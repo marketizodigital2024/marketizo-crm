@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="sr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agency CRM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital" />
+          <div>
+            <strong>Marketizo CRM</strong>
+            <span>Klijenti, paketi i naplata</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Glavna navigacija">
+          <button class="nav-item active" data-view="admin" type="button">Dashboard</button>
+          <button class="nav-item" data-view="clients" type="button">Klijenti</button>
+          <button class="nav-item" data-view="reports" type="button">Računi</button>
+        </nav>
+        <div class="side-panel">
+          <span>Fokus</span>
+          <strong>Klijenti i naplata</strong>
+          <small>Paketi, početak saradnje i status plaćanja.</small>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Marketizo Digital</p>
+            <h1 id="pageTitle">Dashboard</h1>
+          </div>
+          <div class="top-actions">
+            <label class="search">
+              <span>⌕</span>
+              <input id="searchInput" type="search" placeholder="Pretraga klijenata, paketa, naplate..." />
+            </label>
+            <button class="icon-button" id="exportBtn" type="button" title="Izvezi podatke">⇩</button>
+          </div>
+        </header>
+
+        <section class="view active" id="admin">
+          <div class="admin-kpi-grid">
+            <article class="metric">
+              <span>Klijenti</span>
+              <strong id="adminTotalClients">0</strong>
+              <small>ukupno u sistemu</small>
+            </article>
+            <article class="metric">
+              <span>Mesečno</span>
+              <strong id="adminMrr">€0</strong>
+              <small>ukupna cena paketa</small>
+            </article>
+            <article class="metric">
+              <span>Plaćeno u mesecu</span>
+              <strong id="adminPaidTotal">€0</strong>
+              <small id="adminPaidCount">0 klijenata</small>
+            </article>
+            <article class="metric">
+              <span>Za proveru</span>
+              <strong id="adminUnpaidTotal">€0</strong>
+              <small id="adminUnpaidCount">0 klijenata</small>
+            </article>
+          </div>
+
+          <section class="panel filter-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Filter perioda</p>
+                <h2>Pregled po mesecu i datumu</h2>
+              </div>
+              <button class="secondary-button" id="resetFiltersBtn" type="button">Reset</button>
+            </div>
+            <div class="filter-grid">
+              <label>Mesec
+                <input id="monthFilter" type="month" />
+              </label>
+              <label>Od datuma
+                <input id="dateFromFilter" type="date" />
+              </label>
+              <label>Do datuma
+                <input id="dateToFilter" type="date" />
+              </label>
+              <label>Država
+                <select id="countryFilter">
+                  <option value="all">Sve države</option>
+                  <option>Austrija</option>
+                  <option>Nemačka</option>
+                  <option>Srbija</option>
+                  <option>Hrvatska</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Paketi mesečno</h2>
+                <span>zbir</span>
+              </div>
+              <div class="setup-list" id="adminPackageSummary"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Po državama</h2>
+                <span>promet</span>
+              </div>
+              <div class="bars" id="adminCountryBars"></div>
+            </section>
+          </div>
+
+        </section>
+
+        <section class="view" id="clients">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Klijenti i paketi</p>
+              <h2>Baza klijenata</h2>
+            </div>
+            <div class="filters">
+              <button class="primary-button" id="openClientModal" type="button">+ Klijent</button>
+              <button class="chip active" data-filter="all" type="button">Svi</button>
+              <button class="chip" data-filter="Austrija" type="button">Austrija</button>
+              <button class="chip" data-filter="Nemačka" type="button">Nemačka</button>
+              <button class="chip" data-filter="Srbija" type="button">Srbija</button>
+              <button class="chip" data-filter="Hrvatska" type="button">Hrvatska</button>
+            </div>
+          </div>
+          <section class="panel admin-form-panel client-add-panel" id="clientAddPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Novi klijent</p>
+                <h2>Dodaj klijenta</h2>
+              </div>
+              <span>lokalna verzija</span>
+            </div>
+            <form id="adminClientForm" class="admin-form">
+              <div class="form-grid">
+                <label>Ime biznisa<input name="name" required placeholder="npr. Balkan Express" /></label>
+                <label>Niša<input name="niche" required placeholder="npr. restoran" /></label>
+                <label>Država
+                  <select name="country">
+                    <option>Austrija</option>
+                    <option>Nemačka</option>
+                    <option>Srbija</option>
+                    <option>Hrvatska</option>
+                  </select>
+                </label>
+                <label>Paket
+                  <select name="package">
+                    <option value="Starter">Starter - 997€</option>
+                    <option value="Business">Business - 1497€</option>
+                    <option value="Enterprise">Enterprise - 1997€</option>
+                    <option>Custom</option>
+                  </select>
+                </label>
+                <label>Mesečna cena (€)<input name="revenue" type="number" min="0" step="1" value="997" /></label>
+                <label>Ugovor
+                  <select name="contractMonths">
+                    <option value="3">3 meseca</option>
+                    <option value="6">6 meseci</option>
+                  </select>
+                </label>
+                <label>Početak saradnje<input name="startDate" type="date" /></label>
+                <label>Status klijenta
+                  <select name="status">
+                    <option>Aktivan</option>
+                    <option>Neaktivan</option>
+                    <option>Pauza</option>
+                  </select>
+                </label>
+                <label>Račun za ovaj mesec
+                  <select name="invoiceStatus">
+                    <option>Nije poslat</option>
+                    <option>Poslat</option>
+                  </select>
+                </label>
+                <label>Status plaćanja
+                  <select name="paymentStatus">
+                    <option>Nije plaćeno</option>
+                    <option>Plaćeno</option>
+                    <option>Kasni</option>
+                  </select>
+                </label>
+                <label>Način plaćanja
+                  <select name="paymentMethod">
+                    <option>Firma</option>
+                    <option>Keš</option>
+                  </select>
+                </label>
+                <label>Mesečni cilj<input name="guaranteeTarget" type="number" min="0" value="30" /></label>
+                <label>Kontakt osoba<input name="contactName" required placeholder="npr. vlasnik / menadžer" /></label>
+                <label>Telefon za pozive<input name="contactPhone" required placeholder="+436601112233" /></label>
+                <label>WhatsApp za notifikacije<input name="whatsapp" required placeholder="+436601112233" /></label>
+                <label>Login email<input name="loginEmail" type="email" placeholder="klijent@firma.com" /></label>
+                <label>Login lozinka<input name="loginPassword" placeholder="npr. 123456" /></label>
+                <label>Dan naplate<input name="billingDay" type="number" min="1" max="31" value="1" /></label>
+                <label>Meta Page ID<input name="metaPageId" placeholder="kasnije povezujemo" /></label>
+              </div>
+              <div class="admin-submit">
+                <button class="primary-button" type="submit">Sačuvaj klijenta</button>
+              </div>
+            </form>
+          </section>
+          <div class="client-grid" id="clientCards"></div>
+        </section>
+
+        <section class="view" id="production">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Operativa</p>
+              <h2>Produkcija sadržaja</h2>
+            </div>
+            <button class="secondary-button" id="addTaskBtn" type="button">+ Zadatak</button>
+          </div>
+          <div class="kanban" id="productionBoard"></div>
+        </section>
+
+        <section class="view" id="reports">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Računi</p>
+              <h2>Slanje računa i plaćanja</h2>
+            </div>
+          </div>
+          <div class="report-grid">
+            <section class="panel">
+              <h2>Prihod po državi</h2>
+              <div class="bars" id="countryBars"></div>
+            </section>
+            <section class="panel">
+              <h2>Prihod po statusu klijenta</h2>
+              <div class="bars" id="revenueBars"></div>
+            </section>
+            <section class="panel wide">
+              <div class="panel-head">
+                <h2>Računi za mesec</h2>
+                <span id="invoiceMonthLabel">tekući mesec</span>
+              </div>
+              <div class="table-wrap">
+                <table class="invoice-table">
+                  <thead>
+                    <tr>
+                      <th>Klijent</th>
+                      <th>Iznos</th>
+                      <th>Račun</th>
+                      <th>Plaćanje</th>
+                      <th>Način</th>
+                    </tr>
+                  </thead>
+                  <tbody id="monthlyInvoiceRows"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel wide">
+              <div class="panel-head">
+                <h2>Status naplate</h2>
+                <span>pregled</span>
+              </div>
+              <div class="bars" id="adminPaymentBars"></div>
+            </section>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <dialog id="clientModal">
+      <form method="dialog" class="modal-card" id="clientForm">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Novi klijent</p>
+            <h2>Dodaj klijenta</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="closeClientModal">×</button>
+        </div>
+        <div class="form-grid">
+          <label>Ime biznisa<input name="name" required placeholder="npr. Balkan Express" /></label>
+          <label>Niša<input name="niche" required placeholder="npr. stomatologija" /></label>
+          <label>Država
+            <select name="country">
+              <option>Austrija</option>
+              <option>Nemačka</option>
+              <option>Srbija</option>
+              <option>Hrvatska</option>
+            </select>
+          </label>
+          <label>Mesečna cena (€)<input name="revenue" type="number" min="0" step="100" value="2500" /></label>
+          <label>Mesečni cilj<input name="leads" type="number" min="0" value="0" /></label>
+          <label>Status
+            <select name="status">
+              <option>Aktivan</option>
+              <option>Onboarding</option>
+              <option>Rizik</option>
+              <option>Pauza</option>
+            </select>
+          </label>
+        </div>
+        <menu class="modal-actions">
+          <button class="secondary-button" value="cancel" type="button" id="cancelClient">Otkaži</button>
+          <button class="primary-button" value="default" type="submit">Sačuvaj</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="editClientModal">
+      <form method="dialog" class="modal-card" id="editClientForm">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Izmena klijenta</p>
+            <h2 id="editClientTitle">Klijent</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="closeEditClientModal">×</button>
+        </div>
+        <input type="hidden" name="id" />
+        <div class="form-grid">
+          <label>Ime biznisa<input name="name" required /></label>
+          <label>Niša<input name="niche" /></label>
+          <label>Država
+            <select name="country">
+              <option>Austrija</option>
+              <option>Nemačka</option>
+              <option>Srbija</option>
+              <option>Hrvatska</option>
+            </select>
+          </label>
+          <label>Paket
+            <select name="package">
+              <option value="Starter">Starter - 997€</option>
+              <option value="Business">Business - 1497€</option>
+              <option value="Enterprise">Enterprise - 1997€</option>
+              <option>Custom</option>
+            </select>
+          </label>
+          <label>Mesečna cena (€)<input name="revenue" type="number" min="0" step="1" /></label>
+          <label>Ugovor
+            <select name="contractMonths">
+              <option value="3">3 meseca</option>
+              <option value="6">6 meseci</option>
+            </select>
+          </label>
+          <label>Početak saradnje<input name="startDate" type="date" /></label>
+          <label>Status klijenta
+            <select name="status">
+              <option>Aktivan</option>
+              <option>Neaktivan</option>
+              <option>Pauza</option>
+            </select>
+          </label>
+          <label>Račun
+            <select name="invoiceStatus">
+              <option>Nije poslat</option>
+              <option>Poslat</option>
+            </select>
+          </label>
+          <label>Status plaćanja
+            <select name="paymentStatus">
+              <option>Nije plaćeno</option>
+              <option>Plaćeno</option>
+              <option>Kasni</option>
+              <option>Interno</option>
+            </select>
+          </label>
+          <label>Način plaćanja
+            <select name="paymentMethod">
+              <option>Firma</option>
+              <option>Keš</option>
+            </select>
+          </label>
+          <label>Dan naplate<input name="billingDay" type="number" min="1" max="31" /></label>
+          <label>Kontakt osoba<input name="contactName" /></label>
+          <label>Telefon<input name="contactPhone" /></label>
+          <label>WhatsApp<input name="whatsapp" /></label>
+          <label>Login email<input name="loginEmail" type="email" /></label>
+          <label>Login lozinka<input name="loginPassword" /></label>
+        </div>
+        <menu class="modal-actions">
+          <button class="secondary-button" value="cancel" type="button" id="cancelEditClient">Otkaži</button>
+          <button class="primary-button" value="default" type="submit">Sačuvaj</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

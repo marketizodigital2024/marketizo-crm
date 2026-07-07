@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="sr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketizo Client CRM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="client-login-body">
+    <main class="client-auth" id="loginScreen">
+      <section class="panel login-card">
+        <div class="brand login-brand">
+          <img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital" />
+          <div>
+            <strong>Marketizo CRM</strong>
+            <span>Login za klijente</span>
+          </div>
+        </div>
+        <form id="clientLoginForm" class="admin-form">
+          <div>
+            <p class="eyebrow">Klijentski pristup</p>
+            <h1>CRM za leadove</h1>
+          </div>
+          <label>Email
+            <input name="email" type="email" required placeholder="klijent@firma.com" />
+          </label>
+          <label>Lozinka
+            <input name="password" type="password" required placeholder="Lozinka" />
+          </label>
+          <button class="primary-button" type="submit">Uloguj se</button>
+          <p class="login-error" id="loginError" hidden>Login podaci nisu tačni.</p>
+          <div class="login-hint" id="loginHint"></div>
+        </form>
+      </section>
+    </main>
+
+    <div class="client-app" id="clientApp" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital" />
+          <div>
+            <strong id="clientPortalName">Klijent</strong>
+            <span>CRM za leadove</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Klijentska navigacija">
+          <button class="nav-item active" data-client-tab="dashboard" type="button">Dashboard</button>
+          <button class="nav-item" data-client-tab="leads" type="button">Leadovi</button>
+          <button class="nav-item" data-client-tab="team" type="button">Tim</button>
+          <button class="nav-item" data-client-tab="settings" type="button">Podešavanja</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Klijentski CRM</p>
+            <h1 id="clientPageTitle">Dashboard</h1>
+          </div>
+          <div class="top-actions">
+            <button class="secondary-button notification-button" id="enableNotifications" type="button">
+              <span id="notificationBadge" hidden>0</span>
+              Notifikacije
+            </button>
+            <button class="secondary-button" id="logoutClient" type="button">Odjavi se</button>
+          </div>
+        </header>
+        <div class="lead-toast" id="leadToast" hidden></div>
+
+        <section class="client-tab active" id="dashboard">
+          <section class="panel filter-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Filter perioda</p>
+                <h2>Pregled leadova</h2>
+              </div>
+              <button class="secondary-button" id="resetClientFilters" type="button">Reset</button>
+            </div>
+            <div class="filter-grid">
+              <label>Od datuma
+                <input id="clientStartDate" type="date" />
+              </label>
+              <label>Do datuma
+                <input id="clientEndDate" type="date" />
+              </label>
+              <label>Izvor lida
+                <select id="clientSourceFilter">
+                  <option value="all">Svi izvori</option>
+                </select>
+              </label>
+              <label>Status
+                <select id="clientStatusFilter">
+                  <option value="all">Svi statusi</option>
+                  <option>Novi</option>
+                  <option>Kontaktiran</option>
+                  <option>Potvrđen</option>
+                  <option>Izgubljen</option>
+                  <option>Na čekanju</option>
+                </select>
+              </label>
+              <label>Odgovorna osoba
+                <select id="clientResponsibleFilter">
+                  <option value="all">Sve osobe</option>
+                </select>
+              </label>
+            </div>
+          </section>
+          <div class="admin-kpi-grid">
+            <article class="metric">
+              <span>Ukupno leadova</span>
+              <strong id="clientTotalLeads">0</strong>
+              <small>u bazi</small>
+            </article>
+            <article class="metric">
+              <span>Potvrđeni</span>
+              <strong id="clientWonLeads">0</strong>
+              <small>potvrđeni / dobijeni</small>
+            </article>
+            <article class="metric">
+              <span>Otvoreni</span>
+              <strong id="clientOpenLeads">0</strong>
+              <small>treba pozvati</small>
+            </article>
+            <article class="metric">
+              <span>Konverzija</span>
+              <strong id="clientConversion">0%</strong>
+              <small>dobijeni od ukupno</small>
+            </article>
+          </div>
+          <div class="admin-kpi-grid">
+            <article class="metric">
+              <span>Izgubljeni</span>
+              <strong id="clientLostLeads">0</strong>
+              <small>razlog je bitan</small>
+            </article>
+            <article class="metric">
+              <span>Pipeline</span>
+              <strong id="clientPipelineValue">€0</strong>
+              <small>otvorena procena</small>
+            </article>
+            <article class="metric">
+              <span>Vrednost zatvorenih</span>
+              <strong id="clientClosedValue">€0</strong>
+              <small>dobijeni leadovi</small>
+            </article>
+            <article class="metric">
+              <span>Kasni follow-up</span>
+              <strong id="clientLateFollowUp">0</strong>
+              <small>treba proveriti</small>
+            </article>
+            <article class="metric">
+              <span>Win rate zatvorenih</span>
+              <strong id="clientClosedWinRate">0%</strong>
+              <small>dobijeni / zatvoreni</small>
+            </article>
+          </div>
+          <div class="report-grid">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Top score</h2>
+                <span>period</span>
+              </div>
+              <div class="setup-list" id="clientTopScore"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Leadovi i konverzija po izvoru</h2>
+                <span>kanal</span>
+              </div>
+              <div class="bars" id="clientSourceBars"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Leadovi po statusu</h2>
+                <span>broj</span>
+              </div>
+              <div class="bars" id="clientStatusBars"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Leadovi po odgovornoj osobi</h2>
+                <span>tim</span>
+              </div>
+              <div class="bars" id="clientResponsibleBars"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Razlozi gubitka</h2>
+                <span>analiza</span>
+              </div>
+              <div class="bars" id="clientLossBars"></div>
+            </section>
+            <section class="panel wide">
+              <div class="panel-head">
+                <h2>Timsko zatvaranje</h2>
+                <span>win rate</span>
+              </div>
+              <div class="table-wrap">
+                <table class="invoice-table compact-table">
+                  <thead>
+                    <tr>
+                      <th>Osoba</th>
+                      <th>Potvrđeni</th>
+                      <th>Izgubljeni</th>
+                      <th>Win rate</th>
+                    </tr>
+                  </thead>
+                  <tbody id="clientTeamClosingRows"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Odgovornost za pozive</h2>
+                <span>kontrola</span>
+              </div>
+              <div class="setup-list" id="clientCallResponsibility"></div>
+            </section>
+            <section class="panel wide">
+              <div class="panel-head">
+                <h2>Za poziv</h2>
+                <span id="clientActionCount">0</span>
+              </div>
+              <div class="portal-preview" id="clientActionList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="client-tab" id="leads">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Leadovi</p>
+              <h2>CRM leadovi</h2>
+            </div>
+            <button class="primary-button" id="toggleLeadForm" type="button">+ Lead</button>
+          </div>
+          <section class="panel client-add-panel" id="leadFormPanel" hidden>
+            <form id="clientLeadForm" class="admin-form">
+              <div class="form-grid">
+                <label>Kontakt osoba<input name="name" required placeholder="Ime i prezime" /></label>
+                <label>Telefon<input name="phone" required placeholder="+436601112233" /></label>
+                <label>Email<input name="email" type="email" placeholder="email@primer.com" /></label>
+                <label>Lokacija<input name="location" placeholder="grad / država" /></label>
+                <label>Izvor lida<select name="source" id="leadSource"></select></label>
+                <label>Tip usluge<select name="service" id="leadService"></select></label>
+                <label>Procena (€)<input name="estimate" type="number" min="0" step="1" value="0" /></label>
+                <label>Odgovorna osoba<select name="responsible" id="leadResponsible"></select></label>
+                <label>Status<select name="status" id="leadStatus"></select></label>
+                <label>Sledeći korak<input name="nextAction" placeholder="npr. pozvati danas" /></label>
+                <label>Napomena<input name="note" placeholder="kratka napomena" /></label>
+                <label>Razlog gubitka<select name="lossReason" id="leadLossReason"></select></label>
+              </div>
+              <div class="admin-submit">
+                <button class="primary-button" type="submit">Sačuvaj lead</button>
+              </div>
+            </form>
+          </section>
+          <div class="lead-list" id="clientLeadList"></div>
+        </section>
+
+        <section class="client-tab" id="team">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Tim</p>
+              <h2>Ko zove leadove</h2>
+            </div>
+          </div>
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Dodaj osobu</h2>
+                <span>za pozive</span>
+              </div>
+              <form id="clientTeamForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Ime i prezime<input name="name" required placeholder="npr. Milan Cujić" /></label>
+                  <label>Uloga
+                    <select name="role">
+                      <option>Vlasnik</option>
+                      <option>Menadžer</option>
+                      <option>Prodaja</option>
+                      <option>Recepcija</option>
+                    </select>
+                  </label>
+                  <label>Telefon<input name="phone" placeholder="+436601112233" /></label>
+                  <label>Email<input name="email" type="email" placeholder="email@primer.com" /></label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Dodaj u tim</button>
+                </div>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Članovi tima</h2>
+                <span id="clientTeamCount">0</span>
+              </div>
+              <div class="setup-list" id="clientTeamList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="client-tab" id="settings">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Podešavanja</p>
+              <h2>Osnovna pravila CRM-a</h2>
+            </div>
+          </div>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Podešavanja za klijenta</h2>
+                <span>menja se po potrebi</span>
+              </div>
+            </div>
+            <form id="clientSettingsForm" class="admin-form">
+              <div class="settings-grid">
+                <label>Tipovi usluge
+                  <textarea id="settingsServices" name="services" rows="7"></textarea>
+                </label>
+                <div class="settings-static">
+                  <strong>Standardna pravila</strong>
+                  <span>Statusi, izvori i razlozi gubitka su isti za sve klijente.</span>
+                  <div class="lead-details" id="settingsFixedPreview"></div>
+                </div>
+              </div>
+              <div class="admin-submit">
+                <button class="primary-button" type="submit">Sačuvaj podešavanja</button>
+              </div>
+            </form>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="editLeadModal">
+      <section class="modal-card">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Izmena leada</p>
+            <h2>Podaci i status</h2>
+          </div>
+          <button class="icon-button" id="closeEditLead" type="button">×</button>
+        </div>
+        <form id="editLeadForm" class="admin-form">
+          <input name="id" type="hidden" />
+          <div class="form-grid">
+            <label>Kontakt osoba<input name="name" required /></label>
+            <label>Telefon<input name="phone" required /></label>
+            <label>Email<input name="email" type="email" /></label>
+            <label>Lokacija<input name="location" /></label>
+            <label>Izvor lida<select name="source" id="editLeadSource"></select></label>
+            <label>Tip usluge<select name="service" id="editLeadService"></select></label>
+            <label>Procena (€)<input name="estimate" type="number" min="0" step="1" /></label>
+            <label>Odgovorna osoba<select name="responsible" id="editLeadResponsible"></select></label>
+            <label>Status<select name="status" id="editLeadStatus"></select></label>
+            <label>Sledeći korak<input name="nextAction" /></label>
+            <label>Napomena<input name="note" /></label>
+            <label>Razlog gubitka<select name="lossReason" id="editLeadLossReason"></select></label>
+          </div>
+          <div class="modal-actions">
+            <button class="secondary-button" id="cancelEditLead" type="button">Otkaži</button>
+            <button class="primary-button" type="submit">Sačuvaj izmene</button>
+          </div>
+        </form>
+      </section>
+    </dialog>
+
+    <script src="client-portal.js"></script>
+  </body>
+</html>
