@@ -16,6 +16,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -25,18 +26,19 @@
           <img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital" />
           <div>
             <strong>Marketizo CRM</strong>
-            <span>Klijenti, paketi i naplata</span>
+            <span>Klijenti, naplata i tim</span>
           </div>
         </div>
         <nav class="nav" aria-label="Glavna navigacija">
           <button class="nav-item active" data-view="admin" type="button">Dashboard</button>
           <button class="nav-item" data-view="clients" type="button">Klijenti</button>
+          <button class="nav-item" data-view="employees" type="button">Zaposleni</button>
           <button class="nav-item" data-view="reports" type="button">Računi</button>
         </nav>
         <div class="side-panel">
           <span>Fokus</span>
           <strong>Klijenti i naplata</strong>
-          <small>Paketi, početak saradnje i status plaćanja.</small>
+          <small>Klijenti, računi, odmori i radni sati.</small>
         </div>
       </aside>
 
@@ -49,7 +51,7 @@
           <div class="top-actions">
             <label class="search">
               <span>⌕</span>
-              <input id="searchInput" type="search" placeholder="Pretraga klijenata, paketa, naplate..." />
+              <input id="searchInput" type="search" placeholder="Pretraga klijenata, paketa, zaposlenih..." />
             </label>
             <button class="icon-button" id="exportBtn" type="button" title="Izvezi podatke">⇩</button>
             <button class="secondary-button" id="adminLogoutBtn" type="button">Odjavi se</button>
@@ -109,6 +111,52 @@
               </label>
             </div>
           </section>
+
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Obaveštenja</p>
+                  <h2>Šta traži reakciju</h2>
+                </div>
+                <span id="adminNotificationCount">0</span>
+              </div>
+              <div class="setup-list" id="adminNotificationList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Zaposleni</p>
+                  <h2>Satnica i rizik</h2>
+                </div>
+                <span id="adminEmployeeRiskCount">0</span>
+              </div>
+              <div class="setup-list" id="adminEmployeeRiskList"></div>
+            </section>
+          </div>
+
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Backup baze</p>
+                  <h2>Dnevna kopija</h2>
+                </div>
+                <button class="secondary-button" id="backupNowBtn" type="button">Skini backup</button>
+              </div>
+              <div class="setup-list" id="backupStatusList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Ugovori</p>
+                  <h2>Ističu uskoro</h2>
+                </div>
+                <span>30 dana unapred</span>
+              </div>
+              <div class="setup-list" id="contractExpiryList"></div>
+            </section>
+          </div>
 
           <div class="admin-layout">
             <section class="panel">
@@ -180,6 +228,8 @@
                   </select>
                 </label>
                 <label>Početak saradnje<input name="startDate" type="date" /></label>
+                <label>Ugovor fajl<input name="contractFile" type="file" /></label>
+                <label>Napomena ugovora<input name="contractNote" placeholder="npr. produžiti pre isteka" /></label>
                 <label>Status klijenta
                   <select name="status">
                     <option>Aktivan</option>
@@ -232,6 +282,431 @@
             <button class="secondary-button" id="addTaskBtn" type="button">+ Zadatak</button>
           </div>
           <div class="kanban" id="productionBoard"></div>
+        </section>
+
+        <section class="view" id="employees">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Zaposleni</p>
+              <h2>Odmori, bolovanja i radni sati</h2>
+            </div>
+            <div class="filters">
+              <a class="secondary-button" href="employee-login.html" target="_blank" rel="noreferrer">Login za zaposlene</a>
+            </div>
+          </div>
+
+          <div class="admin-kpi-grid">
+            <article class="metric">
+              <span>Zaposleni</span>
+              <strong id="employeeTotal">0</strong>
+              <small>aktivni u sistemu</small>
+            </article>
+            <article class="metric">
+              <span>Plate mesečno</span>
+              <strong id="employeeSalaryTotal">€0</strong>
+              <small>trenutni zbir</small>
+            </article>
+            <article class="metric">
+              <span>Saldo sati</span>
+              <strong id="employeeHourBalance">0h</strong>
+              <small>ukupno plus / minus</small>
+            </article>
+            <article class="metric">
+              <span>Odmor iskorišćen</span>
+              <strong id="employeeVacationUsed">0</strong>
+              <small>dana u godini</small>
+            </article>
+            <article class="metric">
+              <span>Bolovanje</span>
+              <strong id="employeeSickDays">0</strong>
+              <small>dana u godini</small>
+            </article>
+          </div>
+
+          <section class="panel filter-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Austrijski radni kalendar</p>
+                <h2>Pregled po mesecu</h2>
+              </div>
+              <span id="employeeWorkingDaysLabel">0 radnih dana</span>
+            </div>
+            <div class="filter-grid">
+              <label>Mesec
+                <input id="employeeMonthFilter" type="month" />
+              </label>
+              <label>Status
+                <select id="employeeStatusFilter">
+                  <option value="all">Svi</option>
+                  <option>Aktivan</option>
+                  <option>Pauza</option>
+                  <option>Neaktivan</option>
+                </select>
+              </label>
+              <label>Tip pregleda
+                <select id="employeeCalendarFilter">
+                  <option value="all">Sve</option>
+                  <option value="absence">Samo odsustva</option>
+                  <option value="hours">Samo sati</option>
+                </select>
+              </label>
+              <label>Brzi link
+                <a class="secondary-button inline-link" href="employee-login.html" target="_blank" rel="noreferrer">Otvori portal</a>
+              </label>
+            </div>
+          </section>
+
+          <div class="admin-layout employee-admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Novi zaposleni</p>
+                  <h2>Dodaj osobu</h2>
+                </div>
+              </div>
+              <form id="employeeForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Ime i prezime<input name="name" required placeholder="npr. Ivana Marinjes" /></label>
+                  <label>Pozicija<input name="position" required placeholder="npr. Editor" /></label>
+                  <label>Email za login<input name="email" type="email" required placeholder="ime@marketizo.local" /></label>
+                  <label>Lozinka<input name="password" required value="123456" /></label>
+                  <label>Početak rada<input name="startDate" type="date" required /></label>
+                  <label>Trenutna plata (€)<input name="salary" type="number" min="0" step="1" value="0" /></label>
+                  <label>Nedeljni sati<input name="weeklyHours" type="number" min="1" max="60" step="1" value="40" /></label>
+                  <label>Lider
+                    <select name="isLeader">
+                      <option value="false">Ne</option>
+                      <option value="true">Da</option>
+                    </select>
+                  </label>
+                  <label>Pripada lideru
+                    <select name="leaderId" id="employeeLeaderSelect">
+                      <option value="">Nema lidera</option>
+                    </select>
+                  </label>
+                  <label>Godišnji odmor<input name="vacationDays" type="number" min="0" step="1" value="26" /></label>
+                  <label>Poklon dan<input name="giftDays" type="number" min="0" step="1" value="1" /></label>
+                  <label>Status
+                    <select name="status">
+                      <option>Aktivan</option>
+                      <option>Pauza</option>
+                      <option>Neaktivan</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Sačuvaj zaposlenog</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Odsustvo</p>
+                  <h2>Dodaj odmor ili bolovanje</h2>
+                </div>
+              </div>
+              <form id="employeeAbsenceForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Zaposleni<select name="employeeId" id="absenceEmployeeSelect"></select></label>
+                  <label>Tip
+                    <select name="type">
+                      <option>Godišnji odmor</option>
+                      <option>Bolovanje</option>
+                      <option>Poklon dan</option>
+                      <option>Slobodan dan</option>
+                    </select>
+                  </label>
+                  <label>Od datuma<input name="startDate" type="date" required /></label>
+                  <label>Do datuma<input name="endDate" type="date" required /></label>
+                  <label class="span-2">Napomena<input name="note" placeholder="npr. odobreno, čeka potvrdu, doktor..." /></label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Sačuvaj odsustvo</button>
+                </div>
+              </form>
+            </section>
+          </div>
+
+          <section class="panel employee-work-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Sati</p>
+                <h2>Unos radnih sati</h2>
+              </div>
+              <span>jedan zaključan unos po danu</span>
+            </div>
+            <form id="employeeWorkForm" class="admin-form inline-form">
+              <label>Zaposleni<select name="employeeId" id="workEmployeeSelect"></select></label>
+              <label>Datum<input name="date" type="date" required /></label>
+              <label>Sati<input name="hours" type="number" min="0" max="16" step="0.25" value="8" /></label>
+              <label class="wide-input">Šta je rađeno<input name="note" required placeholder="npr. 3 scenarija, montaža, pozivi..." /></label>
+              <button class="primary-button" type="submit">Dodaj sate</button>
+            </form>
+          </section>
+
+          <section class="panel employee-work-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Dokumenti</p>
+                <h2>Fakture, platne liste i ugovori</h2>
+              </div>
+              <span>Srbija fakture · Austrija Lohnzettel</span>
+            </div>
+            <form id="employeeDocumentForm" class="admin-form inline-form document-form">
+              <label>Zaposleni<select name="employeeId" id="documentEmployeeSelect"></select></label>
+              <label>Mesec<input name="month" type="month" required /></label>
+              <label>Tip dokumenta
+                <select name="type">
+                  <option>Faktura</option>
+                  <option>Platna lista / Lohnzettel</option>
+                  <option>Ugovor</option>
+                  <option>Ostalo</option>
+                </select>
+              </label>
+              <label class="wide-input">Fajl<input name="file" type="file" /></label>
+              <label>Napomena<input name="note" placeholder="npr. jul faktura / plata" /></label>
+              <button class="primary-button" type="submit">Dodaj dokument</button>
+            </form>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Zahtevi</p>
+                <h2>Odmori za odobrenje</h2>
+              </div>
+              <span id="employeeAbsenceRequestCount">0 zahteva</span>
+            </div>
+            <div class="table-wrap">
+              <table class="invoice-table employee-table">
+                <thead>
+                  <tr>
+                    <th>Zaposleni</th>
+                    <th>Tip</th>
+                    <th>Period</th>
+                    <th>Napomena</th>
+                    <th>Akcija</th>
+                  </tr>
+                </thead>
+                <tbody id="employeeAbsenceRequestRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <div class="admin-layout employee-admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Kašnjenje</p>
+                  <h2>Upiši kašnjenje</h2>
+                </div>
+                <span>vidljivo zaposlenom</span>
+              </div>
+              <form id="employeeLateForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Zaposleni<select name="employeeId" id="lateEmployeeSelect"></select></label>
+                  <label>Datum<input name="date" type="date" required /></label>
+                  <label>Minuta<input name="minutes" type="number" min="1" max="240" value="10" /></label>
+                  <label>Razlog<input name="reason" required placeholder="npr. kasnio na sastanak" /></label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Sačuvaj kašnjenje</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Napredak</p>
+                  <h2>Cilj zaposlenog</h2>
+                </div>
+                <span>vidljivo zaposlenom</span>
+              </div>
+              <form id="employeeGoalForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Zaposleni<select name="employeeId" id="goalEmployeeSelect"></select></label>
+                  <label>Status
+                    <select name="status">
+                      <option>U toku</option>
+                      <option>Završeno</option>
+                      <option>Rizik</option>
+                    </select>
+                  </label>
+                  <label>Od datuma<input name="startDate" type="date" required /></label>
+                  <label>Do datuma<input name="endDate" type="date" required /></label>
+                  <label>Progres %<input name="progress" type="number" min="0" max="100" value="0" /></label>
+                  <label>Cilj<input name="title" required placeholder="npr. 20 scenarija" /></label>
+                  <label class="span-2">Opis cilja<input name="target" placeholder="šta tačno mora da uradi" /></label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Sačuvaj cilj</button>
+                </div>
+              </form>
+            </section>
+          </div>
+
+          <div class="admin-layout employee-admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">1:1</p>
+                  <h2>Beleške sa sastanka</h2>
+                </div>
+                <span>zaposleni vidi, ne menja</span>
+              </div>
+              <form id="employeeOneOnOneForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Zaposleni<select name="employeeId" id="oneOnOneEmployeeSelect"></select></label>
+                  <label>Datum<input name="date" type="date" required /></label>
+                  <label class="span-2">Naslov<input name="title" required placeholder="npr. 1:1 jul" /></label>
+                  <label class="span-2">Beleška<textarea name="note" rows="4" required placeholder="šta je dogovoreno, šta pratiš..."></textarea></label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Sačuvaj belešku</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Plan firme</p>
+                  <h2>Datumi i ciljevi za tim</h2>
+                </div>
+                <span>vidljivo svim zaposlenima</span>
+              </div>
+              <form id="companyPlanForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Datum<input name="date" type="date" required /></label>
+                  <label>Tip
+                    <select name="type">
+                      <option>Plan firme</option>
+                      <option>Webinar</option>
+                      <option>Bitni datumi</option>
+                      <option>Cilj godine</option>
+                    </select>
+                  </label>
+                  <label class="span-2">Naslov<input name="title" required placeholder="npr. Webinar za uslužne biznise" /></label>
+                  <label class="span-2">Detalji<textarea name="note" rows="4" required placeholder="ciljevi, plan, važan datum..."></textarea></label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Dodaj u plan</button>
+                </div>
+              </form>
+            </section>
+          </div>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <h2>Pregled kašnjenja, ciljeva, 1:1 i izveštaja</h2>
+              <span id="employeeOpsCount">0</span>
+            </div>
+            <div class="admin-layout">
+              <div class="setup-list" id="employeeLateRows"></div>
+              <div class="setup-list" id="employeeGoalRows"></div>
+            </div>
+            <div class="admin-layout">
+              <div class="setup-list" id="employeeOneOnOneRows"></div>
+              <div class="setup-list" id="companyPlanList"></div>
+            </div>
+            <div class="table-wrap">
+              <table class="invoice-table employee-table">
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th>Zaposleni</th>
+                    <th>Prima</th>
+                    <th>Pozitivno</th>
+                    <th>Negativno</th>
+                    <th>Napomena</th>
+                  </tr>
+                </thead>
+                <tbody id="employeeReportRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Kalendar</p>
+                <h2 id="employeeCalendarTitle">Mesec</h2>
+              </div>
+              <span>vikendi i austrijski praznici se ne računaju kao radni dani</span>
+            </div>
+            <div class="employee-calendar" id="employeeCalendar"></div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <h2>Zaposleni</h2>
+              <span id="employeeRowsCount">0</span>
+            </div>
+            <div class="table-wrap">
+              <table class="invoice-table employee-table">
+                <thead>
+                  <tr>
+                    <th>Zaposleni</th>
+                    <th>Pozicija</th>
+                    <th>Početak</th>
+                    <th>Plata</th>
+                    <th>Odmor</th>
+                    <th>Poklon</th>
+                    <th>Bolovanje</th>
+                    <th>Sati mesec</th>
+                    <th>Saldo</th>
+                  </tr>
+                </thead>
+                <tbody id="employeeRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <h2>Uneti sati za mesec</h2>
+              <span id="employeeWorkRowsCount">0</span>
+            </div>
+            <div class="table-wrap">
+              <table class="invoice-table employee-table">
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th>Zaposleni</th>
+                    <th>Sati</th>
+                    <th>Šta je rađeno</th>
+                    <th>Pozitivno / negativno</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="employeeWorkRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel wide">
+            <div class="panel-head">
+              <h2>Dokumenti po zaposlenima</h2>
+              <span id="employeeDocumentRowsCount">0</span>
+            </div>
+            <div class="table-wrap">
+              <table class="invoice-table employee-table">
+                <thead>
+                  <tr>
+                    <th>Mesec</th>
+                    <th>Zaposleni</th>
+                    <th>Tip</th>
+                    <th>Fajl</th>
+                    <th>Napomena</th>
+                  </tr>
+                </thead>
+                <tbody id="employeeDocumentRows"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
 
         <section class="view" id="reports">
@@ -358,6 +833,8 @@
             </select>
           </label>
           <label>Početak saradnje<input name="startDate" type="date" /></label>
+          <label>Ugovor fajl<input name="contractFile" type="file" /></label>
+          <label>Napomena ugovora<input name="contractNote" /></label>
           <label>Status klijenta
             <select name="status">
               <option>Aktivan</option>

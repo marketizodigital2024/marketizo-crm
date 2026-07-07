@@ -8,12 +8,17 @@ let clientFilters = {
   responsible: "all",
 };
 let unreadLeadNotifications = 0;
+let deferredInstallPrompt = null;
 
 const currency = new Intl.NumberFormat("de-AT", {
   style: "currency",
   currency: "EUR",
   maximumFractionDigits: 0,
 });
+
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 
 function saveState() {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
@@ -80,6 +85,18 @@ function showLeadNotification(lead) {
       body: `${lead.name || "Novi kontakt"} · ${lead.phone || "Telefon nije unet"}`,
     });
   }
+}
+
+function showLeadSummaryOnLogin() {
+  const openNew = clientLeads().filter((lead) => (lead.status || "Novi") === "Novi");
+  unreadLeadNotifications = openNew.length;
+  updateNotificationBadge();
+  const toast = document.getElementById("leadToast");
+  if (!toast) return;
+  toast.innerHTML = openNew.length
+    ? `<strong>${openNew.length} leadova čeka obradu</strong><span>Otvori listu leadova i pozovi ih direktno iz aplikacije.</span>`
+    : `<strong>Nema novih leadova</strong><span>Svi leadovi su trenutno obrađeni ili u procesu.</span>`;
+  toast.hidden = false;
 }
 
 function defaultClientSettings() {
@@ -229,6 +246,7 @@ function statusOptions(selectedStatus) {
 
 function updateLeadStatus(lead, status) {
   lead.status = status;
+  lead.lastStatusChangeAt = new Date().toISOString();
   if (status === "Novi") {
     lead.calledAt = null;
   }
@@ -517,6 +535,7 @@ document.getElementById("clientLoginForm").addEventListener("submit", (event) =>
   document.getElementById("clientApp").hidden = false;
   document.getElementById("settingsServices")?.removeAttribute("data-ready");
   renderClientApp();
+  showLeadSummaryOnLogin();
 });
 
 document.querySelectorAll("[data-client-tab]").forEach((button) => {
@@ -620,6 +639,7 @@ document.getElementById("clientLeadForm").addEventListener("submit", (event) => 
     lossReason: formData.get("lossReason"),
     createdAt: new Date().toISOString(),
     calledAt: isContactedStatus(formData.get("status")) ? new Date().toISOString() : null,
+    lastStatusChangeAt: isContactedStatus(formData.get("status")) ? new Date().toISOString() : "",
   };
   state.leads.unshift(newLead);
   activeClient.leads = Number(activeClient.leads || 0) + 1;
@@ -694,6 +714,25 @@ document.getElementById("logoutClient").addEventListener("click", () => {
   document.getElementById("clientApp").hidden = true;
   document.getElementById("loginScreen").hidden = false;
   document.getElementById("clientLoginForm").reset();
+});
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+});
+
+document.getElementById("installClientAppBtn")?.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) {
+    const toast = document.getElementById("leadToast");
+    if (toast) {
+      toast.innerHTML = `<strong>Instalacija aplikacije</strong><span>Opcija se pojavljuje kada je CRM online ili otvoren preko lokalnog servera.</span>`;
+      toast.hidden = false;
+    }
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
 });
 
 ensureLoginData();

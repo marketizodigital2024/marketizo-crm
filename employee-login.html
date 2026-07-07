@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="sr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketizo Employee Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="client-login-body">
+    <main class="client-auth" id="employeeLoginScreen">
+      <section class="panel login-card">
+        <div class="brand login-brand">
+          <img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital" />
+          <div>
+            <strong>Marketizo Team Hub</strong>
+            <span>Interni portal</span>
+          </div>
+        </div>
+        <form id="employeeLoginForm" class="admin-form">
+          <div>
+            <p class="eyebrow">Interni pristup</p>
+            <h1>Marketizo Team Hub</h1>
+          </div>
+          <label>Email
+            <input name="email" type="email" required placeholder="ime@marketizo.local" />
+          </label>
+          <label>Lozinka
+            <input name="password" type="password" required placeholder="Lozinka" />
+          </label>
+          <button class="primary-button" type="submit">Uloguj se</button>
+          <p class="login-error" id="employeeLoginError" hidden>Login podaci nisu tačni.</p>
+          <div class="login-hint" id="employeeLoginHint"></div>
+        </form>
+      </section>
+    </main>
+
+    <div class="client-app" id="employeeApp" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital" />
+          <div>
+            <strong id="employeePortalName">Zaposleni</strong>
+            <span id="employeePortalPosition">Interni portal</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Navigacija za zaposlene">
+          <button class="nav-item active" data-employee-tab="employeeDashboard" type="button">Dashboard</button>
+          <button class="nav-item" data-employee-tab="employeeHours" type="button">Vreme</button>
+          <button class="nav-item" data-employee-tab="employeeVacations" type="button">Odsustva</button>
+          <button class="nav-item" data-employee-tab="employeeDocuments" type="button">Dokumenti</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Marketizo Digital</p>
+            <h1 id="employeePageTitle">Dashboard</h1>
+          </div>
+          <div class="top-actions">
+            <label class="search employee-month-search">
+              <span>⌕</span>
+              <input id="employeePortalMonth" type="month" />
+            </label>
+            <button class="secondary-button" id="installEmployeeAppBtn" type="button">Dodaj kao app</button>
+            <button class="secondary-button" id="logoutEmployee" type="button">Odjavi se</button>
+          </div>
+        </header>
+        <div class="lead-toast employee-alert" id="employeeMissingTimeAlert" hidden></div>
+
+        <section class="client-tab active" id="employeeDashboard">
+          <div class="admin-kpi-grid">
+            <article class="metric">
+              <span>Radni dani</span>
+              <strong id="portalWorkdays">0</strong>
+              <small>Austrijski kalendar</small>
+            </article>
+            <article class="metric">
+              <span>Sati ovaj mesec</span>
+              <strong id="portalHours">0h</strong>
+              <small id="portalExpectedHours">od 0h</small>
+            </article>
+            <article class="metric">
+              <span>Saldo sati</span>
+              <strong id="portalHourBalance">0h</strong>
+              <small id="portalHourBalanceLabel">plus / minus</small>
+            </article>
+            <article class="metric">
+              <span>Godišnji</span>
+              <strong id="portalVacation">0/26</strong>
+              <small id="portalVacationLeft">0 preostalo</small>
+            </article>
+            <article class="metric">
+              <span>Poklon dan</span>
+              <strong id="portalGiftDay">0/1</strong>
+              <small id="portalGiftLeft">0 preostalo</small>
+            </article>
+          </div>
+          <div class="admin-kpi-grid">
+            <article class="metric">
+              <span>Bolovanje</span>
+              <strong id="portalSickDays">0</strong>
+              <small>dana u godini</small>
+            </article>
+            <article class="metric">
+              <span>Početak rada</span>
+              <strong id="portalStartDate">-</strong>
+              <small>u sistemu</small>
+            </article>
+            <article class="metric">
+              <span>Pozicija</span>
+              <strong id="portalPosition">-</strong>
+              <small>trenutno</small>
+            </article>
+            <article class="metric">
+              <span>Plata</span>
+              <strong id="portalSalary">€0</strong>
+              <small>trenutna</small>
+            </article>
+            <article class="metric">
+              <span>Nedeljno</span>
+              <strong id="portalWeeklyHours">0h</strong>
+              <small>ugovoreni sati</small>
+            </article>
+          </div>
+
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Obaveštenja</p>
+                  <h2>Za tebe</h2>
+                </div>
+                <span id="portalNotificationCount">0</span>
+              </div>
+              <div class="setup-list" id="portalNotificationList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Ciljevi</p>
+                  <h2>Napredak</h2>
+                </div>
+                <span id="portalGoalCount">0</span>
+              </div>
+              <div class="setup-list" id="portalGoalList"></div>
+            </section>
+          </div>
+
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">1:1</p>
+                  <h2>Beleške</h2>
+                </div>
+                <span>read-only</span>
+              </div>
+              <div class="setup-list" id="portalOneOnOneList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Kašnjenja</p>
+                  <h2>Evidencija</h2>
+                </div>
+                <span id="portalLateCount">0</span>
+              </div>
+              <div class="setup-list" id="portalLateList"></div>
+            </section>
+          </div>
+
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Plan firme</p>
+                  <h2>Bitni datumi</h2>
+                </div>
+                <span id="portalCompanyPlanCount">0</span>
+              </div>
+              <div class="setup-list" id="portalCompanyPlanList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Izveštaj</p>
+                  <h2>Dnevno prati se kroz unos sati</h2>
+                </div>
+                <span>+ / - obavezno</span>
+              </div>
+              <div class="empty-state">Kada upišeš vreme, pozitivno i negativno polje automatski idu lideru ili adminu.</div>
+            </section>
+          </div>
+
+          <section class="panel" id="leaderPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Lider pogled</p>
+                <h2>Tim, sati i izveštaji</h2>
+              </div>
+              <span id="leaderTeamCount">0 osoba</span>
+            </div>
+            <div class="admin-layout">
+              <div class="setup-list" id="leaderTeamHoursList"></div>
+              <div class="setup-list" id="leaderReportList"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Kalendar</p>
+                <h2 id="portalCalendarTitle">Mesec</h2>
+              </div>
+              <span>praznici i vikendi nisu radni dani</span>
+            </div>
+            <div class="employee-calendar" id="portalEmployeeCalendar"></div>
+          </section>
+        </section>
+
+        <section class="client-tab" id="employeeHours">
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Unos sati</p>
+                  <h2>Dodaj radni dan</h2>
+                </div>
+              </div>
+              <form id="portalHoursForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Datum<input name="date" type="date" required /></label>
+                  <label>Sati<input name="hours" type="number" min="0" max="16" step="0.25" value="8" /></label>
+                  <label class="span-2">Šta je rađeno
+                    <textarea name="note" rows="5" required placeholder="Napiši konkretno šta si radio/la tog dana da se uklopi sa brojem sati."></textarea>
+                  </label>
+                  <label>Šta je bilo pozitivno
+                    <textarea name="positive" rows="4" required placeholder="Šta je danas išlo dobro?"></textarea>
+                  </label>
+                  <label>Šta je bilo negativno
+                    <textarea name="negative" rows="4" required placeholder="Šta je kočilo posao?"></textarea>
+                  </label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Sačuvaj sate</button>
+                </div>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Moji sati</h2>
+                <span id="portalHoursCount">0 unosa</span>
+              </div>
+              <div class="table-wrap">
+                <table class="invoice-table compact-table">
+                  <thead>
+                    <tr>
+                      <th>Datum</th>
+                      <th>Sati</th>
+                      <th>Šta je rađeno</th>
+                      <th>Pozitivno / negativno</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="portalHoursRows"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="client-tab" id="employeeVacations">
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Odsustvo</p>
+                  <h2>Dodaj odmor ili bolovanje</h2>
+                </div>
+              </div>
+              <form id="portalAbsenceForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Tip
+                    <select name="type">
+                      <option>Godišnji odmor</option>
+                      <option>Bolovanje</option>
+                      <option>Poklon dan</option>
+                      <option>Slobodan dan</option>
+                    </select>
+                  </label>
+                  <label>Od datuma<input name="startDate" type="date" required /></label>
+                  <label>Do datuma<input name="endDate" type="date" required /></label>
+                  <label>Napomena<input name="note" placeholder="kratko objašnjenje" /></label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Pošalji</button>
+                </div>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Moja odsustva</h2>
+                <span id="portalAbsenceCount">0 unosa</span>
+              </div>
+              <div class="setup-list" id="portalAbsenceList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="client-tab" id="employeeDocuments">
+          <div class="admin-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Dokumenti</p>
+                  <h2>Dodaj fakturu ili dokument</h2>
+                </div>
+              </div>
+              <form id="portalDocumentForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Mesec<input name="month" type="month" required /></label>
+                  <label>Tip
+                    <select name="type">
+                      <option>Faktura</option>
+                      <option>Platna lista / Lohnzettel</option>
+                      <option>Ugovor</option>
+                      <option>Ostalo</option>
+                    </select>
+                  </label>
+                  <label class="span-2">Fajl<input name="file" type="file" /></label>
+                  <label class="span-2">Napomena<input name="note" placeholder="npr. faktura za jul" /></label>
+                </div>
+                <div class="admin-submit">
+                  <button class="primary-button" type="submit">Dodaj dokument</button>
+                </div>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Moji dokumenti</h2>
+                <span id="portalDocumentCount">0 dokumenata</span>
+              </div>
+              <div class="setup-list" id="portalDocumentList"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="employee-portal.js"></script>
+  </body>
+</html>

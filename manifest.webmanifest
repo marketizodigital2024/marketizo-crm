@@ -1,0 +1,20 @@
+{
+  "name": "Marketizo CRM",
+  "short_name": "Marketizo",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#080808",
+  "theme_color": "#ff6b00",
+  "icons": [
+    {
+      "src": "marketizo-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "marketizo-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
