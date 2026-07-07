@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="sr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketizo Admin Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="client-login-body admin-login-body">
+    <main class="client-auth" id="adminLoginScreen">
+      <section class="panel login-card">
+        <div class="brand login-brand">
+          <img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital" />
+          <div>
+            <strong>Marketizo CRM</strong>
+            <span>Admin pristup</span>
+          </div>
+        </div>
+        <form id="adminLoginForm" class="admin-form">
+          <div>
+            <p class="eyebrow">Marketizo Digital</p>
+            <h1>Admin dashboard</h1>
+          </div>
+          <label>Email
+            <input name="email" type="email" required placeholder="admin@marketizo.local" />
+          </label>
+          <label>Lozinka
+            <input name="password" type="password" required placeholder="Lozinka" />
+          </label>
+          <button class="primary-button" type="submit">Uloguj se</button>
+          <p class="login-error" id="adminLoginError" hidden>Login podaci nisu tačni.</p>
+          <div class="login-hint">
+            <strong>Demo admin login:</strong>
+            <span>miljan@marketizo.local</span>
+            <span>Lozinka: 123456</span>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <script src="admin-auth.js"></script>
+  </body>
+</html>

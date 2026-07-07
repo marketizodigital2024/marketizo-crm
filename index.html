@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Agency CRM</title>
+    <script>
+      (() => {
+        const session = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null");
+        if (!session || Number(session.expiresAt || 0) < Date.now()) {
+          localStorage.removeItem("marketizoAdminSession");
+          window.location.replace("admin-login.html");
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -43,6 +52,7 @@
               <input id="searchInput" type="search" placeholder="Pretraga klijenata, paketa, naplate..." />
             </label>
             <button class="icon-button" id="exportBtn" type="button" title="Izvezi podatke">⇩</button>
+            <button class="secondary-button" id="adminLogoutBtn" type="button">Odjavi se</button>
           </div>
         </header>
 
@@ -389,6 +399,7 @@
       </form>
     </dialog>
 
+    <script src="admin-auth.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
