@@ -9,7 +9,7 @@
         const session = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null");
         if (!session || Number(session.expiresAt || 0) < Date.now()) {
           localStorage.removeItem("marketizoAdminSession");
-          window.location.replace("admin-login.html");
+          window.location.replace("/admin-login");
         }
       })();
     </script>

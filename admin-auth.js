@@ -36,14 +36,14 @@ document.getElementById("adminLoginForm")?.addEventListener("submit", (event) =>
     return;
   }
   setAdminSession(user);
-  window.location.href = "index.html";
+  window.location.href = "/";
 });
 
 if (document.getElementById("adminLoginForm") && getAdminSession()) {
-  window.location.replace("index.html");
+  window.location.replace("/");
 }
 
 document.getElementById("adminLogoutBtn")?.addEventListener("click", () => {
   localStorage.removeItem(adminSessionKey);
-  window.location.href = "admin-login.html";
+  window.location.href = "/admin-login";
 });
