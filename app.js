@@ -446,7 +446,7 @@ let countryFilter = "all";
 let selectedPortalClientId = state.clients[0]?.id || "";
 let employeeMonthFilter = currentMonthKey();
 let employeeStatusFilter = "all";
-let employeeCalendarFilter = "all";
+let selectedEmployeeId = state.employees?.[0]?.id || "";
 
 const currency = new Intl.NumberFormat("de-AT", {
   style: "currency",
@@ -842,6 +842,22 @@ function normalizePhone(phone) {
   return String(phone).replace(/[^\d+]/g, "");
 }
 
+function isClientLeadContacted(lead) {
+  return Boolean(lead.calledAt) || ["Kontaktiran", "Pozvan", "Potvrđen", "Dobijen", "Zakazan"].includes(lead.status);
+}
+
+function clientLeads(client) {
+  return (state.leads || []).filter((lead) => lead.client === client.name);
+}
+
+function clientLeadStats(client) {
+  const leads = clientLeads(client);
+  const contacted = leads.filter(isClientLeadContacted).length;
+  const open = leads.filter((lead) => !isClientLeadContacted(lead) && (lead.status || "Novi") === "Novi").length;
+  const late = leads.filter((lead) => !isClientLeadContacted(lead) && (lead.status || "Novi") === "Novi" && lead.createdAt && hoursSince(lead.createdAt) >= clientLeadSlaHours).length;
+  return { total: leads.length, contacted, open, late };
+}
+
 function renderDashboard() {
   const clients = state.clients.filter(bySearch);
   const active = state.clients.filter((client) => client.status !== "Pauza");
@@ -909,6 +925,7 @@ function renderAdminPanel() {
   setText("adminUnpaidTotal", currency.format(unpaidTotal));
   setText("adminUnpaidCount", `${unpaidClients.length} nije plaćeno · ${unsentClients.length} nije poslat račun`);
   renderAdminNotifications();
+  renderAdminClientSnapshot(active);
   renderAdminEmployeeRisk(monthKey);
   renderBackupStatus();
   renderContractExpiryList();
@@ -940,6 +957,34 @@ function renderAdminNotifications() {
     : `<div class="empty-state">Nema obaveštenja za reakciju.</div>`;
 }
 
+function renderAdminClientSnapshot(clients) {
+  const baseClients = clients.length ? clients : state.clients.filter(bySearch);
+  const rows = [...baseClients]
+    .sort((a, b) => {
+      const aStats = clientLeadStats(a);
+      const bStats = clientLeadStats(b);
+      return bStats.late - aStats.late || bStats.open - aStats.open || Number(b.revenue || 0) - Number(a.revenue || 0);
+    })
+    .slice(0, 6);
+  setText("adminClientSnapshotCount", `${baseClients.length} klijenata`);
+  const target = document.getElementById("adminClientSnapshotList");
+  if (!target) return;
+  target.innerHTML = rows.length
+    ? rows
+        .map((client) => {
+          const stats = clientLeadStats(client);
+          const invoice = monthlyInvoice(client);
+          const status = stats.late ? "danger" : stats.open ? "warn" : "ok";
+          return `
+          <div class="setup-item alert-item clickable-item ${status}" data-go-view="clients">
+            <strong>${stats.open}</strong>
+            <span>${client.name}<br />${stats.contacted}/${stats.total} kontaktirano · ${stats.late} kasni · ${invoice.paymentStatus || "Nije plaćeno"}</span>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema klijenata za izabrani filter.</div>`;
+}
+
 function renderAdminEmployeeRisk(monthKey) {
   const rows = (state.employees || [])
     .map((employee) => {
@@ -960,7 +1005,7 @@ function renderAdminEmployeeRisk(monthKey) {
         .map(({ employee, balance, expected, hours }) => {
           const status = balance < 0 ? "danger" : hours > expected ? "warn" : "ok";
           return `
-          <div class="setup-item alert-item ${status}">
+          <div class="setup-item alert-item clickable-item ${status}" data-go-view="employees" data-select-shortcut-employee="${employee.id}">
             <strong>${formatHourBalance(balance)}</strong>
             <span>${employee.name}<br />${hours}h od ${expected}h · ${employee.weeklyHours || 40}h nedeljno</span>
           </div>`;
@@ -1114,10 +1159,43 @@ function openEditClient(id) {
   form.elements.billingDay.value = Number(client.billingDay || 1);
   form.elements.contactName.value = client.contactName || "";
   form.elements.contactPhone.value = client.contactPhone || "";
-  form.elements.whatsapp.value = client.whatsapp || "";
   form.elements.loginEmail.value = client.loginEmail || "";
   form.elements.loginPassword.value = client.loginPassword || "";
   form.elements.contractNote.value = client.contractNote || "";
+  const leadStats = clientLeadStats(client);
+  const recentLeads = clientLeads(client)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .slice(0, 5);
+  const summary = document.getElementById("editClientLeadSummary");
+  if (summary) {
+    summary.innerHTML = `
+      <div class="setup-item alert-item ${leadStats.late ? "danger" : leadStats.open ? "warn" : "ok"}">
+        <strong>${leadStats.contacted}/${leadStats.total}</strong>
+        <span>Kontaktirano leadova<br />${leadStats.open} nije kontaktirano · ${leadStats.late} kasni preko 48h</span>
+      </div>
+      <div class="setup-item">
+        <strong>WA</strong>
+        <span>WhatsApp podešava klijent u svom CRM-u. Trenutno: ${client.whatsapp || "nije povezano"}</span>
+      </div>
+      <div class="client-lead-detail-list">
+        <h3>Poslednji leadovi</h3>
+        ${
+          recentLeads.length
+            ? recentLeads
+                .map((lead) => {
+                  const contacted = isClientLeadContacted(lead);
+                  const late = !contacted && (lead.status || "Novi") === "Novi" && lead.createdAt && hoursSince(lead.createdAt) >= clientLeadSlaHours;
+                  return `
+                    <div class="setup-item alert-item ${late ? "danger" : contacted ? "ok" : "warn"}">
+                      <strong>${contacted ? "Zvao" : "Nije"}</strong>
+                      <span>${lead.name || "Lead"} · ${lead.phone || "telefon nije unet"}<br />${lead.status || "Novi"} · stigao ${lead.createdAt ? formatDate(lead.createdAt) : "nije uneto"}${lead.calledAt ? ` · pozvan ${formatDate(lead.calledAt)}` : ""}</span>
+                    </div>`;
+                })
+                .join("")
+            : `<div class="empty-state">Još nema leadova za ovog klijenta.</div>`
+        }
+      </div>`;
+  }
   document.getElementById("editClientModal").showModal();
 }
 
@@ -1447,13 +1525,45 @@ function visibleEmployees() {
   return state.employees.filter((employee) => bySearch(employee) && (employeeStatusFilter === "all" || employee.status === employeeStatusFilter));
 }
 
+function selectedEmployee() {
+  let employee = state.employees.find((item) => item.id === selectedEmployeeId);
+  if (!employee) {
+    employee = state.employees[0];
+    selectedEmployeeId = employee?.id || "";
+  }
+  return employee;
+}
+
+function selectedEmployeeFilter(item) {
+  return !selectedEmployeeId || item.employeeId === selectedEmployeeId;
+}
+
+function employeeLeaderName(employee) {
+  if (!employee?.leaderId) return "Nema lidera";
+  return employeeById(employee.leaderId)?.name || "Lider nije pronađen";
+}
+
+function teamUnderLeader(leaderId) {
+  return (state.employees || []).filter((employee) => employee.leaderId === leaderId);
+}
+
+function setSelectedEmployeeOnForms(employeeId) {
+  ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.value = [...select.options].some((option) => option.value === employeeId) ? employeeId : "";
+  });
+}
+
 function renderEmployeeOptions() {
   const employees = state.employees || [];
-  ["absenceEmployeeSelect", "workEmployeeSelect", "documentEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
+  ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
     const selected = select.value;
-    select.innerHTML = employees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("");
+    select.innerHTML = employees.length
+      ? employees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")
+      : `<option value="">Nema zaposlenih</option>`;
     if (employees.some((employee) => employee.id === selected)) select.value = selected;
   });
   const leaderSelect = document.getElementById("employeeLeaderSelect");
@@ -1479,11 +1589,12 @@ function renderEmployees() {
   const monthKey = employeeMonthKey();
   const year = Number(monthKey.slice(0, 4));
   const employees = visibleEmployees();
-  const workingDays = workdaysInMonth(monthKey);
   const totalSalary = employees.reduce((sum, employee) => sum + Number(employee.salary || 0), 0);
   const totalHourBalance = employees.reduce((sum, employee) => sum + employeeHourBalance(employee, monthKey), 0);
   const vacationUsed = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Godišnji odmor"), 0);
   const sickDays = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Bolovanje"), 0);
+  if (!employees.some((employee) => employee.id === selectedEmployeeId)) selectedEmployeeId = employees[0]?.id || state.employees[0]?.id || "";
+  const employee = selectedEmployee();
 
   document.getElementById("employeeMonthFilter").value = monthKey;
   setText("employeeTotal", employees.filter((employee) => employee.status === "Aktivan").length);
@@ -1491,27 +1602,24 @@ function renderEmployees() {
   setText("employeeHourBalance", formatHourBalance(totalHourBalance));
   setText("employeeVacationUsed", vacationUsed);
   setText("employeeSickDays", sickDays);
-  setText("employeeWorkingDaysLabel", `${workingDays.length} radnih dana · ${workingDays.length * 8}h baza`);
-  setText("employeeCalendarTitle", monthLabel(monthKey));
   const workDateInput = document.querySelector('#employeeWorkForm input[name="date"]');
   const absenceStartInput = document.querySelector('#employeeAbsenceForm input[name="startDate"]');
   const absenceEndInput = document.querySelector('#employeeAbsenceForm input[name="endDate"]');
   if (workDateInput && !workDateInput.value) workDateInput.value = currentDateKey();
   if (absenceStartInput && !absenceStartInput.value) absenceStartInput.value = currentDateKey();
   if (absenceEndInput && !absenceEndInput.value) absenceEndInput.value = currentDateKey();
-  const documentMonthInput = document.querySelector('#employeeDocumentForm input[name="month"]');
-  if (documentMonthInput && !documentMonthInput.value) documentMonthInput.value = monthKey;
   document.querySelectorAll('#employeeLateForm input[name="date"], #employeeGoalForm input[name="startDate"], #employeeGoalForm input[name="endDate"], #employeeOneOnOneForm input[name="date"], #companyPlanForm input[name="date"]').forEach((input) => {
     if (!input.value) input.value = currentDateKey();
   });
 
   renderEmployeeOptions();
+  setSelectedEmployeeOnForms(employee?.id || "");
   renderEmployeeRows(employees, monthKey, year);
+  renderSelectedEmployeeDetail(employee, monthKey, year);
   renderEmployeeAbsenceRequests();
   renderEmployeeWorkRows(monthKey);
-  renderEmployeeDocumentRows(monthKey);
   renderEmployeeOps(monthKey);
-  renderEmployeeCalendar(monthKey, employees);
+  renderEmployeeTeamTimeline(monthKey);
 }
 
 function renderEmployeeRows(employees, monthKey, year) {
@@ -1519,34 +1627,215 @@ function renderEmployeeRows(employees, monthKey, year) {
   document.getElementById("employeeRows").innerHTML = employees.length
     ? employees
         .map((employee) => {
-          const vacationUsed = employeeYearAbsenceDays(employee.id, year, "Godišnji odmor");
-          const giftUsed = employeeYearAbsenceDays(employee.id, year, "Poklon dan");
-          const sickDays = employeeYearAbsenceDays(employee.id, year, "Bolovanje");
           const hours = employeeMonthHours(employee.id, monthKey);
           const expected = employeeExpectedHours(employee, monthKey);
           const balance = employeeHourBalance(employee, monthKey);
-          const vacationLeft = Math.max(Number(employee.vacationDays || 0) - vacationUsed, 0);
-          const giftLeft = Math.max(Number(employee.giftDays || 0) - giftUsed, 0);
+          const rowClass = employee.id === selectedEmployeeId ? "selected-row" : "";
           return `
-          <tr>
-            <td><strong>${employee.name}</strong><br /><span>${employee.email}</span></td>
-            <td>${employee.position || "Nije uneto"}<br /><span>${employee.status || "Aktivan"}</span></td>
-            <td>${formatDate(employee.startDate)}</td>
-            <td>${currency.format(Number(employee.salary || 0))}</td>
-            <td><strong>${vacationUsed}/${employee.vacationDays || 26}</strong><br /><span>${vacationLeft} preostalo</span></td>
-            <td><strong>${giftUsed}/${employee.giftDays || 1}</strong><br /><span>${giftLeft} preostalo</span></td>
-            <td>${sickDays} dana</td>
+          <tr class="${rowClass}" data-select-employee="${employee.id}">
+            <td><strong>${employee.name}</strong><br /><span>${employee.position || "Pozicija nije uneta"} · ${employee.email}</span></td>
+            <td>${employee.isLeader ? `<span class="status ok">Lider</span>` : `<span>${employeeLeaderName(employee)}</span>`}</td>
             <td><strong>${hours}h</strong><br /><span>od ${expected}h</span></td>
             <td><span class="status ${balanceClass(balance)}">${formatHourBalance(balance)}</span></td>
+            <td><span class="status ${employee.status === "Aktivan" ? "ok" : employee.status === "Pauza" ? "warn" : "danger"}">${employee.status || "Aktivan"}</span></td>
+            <td>
+              <button class="edit-button" data-edit-employee="${employee.id}" type="button" title="Izmeni">✎</button>
+              <button class="edit-button danger-action" data-delete-employee="${employee.id}" type="button" title="Obriši">×</button>
+            </td>
           </tr>`;
         })
         .join("")
-    : `<tr><td colspan="9">Nema zaposlenih za izabrani filter.</td></tr>`;
+    : `<tr><td colspan="6">Nema zaposlenih za izabrani filter.</td></tr>`;
+  bindEmployeeRowActions();
+}
+
+function renderSelectedEmployeeDetail(employee, monthKey, year) {
+  const panel = document.getElementById("leaderAssignmentPanel");
+  if (!employee) {
+    setText("selectedEmployeeName", "Nema zaposlenih");
+    setText("selectedEmployeePosition", "-");
+    setText("selectedEmployeeStart", "-");
+    setText("selectedEmployeeSalary", currency.format(0));
+    setText("selectedEmployeeWeekly", "0h");
+    setText("selectedEmployeeLeader", "-");
+    setText("selectedEmployeeTeamCount", "0");
+    setSelectedEmployeeOnForms("");
+    if (panel) panel.hidden = true;
+    document.getElementById("selectedEmployeeAbsenceList").innerHTML = `<div class="empty-state">Dodaj prvog zaposlenog.</div>`;
+    return;
+  }
+  const team = teamUnderLeader(employee.id);
+  setText("selectedEmployeeName", employee.name);
+  setText("selectedEmployeePosition", employee.position || "Pozicija nije uneta");
+  setText("selectedEmployeeStart", formatDate(employee.startDate));
+  setText("selectedEmployeeSalary", currency.format(Number(employee.salary || 0)));
+  setText("selectedEmployeeWeekly", `${employee.weeklyHours || 40}h`);
+  setText("selectedEmployeeLeader", employee.isLeader ? "Lider" : employeeLeaderName(employee));
+  setText("selectedEmployeeTeamCount", `${team.length} osoba`);
+  renderSelectedEmployeeAbsenceList(employee.id, year);
+  renderLeaderAssignment(employee);
+}
+
+function renderSelectedEmployeeAbsenceList(employeeId, year) {
+  const vacationUsed = employeeYearAbsenceDays(employeeId, year, "Godišnji odmor");
+  const giftUsed = employeeYearAbsenceDays(employeeId, year, "Poklon dan");
+  const sickDays = employeeYearAbsenceDays(employeeId, year, "Bolovanje");
+  const employee = employeeById(employeeId);
+  const recentAbsences = (state.employeeAbsences || [])
+    .filter((absence) => absence.employeeId === employeeId)
+    .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
+    .slice(0, 4);
+  document.getElementById("selectedEmployeeAbsenceList").innerHTML = `
+    <div class="setup-item">
+      <strong>${vacationUsed}</strong>
+      <span>Godišnji iskorišćen · ${Math.max(Number(employee?.vacationDays || 26) - vacationUsed, 0)} dana preostalo</span>
+    </div>
+    <div class="setup-item">
+      <strong>${giftUsed}</strong>
+      <span>Poklon dan · ${Math.max(Number(employee?.giftDays || 1) - giftUsed, 0)} preostalo</span>
+    </div>
+    <div class="setup-item">
+      <strong>${sickDays}</strong>
+      <span>Bolovanje u godini</span>
+    </div>
+    ${
+      recentAbsences.length
+        ? recentAbsences
+            .map(
+              (absence) => `
+              <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : "warn"}">
+                <strong>${workdayKeysBetween(absence.startDate, absence.endDate).length}</strong>
+                <span>${absence.type} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br />${absence.status || ""} ${absence.note ? `· ${absence.note}` : ""}</span>
+              </div>`
+            )
+            .join("")
+        : `<div class="empty-state">Nema skorijih odsustava.</div>`
+    }`;
+}
+
+function renderLeaderAssignment(employee) {
+  const panel = document.getElementById("leaderAssignmentPanel");
+  if (!panel) return;
+  panel.hidden = !employee?.isLeader;
+  if (!employee?.isLeader) return;
+  const available = (state.employees || []).filter((item) => item.id !== employee.id);
+  const assigned = available.filter((item) => item.leaderId === employee.id).length;
+  setText("leaderAssignmentCount", `${assigned} osoba`);
+  document.getElementById("leaderAssignmentList").innerHTML = available.length
+    ? available
+        .map((item) => {
+          const isAssigned = item.leaderId === employee.id;
+          return `
+          <div class="setup-item leader-assignment-row">
+            <strong>${isAssigned ? "✓" : "+"}</strong>
+            <span>${item.name}<br />${item.position || "Pozicija nije uneta"} ${item.leaderId && !isAssigned ? `· trenutno: ${employeeLeaderName(item)}` : ""}</span>
+            <button class="secondary-button" data-assign-leader="${employee.id}" data-employee-id="${item.id}" type="button">${isAssigned ? "Ukloni" : "Dodaj"}</button>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema drugih zaposlenih za dodelu.</div>`;
+  document.querySelectorAll("[data-assign-leader]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const member = employeeById(button.dataset.employeeId);
+      if (!member) return;
+      member.leaderId = member.leaderId === button.dataset.assignLeader ? "" : button.dataset.assignLeader;
+      saveState();
+      renderAll();
+    });
+  });
+}
+
+function bindEmployeeRowActions() {
+  document.querySelectorAll("[data-select-employee]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button")) return;
+      selectedEmployeeId = row.dataset.selectEmployee;
+      hideEmployeeProfileForm();
+      renderAll();
+    });
+  });
+  document.querySelectorAll("[data-edit-employee]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectedEmployeeId = button.dataset.editEmployee;
+      showEmployeeProfileForm(employeeById(selectedEmployeeId));
+      renderAll();
+    });
+  });
+  document.querySelectorAll("[data-delete-employee]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteEmployee(button.dataset.deleteEmployee);
+    });
+  });
+}
+
+function showEmployeeProfileForm(employee = null) {
+  const panel = document.getElementById("employeeProfilePanel");
+  const form = document.getElementById("employeeForm");
+  if (!panel || !form) return;
+  panel.hidden = false;
+  renderEmployeeOptions();
+  if (employee) {
+    setText("employeeProfileMode", "Izmena");
+    form.elements.id.value = employee.id;
+    form.elements.name.value = employee.name || "";
+    form.elements.position.value = employee.position || "";
+    form.elements.email.value = employee.email || "";
+    form.elements.password.value = employee.password || "123456";
+    form.elements.startDate.value = employee.startDate || "";
+    form.elements.salary.value = Number(employee.salary || 0);
+    form.elements.weeklyHours.value = Number(employee.weeklyHours || 40);
+    form.elements.isLeader.checked = Boolean(employee.isLeader);
+    form.elements.leaderId.value = employee.leaderId || "";
+    form.elements.vacationDays.value = Number(employee.vacationDays || 26);
+    form.elements.giftDays.value = Number(employee.giftDays || 1);
+    form.elements.status.value = employee.status || "Aktivan";
+  } else {
+    setText("employeeProfileMode", "Novi zaposleni");
+    form.reset();
+    form.elements.id.value = "";
+    form.elements.password.value = "123456";
+    form.elements.weeklyHours.value = 40;
+    form.elements.isLeader.checked = false;
+    form.elements.leaderId.value = "";
+    form.elements.vacationDays.value = 26;
+    form.elements.giftDays.value = 1;
+    form.elements.status.value = "Aktivan";
+    form.elements.startDate.value = currentDateKey();
+  }
+  form.querySelector('input[name="name"]')?.focus();
+}
+
+function hideEmployeeProfileForm() {
+  const panel = document.getElementById("employeeProfilePanel");
+  if (panel) panel.hidden = true;
+}
+
+function deleteEmployee(id) {
+  const employee = employeeById(id);
+  if (!employee) return;
+  if (!confirm(`Obrisati zaposlenog: ${employee.name}?`)) return;
+  state.employees = state.employees.filter((item) => item.id !== id);
+  state.employees.forEach((item) => {
+    if (item.leaderId === id) item.leaderId = "";
+  });
+  state.employeeAbsences = (state.employeeAbsences || []).filter((item) => item.employeeId !== id);
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((item) => item.employeeId !== id);
+  state.employeeLateRecords = (state.employeeLateRecords || []).filter((item) => item.employeeId !== id);
+  state.employeeGoals = (state.employeeGoals || []).filter((item) => item.employeeId !== id);
+  state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((item) => item.employeeId !== id);
+  state.employeeReports = (state.employeeReports || []).filter((item) => item.employeeId !== id && item.recipientId !== id);
+  selectedEmployeeId = state.employees[0]?.id || "";
+  hideEmployeeProfileForm();
+  saveState();
+  renderAll();
 }
 
 function renderEmployeeWorkRows(monthKey) {
   const rows = state.employeeWorkLogs
     .filter((log) => String(log.date || "").startsWith(monthKey))
+    .filter(selectedEmployeeFilter)
     .filter((log) => {
       const employee = employeeById(log.employeeId);
       return employee && bySearch({ ...log, employee: employee.name });
@@ -1566,32 +1855,6 @@ function renderEmployeeWorkRows(monthKey) {
     });
   setText("employeeWorkRowsCount", `${rows.length} unosa`);
   document.getElementById("employeeWorkRows").innerHTML = rows.join("") || `<tr><td colspan="6">Nema unetih sati za ovaj mesec.</td></tr>`;
-}
-
-function renderEmployeeDocumentRows(monthKey) {
-  const rows = state.employeeDocuments
-    .filter((documentItem) => String(documentItem.month || "").startsWith(monthKey))
-    .filter((documentItem) => {
-      const employee = employeeById(documentItem.employeeId);
-      return employee && bySearch({ ...documentItem, employee: employee.name });
-    })
-    .sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0))
-    .map((documentItem) => {
-      const employee = employeeById(documentItem.employeeId);
-      const fileLabel = documentItem.fileData
-        ? `<a class="document-link" href="${documentItem.fileData}" download="${documentItem.fileName || "dokument"}">${documentItem.fileName || "Preuzmi"}</a>`
-        : documentItem.fileName || "Fajl nije sačuvan lokalno";
-      return `
-      <tr>
-        <td>${monthLabel(documentItem.month)}</td>
-        <td>${employee?.name || "Obrisan zaposleni"}</td>
-        <td>${documentItem.type || "Dokument"}</td>
-        <td>${fileLabel}</td>
-        <td>${documentItem.note || ""}</td>
-      </tr>`;
-    });
-  setText("employeeDocumentRowsCount", `${rows.length} dokumenata`);
-  document.getElementById("employeeDocumentRows").innerHTML = rows.join("") || `<tr><td colspan="5">Nema dokumenata za ovaj mesec.</td></tr>`;
 }
 
 function renderEmployeeAbsenceRequests() {
@@ -1632,6 +1895,7 @@ function renderEmployeeOps(monthKey) {
 function renderEmployeeLateRows(monthKey) {
   const rows = (state.employeeLateRecords || [])
     .filter((record) => String(record.date || "").startsWith(monthKey))
+    .filter(selectedEmployeeFilter)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 8);
   const target = document.getElementById("employeeLateRows");
@@ -1652,6 +1916,7 @@ function renderEmployeeLateRows(monthKey) {
 
 function renderEmployeeGoalRows() {
   const rows = (state.employeeGoals || [])
+    .filter(selectedEmployeeFilter)
     .sort((a, b) => new Date(b.endDate) - new Date(a.endDate))
     .slice(0, 8);
   const target = document.getElementById("employeeGoalRows");
@@ -1673,6 +1938,7 @@ function renderEmployeeGoalRows() {
 
 function renderEmployeeOneOnOneRows() {
   const rows = (state.employeeOneOnOnes || [])
+    .filter(selectedEmployeeFilter)
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 8);
   const target = document.getElementById("employeeOneOnOneRows");
@@ -1713,6 +1979,7 @@ function renderCompanyPlanList() {
 function renderEmployeeReportRows(monthKey) {
   const rows = (state.employeeReports || [])
     .filter((report) => String(report.date || "").startsWith(monthKey))
+    .filter(selectedEmployeeFilter)
     .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date))
     .map((report) => {
       const employee = employeeById(report.employeeId);
@@ -1757,7 +2024,48 @@ function approveAbsence(id) {
   renderAll();
 }
 
+function renderEmployeeTeamTimeline(monthKey) {
+  const target = document.getElementById("employeeTeamTimeline");
+  if (!target) return;
+  const plans = (state.companyPlans || [])
+    .filter((plan) => String(plan.date || "").startsWith(monthKey))
+    .map((plan) => ({
+      date: plan.date,
+      type: plan.type,
+      title: plan.title,
+      note: plan.note,
+      className: "ok",
+    }));
+  const absences = (state.employeeAbsences || [])
+    .filter((absence) => absence.status !== "Zatraženo")
+    .filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
+    .map((absence) => {
+      const employee = employeeById(absence.employeeId);
+      return {
+        date: absence.startDate,
+        type: absence.type,
+        title: employee?.name || "Zaposleni",
+        note: `${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}${absence.note ? ` · ${absence.note}` : ""}`,
+        className: absence.type === "Bolovanje" ? "danger" : "warn",
+      };
+    });
+  const rows = [...plans, ...absences].sort((a, b) => new Date(a.date) - new Date(b.date));
+  target.innerHTML = rows.length
+    ? rows
+        .map(
+          (row) => `
+          <div class="setup-item alert-item ${row.className}">
+            <strong>${formatDate(row.date).slice(0, 5)}</strong>
+            <span>${row.type} · ${row.title}<br />${row.note || ""}</span>
+          </div>`
+        )
+        .join("")
+    : `<div class="empty-state">Nema unetih datuma ili odsustava za ovaj mesec.</div>`;
+}
+
 function renderEmployeeCalendar(monthKey, employees) {
+  const target = document.getElementById("employeeCalendar");
+  if (!target) return;
   const days = monthDayKeys(monthKey);
   const firstDay = parseDate(days[0]).getDay();
   const offset = firstDay === 0 ? 6 : firstDay - 1;
@@ -1765,7 +2073,7 @@ function renderEmployeeCalendar(monthKey, employees) {
   const monthAbsences = state.employeeAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)));
   const monthLogs = state.employeeWorkLogs.filter((log) => String(log.date || "").startsWith(monthKey));
   const monthPlans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(monthKey));
-  document.getElementById("employeeCalendar").innerHTML = `
+  target.innerHTML = `
     <div class="calendar-weekdays">
       <span>Pon</span><span>Uto</span><span>Sre</span><span>Čet</span><span>Pet</span><span>Sub</span><span>Ned</span>
     </div>
@@ -1778,8 +2086,6 @@ function renderEmployeeCalendar(monthKey, employees) {
           const absences = monthAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(day));
           const logs = monthLogs.filter((log) => log.date === day);
           const plans = monthPlans.filter((plan) => plan.date === day);
-          const shouldShowAbsence = employeeCalendarFilter === "all" || employeeCalendarFilter === "absence";
-          const shouldShowHours = employeeCalendarFilter === "all" || employeeCalendarFilter === "hours";
           const classes = ["calendar-day"];
           if (isWeekend(day)) classes.push("weekend");
           if (holiday) classes.push("holiday");
@@ -1792,18 +2098,16 @@ function renderEmployeeCalendar(monthKey, employees) {
             ${companyDay ? `<span class="calendar-note company-note">${companyDay}</span>` : ""}
             ${plans.map((plan) => `<span class="calendar-note plan-note">${plan.type}: ${plan.title}</span>`).join("")}
             ${
-              shouldShowAbsence
-                ? absences
-                    .slice(0, 3)
-                    .map((absence) => {
-                      const employee = employees.find((item) => item.id === absence.employeeId) || employeeById(absence.employeeId);
-                      return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${employee?.name || "Zaposleni"} · ${absence.type}</span>`;
-                    })
-                    .join("")
-                : ""
+              absences
+                .slice(0, 3)
+                .map((absence) => {
+                  const employee = employees.find((item) => item.id === absence.employeeId) || employeeById(absence.employeeId);
+                  return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${employee?.name || "Zaposleni"} · ${absence.type}</span>`;
+                })
+                .join("")
             }
             ${
-              shouldShowHours && logs.length
+              logs.length
                 ? `<span class="calendar-note hours-note">${logs.reduce((sum, log) => sum + Number(log.hours || 0), 0)}h uneto</span>`
                 : ""
             }
@@ -1840,40 +2144,32 @@ function renderSales() {
 }
 
 function renderClients() {
-  const clients = visibleClients().filter((client) => activeFilter === "all" || client.country === activeFilter);
-  document.getElementById("clientCards").innerHTML = clients
-    .map((client) => {
-      const paymentClass = paymentStatusClass(client);
-      const endDate = contractEndDate(client);
-      const daysLeft = endDate ? daysBetween(currentDateKey(), endDate) : null;
-      return `
-      <article class="client-card" data-client-id="${client.id}">
-        <header>
-          <div>
-            <h3>${client.name}</h3>
-            <p>${client.niche} · ${client.country}</p>
-          </div>
-          <div class="card-actions">
-            <span class="status ${paymentClass}">${client.paymentStatus || "Plaćeno"}</span>
-            <button class="edit-button" data-edit-client="${client.id}" type="button" title="Izmeni klijenta">✎</button>
-          </div>
-        </header>
-        <div class="client-meta">
-          <span class="pill">${displayPackage(client.package)}</span>
-          <span class="pill">${currency.format(client.revenue)}/mes</span>
-          <span class="pill">Start ${formatDate(client.startDate)}</span>
-          <span class="pill">${endDate ? `Ugovor do ${formatDate(endDate)}` : "Ugovor nije unet"}</span>
-          ${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? `<span class="pill danger-pill">${daysLeft} dana do isteka</span>` : ""}
-          <span class="pill">Naplata dan ${client.billingDay || 1}</span>
-        </div>
-        <p><strong>Kontakt:</strong> ${client.contactName || "Nije unet"}</p>
-        <p><strong>Login:</strong> ${client.loginEmail || "nije unet"} · ${client.loginPassword || "nije uneta"}</p>
-        <div class="lead-actions">
-          <a class="secondary-button" href="client-login.html" target="_blank" rel="noreferrer">Otvori login</a>
-        </div>
-      </article>`;
-    })
-    .join("");
+  const clients = state.clients.filter((client) => bySearch(client) && (activeFilter === "all" || client.country === activeFilter));
+  setText("clientRowsCount", `${clients.length} klijenata`);
+  document.getElementById("clientCards").innerHTML = clients.length
+    ? clients
+        .map((client) => {
+          const paymentClass = paymentStatusClass(client);
+          const invoice = monthlyInvoice(client);
+          const endDate = contractEndDate(client);
+          const daysLeft = endDate ? daysBetween(currentDateKey(), endDate) : null;
+          const contractLabel = endDate ? `do ${formatDate(endDate)}` : "nije unet";
+          const leadStats = clientLeadStats(client);
+          const leadClass = leadStats.late ? "danger" : leadStats.open ? "warn" : "ok";
+          return `
+          <tr>
+            <td><strong>${client.name}</strong><br /><span>${client.niche} · ${client.country}</span></td>
+            <td><strong>${displayPackage(client.package)}</strong><br /><span>${currency.format(client.revenue || 0)}/mes</span></td>
+            <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span></td>
+            <td><span class="status ${invoice.invoiceStatus === "Poslat" || invoice.invoiceStatus === "Nije potrebno" ? "ok" : "warn"}">${invoice.invoiceStatus || "Nije poslat"}</span></td>
+            <td><span class="status ${paymentClass}">${invoice.paymentStatus || client.paymentStatus || "Nije plaćeno"}</span></td>
+            <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nije zvao · ${leadStats.late} kasni</span></td>
+            <td>${client.contactName || "Nije unet"}<br /><span>${client.contactPhone || client.whatsapp || "Telefon nije unet"}</span></td>
+            <td><button class="edit-button" data-edit-client="${client.id}" type="button" title="Izmeni klijenta">✎</button></td>
+          </tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="8">Nema klijenata za izabrani filter.</td></tr>`;
   bindEditButtons();
 }
 
@@ -2130,9 +2426,11 @@ function groupSum(items, key, value) {
 }
 
 function renderBars(target, data, suffix) {
+  const targetElement = document.getElementById(target);
+  if (!targetElement) return;
   const entries = Object.entries(data);
   const max = Math.max(...entries.map(([, value]) => value), 1);
-  document.getElementById(target).innerHTML = entries
+  targetElement.innerHTML = entries
     .map(([label, value]) => {
       const display = suffix === "€" ? currency.format(value) : value;
       return `
@@ -2145,7 +2443,8 @@ function renderBars(target, data, suffix) {
 }
 
 function setText(id, value) {
-  document.getElementById(id).textContent = value;
+  const target = document.getElementById(id);
+  if (target) target.textContent = value;
 }
 
 function renderAll() {
@@ -2283,17 +2582,47 @@ document.getElementById("employeeStatusFilter")?.addEventListener("change", (eve
   renderAll();
 });
 
-document.getElementById("employeeCalendarFilter")?.addEventListener("change", (event) => {
-  employeeCalendarFilter = event.target.value;
+document.getElementById("newEmployeeBtn")?.addEventListener("click", () => {
+  setActiveView("employees");
+  showEmployeeProfileForm();
+  document.getElementById("employeeProfilePanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+});
+
+document.getElementById("editSelectedEmployeeBtn")?.addEventListener("click", () => {
+  const employee = selectedEmployee();
+  if (!employee) return;
+  showEmployeeProfileForm(employee);
+});
+
+document.getElementById("deleteSelectedEmployeeBtn")?.addEventListener("click", () => {
+  const employee = selectedEmployee();
+  if (!employee) return;
+  deleteEmployee(employee.id);
+});
+
+document.getElementById("cancelEmployeeEditBtn")?.addEventListener("click", () => {
+  hideEmployeeProfileForm();
+});
+
+document.querySelectorAll("[data-go-view]").forEach((element) => {
+  element.addEventListener("click", () => setActiveView(element.dataset.goView));
+});
+
+document.addEventListener("click", (event) => {
+  const shortcut = event.target.closest("[data-go-view]");
+  if (!shortcut) return;
+  if (shortcut.dataset.selectShortcutEmployee) selectedEmployeeId = shortcut.dataset.selectShortcutEmployee;
+  setActiveView(shortcut.dataset.goView);
   renderAll();
 });
 
 document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
   const name = String(formData.get("name") || "").trim();
-  state.employees.unshift({
-    id: crypto.randomUUID(),
+  const id = String(formData.get("id") || "");
+  const payload = {
     name,
     email: String(formData.get("email") || `${loginSlug(name)}@marketizo.local`).trim().toLowerCase(),
     password: String(formData.get("password") || "123456").trim(),
@@ -2301,20 +2630,38 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
     startDate: formData.get("startDate"),
     salary: Number(formData.get("salary") || 0),
     weeklyHours: Number(formData.get("weeklyHours") || 40),
-    isLeader: formData.get("isLeader") === "true",
+    isLeader: Boolean(form.elements.isLeader?.checked),
     leaderId: formData.get("leaderId") || "",
     vacationDays: Number(formData.get("vacationDays") || 26),
     giftDays: Number(formData.get("giftDays") || 1),
     status: formData.get("status"),
-  });
+  };
+  if (payload.leaderId === id) payload.leaderId = "";
+  if (id) {
+    const employee = state.employees.find((item) => item.id === id);
+    if (!employee) return;
+    Object.assign(employee, payload);
+    if (!employee.isLeader) {
+      state.employees.forEach((item) => {
+        if (item.leaderId === employee.id) item.leaderId = "";
+      });
+    }
+    selectedEmployeeId = employee.id;
+  } else {
+    const employee = { id: crypto.randomUUID(), ...payload };
+    state.employees.unshift(employee);
+    selectedEmployeeId = employee.id;
+  }
   saveState();
   event.currentTarget.reset();
+  event.currentTarget.elements.id.value = "";
   event.currentTarget.elements.password.value = "123456";
   event.currentTarget.elements.weeklyHours.value = 40;
-  event.currentTarget.elements.isLeader.value = "false";
+  event.currentTarget.elements.isLeader.checked = false;
   event.currentTarget.elements.leaderId.value = "";
   event.currentTarget.elements.vacationDays.value = 26;
   event.currentTarget.elements.giftDays.value = 1;
+  hideEmployeeProfileForm();
   renderAll();
 });
 
@@ -2324,6 +2671,10 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", (even
   const startDate = String(formData.get("startDate") || "");
   const endDate = String(formData.get("endDate") || startDate);
   const employeeId = formData.get("employeeId");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
   const absence = {
     id: crypto.randomUUID(),
     employeeId,
@@ -2336,6 +2687,7 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", (even
     approvedBy: "Admin",
   };
   state.employeeAbsences.unshift(absence);
+  selectedEmployeeId = employeeId;
   notifyOnce({
     key: `absence-admin-added-${absence.id}`,
     scope: "employee",
@@ -2354,6 +2706,10 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   const formData = new FormData(event.currentTarget);
   const employeeId = formData.get("employeeId");
   const date = formData.get("date");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
   if (hasEmployeeWorkLog(employeeId, date)) {
     alert("Za ovog zaposlenog već postoji zaključan unos za taj dan.");
     return;
@@ -2368,6 +2724,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
     locked: true,
     submittedAt: new Date().toISOString(),
   });
+  selectedEmployeeId = employeeId;
   saveState();
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
@@ -2375,39 +2732,24 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   renderAll();
 });
 
-document.getElementById("employeeDocumentForm")?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  const file = formData.get("file");
-  state.employeeDocuments.unshift({
-    id: crypto.randomUUID(),
-    employeeId: formData.get("employeeId"),
-    month: formData.get("month") || employeeMonthKey(),
-    type: formData.get("type"),
-    fileName: file?.name || "",
-    fileData: await readSmallFile(file),
-    note: formData.get("note"),
-    uploadedBy: "Admin",
-    uploadedAt: new Date().toISOString(),
-  });
-  saveState();
-  event.currentTarget.reset();
-  event.currentTarget.elements.month.value = employeeMonthKey();
-  renderAll();
-});
-
 document.getElementById("employeeLateForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
+  const employeeId = formData.get("employeeId");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
   const record = {
     id: crypto.randomUUID(),
-    employeeId: formData.get("employeeId"),
+    employeeId,
     date: formData.get("date"),
     minutes: Number(formData.get("minutes") || 0),
     reason: formData.get("reason"),
     createdAt: new Date().toISOString(),
   };
   state.employeeLateRecords.unshift(record);
+  selectedEmployeeId = employeeId;
   notifyOnce({
     key: `late-record-${record.id}`,
     scope: "employee",
@@ -2426,9 +2768,14 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", (event) 
 document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
+  const employeeId = formData.get("employeeId");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
   const goal = {
     id: crypto.randomUUID(),
-    employeeId: formData.get("employeeId"),
+    employeeId,
     title: formData.get("title"),
     target: formData.get("target"),
     startDate: formData.get("startDate"),
@@ -2438,6 +2785,7 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) 
     note: "",
   };
   state.employeeGoals.unshift(goal);
+  selectedEmployeeId = employeeId;
   notifyOnce({
     key: `goal-created-${goal.id}`,
     scope: "employee",
@@ -2457,9 +2805,14 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) 
 document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
+  const employeeId = formData.get("employeeId");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
   const note = {
     id: crypto.randomUUID(),
-    employeeId: formData.get("employeeId"),
+    employeeId,
     date: formData.get("date"),
     title: formData.get("title"),
     note: formData.get("note"),
@@ -2467,6 +2820,7 @@ document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", (eve
     visibleToEmployee: true,
   };
   state.employeeOneOnOnes.unshift(note);
+  selectedEmployeeId = employeeId;
   notifyOnce({
     key: `one-on-one-${note.id}`,
     scope: "employee",
@@ -2578,7 +2932,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     guaranteeTarget: Number(formData.get("guaranteeTarget")),
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
-    whatsapp: formData.get("whatsapp"),
+    whatsapp: "",
     loginEmail: formData.get("loginEmail"),
     loginPassword: formData.get("loginPassword"),
     billingDay: Number(formData.get("billingDay")),
@@ -2644,11 +2998,11 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     billingDay: Number(formData.get("billingDay")),
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
-    whatsapp: formData.get("whatsapp"),
     loginEmail: formData.get("loginEmail"),
     loginPassword: formData.get("loginPassword"),
     contractNote: formData.get("contractNote"),
   });
+  if (formData.has("whatsapp")) client.whatsapp = formData.get("whatsapp");
   if (contractFile?.name) {
     client.contractFileName = contractFile.name;
     client.contractFileData = contractFileData;

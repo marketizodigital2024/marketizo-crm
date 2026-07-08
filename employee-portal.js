@@ -232,10 +232,6 @@ function employeeWorkLogs(monthKey = portalMonth) {
   return (state.employeeWorkLogs || []).filter((log) => log.employeeId === activeEmployee.id && String(log.date || "").startsWith(monthKey));
 }
 
-function employeeDocuments(monthKey = portalMonth) {
-  return (state.employeeDocuments || []).filter((documentItem) => documentItem.employeeId === activeEmployee.id && String(documentItem.month || "").startsWith(monthKey));
-}
-
 function employeeGoals() {
   return (state.employeeGoals || []).filter((goal) => goal.employeeId === activeEmployee.id);
 }
@@ -358,7 +354,6 @@ function renderEmployeePortal() {
   setText("portalHours", `${hours}h`);
   setText("portalExpectedHours", `od ${expected}h`);
   setText("portalHourBalance", formatHourBalance(balance));
-  setText("portalHourBalanceLabel", balance > 0 ? "više od plana" : balance < 0 ? "manje od plana" : "tačno po planu");
   setText("portalVacation", `${vacationUsed}/${activeEmployee.vacationDays || 26}`);
   setText("portalVacationLeft", `${vacationLeft} preostalo`);
   setText("portalGiftDay", `${giftUsed}/${activeEmployee.giftDays || 1}`);
@@ -368,22 +363,18 @@ function renderEmployeePortal() {
   setText("portalPosition", activeEmployee.position || "-");
   setText("portalSalary", currency.format(Number(activeEmployee.salary || 0)));
   setText("portalWeeklyHours", `${activeEmployee.weeklyHours || 40}h`);
-  setText("portalCalendarTitle", monthLabel(portalMonth));
 
   const hourDate = document.querySelector('#portalHoursForm input[name="date"]');
   const absenceStart = document.querySelector('#portalAbsenceForm input[name="startDate"]');
   const absenceEnd = document.querySelector('#portalAbsenceForm input[name="endDate"]');
-  const documentMonth = document.querySelector('#portalDocumentForm input[name="month"]');
   if (hourDate && !hourDate.value) hourDate.value = currentDateKey();
   if (absenceStart && !absenceStart.value) absenceStart.value = currentDateKey();
   if (absenceEnd && !absenceEnd.value) absenceEnd.value = currentDateKey();
-  if (documentMonth && !documentMonth.value) documentMonth.value = portalMonth;
 
   renderMissingTimeAlert();
-  renderPortalCalendar();
+  renderPortalTeamTimeline();
   renderPortalHourRows(logs);
   renderPortalAbsences();
-  renderPortalDocuments();
   renderPortalNotifications();
   renderPortalGoals();
   renderPortalOneOnOnes();
@@ -405,6 +396,8 @@ function renderMissingTimeAlert() {
 }
 
 function renderPortalCalendar() {
+  const target = document.getElementById("portalEmployeeCalendar");
+  if (!target) return;
   const days = monthDayKeys(portalMonth);
   const firstDay = parseDate(days[0]).getDay();
   const offset = firstDay === 0 ? 6 : firstDay - 1;
@@ -412,7 +405,7 @@ function renderPortalCalendar() {
   const absences = (state.employeeAbsences || []).filter((absence) => absence.status !== "Zatraženo" && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)));
   const logs = employeeWorkLogs(portalMonth);
   const plans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(portalMonth));
-  document.getElementById("portalEmployeeCalendar").innerHTML = `
+  target.innerHTML = `
     <div class="calendar-weekdays">
       <span>Pon</span><span>Uto</span><span>Sre</span><span>Čet</span><span>Pet</span><span>Sub</span><span>Ned</span>
     </div>
@@ -450,6 +443,45 @@ function renderPortalCalendar() {
     </div>`;
 }
 
+function renderPortalTeamTimeline() {
+  const target = document.getElementById("portalTeamTimelineList");
+  if (!target) return;
+  const plans = (state.companyPlans || [])
+    .filter((plan) => String(plan.date || "").startsWith(portalMonth))
+    .map((plan) => ({
+      date: plan.date,
+      type: plan.type,
+      title: plan.title,
+      note: plan.note,
+      className: "ok",
+    }));
+  const absences = (state.employeeAbsences || [])
+    .filter((absence) => absence.status !== "Zatraženo")
+    .filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)))
+    .map((absence) => {
+      const employee = (state.employees || []).find((item) => item.id === absence.employeeId);
+      return {
+        date: absence.startDate,
+        type: absence.type,
+        title: absence.employeeId === activeEmployee.id ? "Ti" : employee?.name || "Zaposleni",
+        note: `${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}${absence.note ? ` · ${absence.note}` : ""}`,
+        className: absence.type === "Bolovanje" ? "danger" : "warn",
+      };
+    });
+  const rows = [...plans, ...absences].sort((a, b) => new Date(a.date) - new Date(b.date));
+  target.innerHTML = rows.length
+    ? rows
+        .map(
+          (row) => `
+          <div class="setup-item alert-item ${row.className}">
+            <strong>${formatDate(row.date).slice(0, 5)}</strong>
+            <span>${row.type} · ${row.title}<br />${row.note || ""}</span>
+          </div>`
+        )
+        .join("")
+    : `<div class="empty-state">Nema datuma ni odsustava za ovaj mesec.</div>`;
+}
+
 function renderPortalHourRows(logs) {
   const rows = logs
     .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -482,26 +514,6 @@ function renderPortalAbsences() {
         })
         .join("")
     : `<div class="empty-state">Još nema unetih odsustava.</div>`;
-}
-
-function renderPortalDocuments() {
-  const documents = employeeDocuments()
-    .sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0));
-  setText("portalDocumentCount", `${documents.length} dokumenata`);
-  document.getElementById("portalDocumentList").innerHTML = documents.length
-    ? documents
-        .map((documentItem) => {
-          const fileLabel = documentItem.fileData
-            ? `<a class="document-link" href="${documentItem.fileData}" download="${documentItem.fileName || "dokument"}">${documentItem.fileName || "Preuzmi"}</a>`
-            : documentItem.fileName || "Fajl nije sačuvan lokalno";
-          return `
-          <div class="setup-item">
-            <strong>${String(documentItem.month || portalMonth).slice(5) || "M"}</strong>
-            <span>${documentItem.type || "Dokument"} · ${monthLabel(documentItem.month || portalMonth)}<br />${fileLabel}${documentItem.note ? ` · ${documentItem.note}` : ""}</span>
-          </div>`;
-        })
-        .join("")
-    : `<div class="empty-state">Još nema dokumenata za ovaj mesec.</div>`;
 }
 
 function renderPortalNotifications() {
@@ -593,6 +605,31 @@ function renderLeaderPanel() {
   panel.hidden = !activeEmployee.isLeader;
   if (!activeEmployee.isLeader) return;
   setText("leaderTeamCount", `${team.length} osoba`);
+  const available = (state.employees || []).filter((employee) => employee.id !== activeEmployee.id);
+  document.getElementById("leaderAssignmentList").innerHTML = available.length
+    ? available
+        .map((employee) => {
+          const assigned = employee.leaderId === activeEmployee.id;
+          return `
+          <div class="setup-item leader-assignment-row">
+            <strong>${assigned ? "✓" : "+"}</strong>
+            <span>${employee.name}<br />${employee.position || "Pozicija nije uneta"}${employee.leaderId && !assigned ? " · ima drugog lidera" : ""}</span>
+            <button class="secondary-button leader-assign-btn" data-employee-id="${employee.id}" type="button">${assigned ? "Ukloni" : "Dodaj"}</button>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema drugih zaposlenih.</div>`;
+
+  document.querySelectorAll(".leader-assign-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const employee = (state.employees || []).find((item) => item.id === button.dataset.employeeId);
+      if (!employee) return;
+      employee.leaderId = employee.leaderId === activeEmployee.id ? "" : activeEmployee.id;
+      saveState();
+      renderEmployeePortal();
+    });
+  });
+
   document.getElementById("leaderTeamHoursList").innerHTML = team.length
     ? team
         .map((employee) => {
@@ -609,8 +646,43 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema zaposlenih ispod ovog lidera.</div>`;
   const teamIds = new Set(team.map((employee) => employee.id));
+  const absences = (state.employeeAbsences || [])
+    .filter((absence) => teamIds.has(absence.employeeId) && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)))
+    .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+    .slice(0, 8);
+  document.getElementById("leaderTeamAbsenceList").innerHTML = absences.length
+    ? absences
+        .map((absence) => {
+          const employee = (state.employees || []).find((item) => item.id === absence.employeeId);
+          return `
+          <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : "warn"}">
+            <strong>${formatDate(absence.startDate).slice(0, 5)}</strong>
+            <span>${employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)} · ${absence.status || ""}</span>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema odsustava u ovom mesecu.</div>`;
+
+  const oneOnOnes = (state.employeeOneOnOnes || [])
+    .filter((note) => teamIds.has(note.employeeId) && note.visibleToEmployee !== false)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 8);
+  document.getElementById("leaderOneOnOneList").innerHTML = oneOnOnes.length
+    ? oneOnOnes
+        .map((note) => {
+          const employee = (state.employees || []).find((item) => item.id === note.employeeId);
+          return `
+          <div class="setup-item">
+            <strong>${formatDate(note.date).slice(0, 5)}</strong>
+            <span>${employee?.name || "Zaposleni"} · ${note.title || "1:1"}<br />${note.note || ""}</span>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema 1:1 beleški za tim.</div>`;
+
   const reports = (state.employeeReports || [])
     .filter((report) => teamIds.has(report.employeeId) || report.recipientId === activeEmployee.id)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 8);
   document.getElementById("leaderReportList").innerHTML = reports.length
     ? reports
@@ -702,28 +774,6 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.hours.value = 8;
-  renderEmployeePortal();
-});
-
-document.getElementById("portalDocumentForm")?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  const file = formData.get("file");
-  state.employeeDocuments = state.employeeDocuments || [];
-  state.employeeDocuments.unshift({
-    id: crypto.randomUUID(),
-    employeeId: activeEmployee.id,
-    month: formData.get("month") || portalMonth,
-    type: formData.get("type"),
-    fileName: file?.name || "",
-    fileData: await readSmallFile(file),
-    note: formData.get("note"),
-    uploadedBy: activeEmployee.name,
-    uploadedAt: new Date().toISOString(),
-  });
-  saveState();
-  event.currentTarget.reset();
-  event.currentTarget.elements.month.value = portalMonth;
   renderEmployeePortal();
 });
 

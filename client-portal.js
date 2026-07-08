@@ -334,8 +334,10 @@ function renderLeadSelects() {
 function renderSettingsForm() {
   const settings = clientSettings();
   const services = document.getElementById("settingsServices");
+  const whatsapp = document.getElementById("settingsWhatsapp");
+  if (whatsapp) whatsapp.value = activeClient.whatsapp || "";
   if (!services || services.dataset.ready === "1") return;
-  document.getElementById("settingsServices").value = settings.services.join("\n");
+  services.value = settings.services.join("\n");
   const fixedPreview = document.getElementById("settingsFixedPreview");
   if (fixedPreview) {
     fixedPreview.innerHTML = [...settings.statuses, ...settings.sources, ...settings.lossReasons]
@@ -678,6 +680,7 @@ document.getElementById("clientSettingsForm")?.addEventListener("submit", (event
   activeClient.crmSettings = {
     services: parseLines(document.getElementById("settingsServices").value, defaults.services),
   };
+  activeClient.whatsapp = document.getElementById("settingsWhatsapp")?.value || "";
   clientFilters.source = "all";
   clientFilters.status = "all";
   saveState();

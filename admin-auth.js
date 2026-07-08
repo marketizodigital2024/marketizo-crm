@@ -5,6 +5,14 @@ const adminUsers = [
 
 const adminSessionKey = "marketizoAdminSession";
 
+function adminHomePath() {
+  return window.location.protocol === "file:" ? "index.html" : "/";
+}
+
+function adminLoginPath() {
+  return window.location.protocol === "file:" ? "admin-login.html" : "/admin-login.html";
+}
+
 function getAdminSession() {
   const session = JSON.parse(localStorage.getItem(adminSessionKey) || "null");
   if (!session || Number(session.expiresAt || 0) < Date.now()) {
@@ -36,14 +44,14 @@ document.getElementById("adminLoginForm")?.addEventListener("submit", (event) =>
     return;
   }
   setAdminSession(user);
-  window.location.href = "/";
+  window.location.href = adminHomePath();
 });
 
 if (document.getElementById("adminLoginForm") && getAdminSession()) {
-  window.location.replace("/");
+  window.location.replace(adminHomePath());
 }
 
 document.getElementById("adminLogoutBtn")?.addEventListener("click", () => {
   localStorage.removeItem(adminSessionKey);
-  window.location.href = "/admin-login";
+  window.location.href = adminLoginPath();
 });
