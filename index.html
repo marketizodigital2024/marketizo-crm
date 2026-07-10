@@ -33,6 +33,7 @@
           <button class="nav-item active" data-view="admin" type="button">Dashboard</button>
           <button class="nav-item" data-view="clients" type="button">Klijenti</button>
           <button class="nav-item" data-view="employees" type="button">Zaposleni</button>
+          <button class="nav-item" data-view="calendar" type="button">Kalendar</button>
           <button class="nav-item" data-view="reports" type="button">Računi</button>
         </nav>
         <div class="side-panel">
@@ -414,7 +415,9 @@
                   <label>Lozinka<input name="password" required value="123456" /></label>
                   <label>Početak rada<input name="startDate" type="date" required /></label>
                   <label>Trenutna plata (€)<input name="salary" type="number" min="0" step="1" value="0" /></label>
-                  <label>Nedeljni sati<input name="weeklyHours" type="number" min="1" max="60" step="1" value="40" /></label>
+                  <label>Nedeljni sati<input name="weeklyHours" type="number" min="1" max="60" step="0.5" value="40" /></label>
+                  <label>Prenos sati iz starog sistema<input name="openingHourBalance" type="number" min="-500" max="500" step="0.25" value="0" /></label>
+                  <label>Mesec prenosa<input name="openingBalanceMonth" type="month" /></label>
                   <label class="checkbox-field">
                     <input name="isLeader" type="checkbox" />
                     <span>Ova osoba je lider</span>
@@ -425,6 +428,7 @@
                     </select>
                   </label>
                   <label>Godišnji odmor<input name="vacationDays" type="number" min="0" step="1" value="26" /></label>
+                  <label>Već iskorišćen odmor<input name="openingVacationUsed" type="number" min="0" step="0.5" value="0" /></label>
                   <label>Poklon dan<input name="giftDays" type="number" min="0" step="1" value="1" /></label>
                   <label>Status
                     <select name="status">
@@ -701,6 +705,45 @@
           </section>
         </section>
 
+        <section class="view" id="calendar">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Kalendar tima</p>
+              <h2>Ko je na odmoru</h2>
+            </div>
+          </div>
+          <section class="panel filter-panel">
+            <div class="filter-grid employee-filter-grid">
+              <label>Mesec
+                <input id="teamCalendarMonth" type="month" />
+              </label>
+              <label>Status
+                <select id="teamCalendarStatus">
+                  <option value="approved">Samo odobreno</option>
+                  <option value="all">Sve, uključujući zahteve</option>
+                </select>
+              </label>
+            </div>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Pregled</p>
+                <h2>Odsustva po danima</h2>
+              </div>
+              <span id="adminTeamCalendarSummary">pregled po mesecu</span>
+            </div>
+            <div class="employee-calendar" id="adminTeamCalendar"></div>
+          </section>
+          <section class="panel wide">
+            <div class="panel-head">
+              <h2>Lista odsustava</h2>
+              <span id="adminTeamAbsenceCount">0 unosa</span>
+            </div>
+            <div class="setup-list" id="adminTeamAbsenceList"></div>
+          </section>
+        </section>
+
         <section class="view" id="reports">
           <div class="section-head">
             <div>
@@ -813,6 +856,7 @@
     </dialog>
 
     <script src="admin-auth.js?v=3"></script>
+    <div class="toast-stack" id="toastStack" aria-live="polite"></div>
     <script src="app.js"></script>
   </body>
 </html>

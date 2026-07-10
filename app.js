@@ -602,12 +602,22 @@ function migrateState(data) {
     startDate: "",
     salary: 0,
     weeklyHours: 40,
+    openingHourBalance: 0,
+    openingBalanceMonth: "",
     vacationDays: 26,
+    openingVacationUsed: 0,
     giftDays: 1,
     isLeader: false,
     leaderId: "",
     status: "Aktivan",
     ...employee,
+    weeklyHours: parseNumber(employee.weeklyHours || 40, 40),
+    openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
+    openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
+    vacationDays: parseNumber(employee.vacationDays || 26, 26),
+    openingVacationUsed: parseNumber(employee.openingVacationUsed || 0, 0),
+    giftDays: parseNumber(employee.giftDays || 1, 1),
+    status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
   }));
   const employeeAbsences = (data.employeeAbsences || starterData.employeeAbsences || []).map((absence) => ({
     id: absence.id || crypto.randomUUID(),
@@ -649,7 +659,9 @@ function migrateState(data) {
     employeeId: record.employeeId || employees[0]?.id || "",
     date: record.date || currentDateKey(),
     minutes: Number(record.minutes || 0),
+    penaltyMinutes: Math.max(15, Number(record.penaltyMinutes || record.minutes || 0)),
     reason: record.reason || "",
+    acknowledgedAt: record.acknowledgedAt || "",
     createdAt: record.createdAt || new Date().toISOString(),
   }));
   const employeeGoals = (data.employeeGoals || starterData.employeeGoals || []).map((goal) => ({
@@ -700,6 +712,7 @@ function migrateState(data) {
     title: notification.title || "Obaveštenje",
     message: notification.message || "",
     read: Boolean(notification.read),
+    hiddenUntil: notification.hiddenUntil || "",
     createdAt: notification.createdAt || new Date().toISOString(),
   }));
   return {
@@ -798,6 +811,29 @@ function isClientLeadStatusContacted(status) {
 
 function saveState() {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
+}
+
+function parseNumber(value, fallback = 0) {
+  const normalized = String(value ?? "").replace(",", ".");
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function formatHours(value) {
+  const number = Math.round(parseNumber(value) * 100) / 100;
+  return Number.isInteger(number) ? String(number) : String(number).replace(".", ",");
+}
+
+function showToast(title, message = "", type = "ok") {
+  const stack = document.getElementById("toastStack");
+  if (!stack) return;
+  const toast = document.createElement("div");
+  toast.className = `toast-message ${notificationClass(type)}`;
+  toast.innerHTML = `<strong>${title}</strong>${message ? `<span>${message}</span>` : ""}`;
+  stack.appendChild(toast);
+  window.setTimeout(() => {
+    toast.remove();
+  }, 4200);
 }
 
 function bySearch(item) {
@@ -919,22 +955,96 @@ function notificationClass(type) {
   return "ok";
 }
 
+function isNotificationHidden(notification) {
+  return notification.hiddenUntil && new Date(notification.hiddenUntil).getTime() > Date.now();
+}
+
+function hideNotification(id) {
+  const notification = (state.notifications || []).find((item) => item.id === id);
+  if (!notification) return;
+  notification.hiddenUntil = addDays(currentDateKey(), 7);
+  saveState();
+  renderAll();
+  showToast("Sakriveno", "Obaveštenje je sklonjeno na 7 dana.", "info");
+}
+
+function unhideNotification(id) {
+  const notification = (state.notifications || []).find((item) => item.id === id);
+  if (!notification) return;
+  notification.hiddenUntil = "";
+  saveState();
+  renderAll();
+  showToast("Vraćeno", "Obaveštenje je ponovo aktivno.", "ok");
+}
+
+function showAdminNotificationPopups(notifications) {
+  const shown = JSON.parse(sessionStorage.getItem("shownAdminNotifications") || "[]");
+  const nextShown = new Set(shown);
+  notifications
+    .filter((notification) => notification.title === "Zahtev za odmor" && !nextShown.has(notification.id))
+    .slice(0, 3)
+    .forEach((notification) => {
+      showToast(notification.title, notification.message, notification.type);
+      nextShown.add(notification.id);
+    });
+  sessionStorage.setItem("shownAdminNotifications", JSON.stringify([...nextShown].slice(-50)));
+}
+
 function renderAdminNotifications() {
-  const notifications = (state.notifications || []).filter((notification) => notification.scope === "admin").slice(0, 8);
-  setText("adminNotificationCount", `${notifications.length} aktivno`);
+  const scopedNotifications = (state.notifications || []).filter((notification) => notification.scope === "admin");
+  const activeNotifications = scopedNotifications.filter((notification) => !isNotificationHidden(notification)).slice(0, 8);
+  const hiddenNotifications = scopedNotifications.filter(isNotificationHidden).slice(0, 6);
+  setText("adminNotificationCount", `${activeNotifications.length} aktivno`);
   const target = document.getElementById("adminNotificationList");
   if (!target) return;
-  target.innerHTML = notifications.length
-    ? notifications
+  target.innerHTML = activeNotifications.length
+    ? activeNotifications
         .map(
           (notification) => `
           <div class="setup-item alert-item ${notificationClass(notification.type)}">
             <strong>!</strong>
             <span>${notification.title}<br />${notification.message}</span>
+            <button class="mini-action" data-hide-notification="${notification.id}" type="button">Sakrij 7 dana</button>
           </div>`
         )
-        .join("")
-    : `<div class="empty-state">Nema obaveštenja za reakciju.</div>`;
+        .join("") +
+      (hiddenNotifications.length
+        ? `<div class="notification-archive">
+          <strong>Sakrivena obaveštenja</strong>
+          ${hiddenNotifications
+            .map(
+              (notification) => `
+              <div class="setup-item">
+                <span>${notification.title}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
+                <button class="mini-action" data-unhide-notification="${notification.id}" type="button">Vrati</button>
+              </div>`
+            )
+            .join("")}
+        </div>`
+        : "")
+    : `<div class="empty-state">Nema obaveštenja za reakciju.</div>${
+        hiddenNotifications.length
+          ? `<div class="notification-archive">
+          <strong>Sakrivena obaveštenja</strong>
+          ${hiddenNotifications
+            .map(
+              (notification) => `
+              <div class="setup-item">
+                <span>${notification.title}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
+                <button class="mini-action" data-unhide-notification="${notification.id}" type="button">Vrati</button>
+              </div>`
+            )
+            .join("")}
+        </div>`
+          : ""
+      }`;
+  showAdminNotificationPopups(activeNotifications);
+  target.querySelectorAll("[data-hide-notification]").forEach((button) => {
+    button.addEventListener("click", () => hideNotification(button.dataset.hideNotification));
+  });
+  target.querySelectorAll("[data-unhide-notification]").forEach((button) => {
+    button.addEventListener("click", () => unhideNotification(button.dataset.unhideNotification));
+  });
 }
 
 function renderAdminClientSnapshot(clients) {
@@ -983,11 +1093,12 @@ function renderAdminEmployeeRisk(monthKey) {
   target.innerHTML = rows.length
     ? rows
         .map(({ employee, balance, expected, hours }) => {
-          const status = balance < 0 ? "danger" : hours > expected ? "warn" : "ok";
+          const lateStatus = employeeLateStatus(employee.id, monthKey);
+          const status = balance < 0 || lateStatus.count > 3 ? "danger" : hours > expected || lateStatus.count === 3 ? "warn" : "ok";
           return `
           <div class="setup-item alert-item clickable-item ${status}" data-go-view="employees" data-select-shortcut-employee="${employee.id}">
             <strong>${formatHourBalance(balance)}</strong>
-            <span>${employee.name}<br />${hours}h od ${expected}h · ${employee.weeklyHours || 40}h nedeljno</span>
+            <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours || 40)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
           </div>`;
         })
         .join("")
@@ -1088,6 +1199,7 @@ function bindInvoiceControls() {
       if (control.dataset.invoiceField === "paymentMethod") client.paymentMethod = control.value;
       saveState();
       renderAll();
+      showToast("Sačuvano", `${client.name}: status računa je ažuriran.`, "ok");
     });
   });
 }
@@ -1364,12 +1476,27 @@ function absenceWorkdays(absence) {
 }
 
 function employeeYearAbsenceDays(employeeId, year, type) {
-  return state.employeeAbsences
+  const employee = employeeById(employeeId);
+  const openingUsed = type === "Godišnji odmor" && year === Number(currentDateKey().slice(0, 4)) ? parseNumber(employee?.openingVacationUsed || 0) : 0;
+  return openingUsed + state.employeeAbsences
     .filter((absence) => absence.employeeId === employeeId && absence.type === type && absence.status !== "Zatraženo")
     .reduce((sum, absence) => {
       const days = absenceWorkdays(absence).filter((day) => day.startsWith(`${year}-`));
       return sum + days.length;
     }, 0);
+}
+
+function employeeVacationAllowance(employee, year) {
+  const fullAllowance = parseNumber(employee?.vacationDays || 26, 26);
+  if (!employee?.startDate) return fullAllowance;
+  const startYear = Number(String(employee.startDate).slice(0, 4));
+  if (startYear < year) return fullAllowance;
+  if (startYear > year) return 0;
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const totalWorkdays = workdayKeysBetween(yearStart, yearEnd).length || 1;
+  const employeeWorkdays = workdayKeysBetween(employee.startDate, yearEnd).length;
+  return Math.ceil((fullAllowance * employeeWorkdays) / totalWorkdays);
 }
 
 function employeeMonthAbsenceDays(employeeId, monthKey, type = "") {
@@ -1382,26 +1509,100 @@ function employeeMonthAbsenceDays(employeeId, monthKey, type = "") {
 }
 
 function employeeMonthHours(employeeId, monthKey) {
+  const loggedHours = state.employeeWorkLogs
+    .filter((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey))
+    .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+  const penaltyHours = employeeMonthLatePenaltyHours(employeeId, monthKey);
+  return Math.round((loggedHours - penaltyHours) * 100) / 100;
+}
+
+function employeeMonthRawHours(employeeId, monthKey) {
   return state.employeeWorkLogs
     .filter((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey))
     .reduce((sum, log) => sum + Number(log.hours || 0), 0);
 }
 
+function employeeMonthLatePenaltyHours(employeeId, monthKey) {
+  return (state.employeeLateRecords || [])
+    .filter((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey))
+    .reduce((sum, record) => sum + Math.max(15, Number(record.penaltyMinutes || record.minutes || 0)) / 60, 0);
+}
+
+function employeeLateCount(employeeId, monthKey) {
+  return (state.employeeLateRecords || []).filter((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey)).length;
+}
+
+function employeeLateStatus(employeeId, monthKey) {
+  const count = employeeLateCount(employeeId, monthKey);
+  if (count > 3) return { count, className: "danger", label: `${count}/3 kašnjenja · razgovor` };
+  if (count === 3) return { count, className: "warn", label: `${count}/3 kašnjenja · poslednje` };
+  return { count, className: "ok", label: `${count}/3 kašnjenja` };
+}
+
 function employeeExpectedHours(employee, monthKey) {
   const dailyHours = Number(employee.weeklyHours || 40) / 5;
   const absenceDays = employeeMonthAbsenceDays(employee.id, monthKey);
-  const plannedDays = Math.max(workdaysInMonth(monthKey).length - absenceDays, 0);
+  const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !employee.startDate || day >= employee.startDate);
+  const plannedDays = Math.max(eligibleWorkdays.length - absenceDays, 0);
   return Math.round(plannedDays * dailyHours * 100) / 100;
 }
 
-function employeeHourBalance(employee, monthKey) {
+function shiftMonth(monthKey, offset) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const date = new Date(year, month - 1 + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthIndex(monthKey) {
+  const [year, month] = String(monthKey || currentMonthKey()).split("-").map(Number);
+  if (!year || !month) return 0;
+  return year * 12 + month;
+}
+
+function employeeMonthHasActivity(employeeId, monthKey) {
+  return (
+    state.employeeWorkLogs.some((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey)) ||
+    (state.employeeLateRecords || []).some((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey)) ||
+    (state.employeeAbsences || []).some((absence) => absence.employeeId === employeeId && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
+  );
+}
+
+function employeeMonthBalance(employee, monthKey) {
   return Math.round((employeeMonthHours(employee.id, monthKey) - employeeExpectedHours(employee, monthKey)) * 100) / 100;
+}
+
+function employeeCarryoverBalance(employee, monthKey) {
+  const openingMonth = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
+  const openingBalance = parseNumber(employee.openingHourBalance || 0);
+  let total = monthIndex(monthKey) > monthIndex(openingMonth) ? openingBalance : 0;
+  for (let index = 11; index >= 1; index -= 1) {
+    const key = shiftMonth(monthKey, -index);
+    if (!employeeMonthHasActivity(employee.id, key)) continue;
+    total += employeeMonthBalance(employee, key);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function employeeHourBalance(employee, monthKey) {
+  return Math.round((employeeMonthBalance(employee, monthKey) + employeeCarryoverBalance(employee, monthKey)) * 100) / 100;
+}
+
+function employeeCarryoverLabel(employee, monthKey) {
+  const previousMonth = shiftMonth(monthKey, -1);
+  const carryover = employeeCarryoverBalance(employee, monthKey);
+  const opening = parseNumber(employee.openingHourBalance || 0);
+  const openingMonth = employee.openingBalanceMonth || previousMonth;
+  const prefix = opening && monthIndex(monthKey) > monthIndex(openingMonth)
+    ? `Ručno unet prenos iz ${monthLabel(openingMonth)}: ${formatHourBalance(opening)} · `
+    : "";
+  return `${prefix}Ukupan prenos do ${monthLabel(previousMonth)}: ${formatHourBalance(carryover)}`;
 }
 
 function formatHourBalance(value) {
   const rounded = Math.round(Number(value || 0) * 100) / 100;
-  if (rounded > 0) return `+${rounded}h`;
-  return `${rounded}h`;
+  const formatted = formatHours(rounded);
+  if (rounded > 0) return `+${formatted}h`;
+  return `${formatted}h`;
 }
 
 function balanceClass(value) {
@@ -1459,6 +1660,7 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
     title,
     message,
     read: false,
+    hiddenUntil: "",
     createdAt: new Date().toISOString(),
   });
 }
@@ -1623,6 +1825,7 @@ function renderEmployees() {
   renderEmployeeRows(employees, monthKey, year);
   renderSelectedEmployeeDetail(employee, monthKey, year);
   renderEmployeeAbsenceRequests();
+  renderEmployeeCalendar(monthKey, employees);
   renderEmployeeWorkRows(monthKey);
   renderEmployeeOps(monthKey);
   renderEmployeeTeamTimeline(monthKey);
@@ -1636,13 +1839,14 @@ function renderEmployeeRows(employees, monthKey, year) {
           const hours = employeeMonthHours(employee.id, monthKey);
           const expected = employeeExpectedHours(employee, monthKey);
           const balance = employeeHourBalance(employee, monthKey);
+          const lateStatus = employeeLateStatus(employee.id, monthKey);
           const rowClass = employee.id === selectedEmployeeId ? "selected-row" : "";
           return `
           <tr class="${rowClass}" data-select-employee="${employee.id}">
             <td><strong>${employee.name}</strong><br /><span>${employee.position || "Pozicija nije uneta"} · ${employee.email}</span></td>
             <td>${employee.isLeader ? `<span class="status ok">Lider</span>` : `<span>${employeeLeaderName(employee)}</span>`}</td>
-            <td><strong>${hours}h</strong><br /><span>od ${expected}h</span></td>
-            <td><span class="status ${balanceClass(balance)}">${formatHourBalance(balance)}</span></td>
+            <td><strong>${formatHours(hours)}h</strong><br /><span>od ${formatHours(expected)}h · ${lateStatus.label}</span></td>
+            <td><span class="status ${balanceClass(balance)}">${formatHourBalance(balance)}</span><br /><span>${employeeCarryoverLabel(employee, monthKey)}</span></td>
             <td><span class="status ${employee.status === "Aktivan" ? "ok" : employee.status === "Pauza" ? "warn" : "danger"}">${employee.status || "Aktivan"}</span></td>
             <td>
               <button class="edit-button" data-edit-employee="${employee.id}" type="button" title="Izmeni">✎</button>
@@ -1671,15 +1875,26 @@ function renderSelectedEmployeeDetail(employee, monthKey, year) {
     return;
   }
   const team = teamUnderLeader(employee.id);
+  const lateStatus = employeeLateStatus(employee.id, monthKey);
   setText("selectedEmployeeName", employee.name);
   setText("selectedEmployeePosition", employee.position || "Pozicija nije uneta");
   setText("selectedEmployeeStart", formatDate(employee.startDate));
   setText("selectedEmployeeSalary", currency.format(Number(employee.salary || 0)));
-  setText("selectedEmployeeWeekly", `${employee.weeklyHours || 40}h`);
+  setText("selectedEmployeeWeekly", `${formatHours(employee.weeklyHours || 40)}h`);
   setText("selectedEmployeeLeader", employee.isLeader ? "Lider" : employeeLeaderName(employee));
   setText("selectedEmployeeTeamCount", `${team.length} osoba`);
   renderSelectedEmployeeAbsenceList(employee.id, year);
   renderLeaderAssignment(employee);
+  const absenceList = document.getElementById("selectedEmployeeAbsenceList");
+  if (absenceList) {
+    absenceList.insertAdjacentHTML(
+      "afterbegin",
+      `<div class="setup-item alert-item ${lateStatus.className}">
+        <strong>${lateStatus.count}</strong>
+        <span>Kašnjenja ovaj mesec<br />${lateStatus.label}</span>
+      </div>`
+    );
+  }
 }
 
 function renderSelectedEmployeeAbsenceList(employeeId, year) {
@@ -1687,6 +1902,7 @@ function renderSelectedEmployeeAbsenceList(employeeId, year) {
   const giftUsed = employeeYearAbsenceDays(employeeId, year, "Poklon dan");
   const sickDays = employeeYearAbsenceDays(employeeId, year, "Bolovanje");
   const employee = employeeById(employeeId);
+  const vacationAllowance = employeeVacationAllowance(employee, year);
   const recentAbsences = (state.employeeAbsences || [])
     .filter((absence) => absence.employeeId === employeeId)
     .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
@@ -1694,7 +1910,7 @@ function renderSelectedEmployeeAbsenceList(employeeId, year) {
   document.getElementById("selectedEmployeeAbsenceList").innerHTML = `
     <div class="setup-item">
       <strong>${vacationUsed}</strong>
-      <span>Godišnji iskorišćen · ${Math.max(Number(employee?.vacationDays || 26) - vacationUsed, 0)} dana preostalo</span>
+      <span>Godišnji iskorišćen · ${Math.max(vacationAllowance - vacationUsed, 0)} dana preostalo<br />Pravo za godinu: ${vacationAllowance}/${employee?.vacationDays || 26}</span>
     </div>
     <div class="setup-item">
       <strong>${giftUsed}</strong>
@@ -1791,10 +2007,13 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.password.value = employee.password || "123456";
     form.elements.startDate.value = employee.startDate || "";
     form.elements.salary.value = Number(employee.salary || 0);
-    form.elements.weeklyHours.value = Number(employee.weeklyHours || 40);
+    form.elements.weeklyHours.value = parseNumber(employee.weeklyHours || 40);
+    form.elements.openingHourBalance.value = parseNumber(employee.openingHourBalance || 0);
+    form.elements.openingBalanceMonth.value = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = Boolean(employee.isLeader);
     form.elements.leaderId.value = employee.leaderId || "";
     form.elements.vacationDays.value = Number(employee.vacationDays || 26);
+    form.elements.openingVacationUsed.value = parseNumber(employee.openingVacationUsed || 0);
     form.elements.giftDays.value = Number(employee.giftDays || 1);
     form.elements.status.value = employee.status || "Aktivan";
   } else {
@@ -1803,9 +2022,12 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.id.value = "";
     form.elements.password.value = "123456";
     form.elements.weeklyHours.value = 40;
+    form.elements.openingHourBalance.value = 0;
+    form.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = false;
     form.elements.leaderId.value = "";
     form.elements.vacationDays.value = 26;
+    form.elements.openingVacationUsed.value = 0;
     form.elements.giftDays.value = 1;
     form.elements.status.value = "Aktivan";
     form.elements.startDate.value = currentDateKey();
@@ -1910,10 +2132,11 @@ function renderEmployeeLateRows(monthKey) {
     ? rows
         .map((record) => {
           const employee = employeeById(record.employeeId);
+          const penalty = Math.max(15, Number(record.penaltyMinutes || record.minutes || 0));
           return `
           <div class="setup-item alert-item warn">
             <strong>${record.minutes}m</strong>
-            <span>${employee?.name || "Zaposleni"} · ${formatDate(record.date)}<br />${record.reason || ""}</span>
+            <span>${employee?.name || "Zaposleni"} · ${formatDate(record.date)}<br />Odbija se ${penalty} min · ${record.acknowledgedAt ? "potvrđeno" : "čeka potvrdu"}${record.reason ? ` · ${record.reason}` : ""}</span>
           </div>`;
         })
         .join("")
@@ -2069,16 +2292,24 @@ function renderEmployeeTeamTimeline(monthKey) {
     : `<div class="empty-state">Nema unetih datuma ili odsustava za ovaj mesec.</div>`;
 }
 
-function renderEmployeeCalendar(monthKey, employees) {
-  const target = document.getElementById("employeeCalendar");
+function calendarAbsences(monthKey, includeRequests = false) {
+  return (state.employeeAbsences || []).filter((absence) => {
+    if (!includeRequests && absence.status === "Zatraženo") return false;
+    return dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey));
+  });
+}
+
+function renderEmployeeCalendar(monthKey, employees, targetId = "employeeCalendar", summaryId = "employeeCalendarSummary", includeRequests = false) {
+  const target = document.getElementById(targetId);
   if (!target) return;
   const days = monthDayKeys(monthKey);
   const firstDay = parseDate(days[0]).getDay();
   const offset = firstDay === 0 ? 6 : firstDay - 1;
   const blanks = Array.from({ length: offset }, () => `<div class="calendar-day empty"></div>`).join("");
-  const monthAbsences = state.employeeAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)));
+  const monthAbsences = calendarAbsences(monthKey, includeRequests);
   const monthLogs = state.employeeWorkLogs.filter((log) => String(log.date || "").startsWith(monthKey));
   const monthPlans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(monthKey));
+  setText(summaryId, `${monthLabel(monthKey)} · ${monthAbsences.length} odsustava`);
   target.innerHTML = `
     <div class="calendar-weekdays">
       <span>Pon</span><span>Uto</span><span>Sre</span><span>Čet</span><span>Pet</span><span>Sub</span><span>Ned</span>
@@ -2108,7 +2339,8 @@ function renderEmployeeCalendar(monthKey, employees) {
                 .slice(0, 3)
                 .map((absence) => {
                   const employee = employees.find((item) => item.id === absence.employeeId) || employeeById(absence.employeeId);
-                  return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${employee?.name || "Zaposleni"} · ${absence.type}</span>`;
+                  const requestLabel = absence.status === "Zatraženo" ? " · zahtev" : "";
+                  return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${employee?.name || "Zaposleni"} · ${absence.type}${requestLabel}</span>`;
                 })
                 .join("")
             }
@@ -2121,6 +2353,33 @@ function renderEmployeeCalendar(monthKey, employees) {
         })
         .join("")}
     </div>`;
+}
+
+function renderAdminTeamCalendar() {
+  const monthInput = document.getElementById("teamCalendarMonth");
+  const statusInput = document.getElementById("teamCalendarStatus");
+  if (!monthInput) return;
+  const monthKey = monthInput.value || employeeMonthKey();
+  if (!monthInput.value) monthInput.value = monthKey;
+  const includeRequests = statusInput?.value === "all";
+  renderEmployeeCalendar(monthKey, state.employees || [], "adminTeamCalendar", "adminTeamCalendarSummary", includeRequests);
+  const absences = calendarAbsences(monthKey, includeRequests).sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  setText("adminTeamAbsenceCount", `${absences.length} unosa`);
+  const target = document.getElementById("adminTeamAbsenceList");
+  if (!target) return;
+  target.innerHTML = absences.length
+    ? absences
+        .map((absence) => {
+          const employee = employeeById(absence.employeeId);
+          const days = workdayKeysBetween(absence.startDate, absence.endDate).length;
+          return `
+          <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : absence.status === "Zatraženo" ? "warn" : "ok"}">
+            <strong>${days}</strong>
+            <span>${employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)} · ${absence.status || "Odobreno"}${absence.note ? ` · ${absence.note}` : ""}</span>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema odsustava za izabrani mesec.</div>`;
 }
 
 function renderClients() {
@@ -2409,6 +2668,7 @@ function renderAll() {
   if (document.getElementById("clientCards")) renderClients();
   if (document.getElementById("leadCards")) renderLeadCrm();
   if (document.getElementById("employees")) renderEmployees();
+  if (document.getElementById("adminTeamCalendar")) renderAdminTeamCalendar();
   if (document.getElementById("countryBars")) renderReports();
   if (document.getElementById("clientPortal")) renderClientPortal();
   renderLeadClientOptions();
@@ -2523,6 +2783,12 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
   input.addEventListener("click", () => input.showPicker?.());
 });
 
+window.addEventListener("storage", (event) => {
+  if (event.key !== "agencyCrmData") return;
+  state = loadState();
+  renderAll();
+});
+
 document.getElementById("employeeMonthFilter")?.addEventListener("input", (event) => {
   employeeMonthFilter = event.target.value || currentMonthKey();
   renderAll();
@@ -2530,6 +2796,14 @@ document.getElementById("employeeMonthFilter")?.addEventListener("input", (event
 
 document.getElementById("employeeStatusFilter")?.addEventListener("change", (event) => {
   employeeStatusFilter = event.target.value;
+  renderAll();
+});
+
+document.getElementById("teamCalendarMonth")?.addEventListener("input", () => {
+  renderAll();
+});
+
+document.getElementById("teamCalendarStatus")?.addEventListener("change", () => {
   renderAll();
 });
 
@@ -2579,13 +2853,16 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
     password: String(formData.get("password") || "123456").trim(),
     position: formData.get("position"),
     startDate: formData.get("startDate"),
-    salary: Number(formData.get("salary") || 0),
-    weeklyHours: Number(formData.get("weeklyHours") || 40),
+    salary: parseNumber(formData.get("salary"), 0),
+    weeklyHours: parseNumber(formData.get("weeklyHours"), 40),
+    openingHourBalance: parseNumber(formData.get("openingHourBalance"), 0),
+    openingBalanceMonth: formData.get("openingBalanceMonth") || shiftMonth(currentMonthKey(), -1),
     isLeader: Boolean(form.elements.isLeader?.checked),
     leaderId: formData.get("leaderId") || "",
-    vacationDays: Number(formData.get("vacationDays") || 26),
-    giftDays: Number(formData.get("giftDays") || 1),
-    status: normalizeLeadStatus(formData.get("status")),
+    vacationDays: parseNumber(formData.get("vacationDays"), 26),
+    openingVacationUsed: parseNumber(formData.get("openingVacationUsed"), 0),
+    giftDays: parseNumber(formData.get("giftDays"), 1),
+    status: ["Aktivan", "Pauza", "Neaktivan"].includes(formData.get("status")) ? formData.get("status") : "Aktivan",
   };
   if (payload.leaderId === id) payload.leaderId = "";
   if (id) {
@@ -2608,12 +2885,16 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
   event.currentTarget.elements.id.value = "";
   event.currentTarget.elements.password.value = "123456";
   event.currentTarget.elements.weeklyHours.value = 40;
+  event.currentTarget.elements.openingHourBalance.value = 0;
+  event.currentTarget.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
   event.currentTarget.elements.isLeader.checked = false;
   event.currentTarget.elements.leaderId.value = "";
   event.currentTarget.elements.vacationDays.value = 26;
+  event.currentTarget.elements.openingVacationUsed.value = 0;
   event.currentTarget.elements.giftDays.value = 1;
   hideEmployeeProfileForm();
   renderAll();
+  showToast("Sačuvano", `${name} je sačuvan u zaposlenima.`, "ok");
 });
 
 document.getElementById("employeeAbsenceForm")?.addEventListener("submit", (event) => {
@@ -2650,6 +2931,7 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", (even
   saveState();
   event.currentTarget.reset();
   renderAll();
+  showToast("Sačuvano", "Odsustvo je upisano i zaposlenom je poslato obaveštenje.", "ok");
 });
 
 document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) => {
@@ -2669,7 +2951,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
     id: crypto.randomUUID(),
     employeeId,
     date,
-    hours: Number(formData.get("hours") || 0),
+    hours: parseNumber(formData.get("hours"), 0),
     type: "Rad",
     note: formData.get("note"),
     locked: true,
@@ -2681,6 +2963,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.hours.value = 8;
   renderAll();
+  showToast("Sačuvano", "Sati su upisani za izabranog zaposlenog.", "ok");
 });
 
 document.getElementById("employeeLateForm")?.addEventListener("submit", (event) => {
@@ -2691,12 +2974,16 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", (event) 
     alert("Izaberi zaposlenog za ovaj unos.");
     return;
   }
+  const minutes = parseNumber(formData.get("minutes"), 0);
+  const penaltyMinutes = Math.max(15, minutes);
   const record = {
     id: crypto.randomUUID(),
     employeeId,
     date: formData.get("date"),
-    minutes: Number(formData.get("minutes") || 0),
+    minutes,
+    penaltyMinutes,
     reason: formData.get("reason"),
+    acknowledgedAt: "",
     createdAt: new Date().toISOString(),
   };
   state.employeeLateRecords.unshift(record);
@@ -2707,13 +2994,14 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", (event) 
     targetId: record.employeeId,
     type: "warn",
     title: "Upisano kašnjenje",
-    message: `${record.minutes} minuta · ${formatDate(record.date)} · ${record.reason}`,
+    message: `${record.minutes} minuta · odbija se ${record.penaltyMinutes} minuta · ${formatDate(record.date)} · ${record.reason}. Potvrdi u dashboardu.`,
   });
   saveState();
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.minutes.value = 10;
   renderAll();
+  showToast("Sačuvano", `Kašnjenje je upisano. Odbija se ${penaltyMinutes} minuta.`, "warn");
 });
 
 document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) => {
@@ -2751,6 +3039,7 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) 
   event.currentTarget.elements.endDate.value = currentDateKey();
   event.currentTarget.elements.progress.value = 0;
   renderAll();
+  showToast("Sačuvano", "Cilj je dodat zaposlenom.", "ok");
 });
 
 document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", (event) => {
@@ -2784,6 +3073,7 @@ document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", (eve
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   renderAll();
+  showToast("Sačuvano", "1:1 beleška je sačuvana.", "ok");
 });
 
 document.getElementById("companyPlanForm")?.addEventListener("submit", (event) => {
@@ -2812,6 +3102,7 @@ document.getElementById("companyPlanForm")?.addEventListener("submit", (event) =
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   renderAll();
+  showToast("Sačuvano", "Plan firme je dodat i vidljiv zaposlenima.", "ok");
 });
 
 document.getElementById("openClientModal").addEventListener("click", () => {
@@ -2874,6 +3165,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   event.currentTarget.reset();
   document.getElementById("clientAddPanel")?.setAttribute("hidden", "");
   renderAll();
+  showToast("Sačuvano", "Klijent je dodat u bazu.", "ok");
 });
 
 const adminPackageSelect = document.querySelector('#adminClientForm select[name="package"]');
@@ -2921,6 +3213,7 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
   saveState();
   editClientModal.close();
   renderAll();
+  showToast("Sačuvano", "Izmene klijenta su sačuvane.", "ok");
 });
 
 document.getElementById("portalLeadForm")?.addEventListener("submit", (event) => {
@@ -2956,6 +3249,7 @@ document.getElementById("portalLeadForm")?.addEventListener("submit", (event) =>
   event.currentTarget.reset();
   document.getElementById("portalLeadPanel")?.setAttribute("hidden", "");
   renderAll();
+  showToast("Sačuvano", "Lead je dodat za izabranog klijenta.", "ok");
 });
 
 document.getElementById("portalTeamForm")?.addEventListener("submit", (event) => {
@@ -2974,6 +3268,7 @@ document.getElementById("portalTeamForm")?.addEventListener("submit", (event) =>
   saveState();
   event.currentTarget.reset();
   renderAll();
+  showToast("Sačuvano", "Osoba je dodata u tim klijenta.", "ok");
 });
 
 document.querySelector('#editClientForm select[name="package"]')?.addEventListener("change", (event) => {
@@ -3013,6 +3308,7 @@ document.getElementById("leadForm")?.addEventListener("submit", (event) => {
   event.currentTarget.reset();
   leadModal?.close();
   renderAll();
+  showToast("Sačuvano", "Lead je ručno dodat.", "ok");
 });
 
 function updateLeadStatus(id, status) {
@@ -3025,6 +3321,7 @@ function updateLeadStatus(id, status) {
   lead.lastStatusChangeAt = new Date().toISOString();
   saveState();
   renderAll();
+  showToast("Sačuvano", `Lead je prebačen u status ${lead.status}.`, "ok");
 }
 
 function renderLeadClientOptions() {

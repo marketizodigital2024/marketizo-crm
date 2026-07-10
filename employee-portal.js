@@ -58,12 +58,22 @@ function loadState() {
     startDate: "",
     salary: 0,
     weeklyHours: 40,
+    openingHourBalance: 0,
+    openingBalanceMonth: "",
     vacationDays: 26,
+    openingVacationUsed: 0,
     giftDays: 1,
     isLeader: false,
     leaderId: "",
     status: "Aktivan",
     ...employee,
+    weeklyHours: parseNumber(employee.weeklyHours || 40, 40),
+    openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
+    openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
+    vacationDays: parseNumber(employee.vacationDays || 26, 26),
+    openingVacationUsed: parseNumber(employee.openingVacationUsed || 0, 0),
+    giftDays: parseNumber(employee.giftDays || 1, 1),
+    status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
   }));
   data.employeeAbsences = data.employeeAbsences || [];
   data.employeeWorkLogs = (data.employeeWorkLogs || []).map((log) => ({
@@ -89,18 +99,52 @@ function loadState() {
     uploadedBy: documentItem.uploadedBy || "Zaposleni",
     uploadedAt: documentItem.uploadedAt || new Date().toISOString(),
   }));
-  data.employeeLateRecords = data.employeeLateRecords || [];
+  data.employeeLateRecords = (data.employeeLateRecords || []).map((record) => ({
+    id: record.id || crypto.randomUUID(),
+    employeeId: record.employeeId || "",
+    date: record.date || currentDateKey(),
+    minutes: Number(record.minutes || 0),
+    penaltyMinutes: Math.max(15, Number(record.penaltyMinutes || record.minutes || 0)),
+    reason: record.reason || "",
+    acknowledgedAt: record.acknowledgedAt || "",
+    createdAt: record.createdAt || new Date().toISOString(),
+  }));
   data.employeeGoals = data.employeeGoals || [];
   data.employeeOneOnOnes = data.employeeOneOnOnes || [];
   data.employeeReports = data.employeeReports || [];
   data.companyPlans = data.companyPlans || [];
-  data.notifications = data.notifications || [];
+  data.notifications = (data.notifications || []).map((notification) => ({
+    ...notification,
+    hiddenUntil: notification.hiddenUntil || "",
+  }));
   localStorage.setItem("agencyCrmData", JSON.stringify(data));
   return data;
 }
 
 function saveState() {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
+}
+
+function parseNumber(value, fallback = 0) {
+  const normalized = String(value ?? "").replace(",", ".");
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function formatHours(value) {
+  const number = Math.round(parseNumber(value) * 100) / 100;
+  return Number.isInteger(number) ? String(number) : String(number).replace(".", ",");
+}
+
+function showToast(title, message = "", type = "ok") {
+  const stack = document.getElementById("employeeToastStack");
+  if (!stack) return;
+  const toast = document.createElement("div");
+  const className = type === "danger" ? "danger" : type === "warn" ? "warn" : "ok";
+  toast.className = `toast-message ${className}`;
+  toast.innerHTML = `<strong>${title}</strong>${message ? `<span>${message}</span>` : ""}`;
+  stack.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 4200);
 }
 
 function setText(id, value) {
@@ -245,7 +289,33 @@ function employeeLateRecords(monthKey = portalMonth) {
 }
 
 function employeeNotifications() {
-  return (state.notifications || []).filter((notification) => notification.scope === "employee" && notification.targetId === activeEmployee.id).slice(0, 8);
+  return (state.notifications || []).filter((notification) => notification.scope === "employee" && notification.targetId === activeEmployee.id && !isNotificationHidden(notification)).slice(0, 8);
+}
+
+function hiddenEmployeeNotifications() {
+  return (state.notifications || []).filter((notification) => notification.scope === "employee" && notification.targetId === activeEmployee.id && isNotificationHidden(notification)).slice(0, 6);
+}
+
+function isNotificationHidden(notification) {
+  return notification.hiddenUntil && new Date(notification.hiddenUntil).getTime() > Date.now();
+}
+
+function hideNotification(id) {
+  const notification = (state.notifications || []).find((item) => item.id === id);
+  if (!notification) return;
+  notification.hiddenUntil = addDays(currentDateKey(), 7);
+  saveState();
+  renderEmployeePortal();
+  showToast("Sakriveno", "Obaveštenje je sklonjeno na 7 dana.", "info");
+}
+
+function unhideNotification(id) {
+  const notification = (state.notifications || []).find((item) => item.id === id);
+  if (!notification) return;
+  notification.hiddenUntil = "";
+  saveState();
+  renderEmployeePortal();
+  showToast("Vraćeno", "Obaveštenje je ponovo aktivno.", "ok");
 }
 
 function leaderTeam() {
@@ -259,10 +329,23 @@ function reportRecipientId() {
 }
 
 function employeeYearAbsenceDays(type, year) {
-  return employeeAbsences(type).filter((absence) => absence.status !== "Zatraženo").reduce((sum, absence) => {
+  const openingUsed = type === "Godišnji odmor" && year === Number(currentDateKey().slice(0, 4)) ? parseNumber(activeEmployee?.openingVacationUsed || 0) : 0;
+  return openingUsed + employeeAbsences(type).filter((absence) => absence.status !== "Zatraženo").reduce((sum, absence) => {
     const days = workdayKeysBetween(absence.startDate, absence.endDate).filter((day) => day.startsWith(`${year}-`));
     return sum + days.length;
   }, 0);
+}
+
+function employeeVacationAllowance(employee, year) {
+  const fullAllowance = parseNumber(employee?.vacationDays || 26, 26);
+  if (!employee?.startDate) return fullAllowance;
+  const startYear = Number(String(employee.startDate).slice(0, 4));
+  if (startYear < year) return fullAllowance;
+  if (startYear > year) return 0;
+  const yearEnd = `${year}-12-31`;
+  const totalWorkdays = workdayKeysBetween(`${year}-01-01`, yearEnd).length || 1;
+  const employeeWorkdays = workdayKeysBetween(employee.startDate, yearEnd).length;
+  return Math.ceil((fullAllowance * employeeWorkdays) / totalWorkdays);
 }
 
 function employeeMonthAbsenceDays(employeeId, monthKey) {
@@ -275,20 +358,87 @@ function employeeMonthAbsenceDays(employeeId, monthKey) {
 }
 
 function expectedHours(employee, monthKey) {
-  const dailyHours = Number(employee.weeklyHours || 40) / 5;
-  const plannedDays = Math.max(workdaysInMonth(monthKey).length - employeeMonthAbsenceDays(employee.id, monthKey), 0);
+  const dailyHours = parseNumber(employee.weeklyHours || 40, 40) / 5;
+  const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !employee.startDate || day >= employee.startDate);
+  const plannedDays = Math.max(eligibleWorkdays.length - employeeMonthAbsenceDays(employee.id, monthKey), 0);
   return Math.round(plannedDays * dailyHours * 100) / 100;
 }
 
+function employeeMonthLatePenaltyHours(employeeId, monthKey) {
+  return (state.employeeLateRecords || [])
+    .filter((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey))
+    .reduce((sum, record) => sum + Math.max(15, Number(record.penaltyMinutes || record.minutes || 0)) / 60, 0);
+}
+
+function employeeMonthHours(employee, monthKey) {
+  const logged = (state.employeeWorkLogs || [])
+    .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
+    .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+  return Math.round((logged - employeeMonthLatePenaltyHours(employee.id, monthKey)) * 100) / 100;
+}
+
+function shiftMonth(monthKey, offset) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const date = new Date(year, month - 1 + offset, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthIndex(monthKey) {
+  const [year, month] = String(monthKey || currentMonthKey()).split("-").map(Number);
+  if (!year || !month) return 0;
+  return year * 12 + month;
+}
+
+function employeeMonthHasActivity(employeeId, monthKey) {
+  return (
+    (state.employeeWorkLogs || []).some((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey)) ||
+    (state.employeeLateRecords || []).some((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey)) ||
+    (state.employeeAbsences || []).some((absence) => absence.employeeId === employeeId && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
+  );
+}
+
+function monthBalance(employee, monthKey) {
+  return Math.round((employeeMonthHours(employee, monthKey) - expectedHours(employee, monthKey)) * 100) / 100;
+}
+
+function carryoverBalance(employee, monthKey) {
+  const openingMonth = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
+  const openingBalance = parseNumber(employee.openingHourBalance || 0);
+  let total = monthIndex(monthKey) > monthIndex(openingMonth) ? openingBalance : 0;
+  for (let index = 11; index >= 1; index -= 1) {
+    const key = shiftMonth(monthKey, -index);
+    if (!employeeMonthHasActivity(employee.id, key)) continue;
+    total += monthBalance(employee, key);
+  }
+  return Math.round(total * 100) / 100;
+}
+
 function hourBalance(employee, monthKey) {
-  const hours = employeeWorkLogs(monthKey).reduce((sum, log) => sum + Number(log.hours || 0), 0);
-  return Math.round((hours - expectedHours(employee, monthKey)) * 100) / 100;
+  return Math.round((monthBalance(employee, monthKey) + carryoverBalance(employee, monthKey)) * 100) / 100;
+}
+
+function carryoverLabel(employee, monthKey) {
+  const previousMonth = shiftMonth(monthKey, -1);
+  const opening = parseNumber(employee.openingHourBalance || 0);
+  const openingMonth = employee.openingBalanceMonth || previousMonth;
+  const prefix = opening && monthIndex(monthKey) > monthIndex(openingMonth)
+    ? `Ručno unet prenos iz ${monthLabel(openingMonth)}: ${formatHourBalance(opening)} · `
+    : "";
+  return `${prefix}Ukupan prenos do ${monthLabel(previousMonth)}: ${formatHourBalance(carryoverBalance(employee, monthKey))}`;
+}
+
+function employeeLateStatus(employeeId, monthKey) {
+  const count = (state.employeeLateRecords || []).filter((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey)).length;
+  if (count > 3) return { count, className: "danger", label: `${count}/3 kašnjenja · razgovor` };
+  if (count === 3) return { count, className: "warn", label: `${count}/3 kašnjenja · poslednje` };
+  return { count, className: "ok", label: `${count}/3 kašnjenja` };
 }
 
 function formatHourBalance(value) {
   const rounded = Math.round(Number(value || 0) * 100) / 100;
-  if (rounded > 0) return `+${rounded}h`;
-  return `${rounded}h`;
+  const formatted = formatHours(rounded);
+  if (rounded > 0) return `+${formatted}h`;
+  return `${formatted}h`;
 }
 
 function hasWorkLogForDate(date) {
@@ -330,16 +480,15 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
     title,
     message,
     read: false,
+    hiddenUntil: "",
     createdAt: new Date().toISOString(),
   });
 }
 
 function renderLoginHint() {
   const hint = document.getElementById("employeeLoginHint");
-  const employee = state.employees?.[0];
-  hint.innerHTML = employee
-    ? `<strong>Login podaci:</strong><span>${employee.email}</span><span>Lozinka: ${employee.password}</span>`
-    : `<strong>Nema zaposlenih.</strong><span>Dodaj zaposlenog u admin delu.</span>`;
+  if (!hint) return;
+  hint.innerHTML = `<strong>Login dobijaš od admina.</strong><span>Ako si zaboravio/la lozinku, admin može da je promeni u delu Zaposleni.</span>`;
 }
 
 function renderEmployeePortal() {
@@ -348,24 +497,25 @@ function renderEmployeePortal() {
   activeEmployee = state.employees.find((employee) => employee.id === activeEmployee.id) || activeEmployee;
   const year = Number(portalMonth.slice(0, 4));
   const logs = employeeWorkLogs(portalMonth);
-  const hours = logs.reduce((sum, log) => sum + Number(log.hours || 0), 0);
-  const workdays = workdaysInMonth(portalMonth);
+  const hours = employeeMonthHours(activeEmployee, portalMonth);
+  const workdays = workdaysInMonth(portalMonth).filter((day) => !activeEmployee.startDate || day >= activeEmployee.startDate);
   const expected = expectedHours(activeEmployee, portalMonth);
   const balance = hourBalance(activeEmployee, portalMonth);
   const vacationUsed = employeeYearAbsenceDays("Godišnji odmor", year);
+  const vacationAllowance = employeeVacationAllowance(activeEmployee, year);
   const giftUsed = employeeYearAbsenceDays("Poklon dan", year);
   const sickDays = employeeYearAbsenceDays("Bolovanje", year);
-  const vacationLeft = Math.max(Number(activeEmployee.vacationDays || 26) - vacationUsed, 0);
+  const vacationLeft = Math.max(vacationAllowance - vacationUsed, 0);
   const giftLeft = Math.max(Number(activeEmployee.giftDays || 1) - giftUsed, 0);
 
   document.getElementById("employeePortalMonth").value = portalMonth;
   setText("employeePortalName", activeEmployee.name);
   setText("employeePortalPosition", activeEmployee.position || "Pozicija");
   setText("portalWorkdays", workdays.length);
-  setText("portalHours", `${hours}h`);
-  setText("portalExpectedHours", `od ${expected}h`);
+  setText("portalHours", `${formatHours(hours)}h`);
+  setText("portalExpectedHours", `od ${formatHours(expected)}h · ${carryoverLabel(activeEmployee, portalMonth)}`);
   setText("portalHourBalance", formatHourBalance(balance));
-  setText("portalVacation", `${vacationUsed}/${activeEmployee.vacationDays || 26}`);
+  setText("portalVacation", `${vacationUsed}/${vacationAllowance}`);
   setText("portalVacationLeft", `${vacationLeft} preostalo`);
   setText("portalGiftDay", `${giftUsed}/${activeEmployee.giftDays || 1}`);
   setText("portalGiftLeft", `${giftLeft} preostalo`);
@@ -373,7 +523,7 @@ function renderEmployeePortal() {
   setText("portalStartDate", formatDate(activeEmployee.startDate));
   setText("portalPosition", activeEmployee.position || "-");
   setText("portalSalary", currency.format(Number(activeEmployee.salary || 0)));
-  setText("portalWeeklyHours", `${activeEmployee.weeklyHours || 40}h`);
+  setText("portalWeeklyHours", `${formatHours(activeEmployee.weeklyHours || 40)}h`);
 
   const hourDate = document.querySelector('#portalHoursForm input[name="date"]');
   const absenceStart = document.querySelector('#portalAbsenceForm input[name="startDate"]');
@@ -383,6 +533,7 @@ function renderEmployeePortal() {
   if (absenceEnd && !absenceEnd.value) absenceEnd.value = currentDateKey();
 
   renderMissingTimeAlert();
+  renderPortalCalendar();
   renderPortalTeamTimeline();
   renderPortalHourRows(logs);
   renderPortalAbsences();
@@ -392,6 +543,8 @@ function renderEmployeePortal() {
   renderPortalLateRecords();
   renderPortalCompanyPlan();
   renderLeaderPanel();
+  renderLateAcknowledgement();
+  showEmployeeNotificationPopups();
 }
 
 function renderMissingTimeAlert() {
@@ -416,6 +569,7 @@ function renderPortalCalendar() {
   const absences = (state.employeeAbsences || []).filter((absence) => absence.status !== "Zatraženo" && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)));
   const logs = employeeWorkLogs(portalMonth);
   const plans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(portalMonth));
+  setText("portalCalendarSummary", `${monthLabel(portalMonth)} · ${absences.length} odsustava`);
   target.innerHTML = `
     <div class="calendar-weekdays">
       <span>Pon</span><span>Uto</span><span>Sre</span><span>Čet</span><span>Pet</span><span>Sub</span><span>Ned</span>
@@ -452,6 +606,23 @@ function renderPortalCalendar() {
         })
         .join("")}
     </div>`;
+  const list = document.getElementById("portalCalendarAbsenceList");
+  if (!list) return;
+  const rows = absences.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  setText("portalCalendarListCount", `${rows.length} unosa`);
+  list.innerHTML = rows.length
+    ? rows
+        .map((absence) => {
+          const employee = (state.employees || []).find((item) => item.id === absence.employeeId);
+          const days = workdayKeysBetween(absence.startDate, absence.endDate).length;
+          return `
+          <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : "warn"}">
+            <strong>${days}</strong>
+            <span>${absence.employeeId === activeEmployee.id ? "Ti" : employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}${absence.note ? ` · ${absence.note}` : ""}</span>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema odsustava za izabrani mesec.</div>`;
 }
 
 function renderPortalTeamTimeline() {
@@ -498,16 +669,22 @@ function renderPortalHourRows(logs) {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(
       (log) => `
-      <tr>
-        <td>${formatDate(log.date)}</td>
-        <td>${Number(log.hours || 0)}h</td>
-        <td>${log.note || ""}</td>
-        <td><strong>+</strong> ${log.positive || "-"}<br /><strong>-</strong> ${log.negative || "-"}</td>
-        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span></td>
-      </tr>`
+      <article class="work-log-card">
+        <header>
+          <div>
+            <strong>${formatDate(log.date)}</strong>
+            <span>${formatHours(log.hours || 0)}h · ${log.locked === false ? "Otključano" : "Zaključano"}</span>
+          </div>
+        </header>
+        <p><b>Šta je rađeno:</b> ${log.note || "-"}</p>
+        <div class="work-log-feedback">
+          <span><b>Pozitivno:</b> ${log.positive || "-"}</span>
+          <span><b>Negativno:</b> ${log.negative || "-"}</span>
+        </div>
+      </article>`
     );
   setText("portalHoursCount", `${rows.length} unosa`);
-  document.getElementById("portalHoursRows").innerHTML = rows.join("") || `<tr><td colspan="5">Još nema unetih sati za ovaj mesec.</td></tr>`;
+  document.getElementById("portalHoursRows").innerHTML = rows.join("") || `<div class="empty-state">Još nema unetih sati za ovaj mesec.</div>`;
 }
 
 function renderPortalAbsences() {
@@ -529,6 +706,7 @@ function renderPortalAbsences() {
 
 function renderPortalNotifications() {
   const notifications = employeeNotifications();
+  const hiddenNotifications = hiddenEmployeeNotifications();
   setText("portalNotificationCount", `${notifications.length} aktivno`);
   document.getElementById("portalNotificationList").innerHTML = notifications.length
     ? notifications
@@ -537,10 +715,82 @@ function renderPortalNotifications() {
           <div class="setup-item alert-item ${notification.type === "danger" ? "danger" : notification.type === "warn" ? "warn" : "ok"}">
             <strong>!</strong>
             <span>${notification.title}<br />${notification.message}</span>
+            <button class="mini-action" data-hide-notification="${notification.id}" type="button">Sakrij 7 dana</button>
           </div>`
         )
-        .join("")
-    : `<div class="empty-state">Nema obaveštenja.</div>`;
+        .join("") +
+      (hiddenNotifications.length
+        ? `<div class="notification-archive">
+          <strong>Sakrivena obaveštenja</strong>
+          ${hiddenNotifications
+            .map(
+              (notification) => `
+              <div class="setup-item">
+                <span>${notification.title}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
+                <button class="mini-action" data-unhide-notification="${notification.id}" type="button">Vrati</button>
+              </div>`
+            )
+            .join("")}
+        </div>`
+        : "")
+    : `<div class="empty-state">Nema obaveštenja.</div>${
+        hiddenNotifications.length
+          ? `<div class="notification-archive">
+          <strong>Sakrivena obaveštenja</strong>
+          ${hiddenNotifications
+            .map(
+              (notification) => `
+              <div class="setup-item">
+                <span>${notification.title}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
+                <button class="mini-action" data-unhide-notification="${notification.id}" type="button">Vrati</button>
+              </div>`
+            )
+            .join("")}
+        </div>`
+          : ""
+      }`;
+  document.querySelectorAll("[data-hide-notification]").forEach((button) => {
+    button.addEventListener("click", () => hideNotification(button.dataset.hideNotification));
+  });
+  document.querySelectorAll("[data-unhide-notification]").forEach((button) => {
+    button.addEventListener("click", () => unhideNotification(button.dataset.unhideNotification));
+  });
+}
+
+function showEmployeeNotificationPopups() {
+  if (!activeEmployee) return;
+  const shown = JSON.parse(sessionStorage.getItem(`shownEmployeeNotifications-${activeEmployee.id}`) || "[]");
+  const nextShown = new Set(shown);
+  employeeNotifications()
+    .filter((notification) => notification.title === "Odmor je odobren" && !nextShown.has(notification.id))
+    .slice(0, 3)
+    .forEach((notification) => {
+      showToast(notification.title, notification.message, notification.type);
+      nextShown.add(notification.id);
+    });
+  sessionStorage.setItem(`shownEmployeeNotifications-${activeEmployee.id}`, JSON.stringify([...nextShown].slice(-50)));
+}
+
+function renderLateAcknowledgement() {
+  const dialog = document.getElementById("lateAckDialog");
+  const content = document.getElementById("lateAckContent");
+  const button = document.getElementById("ackLateBtn");
+  if (!dialog || !content || !button || !activeEmployee) return;
+  const record = (state.employeeLateRecords || [])
+    .filter((item) => item.employeeId === activeEmployee.id && !item.acknowledgedAt)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+  if (!record) {
+    if (dialog.open) dialog.close();
+    return;
+  }
+  const penalty = Math.max(15, Number(record.penaltyMinutes || record.minutes || 0));
+  content.innerHTML = `
+    <div class="setup-item alert-item warn">
+      <strong>${record.minutes}m</strong>
+      <span>${formatDate(record.date)}<br />Odbija se ${penalty} min · ${record.reason || "Bez razloga"}</span>
+    </div>`;
+  button.dataset.lateId = record.id;
+  if (!dialog.open) dialog.showModal();
 }
 
 function renderPortalGoals() {
@@ -577,15 +827,19 @@ function renderPortalOneOnOnes() {
 
 function renderPortalLateRecords() {
   const records = employeeLateRecords().sort((a, b) => new Date(b.date) - new Date(a.date));
-  setText("portalLateCount", `${records.length} unosa`);
+  const lateStatus = employeeLateStatus(activeEmployee.id, portalMonth);
+  setText("portalLateCount", lateStatus.label);
   document.getElementById("portalLateList").innerHTML = records.length
     ? records
         .map(
-          (record) => `
+          (record) => {
+            const penalty = Math.max(15, Number(record.penaltyMinutes || record.minutes || 0));
+            return `
           <div class="setup-item alert-item warn">
             <strong>${record.minutes}m</strong>
-            <span>${formatDate(record.date)}<br />${record.reason || ""}</span>
-          </div>`
+            <span>${formatDate(record.date)}<br />Odbija se ${penalty} min · ${record.acknowledgedAt ? "potvrđeno" : "čeka potvrdu"}${record.reason ? ` · ${record.reason}` : ""}</span>
+          </div>`;
+          }
         )
         .join("")
     : `<div class="empty-state">Nema upisanih kašnjenja u ovom mesecu.</div>`;
@@ -644,14 +898,14 @@ function renderLeaderPanel() {
   document.getElementById("leaderTeamHoursList").innerHTML = team.length
     ? team
         .map((employee) => {
-          const logs = (state.employeeWorkLogs || []).filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(portalMonth));
-          const hours = logs.reduce((sum, log) => sum + Number(log.hours || 0), 0);
+          const hours = employeeMonthHours(employee, portalMonth);
           const expected = expectedHours(employee, portalMonth);
-          const balance = Math.round((hours - expected) * 100) / 100;
+          const balance = hourBalance(employee, portalMonth);
+          const lateStatus = employeeLateStatus(employee.id, portalMonth);
           return `
-          <div class="setup-item alert-item ${balance < 0 ? "danger" : "ok"}">
+          <div class="setup-item alert-item ${balance < 0 || lateStatus.count > 3 ? "danger" : lateStatus.count === 3 ? "warn" : "ok"}">
             <strong>${formatHourBalance(balance)}</strong>
-            <span>${employee.name}<br />${hours}h od ${expected}h</span>
+            <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${lateStatus.label}<br />${carryoverLabel(employee, portalMonth)}</span>
           </div>`;
         })
         .join("")
@@ -752,7 +1006,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     id: crypto.randomUUID(),
     employeeId: activeEmployee.id,
     date,
-    hours: Number(formData.get("hours") || 0),
+    hours: parseNumber(formData.get("hours"), 0),
     type: "Rad",
     note: formData.get("note"),
     positive: formData.get("positive"),
@@ -786,6 +1040,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.hours.value = 8;
   renderEmployeePortal();
+  showToast("Sačuvano", "Sati i dnevni izveštaj su sačuvani.", "ok");
 });
 
 document.getElementById("portalAbsenceForm")?.addEventListener("submit", (event) => {
@@ -814,6 +1069,17 @@ document.getElementById("portalAbsenceForm")?.addEventListener("submit", (event)
   saveState();
   event.currentTarget.reset();
   renderEmployeePortal();
+  showToast("Zahtev poslat", "Admin će videti zahtev za odmor.", "warn");
+});
+
+document.getElementById("ackLateBtn")?.addEventListener("click", () => {
+  const record = (state.employeeLateRecords || []).find((item) => item.id === document.getElementById("ackLateBtn").dataset.lateId);
+  if (!record) return;
+  record.acknowledgedAt = new Date().toISOString();
+  saveState();
+  document.getElementById("lateAckDialog")?.close();
+  renderEmployeePortal();
+  showToast("Potvrđeno", "Kašnjenje je potvrđeno.", "ok");
 });
 
 document.getElementById("logoutEmployee")?.addEventListener("click", () => {
