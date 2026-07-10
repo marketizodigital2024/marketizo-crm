@@ -76,7 +76,7 @@
               <small id="adminPaidCount">0 klijenata</small>
             </article>
             <article class="metric metric-link" data-go-view="reports">
-              <span>Za proveru</span>
+              <span>Otvorena naplata</span>
               <strong id="adminUnpaidTotal">€0</strong>
               <small id="adminUnpaidCount">0 klijenata</small>
             </article>
@@ -140,7 +140,7 @@
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Zaposleni</p>
-                  <h2>Satnica i rizik</h2>
+                  <h2>Sati, ciljevi i odgovornost</h2>
                 </div>
                 <span id="adminEmployeeRiskCount">0</span>
               </div>
@@ -248,28 +248,9 @@
                     <option>Aktivan</option>
                     <option>Neaktivan</option>
                     <option>Pauza</option>
+                    <option>Arhiviran</option>
                   </select>
                 </label>
-                <label>Račun za ovaj mesec
-                  <select name="invoiceStatus">
-                    <option>Nije poslat</option>
-                    <option>Poslat</option>
-                  </select>
-                </label>
-                <label>Status plaćanja
-                  <select name="paymentStatus">
-                    <option>Nije plaćeno</option>
-                    <option>Plaćeno</option>
-                    <option>Kasni</option>
-                  </select>
-                </label>
-                <label>Način plaćanja
-                  <select name="paymentMethod">
-                    <option>Firma</option>
-                    <option>Keš</option>
-                  </select>
-                </label>
-                <label>Mesečni cilj<input name="guaranteeTarget" type="number" min="0" value="30" /></label>
                 <label>Kontakt osoba<input name="contactName" required placeholder="npr. vlasnik / menadžer" /></label>
                 <label>Telefon za pozive<input name="contactPhone" required placeholder="+436601112233" /></label>
                 <label>WhatsApp povezivanje<input disabled value="Klijent podešava u svom CRM-u" /></label>
@@ -298,9 +279,9 @@
                     <th>Klijent</th>
                     <th>Paket</th>
                     <th>Start / ugovor</th>
-                    <th>Račun</th>
-                    <th>Plaćanje</th>
+                    <th>Status</th>
                     <th>Leadovi</th>
+                    <th>Login</th>
                     <th>Kontakt</th>
                     <th>Akcija</th>
                   </tr>
@@ -309,17 +290,6 @@
               </table>
             </div>
           </section>
-        </section>
-
-        <section class="view" id="production">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Operativa</p>
-              <h2>Produkcija sadržaja</h2>
-            </div>
-            <button class="secondary-button" id="addTaskBtn" type="button">+ Zadatak</button>
-          </div>
-          <div class="kanban" id="productionBoard"></div>
         </section>
 
         <section class="view" id="employees">
@@ -340,6 +310,7 @@
                 <p class="eyebrow">Filter</p>
                 <h2>Period i status</h2>
               </div>
+              <span>Baza sati: austrijski radni dani minus odobrena odsustva</span>
             </div>
             <div class="filter-grid employee-filter-grid">
               <label>Mesec
@@ -779,44 +750,6 @@
       </main>
     </div>
 
-    <dialog id="clientModal">
-      <form method="dialog" class="modal-card" id="clientForm">
-        <div class="modal-head">
-          <div>
-            <p class="eyebrow">Novi klijent</p>
-            <h2>Dodaj klijenta</h2>
-          </div>
-          <button class="icon-button" value="cancel" type="button" id="closeClientModal">×</button>
-        </div>
-        <div class="form-grid">
-          <label>Ime biznisa<input name="name" required placeholder="npr. Balkan Express" /></label>
-          <label>Niša<input name="niche" required placeholder="npr. stomatologija" /></label>
-          <label>Država
-            <select name="country">
-              <option>Austrija</option>
-              <option>Nemačka</option>
-              <option>Srbija</option>
-              <option>Hrvatska</option>
-            </select>
-          </label>
-          <label>Mesečna cena (€)<input name="revenue" type="number" min="0" step="100" value="2500" /></label>
-          <label>Mesečni cilj<input name="leads" type="number" min="0" value="0" /></label>
-          <label>Status
-            <select name="status">
-              <option>Aktivan</option>
-              <option>Onboarding</option>
-              <option>Rizik</option>
-              <option>Pauza</option>
-            </select>
-          </label>
-        </div>
-        <menu class="modal-actions">
-          <button class="secondary-button" value="cancel" type="button" id="cancelClient">Otkaži</button>
-          <button class="primary-button" value="default" type="submit">Sačuvaj</button>
-        </menu>
-      </form>
-    </dialog>
-
     <dialog id="editClientModal">
       <form method="dialog" class="modal-card" id="editClientForm">
         <div class="modal-head">
@@ -861,26 +794,7 @@
               <option>Aktivan</option>
               <option>Neaktivan</option>
               <option>Pauza</option>
-            </select>
-          </label>
-          <label>Račun
-            <select name="invoiceStatus">
-              <option>Nije poslat</option>
-              <option>Poslat</option>
-            </select>
-          </label>
-          <label>Status plaćanja
-            <select name="paymentStatus">
-              <option>Nije plaćeno</option>
-              <option>Plaćeno</option>
-              <option>Kasni</option>
-              <option>Interno</option>
-            </select>
-          </label>
-          <label>Način plaćanja
-            <select name="paymentMethod">
-              <option>Firma</option>
-              <option>Keš</option>
+              <option>Arhiviran</option>
             </select>
           </label>
           <label>Dan naplate<input name="billingDay" type="number" min="1" max="31" /></label>

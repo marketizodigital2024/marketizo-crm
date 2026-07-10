@@ -93,14 +93,20 @@
                   <option value="all">Svi izvori</option>
                 </select>
               </label>
+              <label>Pipeline
+                <select id="clientPipelineFilter">
+                  <option value="all">Svi pipeline-i</option>
+                </select>
+              </label>
               <label>Status
                 <select id="clientStatusFilter">
                   <option value="all">Svi statusi</option>
+                  <option value="closed">Zatvoreni</option>
                   <option>Novi</option>
                   <option>Kontaktiran</option>
-                  <option>Potvrđen</option>
+                  <option>Zakazan</option>
+                  <option>Dobijen</option>
                   <option>Izgubljen</option>
-                  <option>Na čekanju</option>
                 </select>
               </label>
               <label>Odgovorna osoba
@@ -117,9 +123,9 @@
               <small>u bazi</small>
             </article>
             <article class="metric">
-              <span>Potvrđeni</span>
+              <span>Dobijeni</span>
               <strong id="clientWonLeads">0</strong>
-              <small>potvrđeni / dobijeni</small>
+              <small>zatvoreni kao dobijeni</small>
             </article>
             <article class="metric">
               <span>Otvoreni</span>
@@ -139,7 +145,7 @@
               <small>razlog je bitan</small>
             </article>
             <article class="metric">
-              <span>Pipeline</span>
+              <span>Otvorena vrednost</span>
               <strong id="clientPipelineValue">€0</strong>
               <small>otvorena procena</small>
             </article>
@@ -149,12 +155,12 @@
               <small>dobijeni leadovi</small>
             </article>
             <article class="metric">
-              <span>Kasni follow-up</span>
+              <span>Kasni poziv</span>
               <strong id="clientLateFollowUp">0</strong>
-              <small>treba proveriti</small>
+              <small>bez reakcije</small>
             </article>
             <article class="metric">
-              <span>Win rate zatvorenih</span>
+              <span>Udeo dobijenih</span>
               <strong id="clientClosedWinRate">0%</strong>
               <small>dobijeni / zatvoreni</small>
             </article>
@@ -162,7 +168,7 @@
           <div class="report-grid">
             <section class="panel">
               <div class="panel-head">
-                <h2>Top score</h2>
+                <h2>Najvažnije</h2>
                 <span>period</span>
               </div>
               <div class="setup-list" id="clientTopScore"></div>
@@ -173,6 +179,13 @@
                 <span>kanal</span>
               </div>
               <div class="bars" id="clientSourceBars"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Leadovi po pipeline-u</h2>
+                <span>tržište</span>
+              </div>
+              <div class="bars" id="clientPipelineBars"></div>
             </section>
             <section class="panel">
               <div class="panel-head">
@@ -197,17 +210,17 @@
             </section>
             <section class="panel wide">
               <div class="panel-head">
-                <h2>Timsko zatvaranje</h2>
-                <span>win rate</span>
+                <h2>Rezultat po osobi</h2>
+                <span>dobijeni / izgubljeni</span>
               </div>
               <div class="table-wrap">
                 <table class="invoice-table compact-table">
                   <thead>
                     <tr>
                       <th>Osoba</th>
-                      <th>Potvrđeni</th>
+                      <th>Dobijeni</th>
                       <th>Izgubljeni</th>
-                      <th>Win rate</th>
+                      <th>Udeo</th>
                     </tr>
                   </thead>
                   <tbody id="clientTeamClosingRows"></tbody>
@@ -216,7 +229,7 @@
             </section>
             <section class="panel">
               <div class="panel-head">
-                <h2>Odgovornost za pozive</h2>
+                <h2>Reakcija na leadove</h2>
                 <span>kontrola</span>
               </div>
               <div class="setup-list" id="clientCallResponsibility"></div>
@@ -235,7 +248,7 @@
           <div class="section-head">
             <div>
               <p class="eyebrow">Leadovi</p>
-              <h2>CRM leadovi</h2>
+              <h2>Lista leadova</h2>
             </div>
             <button class="primary-button" id="toggleLeadForm" type="button">+ Lead</button>
           </div>
@@ -246,6 +259,7 @@
                 <label>Telefon<input name="phone" required placeholder="+436601112233" /></label>
                 <label>Email<input name="email" type="email" placeholder="email@primer.com" /></label>
                 <label>Lokacija<input name="location" placeholder="grad / država" /></label>
+                <label>Pipeline<select name="pipeline" id="leadPipeline"></select></label>
                 <label>Izvor lida<select name="source" id="leadSource"></select></label>
                 <label>Tip usluge<select name="service" id="leadService"></select></label>
                 <label>Procena (€)<input name="estimate" type="number" min="0" step="1" value="0" /></label>
@@ -260,6 +274,21 @@
               </div>
             </form>
           </section>
+          <div class="lead-toolbar">
+            <div class="filters">
+              <button class="chip active" data-lead-status-shortcut="all" type="button">Svi</button>
+              <button class="chip" data-lead-status-shortcut="open" type="button">Otvoreni</button>
+              <button class="chip" data-lead-status-shortcut="closed" type="button">Zatvoreni</button>
+              <button class="chip" data-lead-status-shortcut="Dobijen" type="button">Dobijeni</button>
+              <button class="chip" data-lead-status-shortcut="Izgubljen" type="button">Izgubljeni</button>
+            </div>
+            <label class="compact-select">Pipeline
+              <select id="clientLeadPipelineFilter">
+                <option value="all">Svi pipeline-i</option>
+              </select>
+            </label>
+            <button class="secondary-button" id="exportClientLeads" type="button">Export leadova</button>
+          </div>
           <div class="lead-list" id="clientLeadList"></div>
         </section>
 
@@ -324,6 +353,9 @@
                 <label>WhatsApp broj za lead notifikacije
                   <input id="settingsWhatsapp" name="whatsapp" placeholder="+436601112233" />
                 </label>
+                <label>Pipeline-i / tržišta
+                  <textarea id="settingsPipelines" name="pipelines" rows="5"></textarea>
+                </label>
                 <label>Tipovi usluge
                   <textarea id="settingsServices" name="services" rows="7"></textarea>
                 </label>
@@ -358,6 +390,7 @@
             <label>Telefon<input name="phone" required /></label>
             <label>Email<input name="email" type="email" /></label>
             <label>Lokacija<input name="location" /></label>
+            <label>Pipeline<select name="pipeline" id="editLeadPipeline"></select></label>
             <label>Izvor lida<select name="source" id="editLeadSource"></select></label>
             <label>Tip usluge<select name="service" id="editLeadService"></select></label>
             <label>Procena (€)<input name="estimate" type="number" min="0" step="1" /></label>

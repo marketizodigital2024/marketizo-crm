@@ -202,8 +202,8 @@ function publicHolidayName(value) {
 }
 
 function companySpecialDayName(value) {
-  if (value.endsWith("-12-24")) return "24.12. proveriti KV / firma";
-  if (value.endsWith("-12-31")) return "31.12. proveriti KV / firma";
+  if (value.endsWith("-12-24")) return "24.12. poseban radni dan";
+  if (value.endsWith("-12-31")) return "31.12. poseban radni dan";
   return "";
 }
 
@@ -265,8 +265,19 @@ function employeeYearAbsenceDays(type, year) {
   }, 0);
 }
 
+function employeeMonthAbsenceDays(employeeId, monthKey) {
+  return (state.employeeAbsences || [])
+    .filter((absence) => absence.employeeId === employeeId && absence.status !== "Zatraženo")
+    .reduce((sum, absence) => {
+      const days = workdayKeysBetween(absence.startDate, absence.endDate).filter((day) => day.startsWith(monthKey));
+      return sum + days.length;
+    }, 0);
+}
+
 function expectedHours(employee, monthKey) {
-  return Math.round(workdaysInMonth(monthKey).length * (Number(employee.weeklyHours || 40) / 5) * 100) / 100;
+  const dailyHours = Number(employee.weeklyHours || 40) / 5;
+  const plannedDays = Math.max(workdaysInMonth(monthKey).length - employeeMonthAbsenceDays(employee.id, monthKey), 0);
+  return Math.round(plannedDays * dailyHours * 100) / 100;
 }
 
 function hourBalance(employee, monthKey) {
@@ -327,7 +338,7 @@ function renderLoginHint() {
   const hint = document.getElementById("employeeLoginHint");
   const employee = state.employees?.[0];
   hint.innerHTML = employee
-    ? `<strong>Test login:</strong><span>${employee.email}</span><span>Lozinka: ${employee.password}</span>`
+    ? `<strong>Login podaci:</strong><span>${employee.email}</span><span>Lozinka: ${employee.password}</span>`
     : `<strong>Nema zaposlenih.</strong><span>Dodaj zaposlenog u admin delu.</span>`;
 }
 

@@ -4,13 +4,20 @@ const leadSlaHours = 24;
 const clientLeadSlaHours = 48;
 const employeeAbsenceTypes = ["Godišnji odmor", "Bolovanje", "Poklon dan", "Slobodan dan"];
 const employeeWorkTypes = ["Rad", "Sastanak", "Snimanje", "Administracija", "Ostalo"];
+const clientLeadStatuses = ["Novi", "Kontaktiran", "Zakazan", "Dobijen", "Izgubljen"];
+const clientLossReasons = ["Nema budžet", "Nije se javio", "Loš broj", "Nije fit", "Konkurencija", "Preskupo", "Nije hitno", "Odloženo", "Ostalo"];
+const legacyLeadStatusMap = {
+  Pozvan: "Kontaktiran",
+  "Potvrđen": "Zakazan",
+  "Na čekanju": "Kontaktiran",
+};
 const packageConfig = {
   Starter: { price: 997, months: 3 },
   Business: { price: 1497, months: 6 },
   Enterprise: { price: 1997, months: 6 },
   Custom: { price: 0, months: 3 },
 };
-const demoClientNames = new Set(["Marketizo Digital", "Dental Studio Wien", "Auto Detailing Zagreb", "Physio Klinik München", "Beauty Laser Beograd"]);
+const starterClientNames = new Set(["Marketizo Digital", "Dental Studio Wien", "Auto Detailing Zagreb", "Physio Klinik München", "Beauty Laser Beograd"]);
 
 const defaultEmployeeProfiles = [
   {
@@ -104,7 +111,6 @@ const starterData = {
       owner: "Miljan / Ivana",
       team: "Marketizo tim",
       package: "Internal Growth",
-      guaranteeTarget: 0,
       contactName: "Miljan i Ivana",
       contactPhone: "+4368181144747",
       whatsapp: "+4368181144747",
@@ -129,7 +135,6 @@ const starterData = {
       owner: "Miljan",
       team: "Ivana, Marko, Ana",
       package: "Starter",
-      guaranteeTarget: 30,
       contactName: "Anna Gruber",
       contactPhone: "+436601112233",
       whatsapp: "+436601112233",
@@ -139,8 +144,8 @@ const starterData = {
       paymentMethod: "Firma",
       contractMonths: 3,
       startDate: "2026-05-01",
-      metaPageId: "demo_page_wien",
-      metaFormId: "demo_form_implants",
+      metaPageId: "starter_page_wien",
+      metaFormId: "starter_form_implants",
     },
     {
       id: crypto.randomUUID(),
@@ -154,7 +159,6 @@ const starterData = {
       owner: "Ivana",
       team: "Luka, Sara, Nikola",
       package: "Business",
-      guaranteeTarget: 30,
       contactName: "Ivan Kovač",
       contactPhone: "+38591111222",
       whatsapp: "+38591111222",
@@ -164,7 +168,7 @@ const starterData = {
       paymentMethod: "Firma",
       contractMonths: 6,
       startDate: "2026-04-15",
-      metaPageId: "demo_page_zagreb",
+      metaPageId: "starter_page_zagreb",
       metaFormId: "",
     },
     {
@@ -179,7 +183,6 @@ const starterData = {
       owner: "Miljan",
       team: "Ivana, Luka, Ana",
       package: "Enterprise",
-      guaranteeTarget: 30,
       contactName: "Lukas Weber",
       contactPhone: "+491701112233",
       whatsapp: "+491701112233",
@@ -189,8 +192,8 @@ const starterData = {
       paymentMethod: "Firma",
       contractMonths: 6,
       startDate: "2026-03-01",
-      metaPageId: "demo_page_munich",
-      metaFormId: "demo_form_physio",
+      metaPageId: "starter_page_munich",
+      metaFormId: "starter_form_physio",
     },
     {
       id: crypto.randomUUID(),
@@ -204,7 +207,6 @@ const starterData = {
       owner: "Ivana",
       team: "Marko, Sara, Nikola",
       package: "Starter",
-      guaranteeTarget: 30,
       contactName: "Jelena Simić",
       contactPhone: "+381641234567",
       whatsapp: "+381641234567",
@@ -229,7 +231,7 @@ const starterData = {
     { id: crypto.randomUUID(), role: "Scenarista", client: "Dental Studio Wien", title: "3 hook-a za implant kampanju", due: "Danas", priority: "Visok" },
     { id: crypto.randomUUID(), role: "Snimatelj", client: "Beauty Laser Beograd", title: "Plan snimanja za tretmane", due: "Sutra", priority: "Srednji" },
     { id: crypto.randomUUID(), role: "Editor", client: "Physio Klinik München", title: "Reels paket 2/8", due: "Danas", priority: "Visok" },
-    { id: crypto.randomUUID(), role: "Media buyer", client: "Auto Detailing Zagreb", title: "Nova ad grupa za garanciju", due: "Danas", priority: "Visok" },
+    { id: crypto.randomUUID(), role: "Media buyer", client: "Auto Detailing Zagreb", title: "Nova ad grupa za lead kampanju", due: "Danas", priority: "Visok" },
     { id: crypto.randomUUID(), role: "SMM", client: "Dental Studio Wien", title: "Zakazati 6 objava", due: "Petak", priority: "Srednji" },
     { id: crypto.randomUUID(), role: "Editor", client: "Auto Detailing Zagreb", title: "Before/after montaža", due: "Četvrtak", priority: "Srednji" },
   ],
@@ -267,7 +269,7 @@ const starterData = {
       phone: "+491701112233",
       service: "Bol u leđima",
       source: "Facebook Lead Form",
-      status: "Pozvan",
+      status: "Kontaktiran",
       priority: "Srednji",
       createdAt: "2026-07-05T08:10:00+02:00",
       calledAt: "2026-07-05T10:05:00+02:00",
@@ -299,7 +301,7 @@ const starterData = {
       type: "Godišnji odmor",
       startDate: "2026-07-20",
       endDate: "2026-07-24",
-      note: "Primer unosa odmora.",
+      note: "Odobren godišnji odmor.",
       status: "Odobreno",
     },
     {
@@ -308,7 +310,7 @@ const starterData = {
       type: "Bolovanje",
       startDate: "2026-07-08",
       endDate: "2026-07-09",
-      note: "Primer bolovanja.",
+      note: "Evidentirano bolovanje.",
       status: "Evidentirano",
     },
   ],
@@ -323,8 +325,8 @@ const starterData = {
       employeeId: "emp-ivana",
       month: "2026-07",
       type: "Platna lista / Lohnzettel",
-      fileName: "primer-lohnzettel-jul.pdf",
-      note: "Primer dokumenta.",
+      fileName: "lohnzettel-jul.pdf",
+      note: "Dokument za jul.",
       uploadedBy: "Admin",
       uploadedAt: "2026-07-07T10:00:00+02:00",
     },
@@ -532,11 +534,10 @@ function loadState() {
 
 function migrateState(data) {
   const clients = (data.clients || starterData.clients)
-    .filter((client) => !demoClientNames.has(client.name))
+    .filter((client) => !starterClientNames.has(client.name))
     .map((client) => {
       const normalizedClient = {
         package: "Starter",
-        guaranteeTarget: 30,
         contactName: "",
         contactPhone: "",
         whatsapp: "",
@@ -573,9 +574,8 @@ function migrateState(data) {
       leads: 0,
       cpl: 0,
       owner: "Marketizo",
-      team: "Dodeliti tim",
+      team: "",
       package: packageName,
-      guaranteeTarget: 30,
       contactName: "",
       contactPhone: "",
       whatsapp: "",
@@ -708,17 +708,24 @@ function migrateState(data) {
     clients,
     deals: data.deals || starterData.deals,
     tasks: data.tasks || starterData.tasks,
-    leads: (data.leads || starterData.leads).map((lead) => ({
-      email: "",
-      location: "",
-      estimate: 0,
-      responsible: "",
-      nextAction: "",
-      lossReason: "",
-      lastContact: lead.calledAt || "",
-      lastStatusChangeAt: lead.lastStatusChangeAt || lead.calledAt || "",
-      ...lead,
-    })),
+    leads: (data.leads || starterData.leads).map((lead) => {
+      const status = normalizeLeadStatus(lead.status);
+      const reactedAt = lead.calledAt || lead.lastContact || lead.lastStatusChangeAt || "";
+      return {
+        email: "",
+        location: "",
+        estimate: 0,
+        responsible: "",
+        nextAction: "",
+        lossReason: "",
+        customFields: {},
+        lastContact: isClientLeadStatusContacted(status) ? reactedAt : "",
+        lastStatusChangeAt: lead.lastStatusChangeAt || (isClientLeadStatusContacted(status) ? reactedAt : ""),
+        ...lead,
+        status,
+        calledAt: isClientLeadStatusContacted(status) ? reactedAt || lead.calledAt || "" : null,
+      };
+    }),
     teamMembers: data.teamMembers || starterData.teamMembers,
     employees,
     employeeAbsences,
@@ -763,7 +770,30 @@ function normalizeClientStatus(status) {
   if (status === "Interni") return "Interni";
   if (status === "Pauza") return "Pauza";
   if (status === "Neaktivan") return "Neaktivan";
+  if (status === "Arhiviran") return "Arhiviran";
   return "Aktivan";
+}
+
+function normalizeLeadStatus(status) {
+  const mapped = legacyLeadStatusMap[status] || status || "Novi";
+  return clientLeadStatuses.includes(mapped) ? mapped : "Novi";
+}
+
+function isWonClientLeadStatus(status) {
+  return normalizeLeadStatus(status) === "Dobijen";
+}
+
+function isLostClientLeadStatus(status) {
+  return normalizeLeadStatus(status) === "Izgubljen";
+}
+
+function isOpenClientLeadStatus(status) {
+  const normalized = normalizeLeadStatus(status);
+  return normalized !== "Dobijen" && normalized !== "Izgubljen";
+}
+
+function isClientLeadStatusContacted(status) {
+  return normalizeLeadStatus(status) !== "Novi";
 }
 
 function saveState() {
@@ -802,9 +832,8 @@ function byMonth(client) {
 
 function statusClass(client) {
   if (client.status === "Interni") return "ok";
-  const target = Number(client.guaranteeTarget || 30);
-  if (client.status === "Rizik" || client.leads < target * 0.8) return "danger";
-  if (client.status === "Onboarding" || client.leads < target) return "warn";
+  if (client.status === "Neaktivan" || client.status === "Arhiviran") return "danger";
+  if (client.status === "Pauza") return "warn";
   return "ok";
 }
 
@@ -843,7 +872,7 @@ function normalizePhone(phone) {
 }
 
 function isClientLeadContacted(lead) {
-  return Boolean(lead.calledAt) || ["Kontaktiran", "Pozvan", "Potvrđen", "Dobijen", "Zakazan"].includes(lead.status);
+  return Boolean(lead.calledAt) || isClientLeadStatusContacted(lead.status);
 }
 
 function clientLeads(client) {
@@ -853,58 +882,9 @@ function clientLeads(client) {
 function clientLeadStats(client) {
   const leads = clientLeads(client);
   const contacted = leads.filter(isClientLeadContacted).length;
-  const open = leads.filter((lead) => !isClientLeadContacted(lead) && (lead.status || "Novi") === "Novi").length;
-  const late = leads.filter((lead) => !isClientLeadContacted(lead) && (lead.status || "Novi") === "Novi" && lead.createdAt && hoursSince(lead.createdAt) >= clientLeadSlaHours).length;
+  const open = leads.filter((lead) => normalizeLeadStatus(lead.status) === "Novi").length;
+  const late = leads.filter((lead) => normalizeLeadStatus(lead.status) === "Novi" && lead.createdAt && hoursSince(lead.createdAt) >= clientLeadSlaHours).length;
   return { total: leads.length, contacted, open, late };
-}
-
-function renderDashboard() {
-  const clients = state.clients.filter(bySearch);
-  const active = state.clients.filter((client) => client.status !== "Pauza");
-  const leads = active.reduce((sum, client) => sum + Number(client.leads), 0);
-  const revenue = active.reduce((sum, client) => sum + Number(client.revenue), 0);
-  const pipeline = state.deals
-    .filter((deal) => deal.stage !== "Zatvoren")
-    .reduce((sum, deal) => sum + Number(deal.value), 0);
-  const underGuarantee = active.filter((client) => Number(client.leads) < Number(client.guaranteeTarget || 30));
-  const countries = new Set(active.map((client) => client.country)).size;
-
-  setText("activeClients", active.length);
-  setText("clientCountries", `${countries} države u bazi`);
-  setText("monthlyLeads", leads);
-  setText("guaranteeStatus", `${underGuarantee.length} ispod 30 leadova`);
-  setText("monthlyRevenue", currency.format(revenue));
-  setText("avgRevenue", `${currency.format(revenue / Math.max(active.length, 1))} prosek`);
-  setText("pipelineValue", currency.format(pipeline));
-  setText("hotDeals", `${state.deals.filter((deal) => deal.stage !== "Zatvoren").length} otvorene prilike`);
-  setText("riskCount", `${underGuarantee.length} rizika`);
-
-  const table = document.getElementById("clientTable");
-  table.innerHTML = clients
-    .map(
-      (client) => `
-      <tr>
-        <td><strong>${client.name}</strong><br /><span>${client.niche}</span></td>
-        <td>${client.country}</td>
-        <td><span class="status ${statusClass(client)}">${client.status}</span></td>
-        <td><strong>${client.leads}/${client.guaranteeTarget || 30}</strong></td>
-        <td>${currency.format(client.cpl)}</td>
-        <td>${client.team}</td>
-      </tr>`
-    )
-    .join("");
-
-  const today = state.tasks.filter((task) => task.due === "Danas" && bySearch(task));
-  setText("todayCount", today.length);
-  document.getElementById("todayTasks").innerHTML = today
-    .map(
-      (task) => `
-      <div class="task-row">
-        <div><strong>${task.title}</strong><span>${task.client} · ${task.role}</span></div>
-        <span class="pill">${task.priority}</span>
-      </div>`
-    )
-    .join("");
 }
 
 function renderAdminPanel() {
@@ -997,7 +977,7 @@ function renderAdminEmployeeRisk(monthKey) {
     .sort((a, b) => a.balance - b.balance)
     .slice(0, 6);
   const riskCount = rows.filter((row) => row.balance < 0 || row.hours > row.expected).length;
-  setText("adminEmployeeRiskCount", `${riskCount} za proveru`);
+  setText("adminEmployeeRiskCount", `${riskCount} odstupanja`);
   const target = document.getElementById("adminEmployeeRiskList");
   if (!target) return;
   target.innerHTML = rows.length
@@ -1137,6 +1117,32 @@ function bindEditButtons() {
   document.querySelectorAll("[data-edit-client]").forEach((button) => {
     button.addEventListener("click", () => openEditClient(button.dataset.editClient));
   });
+  document.querySelectorAll("[data-archive-client]").forEach((button) => {
+    button.addEventListener("click", () => archiveClient(button.dataset.archiveClient));
+  });
+  document.querySelectorAll("[data-delete-client]").forEach((button) => {
+    button.addEventListener("click", () => deleteClient(button.dataset.deleteClient));
+  });
+}
+
+function archiveClient(id) {
+  const client = state.clients.find((item) => item.id === id);
+  if (!client) return;
+  client.status = client.status === "Arhiviran" ? "Neaktivan" : "Arhiviran";
+  saveState();
+  renderAll();
+}
+
+function deleteClient(id) {
+  const client = state.clients.find((item) => item.id === id);
+  if (!client) return;
+  if (!confirm(`Obrisati klijenta: ${client.name}? Brišu se i njegovi leadovi i sales osobe.`)) return;
+  state.clients = state.clients.filter((item) => item.id !== id);
+  state.leads = (state.leads || []).filter((lead) => lead.client !== client.name);
+  state.teamMembers = (state.teamMembers || []).filter((member) => member.client !== client.name);
+  if (selectedPortalClientId === id) selectedPortalClientId = state.clients[0]?.id || "";
+  saveState();
+  renderAll();
 }
 
 function openEditClient(id) {
@@ -1153,9 +1159,6 @@ function openEditClient(id) {
   form.elements.contractMonths.value = String(client.contractMonths || 3);
   form.elements.startDate.value = client.startDate || "";
   form.elements.status.value = normalizeClientStatus(client.status);
-  form.elements.invoiceStatus.value = client.invoiceStatus || "Nije poslat";
-  form.elements.paymentStatus.value = client.paymentStatus || "Nije plaćeno";
-  form.elements.paymentMethod.value = client.paymentMethod || "Firma";
   form.elements.billingDay.value = Number(client.billingDay || 1);
   form.elements.contactName.value = client.contactName || "";
   form.elements.contactPhone.value = client.contactPhone || "";
@@ -1188,7 +1191,7 @@ function openEditClient(id) {
                   return `
                     <div class="setup-item alert-item ${late ? "danger" : contacted ? "ok" : "warn"}">
                       <strong>${contacted ? "Zvao" : "Nije"}</strong>
-                      <span>${lead.name || "Lead"} · ${lead.phone || "telefon nije unet"}<br />${lead.status || "Novi"} · stigao ${lead.createdAt ? formatDate(lead.createdAt) : "nije uneto"}${lead.calledAt ? ` · pozvan ${formatDate(lead.calledAt)}` : ""}</span>
+                      <span>${lead.name || "Lead"} · ${lead.phone || "telefon nije unet"}<br />${normalizeLeadStatus(lead.status)} · stigao ${lead.createdAt ? formatDate(lead.createdAt) : "nije uneto"}${lead.calledAt ? ` · pozvan ${formatDate(lead.calledAt)}` : ""}${lead.customFields && Object.keys(lead.customFields).length ? `<br />Forma: ${Object.entries(lead.customFields).map(([key, value]) => `${key}: ${value}`).join(" · ")}` : ""}</span>
                     </div>`;
                 })
                 .join("")
@@ -1238,7 +1241,7 @@ function renderStatusSummary(clients) {
 }
 
 function displayPackage(packageName) {
-  if (packageName === "Lead Guarantee") return "Garancija paket";
+  if (packageName === "Lead Guarantee") return "Starter 997€";
   if (packageName === "Internal Growth" || packageName === "Internal") return "Interno";
   if (packageName === "Starter") return "Starter 997€";
   if (packageName === "Business") return "Business 1497€";
@@ -1334,8 +1337,8 @@ function publicHolidayName(value) {
 }
 
 function companySpecialDayName(value) {
-  if (value.endsWith("-12-24")) return "24.12. proveriti KV / firma";
-  if (value.endsWith("-12-31")) return "31.12. proveriti KV / firma";
+  if (value.endsWith("-12-24")) return "24.12. poseban radni dan";
+  if (value.endsWith("-12-31")) return "31.12. poseban radni dan";
   return "";
 }
 
@@ -1385,7 +1388,10 @@ function employeeMonthHours(employeeId, monthKey) {
 }
 
 function employeeExpectedHours(employee, monthKey) {
-  return Math.round(workdaysInMonth(monthKey).length * (Number(employee.weeklyHours || 40) / 5) * 100) / 100;
+  const dailyHours = Number(employee.weeklyHours || 40) / 5;
+  const absenceDays = employeeMonthAbsenceDays(employee.id, monthKey);
+  const plannedDays = Math.max(workdaysInMonth(monthKey).length - absenceDays, 0);
+  return Math.round(plannedDays * dailyHours * 100) / 100;
 }
 
 function employeeHourBalance(employee, monthKey) {
@@ -2117,85 +2123,39 @@ function renderEmployeeCalendar(monthKey, employees) {
     </div>`;
 }
 
-function renderSales() {
-  document.getElementById("pipeline").innerHTML = stages
-    .map((stage) => {
-      const deals = state.deals.filter((deal) => deal.stage === stage && bySearch(deal));
-      const total = deals.reduce((sum, deal) => sum + Number(deal.value), 0);
-      return `
-        <section class="column">
-          <div class="column-head"><strong>${stage}</strong><span>${currency.format(total)}</span></div>
-          ${deals
-            .map(
-              (deal) => `
-              <article class="deal-card">
-                <h3>${deal.name}</h3>
-                <p>${deal.note}</p>
-                <div class="deal-meta">
-                  <span class="pill">${deal.country}</span>
-                  <span class="pill">${currency.format(deal.value)}</span>
-                </div>
-              </article>`
-            )
-            .join("")}
-        </section>`;
-    })
-    .join("");
-}
-
 function renderClients() {
   const clients = state.clients.filter((client) => bySearch(client) && (activeFilter === "all" || client.country === activeFilter));
   setText("clientRowsCount", `${clients.length} klijenata`);
   document.getElementById("clientCards").innerHTML = clients.length
     ? clients
         .map((client) => {
-          const paymentClass = paymentStatusClass(client);
-          const invoice = monthlyInvoice(client);
           const endDate = contractEndDate(client);
           const daysLeft = endDate ? daysBetween(currentDateKey(), endDate) : null;
           const contractLabel = endDate ? `do ${formatDate(endDate)}` : "nije unet";
           const leadStats = clientLeadStats(client);
           const leadClass = leadStats.late ? "danger" : leadStats.open ? "warn" : "ok";
+          const archiveLabel = client.status === "Arhiviran" ? "Vrati" : "Arhiva";
           return `
           <tr>
             <td><strong>${client.name}</strong><br /><span>${client.niche} · ${client.country}</span></td>
             <td><strong>${displayPackage(client.package)}</strong><br /><span>${currency.format(client.revenue || 0)}/mes</span></td>
             <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span></td>
-            <td><span class="status ${invoice.invoiceStatus === "Poslat" || invoice.invoiceStatus === "Nije potrebno" ? "ok" : "warn"}">${invoice.invoiceStatus || "Nije poslat"}</span></td>
-            <td><span class="status ${paymentClass}">${invoice.paymentStatus || client.paymentStatus || "Nije plaćeno"}</span></td>
-            <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nije zvao · ${leadStats.late} kasni</span></td>
+            <td><span class="status ${statusClass(client)}">${client.status || "Aktivan"}</span></td>
+            <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
+            <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "123456"}</span></td>
             <td>${client.contactName || "Nije unet"}<br /><span>${client.contactPhone || client.whatsapp || "Telefon nije unet"}</span></td>
-            <td><button class="edit-button" data-edit-client="${client.id}" type="button" title="Izmeni klijenta">✎</button></td>
+            <td>
+              <div class="row-actions">
+                <button class="edit-button" data-edit-client="${client.id}" type="button" title="Izmeni klijenta">✎</button>
+                <button class="edit-button" data-archive-client="${client.id}" type="button" title="${archiveLabel}">${client.status === "Arhiviran" ? "↺" : "A"}</button>
+                <button class="edit-button danger-action" data-delete-client="${client.id}" type="button" title="Obriši klijenta">×</button>
+              </div>
+            </td>
           </tr>`;
         })
         .join("")
     : `<tr><td colspan="8">Nema klijenata za izabrani filter.</td></tr>`;
   bindEditButtons();
-}
-
-function renderProduction() {
-  document.getElementById("productionBoard").innerHTML = roles
-    .map((role) => {
-      const tasks = state.tasks.filter((task) => task.role === role && bySearch(task));
-      return `
-        <section class="column">
-          <div class="column-head"><strong>${role}</strong><span>${tasks.length}</span></div>
-          ${tasks
-            .map(
-              (task) => `
-              <article class="task-card">
-                <h3>${task.title}</h3>
-                <p>${task.client}</p>
-                <div class="task-meta">
-                  <span class="pill">${task.due}</span>
-                  <span class="pill">${task.priority}</span>
-                </div>
-              </article>`
-            )
-            .join("")}
-        </section>`;
-    })
-    .join("");
 }
 
 function renderReports() {
@@ -2238,8 +2198,8 @@ function renderClientPortal() {
   if (!client) return;
   const leads = portalClientLeads();
   const team = portalClientTeam();
-  const won = leads.filter((lead) => lead.status === "Zakazan" || lead.status === "Dobijen");
-  const open = leads.filter((lead) => lead.status === "Novi" || lead.status === "Pozvan");
+  const won = leads.filter((lead) => isWonClientLeadStatus(lead.status));
+  const open = leads.filter((lead) => isOpenClientLeadStatus(lead.status));
   const conversion = leads.length ? Math.round((won.length / leads.length) * 100) : 0;
 
   setText("portalClientName", client.name);
@@ -2247,7 +2207,7 @@ function renderClientPortal() {
   setText("portalWonLeads", won.length);
   setText("portalOpenLeads", open.length);
   setText("portalConversion", `${conversion}%`);
-  setText("portalActionCount", `${open.length} za proveru`);
+  setText("portalActionCount", `${open.length} otvoreno`);
   setText("portalTeamCount", `${team.length} osoba`);
 
   renderBars("portalStatusBars", groupCount(leads, "status"), "");
@@ -2302,7 +2262,7 @@ function renderPortalLeads(leads) {
                 <h3>${lead.name}</h3>
                 <p>${lead.service || "Tip usluge nije unet"} · ${lead.location || "Lokacija nije uneta"}</p>
               </div>
-              <span class="status ${portalLeadStatusClass(lead.status)}">${lead.status || "Novi"}</span>
+              <span class="status ${portalLeadStatusClass(lead.status)}">${normalizeLeadStatus(lead.status)}</span>
             </header>
             <div class="lead-details">
               <span>ID ${lead.id.slice(0, 8)}</span>
@@ -2315,7 +2275,7 @@ function renderPortalLeads(leads) {
             ${lead.lossReason ? `<p><strong>Razlog gubitka:</strong> ${lead.lossReason}</p>` : ""}
             <div class="lead-actions">
               <a class="call-button" href="tel:${phone}">Pozovi</a>
-              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Pozvan" type="button">Pozvan</button>
+              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Kontaktiran" type="button">Kontaktiran</button>
               <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Zakazan" type="button">Zakazan</button>
               <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Dobijen" type="button">Dobijen</button>
               <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Izgubljen" type="button">Izgubljen</button>
@@ -2345,8 +2305,9 @@ function renderPortalTeam(team) {
 }
 
 function portalLeadStatusClass(status) {
-  if (status === "Dobijen" || status === "Zakazan") return "ok";
-  if (status === "Izgubljen") return "danger";
+  const normalized = normalizeLeadStatus(status);
+  if (normalized === "Dobijen") return "ok";
+  if (normalized === "Novi" || normalized === "Izgubljen") return "danger";
   return "warn";
 }
 
@@ -2356,12 +2317,6 @@ function groupCount(items, key) {
     acc[label] = (acc[label] || 0) + 1;
     return acc;
   }, {});
-}
-
-function paymentStatusClass(client) {
-  if (client.paymentStatus === "Plaćeno" || client.paymentStatus === "Interno") return "ok";
-  if (client.paymentStatus === "Kasni") return "danger";
-  return "warn";
 }
 
 function renderLeadCrm() {
@@ -2382,9 +2337,7 @@ function renderLeadCrm() {
   document.getElementById("leadCards").innerHTML = leads
     .map((lead) => {
       const phone = normalizePhone(lead.phone);
-      const whatsappText = encodeURIComponent(
-        `Novi lead za ${lead.client}: ${lead.name}, ${lead.phone}, usluga: ${lead.service}. Pozvati u roku od 1 radnog dana da garancija ostane važeća.`
-      );
+      const whatsappText = encodeURIComponent(`Novi lead za ${lead.client}: ${lead.name}, ${lead.phone}, usluga: ${lead.service}.`);
       return `
       <article class="lead-card">
         <header>
@@ -2403,8 +2356,9 @@ function renderLeadCrm() {
         <div class="lead-actions">
           <a class="call-button" href="tel:${phone}">Pozovi</a>
           <a class="whatsapp-button" href="https://wa.me/${phone.replace("+", "")}?text=${whatsappText}" target="_blank" rel="noreferrer">WhatsApp</a>
-          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Pozvan" type="button">Pozvan</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Kontaktiran" type="button">Kontaktiran</button>
           <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Zakazan" type="button">Zakazan</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Dobijen" type="button">Dobijen</button>
           <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Izgubljen" type="button">Izgubljen</button>
         </div>
       </article>`;
@@ -2452,11 +2406,8 @@ function renderAll() {
   generateSystemNotifications();
   if ((state.notifications || []).length !== notificationCount) saveState();
   renderAdminPanel();
-  if (document.getElementById("activeClients")) renderDashboard();
-  if (document.getElementById("pipeline")) renderSales();
   if (document.getElementById("clientCards")) renderClients();
   if (document.getElementById("leadCards")) renderLeadCrm();
-  if (document.getElementById("productionBoard")) renderProduction();
   if (document.getElementById("employees")) renderEmployees();
   if (document.getElementById("countryBars")) renderReports();
   if (document.getElementById("clientPortal")) renderClientPortal();
@@ -2634,7 +2585,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
     leaderId: formData.get("leaderId") || "",
     vacationDays: Number(formData.get("vacationDays") || 26),
     giftDays: Number(formData.get("giftDays") || 1),
-    status: formData.get("status"),
+    status: normalizeLeadStatus(formData.get("status")),
   };
   if (payload.leaderId === id) payload.leaderId = "";
   if (id) {
@@ -2863,7 +2814,6 @@ document.getElementById("companyPlanForm")?.addEventListener("submit", (event) =
   renderAll();
 });
 
-const clientModal = document.getElementById("clientModal");
 document.getElementById("openClientModal").addEventListener("click", () => {
   setActiveView("clients");
   const panel = document.getElementById("clientAddPanel");
@@ -2872,51 +2822,15 @@ document.getElementById("openClientModal").addEventListener("click", () => {
   firstInput?.scrollIntoView({ behavior: "smooth", block: "center" });
   firstInput?.focus();
 });
-document.getElementById("closeClientModal").addEventListener("click", () => clientModal.close());
-document.getElementById("cancelClient").addEventListener("click", () => clientModal.close());
-
-document.getElementById("clientForm").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  state.clients.unshift({
-    id: crypto.randomUUID(),
-    name: formData.get("name"),
-    niche: formData.get("niche"),
-    country: formData.get("country"),
-    status: formData.get("status"),
-    revenue: Number(formData.get("revenue")),
-    leads: Number(formData.get("leads")),
-    cpl: 0,
-    owner: "Miljan / Ivana",
-    team: "Dodeliti tim",
-    package: "Garancija paket",
-    guaranteeTarget: 30,
-    contactName: "",
-    contactPhone: "",
-    whatsapp: "",
-    billingDay: 1,
-    paymentStatus: "Nije plaćeno",
-    invoiceStatus: "Nije poslat",
-    paymentMethod: "Firma",
-    invoices: {},
-    startDate: "",
-    metaPageId: "",
-    metaFormId: "",
-  });
-  withInvoiceDefaults(state.clients[0]);
-  saveState();
-  event.currentTarget.reset();
-  clientModal.close();
-  renderAll();
-});
 
 document.getElementById("adminClientForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   const values = packageValues(formData.get("package"), formData.get("revenue"), formData.get("contractMonths"));
   const contractFile = formData.get("contractFile");
-  const invoiceStatus = formData.get("invoiceStatus");
-  const paymentStatus = formData.get("paymentStatus");
+  const invoiceStatus = "Nije poslat";
+  const paymentStatus = "Nije plaćeno";
+  const paymentMethod = "Firma";
   state.clients.unshift({
     id: crypto.randomUUID(),
     name: formData.get("name"),
@@ -2927,9 +2841,8 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     leads: 0,
     cpl: 0,
     owner: "Miljan / Ivana",
-    team: "Dodeliti tim",
+    team: "",
     package: values.package,
-    guaranteeTarget: Number(formData.get("guaranteeTarget")),
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
     whatsapp: "",
@@ -2938,12 +2851,12 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     billingDay: Number(formData.get("billingDay")),
     paymentStatus,
     invoiceStatus,
-    paymentMethod: formData.get("paymentMethod"),
+    paymentMethod,
     invoices: {
       [selectedMonthKey()]: {
         invoiceStatus,
         paymentStatus,
-        paymentMethod: formData.get("paymentMethod"),
+        paymentMethod,
         sentAt: invoiceStatus === "Poslat" ? new Date().toISOString() : "",
         paidAt: paymentStatus === "Plaćeno" ? new Date().toISOString() : "",
       },
@@ -2992,9 +2905,6 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     contractMonths: values.contractMonths,
     startDate: formData.get("startDate"),
     status: formData.get("status"),
-    invoiceStatus: formData.get("invoiceStatus"),
-    paymentStatus: formData.get("paymentStatus"),
-    paymentMethod: formData.get("paymentMethod"),
     billingDay: Number(formData.get("billingDay")),
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
@@ -3007,13 +2917,6 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     client.contractFileName = contractFile.name;
     client.contractFileData = contractFileData;
   }
-  const invoice = monthlyInvoice(client);
-  invoice.invoiceStatus = formData.get("invoiceStatus");
-  invoice.paymentStatus = formData.get("paymentStatus");
-  invoice.paymentMethod = formData.get("paymentMethod");
-  if (invoice.invoiceStatus === "Poslat" && !invoice.sentAt) invoice.sentAt = new Date().toISOString();
-  if (invoice.invoiceStatus !== "Poslat") invoice.sentAt = "";
-  if (invoice.paymentStatus === "Plaćeno") invoice.paidAt = new Date().toISOString();
   withLoginDefaults(client);
   saveState();
   editClientModal.close();
@@ -3041,10 +2944,11 @@ document.getElementById("portalLeadForm")?.addEventListener("submit", (event) =>
     nextAction: formData.get("nextAction"),
     note: formData.get("note"),
     lossReason: formData.get("lossReason"),
+    customFields: {},
     createdAt: new Date().toISOString(),
-    calledAt: null,
+    calledAt: isClientLeadStatusContacted(formData.get("status")) ? new Date().toISOString() : null,
     lastContact: "",
-    lastStatusChangeAt: "",
+    lastStatusChangeAt: isClientLeadStatusContacted(formData.get("status")) ? new Date().toISOString() : "",
   };
   state.leads.unshift(lead);
   client.leads = Number(client.leads || 0) + 1;
@@ -3100,6 +3004,7 @@ document.getElementById("leadForm")?.addEventListener("submit", (event) => {
     createdAt: new Date().toISOString(),
     calledAt: null,
     lastStatusChangeAt: "",
+    customFields: {},
     note: "Ručno dodat lead.",
   });
   const client = state.clients.find((item) => item.name === formData.get("client"));
@@ -3113,8 +3018,8 @@ document.getElementById("leadForm")?.addEventListener("submit", (event) => {
 function updateLeadStatus(id, status) {
   const lead = state.leads.find((item) => item.id === id);
   if (!lead) return;
-  lead.status = status;
-  if ((status === "Pozvan" || status === "Zakazan") && !lead.calledAt) {
+  lead.status = normalizeLeadStatus(status);
+  if (isClientLeadStatusContacted(lead.status) && !lead.calledAt) {
     lead.calledAt = new Date().toISOString();
   }
   lead.lastStatusChangeAt = new Date().toISOString();

@@ -4,11 +4,19 @@ let clientFilters = {
   startDate: "",
   endDate: "",
   source: "all",
+  pipeline: "all",
   status: "all",
   responsible: "all",
 };
 let unreadLeadNotifications = 0;
 let deferredInstallPrompt = null;
+const clientLeadStatuses = ["Novi", "Kontaktiran", "Zakazan", "Dobijen", "Izgubljen"];
+const clientLossReasons = ["Nema budžet", "Nije se javio", "Loš broj", "Nije fit", "Konkurencija", "Preskupo", "Nije hitno", "Odloženo", "Ostalo"];
+const legacyLeadStatusMap = {
+  Pozvan: "Kontaktiran",
+  "Potvrđen": "Zakazan",
+  "Na čekanju": "Kontaktiran",
+};
 
 const currency = new Intl.NumberFormat("de-AT", {
   style: "currency",
@@ -48,7 +56,7 @@ function renderLoginHint() {
   if (!hint) return;
   const client = state.clients?.[0];
   hint.innerHTML = client
-    ? `<strong>Test login:</strong><span>${client.loginEmail}</span><span>Lozinka: ${client.loginPassword}</span>`
+    ? `<strong>Login podaci:</strong><span>${client.loginEmail}</span><span>Lozinka: ${client.loginPassword}</span>`
     : `<strong>Nema klijenata.</strong><span>Prvo dodaj klijenta u admin delu.</span>`;
 }
 
@@ -101,10 +109,11 @@ function showLeadSummaryOnLogin() {
 
 function defaultClientSettings() {
   return {
-    statuses: ["Novi", "Kontaktiran", "Potvrđen", "Izgubljen", "Na čekanju"],
+    statuses: clientLeadStatuses,
     sources: ["Facebook", "Instagram", "TikTok", "Google", "Preporuka", "Ostalo"],
+    pipelines: ["Austrija", "Nemačka", "Srbija", "Hrvatska", "Ostalo"],
     services: ["Konsultacija", "Pregled", "Tretman", "Usluga", "Ostalo"],
-    lossReasons: ["Prekupo", "Nema budžet", "Nije hitno", "Odabrao konkurenciju", "Nema odgovora", "Nije dobar fit", "Odloženo", "Interno rešavaju", "Ostalo"],
+    lossReasons: clientLossReasons,
   };
 }
 
@@ -119,6 +128,7 @@ function clientSettings() {
   activeClient.crmSettings = {
     statuses: defaults.statuses,
     sources: defaults.sources,
+    pipelines: saved.pipelines?.length ? saved.pipelines : defaults.pipelines,
     services: saved.services?.length ? saved.services : defaults.services,
     lossReasons: defaults.lossReasons,
   };
@@ -144,20 +154,56 @@ function selectOptions(options, selected = "", emptyLabel = "") {
   );
 }
 
+function normalizeLeadStatus(status) {
+  const mapped = legacyLeadStatusMap[status] || status || "Novi";
+  return clientLeadStatuses.includes(mapped) ? mapped : "Novi";
+}
+
+function inferLeadPipeline(lead, settings = defaultClientSettings()) {
+  if (lead.pipeline) return lead.pipeline;
+  const text = `${lead.country || ""} ${lead.location || ""}`.toLowerCase();
+  const match = (settings.pipelines || []).find((pipeline) => text.includes(String(pipeline).toLowerCase()));
+  return match || "Ostalo";
+}
+
+function normalizePortalState() {
+  state.leads = (state.leads || []).map((lead) => {
+    const status = normalizeLeadStatus(lead.status);
+    const reactedAt = lead.calledAt || lead.lastContact || lead.lastStatusChangeAt || "";
+    return {
+      ...lead,
+      status,
+      pipeline: inferLeadPipeline(lead),
+      calledAt: isContactedStatus(status) ? reactedAt || lead.calledAt || "" : null,
+      lastStatusChangeAt: lead.lastStatusChangeAt || (isContactedStatus(status) ? reactedAt : ""),
+    };
+  });
+  state.teamMembers = state.teamMembers || [];
+}
+
 function isWonStatus(status) {
-  return ["Potvrđen", "Dobijen", "Zakazan"].includes(status);
+  return normalizeLeadStatus(status) === "Dobijen";
 }
 
 function isLostStatus(status) {
-  return status === "Izgubljen";
+  return normalizeLeadStatus(status) === "Izgubljen";
 }
 
 function isOpenStatus(status) {
-  return !isWonStatus(status) && !isLostStatus(status);
+  const normalized = normalizeLeadStatus(status);
+  return normalized !== "Dobijen" && normalized !== "Izgubljen";
 }
 
 function isContactedStatus(status) {
-  return ["Kontaktiran", "Pozvan", "Potvrđen", "Dobijen", "Zakazan"].includes(status);
+  return normalizeLeadStatus(status) !== "Novi";
+}
+
+function statusMatchesFilter(status, filter) {
+  const normalized = normalizeLeadStatus(status);
+  if (filter === "all") return true;
+  if (filter === "open") return isOpenStatus(normalized);
+  if (filter === "closed") return isWonStatus(normalized) || isLostStatus(normalized);
+  return normalized === filter;
 }
 
 function clientLeads() {
@@ -175,7 +221,8 @@ function filteredClientLeads() {
       if (!createdAt || createdAt > endDate) return false;
     }
     if (clientFilters.source !== "all" && (lead.source || "Nije uneto") !== clientFilters.source) return false;
-    if (clientFilters.status !== "all" && (lead.status || "Novi") !== clientFilters.status) return false;
+    if (clientFilters.pipeline !== "all" && inferLeadPipeline(lead, clientSettings()) !== clientFilters.pipeline) return false;
+    if (!statusMatchesFilter(lead.status || "Novi", clientFilters.status)) return false;
     if (clientFilters.responsible !== "all" && (lead.responsible || "Nije dodeljeno") !== clientFilters.responsible) return false;
     return true;
   });
@@ -235,8 +282,9 @@ function statusClass(status) {
 }
 
 function leadRowClass(lead) {
-  if (isWonStatus(lead.status)) return "ok";
-  if (lead.status === "Kontaktiran" || lead.status === "Pozvan" || lead.status === "Na čekanju") return "warn";
+  const status = normalizeLeadStatus(lead.status);
+  if (status === "Dobijen") return "ok";
+  if (status === "Kontaktiran" || status === "Zakazan") return "warn";
   return "danger";
 }
 
@@ -245,12 +293,12 @@ function statusOptions(selectedStatus) {
 }
 
 function updateLeadStatus(lead, status) {
-  lead.status = status;
+  lead.status = normalizeLeadStatus(status);
   lead.lastStatusChangeAt = new Date().toISOString();
-  if (status === "Novi") {
+  if (lead.status === "Novi") {
     lead.calledAt = null;
   }
-  if (isContactedStatus(status) && !lead.calledAt) {
+  if (isContactedStatus(lead.status) && !lead.calledAt) {
     lead.calledAt = new Date().toISOString();
   }
 }
@@ -266,7 +314,7 @@ function renderClientApp() {
   const closed = leads.filter((lead) => isWonStatus(lead.status) || isLostStatus(lead.status));
   const conversion = leads.length ? Math.round((won.length / leads.length) * 100) : 0;
   const closedWinRate = closed.length ? Math.round((won.length / closed.length) * 100) : 0;
-  const pipeline = open.reduce((sum, lead) => sum + Number(lead.estimate || 0), 0);
+  const openValue = open.reduce((sum, lead) => sum + Number(lead.estimate || 0), 0);
   const closedValue = won.reduce((sum, lead) => sum + Number(lead.estimate || 0), 0);
   const lateFollowUps = open.filter(isFollowUpLate);
 
@@ -276,7 +324,7 @@ function renderClientApp() {
   setText("clientOpenLeads", open.length);
   setText("clientConversion", `${conversion}%`);
   setText("clientLostLeads", lost.length);
-  setText("clientPipelineValue", currency.format(pipeline));
+  setText("clientPipelineValue", currency.format(openValue));
   setText("clientClosedValue", currency.format(closedValue));
   setText("clientLateFollowUp", lateFollowUps.length);
   setText("clientClosedWinRate", `${closedWinRate}%`);
@@ -286,9 +334,10 @@ function renderClientApp() {
   renderFilterOptions(allLeads, team);
   renderLeadSelects();
   renderSettingsForm();
-  renderTopScore(leads, won, lost, open, pipeline);
+  renderTopScore(leads, won, lost, open, openValue);
   renderBars("clientStatusBars", groupCount(leads, "status"));
   renderBars("clientSourceBars", groupCount(leads, "source"));
+  renderBars("clientPipelineBars", groupCount(leads.map((lead) => ({ ...lead, pipeline: inferLeadPipeline(lead, settings) })), "pipeline"));
   renderBars("clientResponsibleBars", groupCount(leads.map((lead) => ({ ...lead, responsible: lead.responsible || "Nije dodeljeno" })), "responsible"));
   renderBars("clientLossBars", groupCount(lost.map((lead) => ({ ...lead, lossReason: lead.lossReason || "Nije unet razlog" })), "lossReason"));
   renderTeamClosing(leads, team);
@@ -297,6 +346,7 @@ function renderClientApp() {
   renderLeadList(leads);
   renderTeam(team);
   renderResponsibleOptions(team);
+  syncLeadStatusShortcut(clientFilters.status);
 }
 
 function isFollowUpLate(lead) {
@@ -309,7 +359,10 @@ function isFollowUpLate(lead) {
 function renderFilterOptions(leads, team) {
   const settings = clientSettings();
   updateSelectOptions("clientSourceFilter", ["all", ...mergeUnique(leads.map((lead) => lead.source || "Nije uneto"), settings.sources)], clientFilters.source, "Svi izvori");
-  updateSelectOptions("clientStatusFilter", ["all", ...mergeUnique(leads.map((lead) => lead.status || "Novi"), settings.statuses)], clientFilters.status, "Svi statusi");
+  const pipelineOptions = ["all", ...mergeUnique(leads.map((lead) => inferLeadPipeline(lead, settings)), settings.pipelines)];
+  updateSelectOptions("clientPipelineFilter", pipelineOptions, clientFilters.pipeline, "Svi pipeline-i");
+  updateSelectOptions("clientLeadPipelineFilter", pipelineOptions, clientFilters.pipeline, "Svi pipeline-i");
+  updateSelectOptions("clientStatusFilter", ["all", "open", "closed", ...mergeUnique(leads.map((lead) => normalizeLeadStatus(lead.status || "Novi")), settings.statuses)], clientFilters.status, "Svi statusi");
   const responsible = new Set(leads.map((lead) => lead.responsible || "Nije dodeljeno"));
   team.forEach((member) => responsible.add(member.name));
   updateSelectOptions("clientResponsibleFilter", ["all", ...responsible], clientFilters.responsible, "Sve osobe");
@@ -317,14 +370,17 @@ function renderFilterOptions(leads, team) {
 
 function renderLeadSelects() {
   const settings = clientSettings();
+  const pipelineOptions = selectOptions(settings.pipelines, "", "");
   const sourceOptions = selectOptions(settings.sources, "", "");
   const serviceOptions = selectOptions(settings.services, "", "");
   const statusOptionsHtml = selectOptions(settings.statuses, "Novi", "");
   const lossOptions = selectOptions(settings.lossReasons, "", "Bez razloga");
+  const leadPipeline = document.getElementById("leadPipeline");
   const leadSource = document.getElementById("leadSource");
   const leadService = document.getElementById("leadService");
   const leadStatus = document.getElementById("leadStatus");
   const leadLossReason = document.getElementById("leadLossReason");
+  if (leadPipeline) leadPipeline.innerHTML = pipelineOptions;
   if (leadSource) leadSource.innerHTML = sourceOptions;
   if (leadService) leadService.innerHTML = serviceOptions;
   if (leadStatus) leadStatus.innerHTML = statusOptionsHtml;
@@ -334,37 +390,98 @@ function renderLeadSelects() {
 function renderSettingsForm() {
   const settings = clientSettings();
   const services = document.getElementById("settingsServices");
+  const pipelines = document.getElementById("settingsPipelines");
   const whatsapp = document.getElementById("settingsWhatsapp");
   if (whatsapp) whatsapp.value = activeClient.whatsapp || "";
-  if (!services || services.dataset.ready === "1") return;
-  services.value = settings.services.join("\n");
+  if (services && services.dataset.ready !== "1") {
+    services.value = settings.services.join("\n");
+    services.dataset.ready = "1";
+  }
+  if (pipelines && pipelines.dataset.ready !== "1") {
+    pipelines.value = settings.pipelines.join("\n");
+    pipelines.dataset.ready = "1";
+  }
   const fixedPreview = document.getElementById("settingsFixedPreview");
   if (fixedPreview) {
     fixedPreview.innerHTML = [...settings.statuses, ...settings.sources, ...settings.lossReasons]
       .map((item) => `<span>${item}</span>`)
       .join("");
   }
-  services.dataset.ready = "1";
+}
+
+function displayFilterLabel(value, allLabel) {
+  if (value === "all") return allLabel;
+  if (value === "open") return "Otvoreni";
+  if (value === "closed") return "Zatvoreni";
+  return value;
 }
 
 function updateSelectOptions(id, values, selected, allLabel) {
   const select = document.getElementById(id);
   if (!select) return;
   select.innerHTML = values
-    .map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${value === "all" ? allLabel : value}</option>`)
+    .map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${displayFilterLabel(value, allLabel)}</option>`)
     .join("");
 }
 
-function renderTopScore(leads, won, lost, open, pipeline) {
+function syncLeadStatusShortcut(status) {
+  document.querySelectorAll("[data-lead-status-shortcut]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.leadStatusShortcut === status);
+  });
+}
+
+function csvCell(value) {
+  const text = String(value ?? "").replace(/\r?\n/g, " ").trim();
+  return /[;"\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportFilteredClientLeads() {
+  const settings = clientSettings();
+  const leads = filteredClientLeads().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const headers = ["Datum", "Pipeline", "Kontakt osoba", "Telefon", "Email", "Lokacija", "Izvor", "Tip usluge", "Procena", "Odgovorna osoba", "Status", "Razlog gubitka", "Sledeći korak", "Napomena"];
+  const rows = leads.map((lead) => [
+    lead.createdAt ? new Date(lead.createdAt).toLocaleString("sr-RS") : "",
+    inferLeadPipeline(lead, settings),
+    lead.name || "",
+    lead.phone || "",
+    lead.email || "",
+    lead.location || "",
+    lead.source || "",
+    lead.service || "",
+    Number(lead.estimate || 0),
+    lead.responsible || "",
+    normalizeLeadStatus(lead.status),
+    lead.lossReason || "",
+    lead.nextAction || "",
+    lead.note || "",
+  ]);
+  const csv = "\uFEFF" + [headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
+  const date = new Date().toISOString().slice(0, 10);
+  downloadTextFile(`${loginSlug(activeClient?.name)}-leadovi-${date}.csv`, csv, "text/csv;charset=utf-8");
+}
+
+function renderTopScore(leads, won, lost, open, openValue) {
   const [topSource, topSourceCount] = topEntry(groupCount(leads, "source"));
   const [topCloser, topCloserCount] = topEntry(groupCount(won.map((lead) => ({ ...lead, responsible: lead.responsible || "Nije dodeljeno" })), "responsible"));
   const [topLoss, topLossCount] = topEntry(groupCount(lost.map((lead) => ({ ...lead, lossReason: lead.lossReason || "Nije unet razlog" })), "lossReason"));
   const avgWon = won.length ? won.reduce((sum, lead) => sum + Number(lead.estimate || 0), 0) / won.length : 0;
   document.getElementById("clientTopScore").innerHTML = `
     <div class="setup-item"><strong>${topSourceCount}</strong><span>Top izvor: ${topSource}</span></div>
-    <div class="setup-item"><strong>${topCloserCount}</strong><span>Najviše zatvara: ${topCloser}</span></div>
+    <div class="setup-item"><strong>${topCloserCount}</strong><span>Najviše dobijenih: ${topCloser}</span></div>
     <div class="setup-item"><strong>${topLossCount}</strong><span>Najčešći razlog gubitka: ${topLoss}</span></div>
-    <div class="setup-item"><strong>${open.length}</strong><span>Otvoren pipeline: ${currency.format(pipeline)}</span></div>
+    <div class="setup-item"><strong>${open.length}</strong><span>Otvorena vrednost: ${currency.format(openValue)}</span></div>
     <div class="setup-item"><strong>${currency.format(avgWon)}</strong><span>Prosečna vrednost dobijenog leada</span></div>`;
 }
 
@@ -388,8 +505,8 @@ function renderCallResponsibility(leads, open, lateFollowUps) {
   const responseRate = leads.length ? Math.round((contacted / leads.length) * 100) : 0;
   document.getElementById("clientCallResponsibility").innerHTML = `
     <div class="setup-item"><strong>${contacted}</strong><span>Kontaktirano leadova</span></div>
-    <div class="setup-item"><strong>${responseRate}%</strong><span>Stopa odgovora na leadove</span></div>
-    <div class="setup-item"><strong>${lateFollowUps.length}</strong><span>Kasni follow-up preko 24h</span></div>
+    <div class="setup-item"><strong>${responseRate}%</strong><span>Kontaktirano od ukupno</span></div>
+    <div class="setup-item"><strong>${lateFollowUps.length}</strong><span>Kasni poziv preko 24h</span></div>
     <div class="setup-item"><strong>${unassigned}</strong><span>Otvoreni leadovi bez odgovorne osobe</span></div>`;
 }
 
@@ -412,7 +529,7 @@ function renderLeadList(leads) {
   document.getElementById("clientLeadList").innerHTML = leads.length
     ? `<div class="lead-list-header">
         <span>Lead</span>
-        <span>Izvor i usluga</span>
+        <span>Pipeline i izvor</span>
         <span>Vrednost i sledeći korak</span>
         <span>Status</span>
         <span>Akcija</span>
@@ -422,6 +539,7 @@ function renderLeadList(leads) {
         .map((lead) => {
           const leadDate = lead.createdAt ? new Date(lead.createdAt).toLocaleDateString("sr-RS") : "nije unet";
           const nextAction = lead.nextAction || (lead.status === "Novi" ? "Pozvati što pre" : "Sledeći korak nije unet");
+          const customFields = Object.entries(lead.customFields || {});
           return `
           <article class="lead-list-row ${leadRowClass(lead)}">
             <div class="lead-list-main">
@@ -430,6 +548,7 @@ function renderLeadList(leads) {
             </div>
             <div class="lead-list-meta">
               <span>${leadDate}</span>
+              <span>${inferLeadPipeline(lead)}</span>
               <span>${lead.source || "Bez izvora"}</span>
               <span>${lead.service || "Tip usluge nije unet"}</span>
             </div>
@@ -444,6 +563,11 @@ function renderLeadList(leads) {
               </select>
               ${lead.note ? `<small class="lead-note">Napomena: ${lead.note}</small>` : ""}
               ${lead.lossReason ? `<small class="lead-loss">Razlog: ${lead.lossReason}</small>` : ""}
+              ${
+                customFields.length
+                  ? `<small class="lead-note">Forma: ${customFields.map(([key, value]) => `${key}: ${value}`).join(" · ")}</small>`
+                  : ""
+              }
             </div>
             <div class="lead-list-actions">
               <a class="call-button" href="tel:${normalizePhone(lead.phone)}">Pozovi</a>
@@ -474,13 +598,24 @@ function renderTeam(team) {
     ? team
         .map(
           (member) => `
-          <div class="setup-item">
+          <div class="setup-item team-member-row">
             <strong>${member.name.slice(0, 1).toUpperCase()}</strong>
             <span>${member.name} · ${member.role}<br />${member.phone || "Telefon nije unet"} ${member.email ? `· ${member.email}` : ""}</span>
+            <button class="edit-button danger-action delete-team-member" data-id="${member.id}" type="button" title="Obriši osobu">×</button>
           </div>`
         )
         .join("")
     : `<div class="empty-state">Dodaj prvu osobu koja će zvati leadove.</div>`;
+  document.querySelectorAll(".delete-team-member").forEach((button) => {
+    button.addEventListener("click", () => {
+      const member = state.teamMembers.find((item) => item.id === button.dataset.id);
+      if (!member) return;
+      if (!confirm(`Obrisati osobu iz sales tima: ${member.name}?`)) return;
+      state.teamMembers = state.teamMembers.filter((item) => item.id !== member.id);
+      saveState();
+      renderClientApp();
+    });
+  });
 }
 
 function renderResponsibleOptions(team) {
@@ -503,6 +638,7 @@ function openEditLead(id) {
   if (!lead || !form || !modal) return;
   const settings = clientSettings();
   renderEditResponsibleOptions(clientTeam(), lead.responsible);
+  document.getElementById("editLeadPipeline").innerHTML = selectOptions(settings.pipelines, inferLeadPipeline(lead, settings), "");
   document.getElementById("editLeadSource").innerHTML = selectOptions(settings.sources, lead.source || "");
   document.getElementById("editLeadService").innerHTML = selectOptions(settings.services, lead.service || "");
   document.getElementById("editLeadStatus").innerHTML = selectOptions(settings.statuses, lead.status || "Novi");
@@ -512,6 +648,7 @@ function openEditLead(id) {
   form.elements.phone.value = lead.phone || "";
   form.elements.email.value = lead.email || "";
   form.elements.location.value = lead.location || "";
+  form.elements.pipeline.value = inferLeadPipeline(lead, settings);
   form.elements.source.value = lead.source || form.elements.source.value;
   form.elements.service.value = lead.service || form.elements.service.value;
   form.elements.estimate.value = Number(lead.estimate || 0);
@@ -536,6 +673,7 @@ document.getElementById("clientLoginForm").addEventListener("submit", (event) =>
   document.getElementById("loginScreen").hidden = true;
   document.getElementById("clientApp").hidden = false;
   document.getElementById("settingsServices")?.removeAttribute("data-ready");
+  document.getElementById("settingsPipelines")?.removeAttribute("data-ready");
   renderClientApp();
   showLeadSummaryOnLogin();
 });
@@ -565,8 +703,19 @@ document.getElementById("clientSourceFilter")?.addEventListener("change", (event
   renderClientApp();
 });
 
+document.getElementById("clientPipelineFilter")?.addEventListener("change", (event) => {
+  clientFilters.pipeline = event.target.value;
+  renderClientApp();
+});
+
+document.getElementById("clientLeadPipelineFilter")?.addEventListener("change", (event) => {
+  clientFilters.pipeline = event.target.value;
+  renderClientApp();
+});
+
 document.getElementById("clientStatusFilter")?.addEventListener("change", (event) => {
   clientFilters.status = event.target.value;
+  syncLeadStatusShortcut(event.target.value);
   renderClientApp();
 });
 
@@ -576,13 +725,29 @@ document.getElementById("clientResponsibleFilter")?.addEventListener("change", (
 });
 
 document.getElementById("resetClientFilters")?.addEventListener("click", () => {
-  clientFilters = { startDate: "", endDate: "", source: "all", status: "all", responsible: "all" };
+  clientFilters = { startDate: "", endDate: "", source: "all", pipeline: "all", status: "all", responsible: "all" };
   document.getElementById("clientStartDate").value = "";
   document.getElementById("clientEndDate").value = "";
   document.getElementById("clientSourceFilter").value = "all";
+  document.getElementById("clientPipelineFilter").value = "all";
+  document.getElementById("clientLeadPipelineFilter").value = "all";
   document.getElementById("clientStatusFilter").value = "all";
   document.getElementById("clientResponsibleFilter").value = "all";
+  syncLeadStatusShortcut("all");
   renderClientApp();
+});
+
+document.querySelectorAll("[data-lead-status-shortcut]").forEach((button) => {
+  button.addEventListener("click", () => {
+    clientFilters.status = button.dataset.leadStatusShortcut;
+    document.getElementById("clientStatusFilter").value = clientFilters.status;
+    syncLeadStatusShortcut(clientFilters.status);
+    renderClientApp();
+  });
+});
+
+document.getElementById("exportClientLeads")?.addEventListener("click", () => {
+  exportFilteredClientLeads();
 });
 
 document.querySelectorAll('#dashboard input[type="date"]').forEach((input) => {
@@ -623,6 +788,8 @@ document.getElementById("clientLeadForm").addEventListener("submit", (event) => 
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   state.leads = state.leads || [];
+  const status = normalizeLeadStatus(formData.get("status"));
+  const reactedAt = isContactedStatus(status) ? new Date().toISOString() : "";
   const newLead = {
     id: crypto.randomUUID(),
     client: activeClient.name,
@@ -630,18 +797,20 @@ document.getElementById("clientLeadForm").addEventListener("submit", (event) => 
     phone: formData.get("phone"),
     email: formData.get("email"),
     location: formData.get("location"),
+    pipeline: formData.get("pipeline"),
     source: formData.get("source"),
     service: formData.get("service"),
     estimate: Number(formData.get("estimate") || 0),
     responsible: formData.get("responsible"),
-    status: formData.get("status"),
+    status,
     priority: "Visok",
     nextAction: formData.get("nextAction"),
     note: formData.get("note"),
     lossReason: formData.get("lossReason"),
+    customFields: {},
     createdAt: new Date().toISOString(),
-    calledAt: isContactedStatus(formData.get("status")) ? new Date().toISOString() : null,
-    lastStatusChangeAt: isContactedStatus(formData.get("status")) ? new Date().toISOString() : "",
+    calledAt: reactedAt || null,
+    lastStatusChangeAt: reactedAt,
   };
   state.leads.unshift(newLead);
   activeClient.leads = Number(activeClient.leads || 0) + 1;
@@ -661,6 +830,7 @@ document.getElementById("editLeadForm")?.addEventListener("submit", (event) => {
   lead.phone = formData.get("phone");
   lead.email = formData.get("email");
   lead.location = formData.get("location");
+  lead.pipeline = formData.get("pipeline");
   lead.source = formData.get("source");
   lead.service = formData.get("service");
   lead.estimate = Number(formData.get("estimate") || 0);
@@ -678,10 +848,12 @@ document.getElementById("clientSettingsForm")?.addEventListener("submit", (event
   event.preventDefault();
   const defaults = defaultClientSettings();
   activeClient.crmSettings = {
+    pipelines: parseLines(document.getElementById("settingsPipelines")?.value, defaults.pipelines),
     services: parseLines(document.getElementById("settingsServices").value, defaults.services),
   };
   activeClient.whatsapp = document.getElementById("settingsWhatsapp")?.value || "";
   clientFilters.source = "all";
+  clientFilters.pipeline = "all";
   clientFilters.status = "all";
   saveState();
   renderClientApp();
@@ -738,5 +910,6 @@ document.getElementById("installClientAppBtn")?.addEventListener("click", async 
   deferredInstallPrompt = null;
 });
 
+normalizePortalState();
 ensureLoginData();
 renderLoginHint();
