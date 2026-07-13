@@ -94,6 +94,18 @@ async function hydrateOnlineState() {
   }
 }
 
+async function waitForOnlineHydration() {
+  if (!onlineHydrationPromise) return;
+  try {
+    await Promise.race([
+      onlineHydrationPromise,
+      new Promise((resolve) => window.setTimeout(resolve, 5000)),
+    ]);
+  } catch {
+    // Login must never stay blocked if online sync has a temporary issue.
+  }
+}
+
 function showToast(title, message = "", type = "ok") {
   const stack = document.getElementById("clientToastStack");
   if (!stack) return;
@@ -722,7 +734,7 @@ function openEditLead(id) {
 
 document.getElementById("clientLoginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  await onlineHydrationPromise;
+  await waitForOnlineHydration();
   const formData = new FormData(event.currentTarget);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
@@ -979,4 +991,4 @@ normalizePortalState();
 ensureLoginData({ remote: false });
 setupPasswordToggles();
 renderLoginHint();
-onlineHydrationPromise = hydrateOnlineState();
+onlineHydrationPromise = hydrateOnlineState().catch(() => null);

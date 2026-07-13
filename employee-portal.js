@@ -538,6 +538,18 @@ async function hydrateOnlineState() {
   }
 }
 
+async function waitForOnlineHydration() {
+  if (!onlineHydrationPromise) return;
+  try {
+    await Promise.race([
+      onlineHydrationPromise,
+      new Promise((resolve) => window.setTimeout(resolve, 5000)),
+    ]);
+  } catch {
+    // Login must never stay blocked if online sync has a temporary issue.
+  }
+}
+
 function renderEmployeePortal() {
   if (!activeEmployee) return;
   state = loadState();
@@ -1012,7 +1024,7 @@ function renderLeaderPanel() {
 
 document.getElementById("employeeLoginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  await onlineHydrationPromise;
+  await waitForOnlineHydration();
   const formData = new FormData(event.currentTarget);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
@@ -1168,4 +1180,4 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 
 setupPasswordToggles();
 renderLoginHint();
-onlineHydrationPromise = hydrateOnlineState();
+onlineHydrationPromise = hydrateOnlineState().catch(() => null);
