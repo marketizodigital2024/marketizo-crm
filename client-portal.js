@@ -1,5 +1,6 @@
-const state = JSON.parse(localStorage.getItem("agencyCrmData") || '{"clients":[],"leads":[],"teamMembers":[]}');
+let state = loadClientState();
 let activeClient = null;
+let onlineHydrationPromise = null;
 let clientFilters = {
   startDate: "",
   endDate: "",
@@ -28,8 +29,18 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-function saveState() {
+function loadClientState(sourceData = null) {
+  if (sourceData) return JSON.parse(JSON.stringify(sourceData));
+  try {
+    return JSON.parse(localStorage.getItem("agencyCrmData") || '{"clients":[],"leads":[],"teamMembers":[]}');
+  } catch {
+    return { clients: [], leads: [], teamMembers: [] };
+  }
+}
+
+function saveState(options = {}) {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
+  if (options.remote !== false) window.MarketizoRemote?.save(state);
 }
 
 function loginSlug(value) {
@@ -42,19 +53,45 @@ function loginSlug(value) {
     .replace(/^\.+|\.+$/g, "") || "klijent";
 }
 
-function ensureLoginData() {
+function ensureLoginData(options = {}) {
   state.clients = state.clients || [];
   state.clients.forEach((client) => {
     client.loginEmail = client.loginEmail || `${loginSlug(client.name)}@marketizo.local`;
     client.loginPassword = client.loginPassword || "123456";
   });
-  saveState();
+  saveState(options);
 }
 
 function renderLoginHint() {
   const hint = document.getElementById("loginHint");
   if (!hint) return;
   hint.innerHTML = `<strong>Login dobijaš od Marketizo tima.</strong><span>Ako zaboraviš lozinku, admin može da je promeni.</span>`;
+}
+
+async function hydrateOnlineState() {
+  if (!window.MarketizoRemote || window.location.protocol === "file:") return;
+  const result = await window.MarketizoRemote.load();
+  if (result.payload) {
+    const activeClientId = activeClient?.id;
+    const activeClientEmail = activeClient?.loginEmail;
+    state = loadClientState(result.payload);
+    normalizePortalState();
+    ensureLoginData({ remote: false });
+    if (activeClientId || activeClientEmail) {
+      activeClient =
+        (state.clients || []).find((client) => client.id === activeClientId || client.loginEmail === activeClientEmail) ||
+        activeClient;
+      if (activeClient) renderClientApp();
+    }
+    renderLoginHint();
+    return;
+  }
+  if (!result.configured && result.error) {
+    const hint = document.getElementById("loginHint");
+    if (hint) {
+      hint.innerHTML = `<strong>Online baza nije povezana.</strong><span>Login sa drugog uređaja radi tek kada povežemo zajedničku bazu.</span>`;
+    }
+  }
 }
 
 function showToast(title, message = "", type = "ok") {
@@ -474,7 +511,7 @@ function exportFilteredClientLeads() {
   const leads = filteredClientLeads().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   const headers = ["Datum", "Pipeline", "Kontakt osoba", "Telefon", "Email", "Lokacija", "Izvor", "Tip usluge", "Procena", "Odgovorna osoba", "Status", "Razlog gubitka", "Sledeći korak", "Napomena"];
   const rows = leads.map((lead) => [
-    lead.createdAt ? new Date(lead.createdAt).toLocaleString("sr-RS") : "",
+    lead.createdAt ? new Date(lead.createdAt).toLocaleString("sr-Latn-RS") : "",
     inferLeadPipeline(lead, settings),
     lead.name || "",
     lead.phone || "",
@@ -559,7 +596,7 @@ function renderLeadList(leads) {
       leads
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
         .map((lead) => {
-          const leadDate = lead.createdAt ? new Date(lead.createdAt).toLocaleDateString("sr-RS") : "nije unet";
+          const leadDate = lead.createdAt ? new Date(lead.createdAt).toLocaleDateString("sr-Latn-RS") : "nije unet";
           const nextAction = lead.nextAction || (lead.status === "Novi" ? "Pozvati što pre" : "Sledeći korak nije unet");
           const customFields = Object.entries(lead.customFields || {});
           return `
@@ -683,8 +720,9 @@ function openEditLead(id) {
   modal.showModal();
 }
 
-document.getElementById("clientLoginForm").addEventListener("submit", (event) => {
+document.getElementById("clientLoginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  await onlineHydrationPromise;
   const formData = new FormData(event.currentTarget);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
@@ -938,6 +976,7 @@ document.getElementById("installClientAppBtn")?.addEventListener("click", async 
 });
 
 normalizePortalState();
-ensureLoginData();
+ensureLoginData({ remote: false });
 setupPasswordToggles();
 renderLoginHint();
+onlineHydrationPromise = hydrateOnlineState();

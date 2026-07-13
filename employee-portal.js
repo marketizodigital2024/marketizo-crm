@@ -45,10 +45,16 @@ let state = loadState();
 let activeEmployee = null;
 let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
+let onlineHydrationPromise = null;
 
-function loadState() {
-  const saved = localStorage.getItem("agencyCrmData");
-  const data = saved ? JSON.parse(saved) : {};
+function loadState(sourceData = null) {
+  const saved = sourceData ? "" : localStorage.getItem("agencyCrmData");
+  let data = {};
+  try {
+    data = sourceData ? JSON.parse(JSON.stringify(sourceData)) : saved ? JSON.parse(saved) : {};
+  } catch {
+    data = {};
+  }
   data.employees = (data.employees?.length ? data.employees : defaultEmployees).map((employee) => ({
     id: employee.id || crypto.randomUUID(),
     name: "",
@@ -121,8 +127,9 @@ function loadState() {
   return data;
 }
 
-function saveState() {
+function saveState(options = {}) {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
+  if (options.remote !== false) window.MarketizoRemote?.save(state);
 }
 
 function parseNumber(value, fallback = 0) {
@@ -193,12 +200,12 @@ function addDays(value, days) {
 
 function monthLabel(monthKey) {
   const [year, month] = monthKey.split("-").map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString("sr-RS", { month: "long", year: "numeric" });
+  return new Date(year, month - 1, 1).toLocaleDateString("sr-Latn-RS", { month: "long", year: "numeric" });
 }
 
 function formatDate(value) {
   if (!value) return "nije unet";
-  return parseDate(value).toLocaleDateString("sr-RS", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return parseDate(value).toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 function monthDayKeys(monthKey) {
@@ -505,6 +512,30 @@ function renderLoginHint() {
   const hint = document.getElementById("employeeLoginHint");
   if (!hint) return;
   hint.innerHTML = `<strong>Login dobijaš od admina.</strong><span>Ako si zaboravio/la lozinku, admin može da je promeni u delu Zaposleni.</span>`;
+}
+
+async function hydrateOnlineState() {
+  if (!window.MarketizoRemote || window.location.protocol === "file:") return;
+  const result = await window.MarketizoRemote.load();
+  if (result.payload) {
+    const activeEmployeeId = activeEmployee?.id;
+    const activeEmployeeEmail = activeEmployee?.email;
+    state = loadState(result.payload);
+    if (activeEmployeeId || activeEmployeeEmail) {
+      activeEmployee =
+        (state.employees || []).find((employee) => employee.id === activeEmployeeId || employee.email === activeEmployeeEmail) ||
+        activeEmployee;
+      if (activeEmployee) renderEmployeePortal();
+    }
+    renderLoginHint();
+    return;
+  }
+  if (!result.configured && result.error) {
+    const hint = document.getElementById("employeeLoginHint");
+    if (hint) {
+      hint.innerHTML = `<strong>Online baza nije povezana.</strong><span>Login sa drugog uređaja radi tek kada povežemo zajedničku bazu.</span>`;
+    }
+  }
 }
 
 function renderEmployeePortal() {
@@ -979,8 +1010,9 @@ function renderLeaderPanel() {
     : `<div class="empty-state">Nema izveštaja za tim.</div>`;
 }
 
-document.getElementById("employeeLoginForm").addEventListener("submit", (event) => {
+document.getElementById("employeeLoginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  await onlineHydrationPromise;
   const formData = new FormData(event.currentTarget);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
@@ -1136,3 +1168,4 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 
 setupPasswordToggles();
 renderLoginHint();
+onlineHydrationPromise = hydrateOnlineState();

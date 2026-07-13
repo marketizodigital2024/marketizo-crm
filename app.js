@@ -436,8 +436,8 @@ const importedClients = [
   ["A - Street", "Starter", "Nije poslat", "Nije plaćeno", "Firma"],
 ];
 
-const state = loadState();
-saveState();
+let state = loadState();
+saveState({ remote: false });
 let activeFilter = "all";
 let activeLeadFilter = "all";
 let searchTerm = "";
@@ -475,7 +475,7 @@ function selectedMonthKey() {
 
 function monthLabel(monthKey) {
   const [year, month] = monthKey.split("-").map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString("sr-RS", { month: "long", year: "numeric" });
+  return new Date(year, month - 1, 1).toLocaleDateString("sr-Latn-RS", { month: "long", year: "numeric" });
 }
 
 function loginSlug(value) {
@@ -522,8 +522,9 @@ function monthlyInvoice(client, monthKey = selectedMonthKey()) {
   return client.invoices[monthKey];
 }
 
-function loadState() {
-  const saved = localStorage.getItem("agencyCrmData");
+function loadState(sourceData = null) {
+  const saved = sourceData ? "" : localStorage.getItem("agencyCrmData");
+  if (sourceData) return migrateState(structuredClone(sourceData));
   if (!saved) return migrateState(structuredClone(starterData));
   try {
     return migrateState(JSON.parse(saved));
@@ -809,8 +810,29 @@ function isClientLeadStatusContacted(status) {
   return normalizeLeadStatus(status) !== "Novi";
 }
 
-function saveState() {
+function saveState(options = {}) {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
+  if (options.remote !== false) window.MarketizoRemote?.save(state);
+}
+
+async function hydrateOnlineState() {
+  if (!window.MarketizoRemote || window.location.protocol === "file:") return;
+  const result = await window.MarketizoRemote.load();
+  if (result.payload) {
+    state = loadState(result.payload);
+    saveState({ remote: false });
+    renderAll();
+    showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
+    return;
+  }
+  if (result.configured && result.empty) {
+    saveState();
+    showToast("Online baza", "Zajednička baza je inicijalizovana.", "ok");
+    return;
+  }
+  if (!result.configured) {
+    showToast("Online baza nije povezana", "Dodaj Supabase env varijable u Vercel da svi uređaji vide iste podatke.", "warn");
+  }
 }
 
 function parseNumber(value, fallback = 0) {
@@ -1124,7 +1146,7 @@ function renderAdminEmployeeRisk(monthKey) {
 function renderBackupStatus() {
   const target = document.getElementById("backupStatusList");
   if (!target) return;
-  const lastBackup = state.backup?.lastDownloadedAt ? new Date(state.backup.lastDownloadedAt).toLocaleString("sr-RS") : "nije skinut";
+  const lastBackup = state.backup?.lastDownloadedAt ? new Date(state.backup.lastDownloadedAt).toLocaleString("sr-Latn-RS") : "nije skinut";
   const isToday = state.backup?.lastDownloadedAt?.slice(0, 10) === currentDateKey();
   target.innerHTML = `
     <div class="setup-item alert-item ${isToday ? "ok" : "warn"}">
@@ -1379,7 +1401,7 @@ function displayPackage(packageName) {
 
 function formatDate(value) {
   if (!value) return "nije unet";
-  return new Date(value).toLocaleDateString("sr-RS", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(value).toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 function employeeMonthKey() {
@@ -2549,7 +2571,7 @@ function renderPortalLeads(leads) {
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .map((lead) => {
           const phone = normalizePhone(lead.phone);
-          const leadDate = new Date(lead.createdAt).toLocaleDateString("sr-RS");
+          const leadDate = new Date(lead.createdAt).toLocaleDateString("sr-Latn-RS");
           return `
           <article class="lead-card portal-lead-card">
             <header>
@@ -2644,7 +2666,7 @@ function renderLeadCrm() {
         </header>
         <div class="lead-details">
           <span>${lead.source}</span>
-          <span>${new Date(lead.createdAt).toLocaleString("sr-RS", { dateStyle: "short", timeStyle: "short" })}</span>
+          <span>${new Date(lead.createdAt).toLocaleString("sr-Latn-RS", { dateStyle: "short", timeStyle: "short" })}</span>
           <span>${lead.priority} prioritet</span>
         </div>
         <p>${lead.note || "Bez napomene."}</p>
@@ -3425,4 +3447,5 @@ document.getElementById("backupNowBtn")?.addEventListener("click", () => {
 
 setupPasswordToggles();
 renderAll();
+hydrateOnlineState();
 updateContextActions("admin");
