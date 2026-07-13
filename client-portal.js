@@ -732,10 +732,11 @@ function openEditLead(id) {
   modal.showModal();
 }
 
-document.getElementById("clientLoginForm").addEventListener("submit", async (event) => {
+async function handleClientLogin(event) {
   event.preventDefault();
   await waitForOnlineHydration();
-  const formData = new FormData(event.currentTarget);
+  const form = document.getElementById("clientLoginForm");
+  const formData = new FormData(form);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
   activeClient = (state.clients || []).find((client) => String(client.loginEmail || "").toLowerCase() === email && String(client.loginPassword || "") === password);
@@ -749,7 +750,11 @@ document.getElementById("clientLoginForm").addEventListener("submit", async (eve
   document.getElementById("settingsPipelines")?.removeAttribute("data-ready");
   renderClientApp();
   showLeadSummaryOnLogin();
-});
+}
+
+const clientLoginForm = document.getElementById("clientLoginForm");
+clientLoginForm.addEventListener("submit", handleClientLogin);
+clientLoginForm.querySelector('button[type="submit"]')?.addEventListener("click", handleClientLogin);
 
 document.querySelectorAll("[data-client-tab]").forEach((button) => {
   button.addEventListener("click", () => {
