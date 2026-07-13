@@ -54,10 +54,34 @@ function ensureLoginData() {
 function renderLoginHint() {
   const hint = document.getElementById("loginHint");
   if (!hint) return;
-  const client = state.clients?.[0];
-  hint.innerHTML = client
-    ? `<strong>Login podaci:</strong><span>${client.loginEmail}</span><span>Lozinka: ${client.loginPassword}</span>`
-    : `<strong>Nema klijenata.</strong><span>Prvo dodaj klijenta u admin delu.</span>`;
+  hint.innerHTML = `<strong>Login dobijaš od Marketizo tima.</strong><span>Ako zaboraviš lozinku, admin može da je promeni.</span>`;
+}
+
+function showToast(title, message = "", type = "ok") {
+  const stack = document.getElementById("clientToastStack");
+  if (!stack) return;
+  const className = type === "danger" ? "danger" : type === "warn" ? "warn" : "ok";
+  const toast = document.createElement("div");
+  toast.className = `toast-message ${className}`;
+  toast.innerHTML = `<strong>${title}</strong>${message ? `<span>${message}</span>` : ""}`;
+  stack.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 4200);
+}
+
+function setupPasswordToggles() {
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    if (button.dataset.ready === "true") return;
+    button.dataset.ready = "true";
+    button.addEventListener("click", () => {
+      const field = button.closest(".password-field");
+      const input = field?.querySelector("input");
+      if (!input) return;
+      const visible = input.type === "text";
+      input.type = visible ? "password" : "text";
+      button.textContent = visible ? "Prikaži" : "Sakrij";
+      button.setAttribute("aria-label", visible ? "Prikaži lozinku" : "Sakrij lozinku");
+    });
+  });
 }
 
 function normalizePhone(phone) {
@@ -111,7 +135,7 @@ function defaultClientSettings() {
   return {
     statuses: clientLeadStatuses,
     sources: ["Facebook", "Instagram", "TikTok", "Google", "Preporuka", "Ostalo"],
-    pipelines: ["Austrija", "Nemačka", "Srbija", "Hrvatska", "Ostalo"],
+    pipelines: ["Glavni pipeline"],
     services: ["Konsultacija", "Pregled", "Tretman", "Usluga", "Ostalo"],
     lossReasons: clientLossReasons,
   };
@@ -161,9 +185,7 @@ function normalizeLeadStatus(status) {
 
 function inferLeadPipeline(lead, settings = defaultClientSettings()) {
   if (lead.pipeline) return lead.pipeline;
-  const text = `${lead.country || ""} ${lead.location || ""}`.toLowerCase();
-  const match = (settings.pipelines || []).find((pipeline) => text.includes(String(pipeline).toLowerCase()));
-  return match || "Ostalo";
+  return settings.pipelines?.[0] || "Glavni pipeline";
 }
 
 function normalizePortalState() {
@@ -614,6 +636,7 @@ function renderTeam(team) {
       state.teamMembers = state.teamMembers.filter((item) => item.id !== member.id);
       saveState();
       renderClientApp();
+      showToast("Sačuvano", "Osoba je obrisana iz sales tima.", "ok");
     });
   });
 }
@@ -819,6 +842,7 @@ document.getElementById("clientLeadForm").addEventListener("submit", (event) => 
   document.getElementById("leadFormPanel").hidden = true;
   renderClientApp();
   showLeadNotification(newLead);
+  showToast("Sačuvano", "Lead je dodat u CRM.", "ok");
 });
 
 document.getElementById("editLeadForm")?.addEventListener("submit", (event) => {
@@ -842,6 +866,7 @@ document.getElementById("editLeadForm")?.addEventListener("submit", (event) => {
   saveState();
   document.getElementById("editLeadModal").close();
   renderClientApp();
+  showToast("Sačuvano", "Izmene na leadu su sačuvane.", "ok");
 });
 
 document.getElementById("clientSettingsForm")?.addEventListener("submit", (event) => {
@@ -857,6 +882,7 @@ document.getElementById("clientSettingsForm")?.addEventListener("submit", (event
   clientFilters.status = "all";
   saveState();
   renderClientApp();
+  showToast("Sačuvano", "Podešavanja CRM-a su sačuvana.", "ok");
 });
 
 document.getElementById("closeEditLead")?.addEventListener("click", () => {
@@ -882,6 +908,7 @@ document.getElementById("clientTeamForm").addEventListener("submit", (event) => 
   saveState();
   event.currentTarget.reset();
   renderClientApp();
+  showToast("Sačuvano", "Član tima je dodat.", "ok");
 });
 
 document.getElementById("logoutClient").addEventListener("click", () => {
@@ -912,4 +939,5 @@ document.getElementById("installClientAppBtn")?.addEventListener("click", async 
 
 normalizePortalState();
 ensureLoginData();
+setupPasswordToggles();
 renderLoginHint();

@@ -147,6 +147,22 @@ function showToast(title, message = "", type = "ok") {
   window.setTimeout(() => toast.remove(), 4200);
 }
 
+function setupPasswordToggles() {
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    if (button.dataset.ready === "true") return;
+    button.dataset.ready = "true";
+    button.addEventListener("click", () => {
+      const field = button.closest(".password-field");
+      const input = field?.querySelector("input");
+      if (!input) return;
+      const visible = input.type === "text";
+      input.type = visible ? "password" : "text";
+      button.textContent = visible ? "Prikaži" : "Sakrij";
+      button.setAttribute("aria-label", visible ? "Prikaži lozinku" : "Sakrij lozinku");
+    });
+  });
+}
+
 function setText(id, value) {
   const element = document.getElementById(id);
   if (element) element.textContent = value;
@@ -1110,6 +1126,7 @@ document.getElementById("installEmployeeAppBtn")?.addEventListener("click", asyn
 
 window.addEventListener("storage", (event) => {
   if (event.key !== "agencyCrmData" || !activeEmployee) return;
+  state = loadState();
   renderEmployeePortal();
 });
 
@@ -1117,4 +1134,5 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
   input.addEventListener("click", () => input.showPicker?.());
 });
 
+setupPasswordToggles();
 renderLoginHint();

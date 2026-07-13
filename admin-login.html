@@ -29,7 +29,10 @@
             <input name="email" type="email" required placeholder="admin@marketizo.local" />
           </label>
           <label>Lozinka
-            <input name="password" type="password" required placeholder="Lozinka" />
+            <span class="password-field">
+              <input name="password" type="password" required placeholder="Lozinka" />
+              <button class="password-toggle" type="button" data-toggle-password aria-label="Prikaži lozinku">Prikaži</button>
+            </span>
           </label>
           <button class="primary-button" type="submit">Uloguj se</button>
           <p class="login-error" id="adminLoginError" hidden>Login podaci nisu tačni.</p>

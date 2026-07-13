@@ -95,6 +95,39 @@ button {
   color: var(--orange);
 }
 
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 92px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #222;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.field-note {
+  display: block;
+  margin-top: 8px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .client-tab {
   display: none;
 }
@@ -230,6 +263,45 @@ h3,
 .lead-toast span {
   color: var(--muted);
   font-size: 13px;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 50;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 28px));
+}
+
+.toast-message {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--green);
+  border-radius: 8px;
+  background: #121212;
+  box-shadow: var(--shadow);
+}
+
+.toast-message.warn {
+  border-left-color: var(--orange);
+}
+
+.toast-message.danger {
+  border-left-color: var(--red);
+}
+
+.toast-message strong {
+  font-family: Montserrat, Inter, sans-serif;
+}
+
+.toast-message span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .eyebrow {
@@ -754,6 +826,34 @@ th {
   line-height: 1.35;
 }
 
+.setup-item .mini-action {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.mini-action {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: #0d0d0d;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.notification-archive {
+  display: grid;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.notification-archive > strong {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
 .alert-item {
   border-left: 4px solid var(--line);
 }
@@ -792,6 +892,52 @@ th {
   border-color: rgba(255, 107, 0, 0.54);
   border-left-color: var(--orange);
   background: rgba(255, 107, 0, 0.14);
+}
+
+.work-log-list {
+  display: grid;
+  gap: 10px;
+}
+
+.work-log-card {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.work-log-card header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.work-log-card strong,
+.work-log-card b {
+  font-family: Montserrat, Inter, sans-serif;
+}
+
+.work-log-card span,
+.work-log-card p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.work-log-feedback {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.work-log-feedback span {
+  padding: 10px;
+  border-radius: 8px;
+  background: #101010;
 }
 
 .admin-client-panel {
@@ -1603,6 +1749,7 @@ select option {
     .leader-grid,
     .inline-form,
     .compact-action-form,
+    .work-log-feedback,
     .calendar-weekdays,
     .calendar-grid {
     grid-template-columns: 1fr;

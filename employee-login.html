@@ -29,10 +29,13 @@
             <input name="email" type="email" required placeholder="ime@marketizo.local" />
           </label>
           <label>Lozinka
-            <input name="password" type="password" required placeholder="Lozinka" />
+            <span class="password-field">
+              <input name="password" type="password" required placeholder="Lozinka" />
+              <button class="password-toggle" type="button" data-toggle-password aria-label="Prikaži lozinku">Prikaži</button>
+            </span>
           </label>
           <button class="primary-button" type="submit">Uloguj se</button>
-          <p class="login-error" id="employeeLoginError" hidden>Login podaci nisu tačni.</p>
+          <p class="login-error" id="employeeLoginError" hidden>Login podaci nisu tačni. Ako je nalog dodat na drugom uređaju, treba nam zajednička baza da bi ga telefon video.</p>
           <div class="login-hint" id="employeeLoginHint"></div>
         </form>
       </section>
@@ -51,6 +54,7 @@
           <button class="nav-item active" data-employee-tab="employeeDashboard" type="button">Dashboard</button>
           <button class="nav-item" data-employee-tab="employeeHours" type="button">Vreme</button>
           <button class="nav-item" data-employee-tab="employeeVacations" type="button">Odsustva</button>
+          <button class="nav-item" data-employee-tab="employeeCalendarTab" type="button">Kalendar</button>
         </nav>
       </aside>
 
@@ -229,6 +233,27 @@
             </div>
             <div class="setup-list" id="portalTeamTimelineList"></div>
           </section>
+
+        </section>
+
+        <section class="client-tab" id="employeeCalendarTab">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Kalendar odsustva</p>
+                <h2>Ko je na odmoru</h2>
+              </div>
+              <span id="portalCalendarSummary">po mesecu</span>
+            </div>
+            <div class="employee-calendar compact-calendar" id="portalEmployeeCalendar"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Lista odsustava</h2>
+              <span id="portalCalendarListCount">0 unosa</span>
+            </div>
+            <div class="setup-list" id="portalCalendarAbsenceList"></div>
+          </section>
         </section>
 
         <section class="client-tab" id="employeeHours">
@@ -264,20 +289,7 @@
                 <h2>Moji sati</h2>
                 <span id="portalHoursCount">0 unosa</span>
               </div>
-              <div class="table-wrap">
-                <table class="invoice-table compact-table">
-                  <thead>
-                    <tr>
-                      <th>Datum</th>
-                      <th>Sati</th>
-                      <th>Šta je rađeno</th>
-                      <th>Pozitivno / negativno</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="portalHoursRows"></tbody>
-                </table>
-              </div>
+              <div class="work-log-list" id="portalHoursRows"></div>
             </section>
           </div>
         </section>
@@ -322,7 +334,21 @@
 
       </main>
     </div>
-
+    <div class="toast-stack" id="employeeToastStack" aria-live="polite"></div>
+    <dialog id="lateAckDialog">
+      <section class="modal-card late-ack-modal">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Potvrda kašnjenja</p>
+            <h2>Kašnjenje je upisano</h2>
+          </div>
+        </div>
+        <div class="setup-list" id="lateAckContent"></div>
+        <div class="modal-actions">
+          <button class="primary-button" id="ackLateBtn" type="button">Potvrđujem</button>
+        </div>
+      </section>
+    </dialog>
     <script src="employee-portal.js"></script>
   </body>
 </html>

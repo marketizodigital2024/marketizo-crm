@@ -33,6 +33,22 @@ function setAdminSession(user) {
   );
 }
 
+function setupPasswordToggles() {
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    if (button.dataset.ready === "true") return;
+    button.dataset.ready = "true";
+    button.addEventListener("click", () => {
+      const field = button.closest(".password-field");
+      const input = field?.querySelector("input");
+      if (!input) return;
+      const visible = input.type === "text";
+      input.type = visible ? "password" : "text";
+      button.textContent = visible ? "Prikaži" : "Sakrij";
+      button.setAttribute("aria-label", visible ? "Prikaži lozinku" : "Sakrij lozinku");
+    });
+  });
+}
+
 document.getElementById("adminLoginForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
@@ -55,3 +71,5 @@ document.getElementById("adminLogoutBtn")?.addEventListener("click", () => {
   localStorage.removeItem(adminSessionKey);
   window.location.href = adminLoginPath();
 });
+
+setupPasswordToggles();

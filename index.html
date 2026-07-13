@@ -412,10 +412,18 @@
                   <label>Ime i prezime<input name="name" required placeholder="npr. Ivana Marinjes" /></label>
                   <label>Pozicija<input name="position" required placeholder="npr. Editor" /></label>
                   <label>Email za login<input name="email" type="email" required placeholder="ime@marketizo.local" /></label>
-                  <label>Lozinka<input name="password" required value="123456" /></label>
+                  <label>Lozinka
+                    <span class="password-field">
+                      <input name="password" type="password" required value="123456" />
+                      <button class="password-toggle" type="button" data-toggle-password aria-label="Prikaži lozinku">Prikaži</button>
+                    </span>
+                  </label>
                   <label>Početak rada<input name="startDate" type="date" required /></label>
                   <label>Trenutna plata (€)<input name="salary" type="number" min="0" step="1" value="0" /></label>
-                  <label>Nedeljni sati<input name="weeklyHours" type="number" min="1" max="60" step="0.5" value="40" /></label>
+                  <label>Nedeljni sati
+                    <input name="weeklyHours" type="number" min="1" max="60" step="0.5" value="40" />
+                    <small class="field-note" id="weeklyHoursMonthlyPreview">Mesečno: 0h</small>
+                  </label>
                   <label>Prenos sati iz starog sistema<input name="openingHourBalance" type="number" min="-500" max="500" step="0.25" value="0" /></label>
                   <label>Mesec prenosa<input name="openingBalanceMonth" type="month" /></label>
                   <label class="checkbox-field">

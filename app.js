@@ -836,6 +836,22 @@ function showToast(title, message = "", type = "ok") {
   }, 4200);
 }
 
+function setupPasswordToggles() {
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    if (button.dataset.ready === "true") return;
+    button.dataset.ready = "true";
+    button.addEventListener("click", () => {
+      const field = button.closest(".password-field");
+      const input = field?.querySelector("input");
+      if (!input) return;
+      const visible = input.type === "text";
+      input.type = visible ? "password" : "text";
+      button.textContent = visible ? "Prikaži" : "Sakrij";
+      button.setAttribute("aria-label", visible ? "Prikaži lozinku" : "Sakrij lozinku");
+    });
+  });
+}
+
 function bySearch(item) {
   const haystack = Object.values(item).join(" ").toLowerCase();
   return haystack.includes(searchTerm.toLowerCase());
@@ -1547,6 +1563,15 @@ function employeeExpectedHours(employee, monthKey) {
   return Math.round(plannedDays * dailyHours * 100) / 100;
 }
 
+function employeeMonthlyHoursPreview(weeklyHours, monthKey, startDate = "") {
+  const dailyHours = parseNumber(weeklyHours || 0, 0) / 5;
+  const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !startDate || day >= startDate);
+  return {
+    days: eligibleWorkdays.length,
+    hours: Math.round(eligibleWorkdays.length * dailyHours * 100) / 100,
+  };
+}
+
 function shiftMonth(monthKey, offset) {
   const [year, month] = monthKey.split("-").map(Number);
   const date = new Date(year, month - 1 + offset, 1);
@@ -1829,6 +1854,7 @@ function renderEmployees() {
   renderEmployeeWorkRows(monthKey);
   renderEmployeeOps(monthKey);
   renderEmployeeTeamTimeline(monthKey);
+  updateEmployeeMonthlyPreview();
 }
 
 function renderEmployeeRows(employees, monthKey, year) {
@@ -2032,7 +2058,17 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.status.value = "Aktivan";
     form.elements.startDate.value = currentDateKey();
   }
+  updateEmployeeMonthlyPreview();
   form.querySelector('input[name="name"]')?.focus();
+}
+
+function updateEmployeeMonthlyPreview() {
+  const form = document.getElementById("employeeForm");
+  const preview = document.getElementById("weeklyHoursMonthlyPreview");
+  if (!form || !preview) return;
+  const monthKey = employeeMonthKey();
+  const estimate = employeeMonthlyHoursPreview(form.elements.weeklyHours?.value || 40, monthKey, form.elements.startDate?.value || "");
+  preview.textContent = `Mesečno: ${formatHours(estimate.hours)}h za ${estimate.days} radnih dana u ${monthLabel(monthKey)}`;
 }
 
 function hideEmployeeProfileForm() {
@@ -2783,6 +2819,10 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
   input.addEventListener("click", () => input.showPicker?.());
 });
 
+document.getElementById("employeeForm")?.addEventListener("input", (event) => {
+  if (["weeklyHours", "startDate"].includes(event.target.name)) updateEmployeeMonthlyPreview();
+});
+
 window.addEventListener("storage", (event) => {
   if (event.key !== "agencyCrmData") return;
   state = loadState();
@@ -2792,6 +2832,7 @@ window.addEventListener("storage", (event) => {
 document.getElementById("employeeMonthFilter")?.addEventListener("input", (event) => {
   employeeMonthFilter = event.target.value || currentMonthKey();
   renderAll();
+  updateEmployeeMonthlyPreview();
 });
 
 document.getElementById("employeeStatusFilter")?.addEventListener("change", (event) => {
@@ -3382,5 +3423,6 @@ document.getElementById("backupNowBtn")?.addEventListener("click", () => {
   renderAll();
 });
 
+setupPasswordToggles();
 renderAll();
 updateContextActions("admin");
