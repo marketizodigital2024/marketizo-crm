@@ -1,4 +1,4 @@
- $("#customerName").textContent=(data.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=overall;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${overall}%,#2b2b2b ${overall}%)`;$("#dashboardConclusion").textContent=clientText(a.mainConclusion,e).split(/(?<=[.!?])\s+/).slice(-2).join(" ");$("#dashboardReason").textContent=clientText(a.mainReason,e).split(/(?<=[.!?])\s+/).slice(0,2).join(" ");
+  $("#customerName").textContent=(data.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=overall;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${overall}%,#2b2b2b ${overall}%)`;$("#dashboardConclusion").textContent=clientText(a.mainConclusion,e);$("#dashboardReason").textContent=clientText(a.mainReason,e);
 $(".dash-head p").textContent="U nastavku vidiš glavne nalaze, prioritete i konkretne preporuke za svoj brend.";
 $(".evidence-section .eyebrow").textContent="Obuhvat analize";
 $(".evidence-section h3").textContent="Na čemu se zasnivaju zaključci";
