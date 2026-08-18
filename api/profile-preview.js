@@ -36,9 +36,13 @@ function normalize(platform, url, items) {
   const posts = usable.map((item) => ({
     image: imageOf(item),
     video: Boolean(item.videoUrl || item.isVideo || item.type === "Video" || item.mediaType === "VIDEO"),
+    videoUrl: item.videoUrl || item.videoPlayUrl || item.downloadUrl || item.mediaUrl || "",
     caption: item.caption || item.text || item.description || item.videoDescription || item.title || "",
     likes: item.likesCount ?? item.diggCount ?? item.likes ?? null,
     comments: item.commentsCount ?? item.commentCount ?? item.comments ?? null,
+    views: item.videoViewCount ?? item.playCount ?? item.viewsCount ?? item.views ?? null,
+    timestamp: item.timestamp || item.createTimeISO || item.date || item.publishedAt || "",
+    type: item.type || item.mediaType || (item.videoUrl ? "video" : "image"),
     url: item.url || item.postUrl || item.webVideoUrl || item.shareUrl || "",
   })).filter((post) => post.image).slice(0, 12);
   return {
