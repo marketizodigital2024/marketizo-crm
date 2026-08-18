@@ -156,7 +156,7 @@ input:focus,select:focus{border-color:var(--purple)}
 .profile-row .avatar{object-fit:cover}
 .profile-row .avatar.empty{background:#272727}
 .real-feed{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;transform:translateY(0)}
-.real-feed:has(.real-post){animation:realProfileScroll 11s ease-in-out infinite}
+.real-feed:has(.real-post){animation:naturalFeedScroll 20s linear infinite;will-change:transform}
 .real-post{position:relative;height:115px;overflow:hidden;background:#181818}
 .real-post img{width:100%;height:100%;object-fit:cover}
 .real-post>span{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:20px;text-shadow:0 2px 9px #000}
@@ -171,6 +171,13 @@ input:focus,select:focus{border-color:var(--purple)}
 45%,62%{transform:translateY(-120px)}
 88%,100%{transform:translateY(-230px)}
 }
+.loading-feed i{height:115px;border-radius:2px;background:linear-gradient(110deg,#171717 20%,#252525 38%,#171717 56%);background-size:220% 100%;animation:skeletonPulse 1.35s ease-in-out infinite}
+.loading-feed i:nth-child(3n+2){animation-delay:.12s}.loading-feed i:nth-child(3n){animation-delay:.24s}
+.progress-value{display:flex;align-items:center;gap:10px}.progress-spinner{width:17px;height:17px;border:2px solid #ffffff24;border-top-color:var(--orange);border-radius:50%;animation:spin .75s linear infinite}.progress-spinner.ready{display:none}
+.analysis-track{overflow:hidden}.analysis-track.connecting b{width:28%!important;animation:indeterminate 1.25s ease-in-out infinite}
+@keyframes naturalFeedScroll{from{transform:translateY(0)}to{transform:translateY(calc(-50% - 2px))}}
+@keyframes skeletonPulse{0%{background-position:110% 0}100%{background-position:-110% 0}}
+@keyframes indeterminate{0%{transform:translateX(-120%)}100%{transform:translateX(360%)}}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:30px}
 @media(max-width:800px){.whatsapp-card{align-items:flex-start;flex-direction:column}
 .thank-you{margin:30px auto}

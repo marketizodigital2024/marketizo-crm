@@ -43,7 +43,9 @@ function displayProfile(profile){
  $("#scanDisplayName").textContent=profile.displayName;
  $("#scanBio").textContent=profile.bio||"Opis profila nije javno dostupan";
  const avatar=$("#scanAvatar");avatar.src=profile.avatar||"";avatar.classList.toggle("empty",!profile.avatar);
- $("#feedGrid").innerHTML=profile.posts.map((post,index)=>`<article class="real-post ${post.video?"video":""}" style="--order:${index}"><img src="${post.image}" alt="Javna objava profila ${profile.username}" loading="eager"><span>${post.video?"▶":""}</span><small>${post.caption||"Javna objava"}</small></article>`).join("");
+ const posts=[...(profile.posts||[]),...(profile.posts||[])];
+ const feed=$("#feedGrid");feed.classList.remove("loading-feed");
+ feed.innerHTML=posts.map((post,index)=>`<article class="real-post ${post.video?"video":""}" style="--order:${index}"><img src="${post.image}" alt="Javna objava profila ${profile.username}" loading="eager"><span>${post.video?"▶":""}</span><small>${post.caption||"Javna objava"}</small></article>`).join("");
  $("#scanLine").classList.remove("hidden");
 }
 function formatMetric(value){return value==null?"—":new Intl.NumberFormat("sr-Latn-RS",{notation:"compact"}).format(value)}
@@ -67,12 +69,16 @@ async function captureLead(data){
 }
 $("#auditForm").onsubmit=async e=>{
  e.preventDefault();const d=Object.fromEntries(new FormData(e.target));localStorage.setItem("marketizoAudit",JSON.stringify(d));void captureLead(d);render(d);show("analyzing");
+ const waitingMessages=["Povezujemo se sa javnim profilom…","Učitavamo objave i video sadržaj…","Pripremamo profil za detaljan pregled…"];
+ let waitingStep=0,waitingPercent=8;
+ const waitingTimer=setInterval(()=>{$("#analysisStatus").textContent=waitingMessages[++waitingStep%waitingMessages.length];waitingPercent=Math.min(22,waitingPercent+2);$("#analysisPercent").textContent=waitingPercent+"%"},1800);
  let publicProfiles=[];
  try{publicProfiles=await loadPublicProfiles(d);displayProfile(publicProfiles[0]);render(d,publicProfiles);inspectPost(publicProfiles[0]?.posts?.[0]);$("#analysisStatus").textContent="Učitani su stvarni javni podaci. Pregledamo objave redom."}
- catch(error){$("#feedGrid").innerHTML=`<div class="feed-unavailable"><strong>Profil nije automatski učitan</strong><p>${error.message}</p><small>Nećemo prikazivati izmišljene objave. U produkciji korisniku nudimo da doda screenshotove.</small></div>`;$("#analysisStatus").textContent="Nastavljamo analizu na osnovu informacija o biznisu."}
+ catch(error){$("#feedGrid").innerHTML=`<div class="feed-unavailable"><strong>Profil nije automatski učitan</strong><p>${error.message}</p><small>Analizu nastavljamo na osnovu podataka koje ste uneli.</small></div>`;$("#analysisStatus").textContent="Nastavljamo analizu na osnovu informacija o biznisu."}
+ clearInterval(waitingTimer);$(".analysis-track").classList.remove("connecting");$(".progress-spinner").classList.add("ready");
  const phases=["Čitamo bio i proveravamo da li se vrednost razume odmah","Otvaramo Reels, objave i karusele — ne gledamo samo grid","Tražimo stvarne rezultate, izjave i elemente poverenja","Čitamo hookove, opise i pozive na sledeći korak","Prolazimo put koji klijent ima pre nego što pošalje upit","Poredimo poruke na svim dodatim mrežama",`Pišemo preporuke za ${d.business} u gradu ${d.location}`];
  const notes=["Da li potencijalni klijent za pet sekundi zna kome pomažete?","Da li sadržaj zadržava pažnju ili samo lepo izgleda?","Da li tvrdnje imaju dokaz i dovoljno konteksta?","Da li svaka dobra objava vodi ka prirodnom sledećem koraku?","Kod skuplje ponude tražimo topliji put do razgovora.","Dobra poruka mora ostati ista, ali format treba prilagoditi mreži.","Svaku preporuku vezujemo za cilj, ponudu i ono što smo videli."];
- let p=0,checks=$$("#scanChecks li");const timer=setInterval(()=>{checks[p]?.classList.remove("active");checks[p]?.classList.add("done");closePost();p++;const profile=publicProfiles.length?publicProfiles[p%publicProfiles.length]:null;if(profile){displayProfile(profile);const post=profile.posts?.[(p*2)%profile.posts.length];setTimeout(()=>inspectPost(post,p),650);$$("#networkTabs span").forEach((tab,index)=>tab.classList.toggle("active",index===p%publicProfiles.length))}const percent=Math.min(100,8+p*13.15);$("#analysisBar").style.width=percent+"%";$("#analysisPercent").textContent=Math.round(percent)+"%";if(p<phases.length){checks[p].classList.add("active");$("#analysisStatus").textContent=phases[p];$("#analystNote").querySelector("strong").textContent=notes[p]}else{clearInterval(timer);closePost();$("#analysisStatus").textContent="Analiza je spremna";setTimeout(()=>show("preview"),1100)}},4200)
+ let p=0,checks=$$("#scanChecks li");const timer=setInterval(()=>{checks[p]?.classList.remove("active");checks[p]?.classList.add("done");closePost();p++;const profile=publicProfiles.length?publicProfiles[p%publicProfiles.length]:null;if(profile){displayProfile(profile);const post=profile.posts?.[(p*2)%profile.posts.length];setTimeout(()=>inspectPost(post,p),650);$$("#networkTabs span").forEach((tab,index)=>tab.classList.toggle("active",index===p%publicProfiles.length))}const percent=Math.min(100,22+p*11.15);$("#analysisBar").style.width=percent+"%";$("#analysisPercent").textContent=Math.round(percent)+"%";if(p<phases.length){checks[p].classList.add("active");$("#analysisStatus").textContent=phases[p];$("#analystNote").querySelector("strong").textContent=notes[p]}else{clearInterval(timer);closePost();$("#analysisStatus").textContent="Analiza je spremna";setTimeout(()=>show("dashboard"),1100)}},4200)
 };
 $$('[data-content-tab]').forEach(button=>button.onclick=()=>{$$('[data-content-tab]').forEach(x=>x.classList.toggle('active',x===button));renderContentPlan(saved(),button.dataset.contentTab)});
 $("#checkoutButton").onclick=()=>{const url=window.MARKETIZO_STRIPE_CHECKOUT_URL;if(url){location.href=url;return}location.href="thank-you.html?demo=1"};
