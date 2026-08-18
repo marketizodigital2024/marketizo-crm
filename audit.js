@@ -64,6 +64,7 @@ async function loadDeepAudit(data,profiles){
  deepAudit=payload;localStorage.setItem("marketizoDeepAudit",JSON.stringify(payload));return payload;
 }
 function esc(value){return String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]))}
+function mediaUrl(value){if(!value)return"";try{return`/api/profile-preview?image=${encodeURIComponent(new URL(value).toString())}`}catch{return value}}
 function returnToProfiles(){show("wizard");setStep(1);$("[name=instagram]")?.focus()}
 function addRetryAction(){if($(".retry-analysis"))return;const button=document.createElement("button");button.type="button";button.className="secondary retry-analysis";button.textContent="Proveri link profila →";button.onclick=returnToProfiles;$("#analystNote").after(button)}
 function clientText(value,evidence=[]){
@@ -118,19 +119,19 @@ function displayProfile(profile){
  $("#scanHandle").textContent="@"+profile.username;
  $("#scanDisplayName").textContent=profile.displayName;
  $("#scanBio").textContent=profile.bio||"Opis profila nije javno dostupan";
- const fallbackAvatar=profile.posts?.[0]?.image||neutralAvatar();
+ const fallbackAvatar=neutralAvatar();
  const avatar=$("#scanAvatar");
  avatar.onerror=()=>{avatar.onerror=null;avatar.src=fallbackAvatar;avatar.classList.add("empty")};
- avatar.src=profile.avatar||fallbackAvatar;
+ avatar.src=profile.avatar?mediaUrl(profile.avatar):fallbackAvatar;
  avatar.classList.toggle("empty",!profile.avatar);
  const sourcePosts=profile.posts||[],posts=[...sourcePosts,...sourcePosts];
  const feed=$("#feedGrid");feed.classList.remove("loading-feed");
- feed.innerHTML=posts.map((post,index)=>`<article class="real-post ${post.video?"video":""}" style="--order:${index}"><img src="${post.image}" alt="Javna objava profila ${profile.username}" loading="eager"><span>${post.video?"▶":""}</span><small>${post.caption||"Javna objava"}</small>${profile.platform==="facebook"?`<div class="facebook-post-meta"><b>${esc(profile.displayName||profile.username)}</b><em>${formatMetric(post.likes)} reakcija · ${formatMetric(post.comments)} komentara</em></div>`:""}</article>`).join("");
+ feed.innerHTML=posts.length?posts.map((post,index)=>`<article class="real-post ${post.video?"video":""}" style="--order:${index}"><img src="${mediaUrl(post.image)}" alt="Javna objava profila ${profile.username}" loading="eager"><span>${post.video?"▶":""}</span><small>${post.caption||"Javna objava"}</small>${profile.platform==="facebook"?`<div class="facebook-post-meta"><b>${esc(profile.displayName||profile.username)}</b><em>${formatMetric(post.likes)} reakcija · ${formatMetric(post.comments)} komentara</em></div>`:""}</article>`).join(""):`<div class="feed-unavailable"><strong>Profil je učitan</strong><p>Javne objave ove mreže trenutno nisu dostupne za prikaz.</p></div>`;
  $$("#networkTabs span").forEach(tab=>tab.classList.toggle("active",tab.dataset.network===profile.platform));
  $("#scanLine").classList.remove("hidden");
 }
 function formatMetric(value){return value==null?"—":new Intl.NumberFormat("sr-Latn-RS",{notation:"compact"}).format(value)}
-function inspectPost(post){if(!post)return;const caption=(post.caption||"").replace(/\s+/g," ").trim(),title=caption.split(/[.!?]/).find(x=>x.trim().length>10)?.trim().split(/\s+/).slice(0,8).join(" ")||`${post.video?"Reel":"Objava"} sa profila`,media=$("#inspectorMedia");media.classList.toggle("is-video",!!post.video);media.innerHTML=`<img src="${esc(post.image)}" alt="${esc(title)}">`;$("#inspectorType").textContent=post.video?"PREGLEDAMO REEL":"PREGLEDAMO OBJAVU";$("#inspectorCaption").textContent=title;$("#inspectorMetrics").textContent=`${formatMetric(post.likes)} sviđanja · ${formatMetric(post.comments)} komentara${post.views!=null?` · ${formatMetric(post.views)} pregleda`:""}`;$("#postInspector").classList.remove("hidden");setTimeout(()=>$("#postInspector").classList.add("reviewing"),50)}
+function inspectPost(post){if(!post)return;const caption=(post.caption||"").replace(/\s+/g," ").trim(),title=caption.split(/[.!?]/).find(x=>x.trim().length>10)?.trim().split(/\s+/).slice(0,8).join(" ")||`${post.video?"Reel":"Objava"} sa profila`,media=$("#inspectorMedia");media.classList.toggle("is-video",!!post.video);media.innerHTML=`<img src="${mediaUrl(post.image)}" alt="${esc(title)}">`;$("#inspectorType").textContent=post.video?"PREGLEDAMO REEL":"PREGLEDAMO OBJAVU";$("#inspectorCaption").textContent=title;$("#inspectorMetrics").textContent=`${formatMetric(post.likes)} sviđanja · ${formatMetric(post.comments)} komentara${post.views!=null?` · ${formatMetric(post.views)} pregleda`:""}`;$("#postInspector").classList.remove("hidden");setTimeout(()=>$("#postInspector").classList.add("reviewing"),50)}
 function closePost(){const box=$("#postInspector");box.classList.remove("reviewing");setTimeout(()=>box.classList.add("hidden"),250)}
 $("#closeInspector").onclick=closePost;
 async function loadPublicProfiles(data){
@@ -141,10 +142,13 @@ async function loadPublicProfiles(data){
  if(!response.ok)throw new Error(payload.error||"Javni profili trenutno nisu dostupni.");
  const loaded=new Set((payload.profiles||[]).map(profile=>profile.platform));
  $("#networkTabs").innerHTML=Object.entries(profiles).filter(([,url])=>url).map(([name])=>`<span data-network="${esc(name)}" class="${loaded.has(name)?"":"unavailable"}">${esc(networkLabel[name]||name)}</span>`).join("");
+ $$("#networkTabs span").forEach(tab=>{const profile=(payload.profiles||[]).find(item=>item.platform===tab.dataset.network);tab.onclick=()=>{if(!profile)return;closePost();displayProfile(profile);setTimeout(()=>inspectPost(profile.posts?.[0]),250)}});
  localStorage.setItem("marketizoPublicProfiles",JSON.stringify(payload.profiles));
  return payload.profiles;
 }
 function startProfilePrefetch(data){const key=socialKey(data);if(key===profilePrefetchKey&&profilePrefetch)return profilePrefetch;profilePrefetchKey=key;profilePrefetch=loadPublicProfiles(data).catch(error=>{profilePrefetch=null;throw error});return profilePrefetch}
+let profileWarmupTimer;
+$$('[name="instagram"],[name="facebook"],[name="tiktok"]').forEach(input=>{const warm=()=>{clearTimeout(profileWarmupTimer);profileWarmupTimer=setTimeout(()=>{const data=Object.fromEntries(new FormData($("#auditForm")));if(Object.values(socialProfiles(data)).some(Boolean))void startProfilePrefetch(data).catch(()=>{})},350)};input.addEventListener("change",warm);input.addEventListener("blur",warm)});
 async function captureLead(data){
  try{
   const response=await fetch("/api/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),keepalive:true});
@@ -152,7 +156,7 @@ async function captureLead(data){
  }catch(error){console.warn("CRM trenutno nije dostupan.",error)}
 }
 $("#auditForm").onsubmit=async e=>{
- e.preventDefault();const d=Object.fromEntries(new FormData(e.target)),submitter=e.submitter;localStorage.setItem("marketizoAudit",JSON.stringify(d));void captureLead(d);render(d);showProfileShell(d);if(submitter){submitter.disabled=true;submitter.dataset.original=submitter.textContent;submitter.textContent="Učitavamo tvoje profile…"}
+ e.preventDefault();const d=Object.fromEntries(new FormData(e.target)),submitter=e.submitter;localStorage.setItem("marketizoAudit",JSON.stringify(d));if(!new URLSearchParams(location.search).has("test"))void captureLead(d);render(d);showProfileShell(d);if(submitter){submitter.disabled=true;submitter.dataset.original=submitter.textContent;submitter.textContent="Učitavamo tvoje profile…"}
  const waitingMessages=["Povezujemo se sa profilom…","Preuzimamo objave i Reelove…","Pripremamo sadržaj za detaljno čitanje…"];
  let waitingStep=0,waitingPercent=8;
  const waitingTimer=setInterval(()=>{$("#analysisStatus").textContent=waitingMessages[++waitingStep%waitingMessages.length];waitingPercent=Math.min(44,waitingPercent+3);$("#analysisPercent").textContent=waitingPercent+"%";$("#analysisBar").style.width=waitingPercent+"%"},1800);
