@@ -31,7 +31,7 @@ async function proxyImage(request, response) {
     const raw = Array.isArray(request.query?.image) ? request.query.image[0] : request.query?.image;
     const url = new URL(raw);
     const host = url.hostname.toLowerCase();
-    const allowed = ["cdninstagram.com", "fbcdn.net", "tiktokcdn.com", "tiktokcdn-us.com", "tiktokcdn-eu.com", "byteimg.com", "ibytedtos.com", "akamaized.net"];
+    const allowed = ["cdninstagram.com", "fbcdn.net", "tiktokcdn.com", "tiktokcdn-us.com", "tiktokcdn-eu.com", "byteimg.com", "ibytedtos.com", "akamaized.net", "api.apify.com"];
     if (url.protocol !== "https:" || !allowed.some((domain) => host === domain || host.endsWith(`.${domain}`))) return response.status(400).end();
     const upstream = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" }, signal: AbortSignal.timeout(15000) });
     if (!upstream.ok) return response.status(404).end();
@@ -114,6 +114,8 @@ export default async function handler(request, response) {
   if (!entries.length) return response.status(400).json({ error: "Dodajte najmanje jedan profil." });
   const settled = await Promise.allSettled(entries.map(([platform, url]) => fetchProfile(platform, url.trim(), process.env.APIFY_TOKEN)));
   const profiles = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
+  const sharedAvatar = profiles.find((profile) => profile.avatar)?.avatar || "";
+  profiles.forEach((profile) => { if (!profile.avatar && sharedAvatar) profile.avatar = sharedAvatar; });
   const failures = settled.map((item, index) => ({ item, index })).filter(({ item }) => item.status === "rejected").map(({ item, index }) => ({ platform: entries[index]?.[0], message: item.reason?.message || "Profil nije dostupan." }));
   if (!profiles.length) {
     console.error("Profile preview failed", failures);
