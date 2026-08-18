@@ -54,6 +54,7 @@ function contentBlueprint(d){const offer=d.offer||"glavna ponuda",city=d.locatio
  posts:[["Studija slučaja sa konkretnim rezultatom","Jedna snažna fotografija. U opisu prikaži početni problem, odluku, proces, rezultat i sledeći korak."]],
  carousels:[[program?"Kako da znaš da li je ovaj program pravi izbor":`Kako da znaš da li ti je potrebna ponuda „${offer}“`,`Prvi slajd postavlja jasno pitanje. Srednji slajdovi prikazuju situacije u kojima se publika prepoznaje, a poslednji vodi na ${path}.`]]};}
 function renderContentPlan(d,type="reels"){const plan=contentBlueprint(d)[type]||[];$("#contentPlan").innerHTML=plan.map(([title,body],i)=>`<article><span>${String(i+1).padStart(2,"0")}</span><div><strong>${title}</strong><p>${body}</p></div></article>`).join("")}
+function updateReportProfile(profiles=[]){const profile=profiles.find(item=>item.platform==="instagram"&&item.avatar)||profiles.find(item=>item.avatar);let block=$(".report-profile");if(!block){block=document.createElement("div");block.className="report-profile";block.innerHTML='<img id="reportAvatar" alt="Profil analiziranog brenda"><div><small>ANALIZIRANI PROFIL</small><strong id="reportHandle"></strong></div>';$(".dash-head .secondary").before(block)}if(!profile){block.classList.add("empty");return}if(block.dataset.source==="instagram"&&profile.platform!=="instagram")return;block.dataset.source=profile.platform;block.classList.remove("empty");$("#reportAvatar").src=mediaUrl(profile.avatar);$("#reportHandle").textContent=`${networkLabel[profile.platform]||profile.platform} · @${String(profile.username||profile.displayName||"profil").replace(/^@/,"")}`}
 function render(d,profiles=[]){const base=analysis(d),r=derivedAudit(d,profiles,base),f=profileFacts(profiles);$("#previewSummary").textContent=r.summary;$("#previewStrength").textContent=r.strength;$("#previewIssue").textContent=r.issue;$("#previewIssueReason").textContent=r.reason;$("#customerName").textContent=(d.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=r.overall;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${r.overall}%,#2b2b2b ${r.overall}%)`;$("#dashboardConclusion").textContent=f.posts.length?`Pregledali smo ${f.posts.length} objava. Najveća prilika je da svaki dobar sadržaj jasnije vodi ka ponudi.`:"Profil mora brže da objasni vrednost ponude i prirodan sledeći korak.";$("#dashboardReason").textContent=f.posts.length?`${f.ctas.length} od ${f.posts.length} opisa ima poziv na akciju, a ${f.proof.length} sadrži rezultat ili iskustvo klijenta. Sledeći korak je da sadržaj doslednije gradi poverenje i vodi ka koraku „${d.purchasePath||"upit"}“.`:"Preporuke su pripremljene prema ponudi, ciljnoj publici i informacijama iz upitnika.";$("#scoreGrid").innerHTML=r.scores.map(([n,v,why])=>`<article><span>${n}</span><strong>${v}<small>/100</small></strong><i><b style="width:${v}%"></b></i><p>${why}</p></article>`).join("");$("#priorities").innerHTML=r.priorities.map(([t,w],i)=>`<article><span>${i+1}</span><div><strong>${t}</strong><p>${w}</p></div><b class="impact">VISOK UTICAJ</b></article>`).join("");$("#evidenceGrid").innerHTML=evidenceFor(d,profiles).map(([title,body])=>`<article><small>${title}</small><strong>${body}</strong></article>`).join("");renderReviewedExamples(d,profiles);renderContentPlan(d)}
 let deepAudit=null;
 async function loadDeepAudit(data,profiles){
@@ -115,6 +116,8 @@ function showProfileShell(data){
 }
 function displayProfile(profile){
  const phone=$(".profile-phone");phone.dataset.network=profile.platform||"instagram";
+ updateReportProfile([profile]);
+ $("#networkTabs").innerHTML=`<span class="active" data-network="${esc(profile.platform||"instagram")}">${esc(networkLabel[profile.platform]||profile.platform||"Profil")}</span>`;
  $("#activeNetwork").textContent=networkLabel[profile.platform]||profile.platform;
  $("#scanHandle").textContent="@"+profile.username;
  $("#scanDisplayName").textContent=profile.displayName;
@@ -127,7 +130,6 @@ function displayProfile(profile){
  const sourcePosts=profile.posts||[],posts=[...sourcePosts,...sourcePosts];
  const feed=$("#feedGrid");feed.classList.remove("loading-feed");
  feed.innerHTML=posts.length?posts.map((post,index)=>`<article class="real-post ${post.video?"video":""}" style="--order:${index}"><img src="${mediaUrl(post.image)}" alt="Javna objava profila ${profile.username}" loading="eager"><span>${post.video?"▶":""}</span><small>${post.caption||"Javna objava"}</small>${profile.platform==="facebook"?`<div class="facebook-post-meta"><b>${esc(profile.displayName||profile.username)}</b><em>${formatMetric(post.likes)} reakcija · ${formatMetric(post.comments)} komentara</em></div>`:""}</article>`).join(""):`<div class="feed-unavailable"><strong>Profil je učitan</strong><p>Javne objave ove mreže trenutno nisu dostupne za prikaz.</p></div>`;
- $$("#networkTabs span").forEach(tab=>tab.classList.toggle("active",tab.dataset.network===profile.platform));
  $("#scanLine").classList.remove("hidden");
 }
 function formatMetric(value){return value==null?"—":new Intl.NumberFormat("sr-Latn-RS",{notation:"compact"}).format(value)}
@@ -140,9 +142,8 @@ async function loadPublicProfiles(data){
  const response=await fetch("/api/profile-preview",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profiles})});
  const payload=await response.json().catch(()=>({}));
  if(!response.ok)throw new Error(payload.error||"Javni profili trenutno nisu dostupni.");
- const loaded=new Set((payload.profiles||[]).map(profile=>profile.platform));
- $("#networkTabs").innerHTML=Object.entries(profiles).filter(([,url])=>url).map(([name])=>`<span data-network="${esc(name)}" class="${loaded.has(name)?"":"unavailable"}">${esc(networkLabel[name]||name)}</span>`).join("");
- $$("#networkTabs span").forEach(tab=>{const profile=(payload.profiles||[]).find(item=>item.platform===tab.dataset.network);tab.onclick=()=>{if(!profile)return;closePost();displayProfile(profile);setTimeout(()=>inspectPost(profile.posts?.[0]),250)}});
+ const firstProfile=payload.profiles?.[0];
+ if(firstProfile)$("#networkTabs").innerHTML=`<span class="active" data-network="${esc(firstProfile.platform)}">${esc(networkLabel[firstProfile.platform]||firstProfile.platform)}</span>`;
  localStorage.setItem("marketizoPublicProfiles",JSON.stringify(payload.profiles));
  return payload.profiles;
 }
