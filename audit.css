@@ -54,8 +54,9 @@ main{max-width:1180px;margin:auto;padding:70px 24px}
 .fields .wide{grid-column:1/-1}
 label span{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:8px}
 label small{color:var(--muted);font-weight:400}
-input,select{width:100%;background:#0d0d0d;border:1px solid var(--line);color:#fff;border-radius:11px;padding:15px;outline:0;font:14px Inter}
-input:focus,select:focus{border-color:var(--purple)}
+input,select,textarea{width:100%;background:#0d0d0d;border:1px solid var(--line);color:#fff;border-radius:11px;padding:15px;outline:0;font:14px Inter}
+textarea{resize:vertical;min-height:92px;line-height:1.5}
+input:focus,select:focus,textarea:focus{border-color:var(--purple)}
 .step-actions{display:flex;justify-content:space-between;margin-top:25px}
 .error{color:#ff7f92!important;font-size:13px}
 .consent{display:flex;align-items:flex-start;gap:10px;color:var(--muted);font-size:12px}
