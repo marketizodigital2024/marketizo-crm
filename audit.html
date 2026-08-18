@@ -211,7 +211,7 @@
   };
   $$('[data-content-tab]').forEach(button=>button.onclick=()=>{$$('[data-content-tab]').forEach(x=>x.classList.toggle('active',x===button));deepAudit?renderDeepIdeas(button.dataset.contentTab):renderContentPlan(saved(),button.dataset.contentTab)});
   $("#checkoutButton").onclick=()=>{const url=window.MARKETIZO_STRIPE_CHECKOUT_URL;if(url){location.href=url;return}location.href="thank-you.html?demo=1"};
-  if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),profiles=JSON.parse(localStorage.getItem("marketizoPublicProfiles")||"[]");deepAudit=JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null");deepAudit?renderDeepAudit(d,deepAudit):render(d,profiles);show("dashboard")}
+  if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),profiles=JSON.parse(localStorage.getItem("marketizoPublicProfiles")||"[]");deepAudit=JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null");updateReportProfile(profiles);deepAudit?renderDeepAudit(d,deepAudit):render(d,profiles);show("dashboard")}
   
     </script>
 </body>
