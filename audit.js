@@ -1,4 +1,4 @@
-const $=s=>document.querySelector(s),$=s=>document.querySelectorAll(s);let step=1;
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let step=1;
 const trackMeta=(event,params={},custom=false)=>{try{if(typeof window.fbq==="function")window.fbq(custom?"trackCustom":"track",event,params)}catch(error){console.warn("Meta event nije poslat.",error)}};
 $(".dash-head p").textContent="U nastavku vidiš glavne nalaze, prioritete i konkretne preporuke za svoj brend.";
 $(".evidence-section .eyebrow").textContent="Obuhvat analize";
