@@ -44,8 +44,14 @@ async function loadPublicProfiles(data){
  localStorage.setItem("marketizoPublicProfiles",JSON.stringify(payload.profiles));
  return payload.profiles;
 }
+async function captureLead(data){
+ try{
+  const response=await fetch("/api/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),keepalive:true});
+  if(!response.ok)console.warn("Lead nije poslat u CRM.");
+ }catch(error){console.warn("CRM trenutno nije dostupan.",error)}
+}
 $("#auditForm").onsubmit=async e=>{
- e.preventDefault();const d=Object.fromEntries(new FormData(e.target));localStorage.setItem("marketizoAudit",JSON.stringify(d));render(d);show("analyzing");
+ e.preventDefault();const d=Object.fromEntries(new FormData(e.target));localStorage.setItem("marketizoAudit",JSON.stringify(d));void captureLead(d);render(d);show("analyzing");
  let publicProfiles=[];
  try{publicProfiles=await loadPublicProfiles(d);displayProfile(publicProfiles[0]);$("#analysisStatus").textContent="Učitani su stvarni javni podaci. Pregledamo objave redom."}
  catch(error){$("#feedGrid").innerHTML=`<div class="feed-unavailable"><strong>Profil nije automatski učitan</strong><p>${error.message}</p><small>Nećemo prikazivati izmišljene objave. U produkciji korisniku nudimo da doda screenshotove.</small></div>`;$("#analysisStatus").textContent="Nastavljamo analizu na osnovu informacija o biznisu."}
