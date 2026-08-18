@@ -8,14 +8,14 @@ const PLATFORM_CONFIG = {
   facebook: {
     host: "facebook.com",
     actorEnv: "APIFY_FACEBOOK_ACTOR_ID",
-    fallbackActor: "apify~facebook-pages-scraper",
-    input: (url) => ({ startUrls: [{ url }], maxPosts: 12 }),
+    fallbackActor: "netdesignr~facebook-posts-scraper",
+    input: (url) => ({ startUrls: [{ url }], pageOrProfileUrls: [url], maxPosts: 12, extractionMode: "balanced", includeTopComments: false }),
   },
   tiktok: {
     host: "tiktok.com",
     actorEnv: "APIFY_TIKTOK_ACTOR_ID",
     fallbackActor: "clockworks~tiktok-scraper",
-    input: (url) => ({ profiles: [url], resultsPerPage: 12, shouldDownloadVideos: false, shouldDownloadCovers: false }),
+    input: (url) => ({ profiles: [new URL(url).pathname.split("/").filter(Boolean).pop().replace(/^@/,"")], profileScrapeSections: ["videos"], profileSorting: "latest", resultsPerPage: 12, shouldDownloadVideos: false, shouldDownloadCovers: true, shouldDownloadAvatars: true }),
   },
 };
 
@@ -27,7 +27,7 @@ function safeUrl(raw, expectedHost) {
 }
 
 function imageOf(item) {
-  return item.displayUrl || item.imageUrl || item.thumbnailUrl || item.thumbnail || item.coverImageUrl || item.cover || item.mediaUrl || item.picture || item.images?.[0] || "";
+  return item.displayUrl || item.imageUrl || item.thumbnailUrl || item.thumbnail || item.coverImageUrl || item.cover || item.mediaUrl || item.picture || item.images?.[0] || item.media?.[0]?.url || item.attachments?.[0]?.media?.image?.src || item.videoMeta?.coverUrl || "";
 }
 
 function authorOf(item = {}) {
@@ -36,7 +36,8 @@ function authorOf(item = {}) {
 
 function normalize(platform, url, items) {
   const usable = items.filter((item) => item && typeof item === "object");
-  const profile = usable.find((item) => { const author=authorOf(item); return item.profilePicUrl || item.ownerProfilePicUrl || item.avatarUrl || item.avatar || author.profilePicUrl || author.avatar || author.avatarLarger || item.biography || item.bio; }) || usable[0] || {};
+  const profileScore=item=>{const author=authorOf(item);return (item.profilePicUrlHD?12:0)+(item.profilePicUrl?10:0)+(item.ownerProfilePicUrl?9:0)+(item.avatarUrl||item.avatar?8:0)+(author.avatarLarger||author.profilePicUrl?7:0)+(item.biography||item.bio||item.signature?4:0)+(item.fullName||item.ownerFullName||item.nickname?2:0)};
+  const profile = [...usable].sort((a,b)=>profileScore(b)-profileScore(a))[0] || {};
   const author = authorOf(profile);
   const posts = usable.map((item) => ({
     image: imageOf(item),
@@ -56,7 +57,7 @@ function normalize(platform, url, items) {
     username: profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || author.username || author.uniqueId || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
     displayName: profile.fullName || profile.ownerFullName || profile.nickname || profile.name || profile.title || author.fullName || author.nickname || profile.username || profile.ownerUsername || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
     bio: profile.biography || profile.bio || profile.signature || profile.about || author.biography || author.signature || "",
-    avatar: profile.profilePicUrlHD || profile.profilePicUrl || profile.ownerProfilePicUrlHD || profile.ownerProfilePicUrl || profile.avatarUrl || profile.avatar || profile.profilePicture || profile.pageProfilePictureUrl || author.profilePicUrlHD || author.profilePicUrl || author.avatarLarger || author.avatarMedium || author.avatar || author.avatarUrl || "",
+    avatar: profile.profilePicUrlHD || profile.profilePicUrl || profile.ownerProfilePicUrlHD || profile.ownerProfilePicUrl || profile.avatarUrl || profile.avatar || profile.profilePicture || profile.pageProfilePictureUrl || profile.personalProfile?.profilePictureLarge || profile.personalProfile?.profilePictureMedium || profile.profileImageUrl || author.profilePicUrlHD || author.profilePicUrl || author.avatarLarger || author.avatarMedium || author.avatar || author.avatarUrl || "",
     followers: profile.followersCount ?? profile.fans ?? profile.followers ?? null,
     posts,
   };
@@ -72,7 +73,13 @@ async function fetchProfile(platform, rawUrl, token) {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(input), signal: AbortSignal.timeout(90000),
   });
-  const responses=await Promise.all([run(config.input(url)),...(platform==="instagram"?[run({directUrls:[url],resultsType:"details",resultsLimit:1})]:[])]);
+  const extra=[];
+  if(platform==="instagram") extra.push(run({directUrls:[url],resultsType:"details",resultsLimit:1}));
+  if(platform==="facebook"){
+    const detailsEndpoint=`https://api.apify.com/v2/actors/${encodeURIComponent("apify~facebook-pages-scraper")}/run-sync-get-dataset-items?clean=true&format=json`;
+    extra.push(fetch(detailsEndpoint,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({startUrls:[{url}]}),signal:AbortSignal.timeout(90000)}));
+  }
+  const responses=await Promise.all([run(config.input(url)),...extra]);
   const response=responses[0];
   if (!response.ok) throw new Error(`Servis za ${platform} je vratio status ${response.status}.`);
   const items=(await Promise.all(responses.map(async item=>item.ok?item.json():[]))).flat();
