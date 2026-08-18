@@ -5,6 +5,7 @@ $(".evidence-section h3").textContent="Na čemu se zasnivaju zaključci";
 const show=id=>{["landing","wizard","analyzing","preview","dashboard"].forEach(x=>$("#"+x).classList.add("hidden"));$("#"+id).classList.remove("hidden");window.scrollTo({top:0,behavior:"smooth"})};
 function setStep(n){step=n;$$(".step").forEach(x=>x.classList.toggle("active",+x.dataset.step===n));$("#stepText").textContent=`Korak ${n} od 4`;$("#progressBar").style.width=`${n*25}%`}
 const saved=()=>JSON.parse(localStorage.getItem("marketizoAudit")||"{}");
+const normalizeScore=value=>Math.max(30,Math.min(95,Math.round(Number(value)||50)));
 const beauty=d=>/beauty|salon|kozmet|estet|laser|lice|kož|nokt|frizer|šmink|obrve|trepavic/i.test(`${d.business||""} ${d.offer||""}`);
 function analysis(d){
  const biz=d.business||"tvoj biznis",offer=d.offer||"glavnu ponudu",aud=d.audience||"idealne klijente",city=d.location||"tvom tržištu",result=d.result||"jasan rezultat",price=d.price||"unetu cenu",path=d.purchasePath||"sledeći korak";
@@ -82,9 +83,10 @@ function conciseCoverage(limitations=[]){
 }
 function renderDeepAudit(data,payload){
  const a=payload.audit,e=payload.evidence||[],coverage=a.coverage||{};
- $("#customerName").textContent=(data.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=a.overallScore;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${a.overallScore}%,#2b2b2b ${a.overallScore}%)`;$("#dashboardConclusion").textContent=clientText(a.mainConclusion,e);$("#dashboardReason").textContent=clientText(a.mainReason,e);
+ const overall=normalizeScore(a.overallScore);
+ $("#customerName").textContent=(data.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=overall;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${overall}%,#2b2b2b ${overall}%)`;$("#dashboardConclusion").textContent=clientText(a.mainConclusion,e);$("#dashboardReason").textContent=clientText(a.mainReason,e);
  $("#evidenceGrid").innerHTML=[["Pregledano",`${coverage.postsReviewed||e.length} objava`],["Reels i video",`${coverage.videosFound||0} pronađeno · ${coverage.videosTranscribed||0} detaljno analizirano`],["Povezane mreže",[...new Set(e.map(x=>x.platform))].filter(Boolean).join(", ")||"—"],["Osnova zaključaka",conciseCoverage(coverage.limitations)]].map(([t,b])=>`<article><small>${esc(t)}</small><strong>${esc(b)}</strong></article>`).join("");
- $("#scoreGrid").innerHTML=a.scores.map(x=>`<article><span>${esc(x.name)}</span><strong>${x.value}<small>/100</small></strong><i><b style="width:${x.value}%"></b></i><p>${esc(clientText(x.reason,e))}</p></article>`).join("");
+ $("#scoreGrid").innerHTML=a.scores.map(x=>{const value=normalizeScore(x.value);return`<article><span>${esc(x.name)}</span><strong>${value}<small>/100</small></strong><i><b style="width:${value}%"></b></i><p>${esc(clientText(x.reason,e))}</p></article>`}).join("");
  $("#priorities").innerHTML=a.priorities.map((x,i)=>`<article><span>${i+1}</span><div><strong>${esc(clientText(x.title,e))}</strong><p>${esc(clientText(x.why,e))}</p><small class="priority-proof">Osnova preporuke: ${esc(clientText(x.evidence,e))}</small></div><b class="impact">VISOK UTICAJ</b></article>`).join("");
  $("#reviewedExamples").innerHTML=a.examples.map(x=>{const item=e.find(y=>y.index===x.postIndex)||{},title=item.title||clientText(x.observed,e)||"Pregledani sadržaj";return`<article>${item.image?`<img src="${esc(item.image)}" alt="${esc(title)}">`:""}<div><small>${esc(x.format)} · ${esc(item.username?"@"+item.username:"")}</small><strong>${esc(title)}</strong><p><b>Šta već radi:</b> ${esc(clientText(x.works,e))}</p><p><b>Šta bih promenio:</b> ${esc(clientText(x.improve,e))}</p><p class="rewrite"><b>Konkretan primer:</b> ${esc(clientText(x.rewrite,e))}</p></div></article>`}).join("");
  renderDeepIdeas("reels");
