@@ -33,7 +33,9 @@ async function proxyImage(request, response) {
     const host = url.hostname.toLowerCase();
     const allowed = ["cdninstagram.com", "fbcdn.net", "tiktokcdn.com", "tiktokcdn-us.com", "tiktokcdn-eu.com", "byteimg.com", "ibytedtos.com", "akamaized.net", "api.apify.com"];
     if (url.protocol !== "https:" || !allowed.some((domain) => host === domain || host.endsWith(`.${domain}`))) return response.status(400).end();
-    const upstream = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" }, signal: AbortSignal.timeout(15000) });
+    const headers = { "User-Agent": "Mozilla/5.0", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" };
+    if (host === "api.apify.com" && process.env.APIFY_TOKEN) headers.Authorization = `Bearer ${process.env.APIFY_TOKEN}`;
+    const upstream = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
     if (!upstream.ok) return response.status(404).end();
     const contentType = upstream.headers.get("content-type") || "image/jpeg";
     if (!contentType.startsWith("image/")) return response.status(415).end();
@@ -46,7 +48,8 @@ async function proxyImage(request, response) {
 }
 
 function imageOf(item) {
-  return item.displayUrl || item.imageUrl || item.thumbnailUrl || item.thumbnail || item.coverImageUrl || item.cover || item.coverPhotoUrl || item.mediaUrl || item.picture || item.images?.[0] || item.media?.[0]?.url || item.attachments?.[0]?.media?.image?.src || item.videoMeta?.coverUrl || item.videoMeta?.originalCoverUrl || "";
+  const candidates = [item.displayUrl, item.imageUrl, item.image, item.thumbnailUrl, item.thumbnail, item.coverImageUrl, item.cover, item.coverPhotoUrl, item.picture, item.images?.[0], item.media?.[0]?.url, item.attachments?.[0]?.media?.image?.src, item.videoMeta?.coverUrl, item.videoMeta?.originalCoverUrl, item.mediaUrl];
+  return candidates.find((value) => typeof value === "string" && value.startsWith("https://") && !/facebook\.com\/(?:permalink|reel|watch|share)/i.test(value)) || "";
 }
 
 function authorOf(item = {}) {
