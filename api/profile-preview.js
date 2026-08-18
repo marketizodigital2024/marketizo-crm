@@ -26,8 +26,27 @@ function safeUrl(raw, expectedHost) {
   return url.toString();
 }
 
+async function proxyImage(request, response) {
+  try {
+    const raw = Array.isArray(request.query?.image) ? request.query.image[0] : request.query?.image;
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    const allowed = ["cdninstagram.com", "fbcdn.net", "tiktokcdn.com", "tiktokcdn-us.com", "tiktokcdn-eu.com", "byteimg.com", "ibytedtos.com", "akamaized.net"];
+    if (url.protocol !== "https:" || !allowed.some((domain) => host === domain || host.endsWith(`.${domain}`))) return response.status(400).end();
+    const upstream = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" }, signal: AbortSignal.timeout(15000) });
+    if (!upstream.ok) return response.status(404).end();
+    const contentType = upstream.headers.get("content-type") || "image/jpeg";
+    if (!contentType.startsWith("image/")) return response.status(415).end();
+    response.setHeader("Content-Type", contentType);
+    response.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=604800");
+    return response.status(200).send(Buffer.from(await upstream.arrayBuffer()));
+  } catch {
+    return response.status(400).end();
+  }
+}
+
 function imageOf(item) {
-  return item.displayUrl || item.imageUrl || item.thumbnailUrl || item.thumbnail || item.coverImageUrl || item.cover || item.mediaUrl || item.picture || item.images?.[0] || item.media?.[0]?.url || item.attachments?.[0]?.media?.image?.src || item.videoMeta?.coverUrl || "";
+  return item.displayUrl || item.imageUrl || item.thumbnailUrl || item.thumbnail || item.coverImageUrl || item.cover || item.coverPhotoUrl || item.mediaUrl || item.picture || item.images?.[0] || item.media?.[0]?.url || item.attachments?.[0]?.media?.image?.src || item.videoMeta?.coverUrl || item.videoMeta?.originalCoverUrl || "";
 }
 
 function authorOf(item = {}) {
@@ -54,7 +73,7 @@ function normalize(platform, url, items) {
   return {
     platform,
     sourceUrl: url,
-    username: profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || author.username || author.uniqueId || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
+    username: String(profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || author.username || author.uniqueId || author.name || new URL(url).pathname.split("/").filter(Boolean)[0] || platform).replace(/^@/,""),
     displayName: profile.fullName || profile.ownerFullName || profile.nickname || profile.name || profile.title || author.fullName || author.nickname || profile.username || profile.ownerUsername || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
     bio: profile.biography || profile.bio || profile.signature || profile.about || author.biography || author.signature || "",
     avatar: profile.profilePicUrlHD || profile.profilePicUrl || profile.ownerProfilePicUrlHD || profile.ownerProfilePicUrl || profile.avatarUrl || profile.avatar || profile.profilePicture || profile.pageProfilePictureUrl || profile.personalProfile?.profilePictureLarge || profile.personalProfile?.profilePictureMedium || profile.profileImageUrl || author.profilePicUrlHD || author.profilePicUrl || author.avatarLarger || author.avatarMedium || author.avatar || author.avatarUrl || "",
@@ -80,15 +99,14 @@ async function fetchProfile(platform, rawUrl, token) {
     extra.push(fetch(detailsEndpoint,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({startUrls:[{url}]}),signal:AbortSignal.timeout(90000)}));
   }
   const responses=await Promise.all([run(config.input(url)),...extra]);
-  const response=responses[0];
-  if (!response.ok) throw new Error(`Servis za ${platform} je vratio status ${response.status}.`);
   const items=(await Promise.all(responses.map(async item=>item.ok?item.json():[]))).flat();
   const result = normalize(platform, url, Array.isArray(items) ? items : []);
-  if (!result.posts.length) throw new Error("Nema javno dostupnih objava za prikaz.");
+  if (!result.posts.length && !result.avatar) throw new Error("Nema javno dostupnih objava za prikaz.");
   return result;
 }
 
 export default async function handler(request, response) {
+  if (request.method === "GET" && request.query?.image) return proxyImage(request, response);
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
   if (!process.env.APIFY_TOKEN) return response.status(503).json({ error: "Prikupljanje javnih profila još nije povezano. Dodajte APIFY_TOKEN na serveru." });
   const supplied = request.body?.profiles || {};
