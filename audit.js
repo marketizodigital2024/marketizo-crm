@@ -5,7 +5,7 @@ $(".evidence-section h3").textContent="Na čemu se zasnivaju zaključci";
 const show=id=>{["landing","wizard","analyzing","preview","dashboard"].forEach(x=>$("#"+x).classList.add("hidden"));$("#"+id).classList.remove("hidden");window.scrollTo({top:0,behavior:"smooth"})};
 function setStep(n){step=n;$$(".step").forEach(x=>x.classList.toggle("active",+x.dataset.step===n));$("#stepText").textContent=`Korak ${n} od 4`;$("#progressBar").style.width=`${n*25}%`}
 const saved=()=>JSON.parse(localStorage.getItem("marketizoAudit")||"{}");
-const normalizeScore=value=>Math.max(30,Math.min(95,Math.round(Number(value)||50)));
+const normalizeScore=value=>{const raw=Number(value);const scaled=raw>0&&raw<=10?raw*10:raw;return Math.max(30,Math.min(95,Math.round(scaled||50)))};
 const beauty=d=>/beauty|salon|kozmet|estet|laser|lice|kož|nokt|frizer|šmink|obrve|trepavic/i.test(`${d.business||""} ${d.offer||""}`);
 function analysis(d){
  const biz=d.business||"tvoj biznis",offer=d.offer||"glavnu ponudu",aud=d.audience||"idealne klijente",city=d.location||"tvom tržištu",result=d.result||"jasan rezultat",price=d.price||"unetu cenu",path=d.purchasePath||"sledeći korak";
