@@ -13,7 +13,7 @@ main{max-width:1180px;margin:auto;padding:70px 24px}
 .hero>*{min-width:0}
 .pill,.eyebrow{color:var(--purple2);font-weight:800;font-size:12px;letter-spacing:.12em;text-transform:uppercase}
 .pill{display:inline-block;background:#ff6b0018;border:1px solid #ff6b0045;border-radius:99px;padding:10px 14px}
-.hero h1{font:800 clamp(44px,5.7vw,76px)/1.02 Montserrat,sans-serif;letter-spacing:-.055em;margin:24px 0}
+.hero h1{font:800 clamp(40px,4.5vw,60px)/1.04 Montserrat,sans-serif;letter-spacing:-.05em;margin:22px 0}
 .hero h1 em,.preview h2 em{font-style:normal;color:var(--purple2)}
 .hero-copy>p{max-width:650px;color:var(--muted);font-size:18px;line-height:1.7}
 .primary,.secondary,.back{border:0;border-radius:12px;padding:16px 22px;font:700 14px Inter;cursor:pointer}
