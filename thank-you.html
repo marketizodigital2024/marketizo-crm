@@ -10,7 +10,9 @@
   <script>
     !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
     fbq('init','563031312599000');fbq('track','PageView');
-    const purchaseKey='marketizo_audit_purchase_'+(new URLSearchParams(location.search).get('session_id')||'confirmed');
+    const paidSession=new URLSearchParams(location.search).get('session_id');
+    if(paidSession){localStorage.setItem('marketizoAuditPaid','1');localStorage.setItem('marketizoAuditPaymentSession',paidSession)}
+    const purchaseKey='marketizo_audit_purchase_'+(paidSession||'confirmed');
     if(!localStorage.getItem(purchaseKey)){fbq('track','Purchase',{value:1.00,currency:'EUR',content_name:'Marketizo Brand Audit'});localStorage.setItem(purchaseKey,'1')}
   </script>
 </head>
@@ -21,7 +23,7 @@
     <div class="eyebrow">UPLATA JE USPEŠNA</div>
     <h1>Hvala. Krećemo sa tvojim auditom.</h1>
     <p>Uplata od 1 € je potvrđena. Tvoji podaci i rezultat su sačuvani, a Marketizo tim nastavlja sa sledećim korakom.</p>
-    <a href="/audit?dashboard=1">Vrati se na rezultat audita →</a>
+    <a href="/audit?dashboard=1&paid=1">Vrati se na rezultat audita →</a>
   </main>
 </body>
 </html>
