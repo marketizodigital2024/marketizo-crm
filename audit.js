@@ -100,7 +100,12 @@ function displayProfile(profile){
  $("#scanHandle").textContent="@"+profile.username;
  $("#scanDisplayName").textContent=profile.displayName;
  $("#scanBio").textContent=profile.bio||"Opis profila nije javno dostupan";
- const avatar=$("#scanAvatar");avatar.src=profile.avatar||"";avatar.classList.toggle("empty",!profile.avatar);
+ const initial=(profile.displayName||profile.username||"P").trim().charAt(0).toUpperCase();
+ const fallbackAvatar=`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="50" fill="#272727"/><text x="50" y="66" text-anchor="middle" font-family="Arial,sans-serif" font-size="52" font-weight="700" fill="#ffffff">${initial}</text></svg>`)}`;
+ const avatar=$("#scanAvatar");
+ avatar.onerror=()=>{avatar.onerror=null;avatar.src=fallbackAvatar;avatar.classList.add("empty")};
+ avatar.src=profile.avatar||fallbackAvatar;
+ avatar.classList.toggle("empty",!profile.avatar);
  const sourcePosts=profile.posts||[],posts=[...sourcePosts,...sourcePosts];
  const feed=$("#feedGrid");feed.classList.remove("loading-feed");
  feed.innerHTML=posts.map((post,index)=>`<article class="real-post ${post.video?"video":""}" style="--order:${index}"><img src="${post.image}" alt="Javna objava profila ${profile.username}" loading="eager"><span>${post.video?"▶":""}</span><small>${post.caption||"Javna objava"}</small>${profile.platform==="facebook"?`<div class="facebook-post-meta"><b>${esc(profile.displayName||profile.username)}</b><em>${formatMetric(post.likes)} reakcija · ${formatMetric(post.comments)} komentara</em></div>`:""}</article>`).join("");
