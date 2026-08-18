@@ -32,7 +32,7 @@ function imageOf(item) {
 
 function normalize(platform, url, items) {
   const usable = items.filter((item) => item && typeof item === "object");
-  const profile = usable.find((item) => item.profilePicUrl || item.avatarUrl || item.avatar || item.biography || item.bio) || usable[0] || {};
+  const profile = usable.find((item) => item.profilePicUrl || item.ownerProfilePicUrl || item.avatarUrl || item.avatar || item.biography || item.bio) || usable[0] || {};
   const posts = usable.map((item) => ({
     image: imageOf(item),
     video: Boolean(item.videoUrl || item.isVideo || item.type === "Video" || item.mediaType === "VIDEO"),
@@ -48,10 +48,10 @@ function normalize(platform, url, items) {
   return {
     platform,
     sourceUrl: url,
-    username: profile.username || profile.uniqueId || profile.pageName || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
-    displayName: profile.fullName || profile.nickname || profile.name || profile.title || "Javni profil",
+    username: profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
+    displayName: profile.fullName || profile.ownerFullName || profile.nickname || profile.name || profile.title || profile.username || profile.ownerUsername || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
     bio: profile.biography || profile.bio || profile.signature || profile.about || "",
-    avatar: profile.profilePicUrl || profile.profilePicUrlHD || profile.avatarUrl || profile.avatar || profile.profilePicture || "",
+    avatar: profile.profilePicUrl || profile.profilePicUrlHD || profile.ownerProfilePicUrl || profile.ownerProfilePicUrlHD || profile.avatarUrl || profile.avatar || profile.profilePicture || "",
     followers: profile.followersCount ?? profile.fans ?? profile.followers ?? null,
     posts,
   };
