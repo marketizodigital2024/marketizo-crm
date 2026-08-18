@@ -27,12 +27,17 @@ function safeUrl(raw, expectedHost) {
 }
 
 function imageOf(item) {
-  return item.displayUrl || item.imageUrl || item.thumbnailUrl || item.thumbnail || item.coverImageUrl || item.cover || item.mediaUrl || item.picture || "";
+  return item.displayUrl || item.imageUrl || item.thumbnailUrl || item.thumbnail || item.coverImageUrl || item.cover || item.mediaUrl || item.picture || item.images?.[0] || "";
+}
+
+function authorOf(item = {}) {
+  return item.owner || item.author || item.authorMeta || item.channel || item.user || item.userInfo?.user || {};
 }
 
 function normalize(platform, url, items) {
   const usable = items.filter((item) => item && typeof item === "object");
-  const profile = usable.find((item) => item.profilePicUrl || item.ownerProfilePicUrl || item.avatarUrl || item.avatar || item.biography || item.bio) || usable[0] || {};
+  const profile = usable.find((item) => { const author=authorOf(item); return item.profilePicUrl || item.ownerProfilePicUrl || item.avatarUrl || item.avatar || author.profilePicUrl || author.avatar || author.avatarLarger || item.biography || item.bio; }) || usable[0] || {};
+  const author = authorOf(profile);
   const posts = usable.map((item) => ({
     image: imageOf(item),
     video: Boolean(item.videoUrl || item.isVideo || item.type === "Video" || item.mediaType === "VIDEO"),
@@ -48,10 +53,10 @@ function normalize(platform, url, items) {
   return {
     platform,
     sourceUrl: url,
-    username: profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
-    displayName: profile.fullName || profile.ownerFullName || profile.nickname || profile.name || profile.title || profile.username || profile.ownerUsername || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
-    bio: profile.biography || profile.bio || profile.signature || profile.about || "",
-    avatar: profile.profilePicUrl || profile.profilePicUrlHD || profile.ownerProfilePicUrl || profile.ownerProfilePicUrlHD || profile.avatarUrl || profile.avatar || profile.profilePicture || "",
+    username: profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || author.username || author.uniqueId || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
+    displayName: profile.fullName || profile.ownerFullName || profile.nickname || profile.name || profile.title || author.fullName || author.nickname || profile.username || profile.ownerUsername || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
+    bio: profile.biography || profile.bio || profile.signature || profile.about || author.biography || author.signature || "",
+    avatar: profile.profilePicUrlHD || profile.profilePicUrl || profile.ownerProfilePicUrlHD || profile.ownerProfilePicUrl || profile.avatarUrl || profile.avatar || profile.profilePicture || profile.pageProfilePictureUrl || author.profilePicUrlHD || author.profilePicUrl || author.avatarLarger || author.avatarMedium || author.avatar || author.avatarUrl || "",
     followers: profile.followersCount ?? profile.fans ?? profile.followers ?? null,
     posts,
   };
@@ -62,13 +67,15 @@ async function fetchProfile(platform, rawUrl, token) {
   const url = safeUrl(rawUrl, config.host);
   const actor = process.env[config.actorEnv] || config.fallbackActor;
   const endpoint = `https://api.apify.com/v2/actors/${encodeURIComponent(actor)}/run-sync-get-dataset-items?clean=true&format=json`;
-  const response = await fetch(endpoint, {
+  const run = input => fetch(endpoint, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(config.input(url)),
+    body: JSON.stringify(input), signal: AbortSignal.timeout(90000),
   });
+  const responses=await Promise.all([run(config.input(url)),...(platform==="instagram"?[run({directUrls:[url],resultsType:"details",resultsLimit:1})]:[])]);
+  const response=responses[0];
   if (!response.ok) throw new Error(`Servis za ${platform} je vratio status ${response.status}.`);
-  const items = await response.json();
+  const items=(await Promise.all(responses.map(async item=>item.ok?item.json():[]))).flat();
   const result = normalize(platform, url, Array.isArray(items) ? items : []);
   if (!result.posts.length) throw new Error("Nema javno dostupnih objava za prikaz.");
   return result;
