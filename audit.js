@@ -1,4 +1,5 @@
-const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let step=1;
+const $=s=>document.querySelector(s),$=s=>document.querySelectorAll(s);let step=1;
+const trackMeta=(event,params={},custom=false)=>{try{if(typeof window.fbq==="function")window.fbq(custom?"trackCustom":"track",event,params)}catch(error){console.warn("Meta event nije poslat.",error)}};
 $(".dash-head p").textContent="U nastavku vidiš glavne nalaze, prioritete i konkretne preporuke za svoj brend.";
 $(".evidence-section .eyebrow").textContent="Obuhvat analize";
 $(".evidence-section h3").textContent="Na čemu se zasnivaju zaključci";
@@ -97,7 +98,7 @@ function renderDeepAudit(data,payload){
  renderDeepIdeas("reels");renderPrintContentPlan(data);
 }
 function renderDeepIdeas(type){const ideas=deepAudit?.audit?.contentIdeas?.[type],evidence=deepAudit?.evidence||[];if(!ideas)return renderContentPlan(saved(),type);$("#contentPlan").innerHTML=ideas.map((x,i)=>`<article><span>${String(i+1).padStart(2,"0")}</span><div><strong>${esc(clientText(x.title,evidence))}</strong><p>${esc(clientText(x.execution,evidence))}</p><small class="idea-reason">Zašto: ${esc(clientText(x.reason,evidence))}</small></div></article>`).join("")}
-$$("[data-start]").forEach(b=>b.onclick=()=>show("wizard"));
+$$("[data-start]").forEach(b=>b.onclick=()=>{trackMeta("AuditStarted",{content_name:"Marketizo Brand Audit"},true);show("wizard")});
 $$(".next").forEach(b=>b.onclick=()=>{if(step===1&&!["instagram","facebook","tiktok"].some(n=>$('[name="'+n+'"]').value.trim())){$("#socialError").textContent="Dodaj link ka najmanje jednoj društvenoj mreži.";return}const active=$('.step[data-step="'+step+'"]');if(![...active.querySelectorAll("[required]")].every(i=>i.reportValidity()))return;$("#socialError").textContent="";if(step===1){const early=Object.fromEntries(new FormData($("#auditForm")));showProfileShell(early);void startProfilePrefetch(early).catch(()=>{})}setStep(step+1)});
 $$(".back").forEach(b=>b.onclick=()=>setStep(step-1));
 const networkLabel={instagram:"Instagram",facebook:"Facebook",tiktok:"TikTok"};
@@ -155,7 +156,8 @@ $$('[name="instagram"],[name="facebook"],[name="tiktok"]').forEach(input=>{const
 async function captureLead(data){
  try{
   const response=await fetch("/api/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),keepalive:true});
-  if(!response.ok)console.warn("Lead nije poslat u CRM.");
+  if(!response.ok){console.warn("Lead nije poslat u CRM.");return false}
+  trackMeta("Lead",{content_name:"Marketizo Brand Audit",currency:"EUR",value:1});return true;
  }catch(error){console.warn("CRM trenutno nije dostupan.",error)}
 }
 $("#auditForm").onsubmit=async e=>{
@@ -171,8 +173,8 @@ $("#auditForm").onsubmit=async e=>{
  const notes=["Da li potencijalni klijent za pet sekundi zna kome pomažete?","Da li sadržaj zadržava pažnju ili samo lepo izgleda?","Da li tvrdnje imaju dokaz i dovoljno konteksta?","Da li svaka dobra objava vodi ka prirodnom sledećem koraku?","Kod skuplje ponude tražimo topliji put do razgovora.","Dobra poruka mora ostati ista, ali format treba prilagoditi mreži.","Svaku preporuku vezujemo za cilj, ponudu i ono što smo videli."];
  let p=0,visualCursor=0,checks=$$("#scanChecks li"),finished=false;
  const deepPromise=loadDeepAuditWithRetry(d,publicProfiles).then(result=>{renderDeepAudit(d,result);finished=true;return result}).catch(error=>{render(d,publicProfiles);$("#analysisStatus").textContent="Pregled je završen na osnovu dostupnih podataka.";console.warn("Detaljna analiza nije završena.",error);finished=true;return null});
- const timer=setInterval(async()=>{const phaseIndex=Math.min(p,phases.length-1);checks[phaseIndex]?.classList.remove("active");checks[phaseIndex]?.classList.add("done");closePost();p++;visualCursor++;const profile=publicProfiles[visualCursor%publicProfiles.length];if(profile){displayProfile(profile);const posts=profile.posts||[],post=posts[Math.floor(visualCursor/publicProfiles.length)%Math.max(1,posts.length)];setTimeout(()=>inspectPost(post),500)}const percent=Math.min(finished?96:88,36+p*8);$("#analysisBar").style.width=percent+"%";$("#analysisPercent").textContent=Math.round(percent)+"%";if(p<phases.length){checks[p]?.classList.add("active");$("#analysisStatus").textContent=phases[p];$("#analystNote").querySelector("strong").textContent=notes[p]}else if(!finished){$("#analysisStatus").textContent="Završavamo pregled i pripremamo tvoje preporuke."}else{clearInterval(timer);await deepPromise;closePost();$("#analysisBar").style.width="100%";$("#analysisPercent").textContent="100%";$("#analysisStatus").textContent="Tvoja analiza je spremna";setTimeout(()=>show("dashboard"),700)}},3200)
+ const timer=setInterval(async()=>{const phaseIndex=Math.min(p,phases.length-1);checks[phaseIndex]?.classList.remove("active");checks[phaseIndex]?.classList.add("done");closePost();p++;visualCursor++;const profile=publicProfiles[visualCursor%publicProfiles.length];if(profile){displayProfile(profile);const posts=profile.posts||[],post=posts[Math.floor(visualCursor/publicProfiles.length)%Math.max(1,posts.length)];setTimeout(()=>inspectPost(post),500)}const percent=Math.min(finished?96:88,36+p*8);$("#analysisBar").style.width=percent+"%";$("#analysisPercent").textContent=Math.round(percent)+"%";if(p<phases.length){checks[p]?.classList.add("active");$("#analysisStatus").textContent=phases[p];$("#analystNote").querySelector("strong").textContent=notes[p]}else if(!finished){$("#analysisStatus").textContent="Završavamo pregled i pripremamo tvoje preporuke."}else{clearInterval(timer);await deepPromise;closePost();$("#analysisBar").style.width="100%";$("#analysisPercent").textContent="100%";$("#analysisStatus").textContent="Tvoja analiza je spremna";trackMeta("AuditCompleted",{content_name:"Marketizo Brand Audit"},true);setTimeout(()=>show("dashboard"),700)}},3200)
 };
 $$('[data-content-tab]').forEach(button=>button.onclick=()=>{$$('[data-content-tab]').forEach(x=>x.classList.toggle('active',x===button));deepAudit?renderDeepIdeas(button.dataset.contentTab):renderContentPlan(saved(),button.dataset.contentTab)});
-$("#checkoutButton").onclick=()=>{const url=window.MARKETIZO_STRIPE_CHECKOUT_URL;if(url){location.href=url;return}location.href="thank-you.html?demo=1"};
+$("#checkoutButton").onclick=()=>{trackMeta("InitiateCheckout",{content_name:"Marketizo Brand Audit",currency:"EUR",value:1});const url=window.MARKETIZO_STRIPE_CHECKOUT_URL;if(url){location.href=url;return}location.href="thank-you.html?demo=1"};
 if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),profiles=JSON.parse(localStorage.getItem("marketizoPublicProfiles")||"[]");deepAudit=JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null");updateReportProfile(profiles);deepAudit?renderDeepAudit(d,deepAudit):render(d,profiles);show("dashboard")}
