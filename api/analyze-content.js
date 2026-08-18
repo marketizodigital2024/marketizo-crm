@@ -58,9 +58,9 @@ function schema() {
     type: "object", additionalProperties: false,
     required: ["overallScore", "mainConclusion", "mainReason", "coverage", "scores", "priorities", "examples", "contentIdeas"],
     properties: {
-      overallScore: { type: "integer", minimum: 0, maximum: 100 }, mainConclusion: string, mainReason: string,
+      overallScore: { type: "integer", minimum: 30, maximum: 95 }, mainConclusion: string, mainReason: string,
       coverage: { type: "object", additionalProperties: false, required: ["postsReviewed", "videosFound", "videosTranscribed", "limitations"], properties: { postsReviewed: { type: "integer" }, videosFound: { type: "integer" }, videosTranscribed: { type: "integer" }, limitations: { type: "array", items: string } } },
-      scores: { type: "array", minItems: 5, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["name", "value", "reason"], properties: { name: string, value: { type: "integer", minimum: 0, maximum: 100 }, reason: string } } },
+      scores: { type: "array", minItems: 5, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["name", "value", "reason"], properties: { name: string, value: { type: "integer", minimum: 30, maximum: 95 }, reason: string } } },
       priorities: { type: "array", minItems: 5, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["title", "why", "evidence"], properties: { title: string, why: string, evidence: string } } },
       examples: { type: "array", minItems: 2, maxItems: 4, items: { type: "object", additionalProperties: false, required: ["postIndex", "format", "observed", "works", "improve", "rewrite"], properties: { postIndex: { type: "integer" }, format: string, observed: string, works: string, improve: string, rewrite: string } } },
       contentIdeas: { type: "object", additionalProperties: false, required: ["reels", "stories", "carousels", "posts"], properties: { reels: { type: "array", minItems: 4, maxItems: 6, items: idea }, stories: { type: "array", minItems: 4, maxItems: 6, items: idea }, carousels: { type: "array", minItems: 3, maxItems: 5, items: idea }, posts: { type: "array", minItems: 3, maxItems: 5, items: idea } } }
