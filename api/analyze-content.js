@@ -1,7 +1,7 @@
 export const config = { maxDuration: 300 };
 
 const MAX_POSTS = 12;
-const MAX_VIDEOS = 5;
+const MAX_VIDEOS = 3;
 const MAX_MEDIA_BYTES = 24 * 1024 * 1024;
 
 function clean(value, max = 1200) {
@@ -24,7 +24,7 @@ function safeMediaUrl(raw) {
 
 async function downloadMedia(rawUrl) {
   const url = safeMediaUrl(rawUrl);
-  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(45000) });
+  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(25000) });
   if (!response.ok) throw new Error(`Video nije dostupan (${response.status}).`);
   const declared = Number(response.headers.get("content-length") || 0);
   if (declared > MAX_MEDIA_BYTES) throw new Error("Video je prevelik za ovu analizu.");
@@ -42,7 +42,7 @@ async function transcribe(post, apiKey) {
     form.append("language", "sr");
     form.append("prompt", "Marketing sadržaj na srpskom, bosanskom, hrvatskom ili nemačkom jeziku. Sačuvaj nazive brendova, proizvoda i cene tačno.");
     form.append("file", new Blob([media.bytes], { type: media.type }), "reel.mp4");
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form });
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form, signal: AbortSignal.timeout(60000) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error?.message || "Transkripcija nije uspela.");
     return { status: "transcribed", transcript: clean(payload.text, 6000) };
@@ -99,6 +99,7 @@ export default async function handler(request, response) {
   });
   const aiResponse = await fetch("https://api.openai.com/v1/responses", {
     method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(90000),
     body: JSON.stringify({ model: process.env.OPENAI_AUDIT_MODEL || "gpt-5.6-luna", reasoning: { effort: "medium" }, input: [{ role: "user", content: input }], text: { format: { type: "json_schema", name: "marketizo_brand_audit", strict: true, schema: schema() } } })
   });
   const payload = await aiResponse.json().catch(() => ({}));
