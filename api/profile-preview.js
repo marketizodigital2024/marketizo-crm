@@ -104,6 +104,7 @@ async function fetchProfile(platform, rawUrl, token) {
   const responses=await Promise.all([run(config.input(url)),...extra]);
   const items=(await Promise.all(responses.map(async item=>item.ok?item.json():[]))).flat();
   const result = normalize(platform, url, Array.isArray(items) ? items : []);
+  if (platform === "facebook" && /^(people|profile\.php|pages)$/i.test(result.username)) result.username = String(result.displayName || "Facebook profil").replace(/\s+/g, "");
   if (!result.posts.length && !result.avatar) throw new Error("Nema javno dostupnih objava za prikaz.");
   return result;
 }
