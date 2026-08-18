@@ -195,7 +195,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--purple)}
 .loading-feed i{height:115px;border-radius:2px;background:linear-gradient(110deg,#171717 20%,#252525 38%,#171717 56%);background-size:220% 100%;animation:skeletonPulse 1.35s ease-in-out infinite}
 .loading-feed i:nth-child(3n+2){animation-delay:.12s}.loading-feed i:nth-child(3n){animation-delay:.24s}
 .loading-feed{animation:loadingFeedMove 4.8s ease-in-out infinite}
-.progress-value{display:flex;align-items:center;gap:10px}.progress-spinner{width:17px;height:17px;border:2px solid #ffffff24;border-top-color:var(--orange);border-radius:50%;animation:spin .75s linear infinite}.progress-spinner.ready{display:none}
+.progress-value{display:flex;align-items:center;gap:10px}.progress-value>div{display:flex;flex-direction:column;gap:2px}.progress-value small{color:#858585;font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.progress-value strong{font-size:18px}.progress-spinner{width:17px;height:17px;border:2px solid #ffffff24;border-top-color:var(--orange);border-radius:50%;animation:spin .75s linear infinite}.progress-spinner.ready{display:none}
 .analysis-track{overflow:hidden}.analysis-track.connecting b{width:28%!important;animation:indeterminate 1.25s ease-in-out infinite}
 @keyframes naturalFeedScroll{from{transform:translateY(0)}to{transform:translateY(calc(-50% - 2px))}}
 .profile-phone[data-network="facebook"] .real-feed:has(.real-post){animation-duration:28s}
