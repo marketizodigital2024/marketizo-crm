@@ -65,7 +65,7 @@ async function loadDeepAudit(data,profiles){
  const response=await fetch("/api/analyze-content",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({form:data,profiles}),signal:controller.signal}).finally(()=>clearTimeout(timeout));
  const payload=await response.json().catch(()=>({}));
  if(!response.ok)throw new Error(payload.error||"Dubinska analiza trenutno nije dostupna.");
- deepAudit=payload;localStorage.setItem("marketizoDeepAudit",JSON.stringify(payload));return payload;
+ deepAudit=payload;localStorage.setItem("marketizoDeepAudit",JSON.stringify(payload));localStorage.setItem("marketizoDeepAuditOwner",saved().auditId||"");return payload;
 }
 async function loadDeepAuditWithRetry(data,profiles){return loadDeepAudit(data,profiles)}
 function esc(value){return String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]))}
@@ -183,7 +183,7 @@ async function loadPublicProfiles(data){
  if(!response.ok)throw new Error(payload.error||"Javni profili trenutno nisu dostupni.");
  const firstProfile=payload.profiles?.[0];
  if(firstProfile)$("#networkTabs").innerHTML=`<span class="active" data-network="${esc(firstProfile.platform)}">${esc(networkLabel[firstProfile.platform]||firstProfile.platform)}</span>`;
- localStorage.setItem("marketizoPublicProfiles",JSON.stringify(payload.profiles));
+ localStorage.setItem("marketizoPublicProfiles",JSON.stringify(payload.profiles));localStorage.setItem("marketizoPublicProfilesOwner",saved().auditId||"");
  return payload.profiles;
 }
 function startProfilePrefetch(data){const key=socialKey(data);if(key===profilePrefetchKey&&profilePrefetch)return profilePrefetch;profilePrefetchKey=key;profilePrefetch=loadPublicProfiles(data).catch(error=>{profilePrefetch=null;throw error});return profilePrefetch}
@@ -197,7 +197,7 @@ async function captureLead(data){
  }catch(error){console.warn("CRM trenutno nije dostupan.",error)}
 }
 $("#auditForm").onsubmit=async e=>{
- e.preventDefault();const d=Object.fromEntries(new FormData(e.target)),submitter=e.submitter;d.auditId=crypto.randomUUID();localStorage.setItem("marketizoAudit",JSON.stringify(d));localStorage.removeItem("marketizoPaidAuditId");localStorage.removeItem("marketizoAuditPaid");if(!new URLSearchParams(location.search).has("test"))void captureLead(d);render(d);showProfileShell(d);if(submitter){submitter.disabled=true;submitter.dataset.original=submitter.textContent;submitter.textContent="Učitavamo tvoje profile…"}
+ e.preventDefault();const d=Object.fromEntries(new FormData(e.target)),submitter=e.submitter;d.auditId=crypto.randomUUID();localStorage.setItem("marketizoAudit",JSON.stringify(d));localStorage.removeItem("marketizoPaidAuditId");localStorage.removeItem("marketizoAuditPaid");localStorage.removeItem("marketizoDeepAudit");localStorage.removeItem("marketizoDeepAuditOwner");localStorage.removeItem("marketizoPublicProfiles");localStorage.removeItem("marketizoPublicProfilesOwner");deepAudit=null;if(!new URLSearchParams(location.search).has("test"))void captureLead(d);render(d);showProfileShell(d);if(submitter){submitter.disabled=true;submitter.dataset.original=submitter.textContent;submitter.textContent="Učitavamo tvoje profile…"}
  const waitingMessages=["Povezujemo se sa profilom…","Preuzimamo objave i Reelove…","Pripremamo sadržaj za detaljno čitanje…"];
  let waitingStep=0,waitingPercent=8;
  const waitingTimer=setInterval(()=>{$("#analysisStatus").textContent=waitingMessages[++waitingStep%waitingMessages.length];waitingPercent=Math.min(44,waitingPercent+3);$("#analysisPercent").textContent=waitingPercent+"%";$("#analysisBar").style.width=waitingPercent+"%"},1800);
@@ -213,4 +213,4 @@ $("#auditForm").onsubmit=async e=>{
 };
 $$('[data-content-tab]').forEach(button=>button.onclick=()=>{$$('[data-content-tab]').forEach(x=>x.classList.toggle('active',x===button));deepAudit?renderDeepIdeas(button.dataset.contentTab):renderContentPlan(saved(),button.dataset.contentTab)});
 $("#checkoutButton").onclick=()=>{trackMeta("InitiateCheckout",{content_name:"Marketizo Brand Audit",currency:"EUR",value:1});const base=window.MARKETIZO_STRIPE_CHECKOUT_URL,audit=saved();if(base){const url=new URL(base);if(audit.auditId)url.searchParams.set("client_reference_id",audit.auditId);location.href=url.toString();return}alert("Plaćanje trenutno nije dostupno. Pokušaj ponovo za nekoliko minuta.")};
-if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),profiles=JSON.parse(localStorage.getItem("marketizoPublicProfiles")||"[]");deepAudit=JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null");updateReportProfile(profiles);deepAudit?renderDeepAudit(d,deepAudit):render(d,profiles);show(paidForCurrentAudit()?"dashboard":"preview")}
+if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),owns=key=>Boolean(d.auditId)&&localStorage.getItem(key)===d.auditId,profiles=owns("marketizoPublicProfilesOwner")?JSON.parse(localStorage.getItem("marketizoPublicProfiles")||"[]"):[];deepAudit=owns("marketizoDeepAuditOwner")?JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null"):null;updateReportProfile(profiles);deepAudit?renderDeepAudit(d,deepAudit):render(d,profiles);show(paidForCurrentAudit()?"dashboard":"preview")}
