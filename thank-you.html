@@ -5,40 +5,101 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Hvala — Marketizo Brand Audit</title>
   <style>
-    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 70% 20%,#2b1206 0,#090909 42%,#050505 100%);font-family:Inter,Arial,sans-serif;color:#fff;padding:24px}.card{width:min(760px,100%);border:1px solid #343434;border-radius:32px;background:linear-gradient(145deg,#151515,#0b0b0b);padding:64px;box-shadow:0 30px 90px #000}.logo{font-weight:900;letter-spacing:.08em;font-size:20px}.logo span,.eyebrow{color:#ff7900}.check{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;background:#ff7900;color:#111;font-size:38px;font-weight:900;margin:54px 0 28px}h1{font-size:clamp(42px,7vw,76px);line-height:.98;margin:0 0 24px;letter-spacing:-.05em}p{font-size:20px;line-height:1.6;color:#bcbcbc;margin:0 0 36px}a{display:inline-block;background:#ff7900;color:#111;text-decoration:none;font-weight:900;padding:17px 24px;border-radius:14px}@media(max-width:600px){.card{padding:36px 26px;border-radius:24px}p{font-size:18px}}
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 70% 20%,#2b1206 0,#090909 42%,#050505 100%);font-family:Inter,Arial,sans-serif;color:#fff;padding:24px}.card{width:min(760px,100%);border:1px solid #343434;border-radius:32px;background:linear-gradient(145deg,#151515,#0b0b0b);padding:64px;box-shadow:0 30px 90px #000}.logo{font-weight:900;letter-spacing:.08em;font-size:20px}.logo span,.eyebrow{color:#ff7900}.check{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;background:#ff7900;color:#111;font-size:38px;font-weight:900;margin:54px 0 28px}.check.waiting{background:#2b2b2b;color:#ff7900;font-size:28px}h1{font-size:clamp(42px,7vw,76px);line-height:.98;margin:0 0 24px;letter-spacing:-.05em}p{font-size:20px;line-height:1.6;color:#bcbcbc;margin:0 0 36px}a{display:inline-block;background:#ff7900;color:#111;text-decoration:none;font-weight:900;padding:17px 24px;border-radius:14px}a.ghost{background:transparent;color:#bcbcbc;border:1px solid #343434;margin-left:10px}@media(max-width:600px){.card{padding:36px 26px;border-radius:24px}p{font-size:18px}a.ghost{margin:12px 0 0;display:block;text-align:center}}
   </style>
   <script>
     !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
     fbq('init','563031312599000');fbq('track','PageView');
-    addEventListener('DOMContentLoaded',async()=>{
-      const sessionId=new URLSearchParams(location.search).get('session_id');
-      const audit=JSON.parse(localStorage.getItem('marketizoAudit')||'{}');
-      const title=document.querySelector('h1'),copy=document.querySelector('p'),link=document.querySelector('a');
-      link.hidden=true;
-      if(!sessionId||!audit.auditId){title.textContent='Ne možemo još da potvrdimo uplatu.';copy.textContent='Vrati se na audit i pokreni plaćanje preko dugmeta na stranici.';return}
-      try{
-        const response=await fetch('/api/verify-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId,auditId:audit.auditId,lead:audit})});
-        const result=await response.json();
-        if(!response.ok||!result.paid)throw new Error(result.error||'Uplata nije potvrđena.');
-        localStorage.setItem('marketizoPaidAuditId',audit.auditId);
-        localStorage.setItem('marketizoAuditPaymentSession',sessionId);
-        const purchaseKey='marketizo_audit_purchase_'+sessionId;
-        if(!localStorage.getItem(purchaseKey)){fbq('track','Purchase',{value:1.00,currency:'EUR',content_name:'Marketizo Brand Audit'});localStorage.setItem(purchaseKey,'1')}
-        title.textContent='Hvala. Tvoja analiza je otključana.';
-        copy.textContent='Uplata od 1 € je potvrđena. Otvori ceo izveštaj i preuzmi svoju Marketizo PDF analizu.';
-        link.hidden=false;
-      }catch(error){title.textContent='Uplata se još proverava.';copy.textContent=error.message+' Ako je novac skinut, osveži ovu stranicu za nekoliko sekundi.'}
+
+    addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(location.search);
+      const sessionId = params.get('session_id') || '';
+      let audit = {};
+      try { audit = JSON.parse(localStorage.getItem('marketizoAudit') || '{}') || {}; } catch (e) { audit = {}; }
+
+      const mark = document.querySelector('.check');
+      const eyebrow = document.querySelector('.eyebrow');
+      const title = document.querySelector('h1');
+      const copy = document.querySelector('p');
+      const primary = document.querySelector('#primaryLink');
+      const helpLink = document.querySelector('#helpLink');
+
+      // Jedno stanje u jednom trenutku — stranica nikada ne tvrdi dve stvari odjednom.
+      const setState = (state) => {
+        if (state === 'checking') {
+          mark.className = 'check waiting'; mark.textContent = '•••';
+          eyebrow.textContent = 'PROVERAVAMO UPLATU';
+          title.textContent = 'Sačekaj nekoliko sekundi.';
+          copy.textContent = 'Potvrđujemo tvoju uplatu kod Stripe-a. Nemoj zatvarati ovu stranicu.';
+          primary.hidden = true; helpLink.hidden = true;
+        }
+        if (state === 'paid') {
+          mark.className = 'check'; mark.textContent = '✓';
+          eyebrow.textContent = 'UPLATA JE POTVRĐENA';
+          title.textContent = 'Hvala. Tvoja analiza je otključana.';
+          copy.textContent = 'Ceo izveštaj, prioriteti i mesečni plan sadržaja su ti sada dostupni. Link šaljemo i na email koji si ostavio.';
+          primary.hidden = false; helpLink.hidden = true;
+        }
+        if (state === 'failed') {
+          mark.className = 'check waiting'; mark.textContent = '!';
+          eyebrow.textContent = 'UPLATA JOŠ NIJE POTVRĐENA';
+          title.textContent = 'Nismo pronašli tvoju uplatu.';
+          primary.hidden = true; helpLink.hidden = false;
+        }
+      };
+
+      setState('checking');
+
+      if (!sessionId || !audit.auditId) {
+        setState('failed');
+        copy.textContent = 'Otvori ovu stranicu preko linka koji dobiješ odmah nakon plaćanja, u istom browseru u kom si radio analizu. Ako je novac skinut, javi nam se i odmah ćemo ti otključati izveštaj.';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/verify-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, auditId: audit.auditId, lead: audit })
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok || !result.paid) {
+          setState('failed');
+          copy.textContent = (result.error || 'Uplata još nije potvrđena.') + ' Ako je novac skinut, osveži stranicu za nekoliko sekundi ili nam se javi — odmah otključavamo ručno.';
+          return;
+        }
+
+        localStorage.setItem('marketizoPaidAuditId', audit.auditId);
+        localStorage.setItem('marketizoAuditPaymentSession', sessionId);
+
+        const purchaseKey = 'marketizo_audit_purchase_' + sessionId;
+        if (!localStorage.getItem(purchaseKey)) {
+          fbq('track', 'Purchase', {
+            value: typeof result.amount === 'number' ? result.amount : 1,
+            currency: result.currency || 'EUR',
+            content_name: 'Marketizo Brand Audit'
+          });
+          localStorage.setItem(purchaseKey, '1');
+        }
+
+        setState('paid');
+      } catch (error) {
+        setState('failed');
+        copy.textContent = 'Trenutno ne možemo da proverimo uplatu. Osveži stranicu za nekoliko sekundi ili nam se javi.';
+      }
     });
   </script>
 </head>
 <body>
   <main class="card">
     <div class="logo"><span>M</span>ARKETIZO <span>•</span> BRAND AUDIT</div>
-    <div class="check">✓</div>
-    <div class="eyebrow">UPLATA JE USPEŠNA</div>
-    <h1>Hvala. Krećemo sa tvojim auditom.</h1>
-    <p>Uplata od 1 € je potvrđena. Tvoji podaci i rezultat su sačuvani, a Marketizo tim nastavlja sa sledećim korakom.</p>
-    <a href="/audit?dashboard=1&paid=1">Vrati se na rezultat audita →</a>
+    <div class="check waiting">•••</div>
+    <div class="eyebrow">PROVERAVAMO UPLATU</div>
+    <h1>Sačekaj nekoliko sekundi.</h1>
+    <p>Potvrđujemo tvoju uplatu kod Stripe-a. Nemoj zatvarati ovu stranicu.</p>
+    <a id="primaryLink" href="/audit?dashboard=1" hidden>Otvori celu analizu →</a>
+    <a id="helpLink" class="ghost" href="https://wa.me/4368181144747?text=Zdravo%20Marketizo%2C%20platio%2Fla%20sam%20audit%20ali%20mi%20se%20ne%20otkljucava." target="_blank" rel="noreferrer" hidden>Piši nam na WhatsApp →</a>
   </main>
 </body>
 </html>
