@@ -10,10 +10,25 @@
   <script>
     !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
     fbq('init','563031312599000');fbq('track','PageView');
-    const paidSession=new URLSearchParams(location.search).get('session_id');
-    if(paidSession){localStorage.setItem('marketizoAuditPaid','1');localStorage.setItem('marketizoAuditPaymentSession',paidSession)}
-    const purchaseKey='marketizo_audit_purchase_'+(paidSession||'confirmed');
-    if(!localStorage.getItem(purchaseKey)){fbq('track','Purchase',{value:1.00,currency:'EUR',content_name:'Marketizo Brand Audit'});localStorage.setItem(purchaseKey,'1')}
+    addEventListener('DOMContentLoaded',async()=>{
+      const sessionId=new URLSearchParams(location.search).get('session_id');
+      const audit=JSON.parse(localStorage.getItem('marketizoAudit')||'{}');
+      const title=document.querySelector('h1'),copy=document.querySelector('p'),link=document.querySelector('a');
+      link.hidden=true;
+      if(!sessionId||!audit.auditId){title.textContent='Ne možemo još da potvrdimo uplatu.';copy.textContent='Vrati se na audit i pokreni plaćanje preko dugmeta na stranici.';return}
+      try{
+        const response=await fetch('/api/verify-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId,auditId:audit.auditId,lead:audit})});
+        const result=await response.json();
+        if(!response.ok||!result.paid)throw new Error(result.error||'Uplata nije potvrđena.');
+        localStorage.setItem('marketizoPaidAuditId',audit.auditId);
+        localStorage.setItem('marketizoAuditPaymentSession',sessionId);
+        const purchaseKey='marketizo_audit_purchase_'+sessionId;
+        if(!localStorage.getItem(purchaseKey)){fbq('track','Purchase',{value:1.00,currency:'EUR',content_name:'Marketizo Brand Audit'});localStorage.setItem(purchaseKey,'1')}
+        title.textContent='Hvala. Tvoja analiza je otključana.';
+        copy.textContent='Uplata od 1 € je potvrđena. Otvori ceo izveštaj i preuzmi svoju Marketizo PDF analizu.';
+        link.hidden=false;
+      }catch(error){title.textContent='Uplata se još proverava.';copy.textContent=error.message+' Ako je novac skinut, osveži ovu stranicu za nekoliko sekundi.'}
+    });
   </script>
 </head>
 <body>
