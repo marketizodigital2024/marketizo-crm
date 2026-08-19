@@ -89,9 +89,42 @@ function conciseCoverage(limitations=[]){
  return"Zaključci su provereni prema dostupnim objavama i podacima iz upitnika.";
 }
 function splitConclusion(value){const text=String(value||"").trim(),sentences=text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[text];let headline="",rest="";for(const sentence of sentences){if((headline+" "+sentence).trim().split(/\s+/).length<=48&&!rest)headline=(headline+" "+sentence).trim();else rest=(rest+" "+sentence).trim()}return{headline:headline||text.split(/\s+/).slice(0,48).join(" "),rest}}
+
+function previewExcerpt(value,maxWords=48){
+ const text=String(value||"").replace(/\s+/g," ").trim();
+ const words=text.split(" ").filter(Boolean);
+ return words.length>maxWords?`${words.slice(0,maxWords).join(" ")}…`:text;
+}
+function renderPreviewFromAudit(a,evidence=[]){
+ const scores=(a.scores||[]).map(item=>({
+  name:clientText(item.name,evidence),
+  value:normalizeScore(item.value),
+  reason:clientText(item.reason,evidence)
+ })).filter(item=>item.name);
+ if(!scores.length)return;
+ const sorted=[...scores].sort((left,right)=>right.value-left.value);
+ const strongest=sorted[0],weakest=sorted.at(-1);
+ const findScore=term=>scores.find(item=>item.name.toLocaleLowerCase("sr").includes(term))||weakest;
+ const path=findScore("put"),trust=findScore("poveren");
+ const conclusion=previewExcerpt(clientText(a.mainConclusion,evidence),50);
+ const reason=previewExcerpt(clientText(a.mainReason,evidence),36);
+ $("#previewSummary").textContent=[conclusion,reason].filter(Boolean).join(" ");
+ const cards=[...document.querySelectorAll("#preview .findings article")];
+ const setCard=(card,label,title,body)=>{
+  if(!card)return;
+  card.querySelector("small").textContent=label;
+  card.querySelector("strong").textContent=title;
+  card.querySelector("p").textContent=previewExcerpt(body,44);
+ };
+ setCard(cards[0],"PRVI UTISAK KADA NEKO OTVORI TVOJ PROFIL",`Najbolje radiš: ${strongest.name.toLocaleLowerCase("sr")}`,`${strongest.reason} Ovaj deo analize dobio je ${strongest.value}/100, zato ovde već postoji dobra osnova na kojoj možeš da gradiš.`);
+ setCard(cards[1],"GLAVNA PREPREKA ZA VIŠE UPITA",`Najviše prostora za rast: ${weakest.name.toLocaleLowerCase("sr")}`,`${weakest.reason} Ovaj deo je ocenjen sa ${weakest.value}/100 i trenutno je prvo mesto na kome potencijalni klijent može izgubiti razlog da nastavi dalje.`);
+ setCard(cards[2],"PUT OD PAŽNJE DO KONKRETNOG UPITA","Da li sadržaj prirodno vodi do razgovora?",`${path.reason} Ocena ovog dela je ${path.value}/100. To pokazuje koliko je nekome lako da od zainteresovanog posetioca postane konkretan upit.`);
+ setCard(cards[3],"DOKAZI KOJI GRADE POVERENJE","Da li sadržaj uklanja sumnju pre pitanja o ceni?",`${trust.reason} Ocena ovog dela je ${trust.value}/100. Što je dokaz konkretniji, klijentu je lakše da poveruje obećanju i napravi sledeći korak.`);
+}
 function renderDeepAudit(data,payload){
  const a=payload.audit,e=payload.evidence||[],coverage=a.coverage||{},conclusion=splitConclusion(clientText(a.mainConclusion,e));
  const overall=normalizeScore(a.overallScore);
+ renderPreviewFromAudit(a,e);
  $("#previewScore").textContent=overall;
  $("#customerName").textContent=(data.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=overall;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${overall}%,#2b2b2b ${overall}%)`;$("#dashboardConclusion").textContent=conclusion.headline;$("#dashboardReason").textContent=[conclusion.rest,clientText(a.mainReason,e)].filter(Boolean).join(" ");
  $("#evidenceGrid").innerHTML=[["Pregledano",`${coverage.postsReviewed||e.length} objava`],["Reels i video",`${coverage.videosFound||0} pronađeno · ${coverage.videosTranscribed||0} detaljno analizirano`],["Povezane mreže",[...new Set(e.map(x=>x.platform))].filter(Boolean).join(", ")||"—"],["Osnova zaključaka",conciseCoverage(coverage.limitations)]].map(([t,b])=>`<article><small>${esc(t)}</small><strong>${esc(b)}</strong></article>`).join("");
