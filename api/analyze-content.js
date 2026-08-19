@@ -1,7 +1,7 @@
 export const config = { maxDuration: 300 };
 
-const MAX_POSTS = 12;
-const MAX_VIDEOS = 3;
+const MAX_POSTS = 10;
+const MAX_VIDEOS = 2;
 const MAX_MEDIA_BYTES = 24 * 1024 * 1024;
 
 function clean(value, max = 1200) {
@@ -42,7 +42,7 @@ async function transcribe(post, apiKey) {
     form.append("language", "sr");
     form.append("prompt", "Marketing sadržaj na srpskom, bosanskom, hrvatskom ili nemačkom jeziku. Sačuvaj nazive brendova, proizvoda i cene tačno.");
     form.append("file", new Blob([media.bytes], { type: media.type }), "reel.mp4");
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form, signal: AbortSignal.timeout(60000) });
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form, signal: AbortSignal.timeout(35000) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error?.message || "Transkripcija nije uspela.");
     return { status: "transcribed", transcript: clean(payload.text, 6000) };
@@ -90,17 +90,17 @@ export default async function handler(request, response) {
     return { index, title: contentTitle(post, index), platform: post.platform, username: post.username, format: post.video ? "reel_video" : "post", caption: clean(post.caption, 4000), image: clean(post.image, 1000), url: clean(post.url, 1000), metrics: { likes: post.likes ?? null, comments: post.comments ?? null, views: post.views ?? null }, transcript };
   });
 
-  const input = [{ type: "input_text", text: `Ti si senior Marketizo strateg. Piši prirodnim, gramatički tačnim srpskim jezikom (ekavica), kao iskusan čovek, bez AI fraza. Analiziraš samo dokaze koje dobiješ. Ne pretpostavljaj da nešto nedostaje ako to nisi proverio. Ne menjaj korisnikove reči prostim ubacivanjem u šablon. Polje audience služi da razumeš publiku: nikada ga nemoj kopirati kao početak rečenice ili obraćanje, već ga preformuliši gramatički i prirodno. Ne izmišljaj grad, trajanje, cenu, format, rezultat ili CTA. Razlikuj podatak iz upitnika od onoga što je javno pronađeno. Ako se prodaja završava pozivom, cena i svi detalji ne moraju biti javni. Glavni zaključak mora biti detaljan: 90 do 150 reči, 3 do 5 jasnih rečenica, sa ukupnom ocenom profila, glavnom snagom, najvećom preprekom i poslovnim efektom preporuke. Obrazloženje zaključka treba da ima 60 do 110 reči i da navede konkretne brojeve ili nazive pregledanih sadržaja. Svaki prioritet i svaka ocena moraju navesti konkretan dokaz. Svaki primer prepravke mora biti potpuna, objavljiva i gramatički prirodna rečenica zasnovana na konkretnoj objavi; ne koristi opšti šablon. Kada se pozivaš na sadržaj, UVEK koristi njegovo polje title u navodnicima. Nikada u tekstu za klijenta nemoj koristiti interne oznake poput #0, #1 ili izraze transkript, transkripcija i video transkript. Umesto toga reci da je govor u videu analiziran ili da je Reel detaljno pregledan. Ograničenja objasni kratko, mirno i klijentskim jezikom, bez tehničkih detalja.\n\nPODACI O BIZNISU:\n${JSON.stringify(form)}\n\nPREGLEDANI SADRŽAJ:\n${JSON.stringify(evidence.map(({ image, ...item }) => item))}` }];
-  evidence.filter(item => item.image).slice(0, 10).forEach(item => {
+  const input = [{ type: "input_text", text: `Ti si senior Marketizo strateg. Piši prirodnim, gramatički tačnim srpskim jezikom (ekavica), kao iskusan čovek, bez AI fraza. Analiziraš samo dokaze koje dobiješ. Ne pretpostavljaj da nešto nedostaje ako to nisi proverio. Ne menjaj korisnikove reči prostim ubacivanjem u šablon. Polje audience služi da razumeš publiku: nikada ga nemoj kopirati kao početak rečenice ili obraćanje, već ga preformuliši gramatički i prirodno. Ne izmišljaj grad, trajanje, cenu, format, rezultat ili CTA. Razlikuj podatak iz upitnika od onoga što je javno pronađeno. Ako se prodaja završava pozivom, cena i svi detalji ne moraju biti javni. Glavni zaključak mora biti direktan i sažet: 55 do 85 reči, 2 do 4 jasne rečenice, sa ukupnom ocenom profila, glavnom snagom, najvećom preprekom i poslovnim efektom preporuke. Obrazloženje zaključka treba da ima 45 do 75 reči i da navede konkretne brojeve ili nazive pregledanih sadržaja. Svaki prioritet i svaka ocena moraju navesti konkretan dokaz. Svaki primer prepravke mora biti potpuna, objavljiva i gramatički prirodna rečenica zasnovana na konkretnoj objavi; ne koristi opšti šablon. Kada se pozivaš na sadržaj, UVEK koristi njegovo polje title u navodnicima. Nikada u tekstu za klijenta nemoj koristiti interne oznake poput #0, #1 ili izraze transkript, transkripcija i video transkript. Umesto toga reci da je govor u videu analiziran ili da je Reel detaljno pregledan. Ograničenja objasni kratko, mirno i klijentskim jezikom, bez tehničkih detalja. Posebno proceni da li se u pregledanom sadržaju dosledno pojavljuje prepoznatljiva osoba koja govori, objašnjava ili predstavlja brend. Ako to ne možeš potvrditi na najmanje dva pregledana sadržaja, među prva dva prioriteta jasno napiši da brendu nedostaje lice brenda i preporuči da vlasnik, stručnjak ili stalni predstavnik redovno govori pred kamerom. Nemoj tvrditi da lica nema ako vizuelni dokazi nisu dovoljni; tada napiši da dosledno lice brenda nije potvrđeno u pregledanom javnom sadržaju.\n\nPODACI O BIZNISU:\n${JSON.stringify(form)}\n\nPREGLEDANI SADRŽAJ:\n${JSON.stringify(evidence.map(({ image, ...item }) => item))}` }];
+  evidence.filter(item => item.image).slice(0, 8).forEach(item => {
     try {
       input.push({ type: "input_text", text: `Vizuelni dokaz za sadržaj „${item.title}“:` });
-      input.push({ type: "input_image", image_url: safeMediaUrl(item.image), detail: "high" });
+      input.push({ type: "input_image", image_url: safeMediaUrl(item.image), detail: "low" });
     } catch {}
   });
   const aiResponse = await fetch("https://api.openai.com/v1/responses", {
     method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(90000),
-    body: JSON.stringify({ model: process.env.OPENAI_AUDIT_MODEL || "gpt-5.6-luna", reasoning: { effort: "medium" }, input: [{ role: "user", content: input }], text: { format: { type: "json_schema", name: "marketizo_brand_audit", strict: true, schema: schema() } } })
+    signal: AbortSignal.timeout(55000),
+    body: JSON.stringify({ model: process.env.OPENAI_AUDIT_MODEL || "gpt-5.6-luna", reasoning: { effort: "low" }, input: [{ role: "user", content: input }], text: { format: { type: "json_schema", name: "marketizo_brand_audit", strict: true, schema: schema() } } })
   });
   const payload = await aiResponse.json().catch(() => ({}));
   if (!aiResponse.ok) return response.status(aiResponse.status).json({ error: payload.error?.message || "Dubinska analiza nije uspela." });
