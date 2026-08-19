@@ -34,29 +34,29 @@ async function findByAuditId(auditId, secret) {
   return payload.data.find((item) => item.client_reference_id === auditId && isPaid(item)) || null;
 }
 
-async function tagPaidLeadInGhl(lead) {
-  const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN;
-  const locationId = process.env.GHL_LOCATION_ID;
-  const email = clean(lead?.email, 200).toLowerCase();
-  if (!token || !locationId || !email) return;
+// Isti GHL webhook koji koristi api/lead.js, samo sa dodatnim tagom za plaćen audit.
+const GHL_AUDIT_WEBHOOK =
+  "https://services.leadconnectorhq.com/hooks/J9svmFaKnsH9r8T04I0D/webhook-trigger/dce8189c-7b35-444d-bea6-e2b38641512c";
 
-  await fetch("https://services.leadconnectorhq.com/contacts/upsert", {
+async function tagPaidLeadInGhl(lead, session) {
+  const name = clean(lead?.name, 120);
+  const email = clean(lead?.email, 200).toLowerCase() || clean(session?.customer_details?.email, 200).toLowerCase();
+  const phone = clean(lead?.phone, 50);
+  if (!name || (!email && !phone)) return;
+
+  await fetch(GHL_AUDIT_WEBHOOK, {
     method: "POST",
-    headers: {
-      Authorization: "Bearer " + token,
-      Version: "2021-07-28",
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      locationId,
+      name,
       email,
-      name: clean(lead.name, 120),
-      phone: clean(lead.phone, 50),
-      companyName: clean(lead.business, 120),
-      city: clean(lead.location, 120),
+      phone,
+      business: clean(lead?.business, 120),
+      location: clean(lead?.location, 120),
       source: "Marketizo Brand Audit",
-      tags: ["marketizo-brand-audit", "audit-lead", "audit-paid"],
+      tags: ["marketizo-brand-audit", "audit-paid"],
+      audit_tag: "marketizo-brand-audit",
+      audit_paid: true,
     }),
     signal: AbortSignal.timeout(12000),
   }).catch(() => null);
@@ -94,7 +94,7 @@ export default async function handler(request, response) {
     return response.status(402).json({ paid: false, error: "Iznos uplate ne odgovara ovom auditu." });
   }
 
-  await tagPaidLeadInGhl(request.body?.lead || {});
+  await tagPaidLeadInGhl(request.body?.lead || {}, session);
 
   return response.status(200).json({
     paid: true,
