@@ -396,7 +396,7 @@ async function notifyReport(data,payload){
   ".mobile-progress .analysis-track{margin:0 0 11px}"+
   ".mobile-progress .analysis-meta{margin:0;font-size:12px}"+
   ".mobile-progress .analysis-meta>span{display:none}"+
-  "@media(max-width:820px){.analyzing,.scan-layout{overflow:visible}.scan-copy{text-align:left}.analyst-note{text-align:left}.analyzing{margin:6px auto 26px}.scan-copy .eyebrow,.scan-copy h2{display:none}.scan-eta{margin-top:10px;font-size:13px}.profile-phone{width:240px;height:410px}.analysis-kicker{margin-top:10px;font-size:12px;padding:9px 13px;max-width:calc(100% - 14px)}.scan-layout{margin-top:6px}}";
+  "@media(max-width:820px){.analyzing,.scan-layout{overflow:visible}.scan-copy{text-align:left}.analyst-note{text-align:left}.analyzing{margin:6px auto 26px}.scan-copy .eyebrow,.scan-copy h2{display:none}.scan-eta{margin-top:10px;font-size:13px}.profile-phone{width:min(332px,92vw);height:600px;padding:34px 12px 16px}.analysis-kicker{margin-top:10px;font-size:12px;padding:9px 13px;max-width:calc(100% - 14px)}.scan-layout{margin-top:6px}}";
  document.head.appendChild(style);
 })();
 
