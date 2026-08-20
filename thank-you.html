@@ -50,39 +50,56 @@
 
       setState('checking');
 
-      if (!sessionId || !audit.auditId) {
+      // Oznaka analize ume da nedostaje kada je plaćanje završeno u drugom browseru.
+      // U tom slučaju je uzimamo iz same Stripe sesije, preko servera.
+      if (!sessionId && !audit.auditId) {
         setState('failed');
-        copy.textContent = 'Otvori ovu stranicu preko linka koji dobiješ odmah nakon plaćanja, u istom browseru u kom si radio analizu. Ako je novac skinut, javi nam se i odmah ćemo ti otključati izveštaj.';
+        copy.textContent = 'Otvori ovu stranicu preko linka koji dobiješ odmah nakon plaćanja. Ako je novac skinut, javi nam se i odmah ćemo ti otključati izveštaj.';
         return;
       }
 
-      try {
-        const response = await fetch('/api/verify-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId, auditId: audit.auditId, lead: audit })
-        });
-        const result = await response.json().catch(() => ({}));
+      // Stripe ponekad još zaključava sesiju u trenutku povratka, pa pokušavamo nekoliko puta.
+      const verify = async () => {
+        for (let attempt = 1; ; attempt++) {
+          const response = await fetch('/api/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, auditId: audit.auditId || '', lead: audit })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (response.ok && result.paid) return result;
+          if (attempt >= 3 || !(result.retry || response.status >= 500)) return { paid: false, error: result.error };
+          await new Promise((done) => setTimeout(done, 2500 * attempt));
+        }
+      };
 
-        if (!response.ok || !result.paid) {
+      try {
+        const result = await verify();
+
+        if (!result.paid) {
           setState('failed');
           copy.textContent = (result.error || 'Uplata još nije potvrđena.') + ' Ako je novac skinut, osveži stranicu za nekoliko sekundi ili nam se javi — odmah otključavamo ručno.';
           return;
         }
 
-        localStorage.setItem('marketizoPaidAuditId', audit.auditId);
-        localStorage.setItem('marketizoAuditPaymentSession', sessionId);
-        primary.href = '/audit?report=' + encodeURIComponent(audit.auditId) + '&session_id=' + encodeURIComponent(sessionId);
+        const auditId = result.auditId || audit.auditId || '';
+        try {
+          if (auditId) localStorage.setItem('marketizoPaidAuditId', auditId);
+          if (sessionId) localStorage.setItem('marketizoAuditPaymentSession', sessionId);
+        } catch (storageError) { /* privatni režim: link i dalje radi */ }
+        primary.href = '/audit?report=' + encodeURIComponent(auditId) + (sessionId ? '&session_id=' + encodeURIComponent(sessionId) : '');
 
-        const purchaseKey = 'marketizo_audit_purchase_' + sessionId;
-        if (!localStorage.getItem(purchaseKey)) {
-          fbq('track', 'Purchase', {
-            value: typeof result.amount === 'number' ? result.amount : 1,
-            currency: result.currency || 'EUR',
-            content_name: 'Marketizo Brand Audit'
-          });
-          localStorage.setItem(purchaseKey, '1');
-        }
+        try {
+          const purchaseKey = 'marketizo_audit_purchase_' + (sessionId || auditId);
+          if (!localStorage.getItem(purchaseKey)) {
+            fbq('track', 'Purchase', {
+              value: typeof result.amount === 'number' ? result.amount : 1,
+              currency: result.currency || 'EUR',
+              content_name: 'Marketizo Brand Audit'
+            });
+            localStorage.setItem(purchaseKey, '1');
+          }
+        } catch (pixelError) { /* bez lokalnog upisa piksel se ne šalje dvaput u istoj sesiji */ }
 
         setState('paid');
       } catch (error) {
