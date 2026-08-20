@@ -181,7 +181,7 @@ async function askWithRetry(options) {
   try {
     return await ask({ ...options, timeoutMs: Math.max(15000, Math.min(options.timeoutMs, left())) });
   } catch (error) {
-    if (left() < 40000) throw error;
+    if (left() < 35000) throw error;
     return await ask({ ...options, effort: "low", timeoutMs: Math.max(15000, Math.min(80000, left())) });
   }
 }
@@ -197,7 +197,7 @@ export default async function handler(request, response) {
 
   const videoPosts = posts.filter(post => post.video && post.videoUrl).slice(0, MAX_VIDEOS);
   // Vremenski budzet: uzimamo sve Reelove koje stignemo da preslusamo, ostali se citaju iz opisa i slika.
-  const budget = Number(process.env.MARKETIZO_TRANSCRIBE_BUDGET_MS || 30000);
+  const budget = Number(process.env.MARKETIZO_TRANSCRIBE_BUDGET_MS || 25000);
   const deadline = Date.now() + budget;
   const transcripts = await Promise.all(videoPosts.map(post => Promise.race([
     transcribe(post, apiKey),
@@ -207,14 +207,14 @@ export default async function handler(request, response) {
   let videoCursor = 0;
   const evidence = posts.map((post, index) => {
     const transcript = post.video && post.videoUrl && videoCursor < transcripts.length ? transcripts[videoCursor++] : { status: "not_requested", transcript: "" };
-    return { index, title: contentTitle(post, index), platform: post.platform, username: post.username, format: post.video ? "reel_video" : "post", caption: clean(post.caption, 4000), image: clean(post.image, 1000), url: clean(post.url, 1000), metrics: { likes: post.likes ?? null, comments: post.comments ?? null, views: post.views ?? null }, transcript };
+    return { index, title: contentTitle(post, index), platform: post.platform, username: post.username, format: post.video ? "reel_video" : "post", caption: clean(post.caption, 2500), image: clean(post.image, 1000), url: clean(post.url, 1000), metrics: { likes: post.likes ?? null, comments: post.comments ?? null, views: post.views ?? null }, transcript };
   });
 
   const evidenceInput = [{
     type: "input_text",
     text: `ODGOVORI IZ UPITNIKA (samo nagoveštaj, nikako izvor teksta):\n${JSON.stringify(form)}\n\nPREGLEDANI SADRŽAJ (ovo je tvoj glavni izvor):\n${JSON.stringify(evidence.map(({ image, ...item }) => item))}`
   }];
-  evidence.filter(item => item.image).slice(0, 6).forEach(item => {
+  evidence.filter(item => item.image).slice(0, 5).forEach(item => {
     try {
       evidenceInput.push({ type: "input_text", text: `Vizuelni dokaz za sadržaj „${item.title}“:` });
       evidenceInput.push({ type: "input_image", image_url: safeMediaUrl(item.image), detail: "high" });
@@ -223,12 +223,12 @@ export default async function handler(request, response) {
 
   // Dva poziva idu paralelno: dijagnoza i plan sadrzaja. Tako je ukupno cekanje
   // jednako duzem od dva, a ne njihovom zbiru, i svaki poziv ima uzi zadatak.
-  const aiDeadline = Date.now() + 165000;
+  const aiDeadline = Date.now() + 195000;
   const [core, ideas] = await Promise.all([
-    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 140000, effort: "medium", deadline: aiDeadline })
+    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 115000, effort: "medium", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(error => ({ ok: false, error })),
-    askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 140000, effort: "low", deadline: aiDeadline })
+    askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 130000, effort: "low", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(() => ({ ok: false }))
   ]);
