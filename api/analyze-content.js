@@ -106,8 +106,8 @@ evidence.filter(item => item.image).slice(0, 6).forEach(item => {
   });
   const aiResponse = await fetch("https://api.openai.com/v1/responses", {
     method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(100000),
-    body: JSON.stringify({ model: process.env.OPENAI_AUDIT_MODEL || "gpt-5.6-luna", reasoning: { effort: "medium" }, input: [{ role: "user", content: input }], text: { format: { type: "json_schema", name: "marketizo_brand_audit", strict: true, schema: schema() } } })
+        signal: AbortSignal.timeout(175000),
+body: JSON.stringify({ model: process.env.OPENAI_AUDIT_MODEL || "gpt-5.6-luna", reasoning: { effort: "medium" }, input: [{ role: "user", content: input }], text: { format: { type: "json_schema", name: "marketizo_brand_audit", strict: true, schema: schema() } } })
   });
   const payload = await aiResponse.json().catch(() => ({}));
   if (!aiResponse.ok) return response.status(aiResponse.status).json({ error: payload.error?.message || "Dubinska analiza nije uspela." });
