@@ -9,9 +9,11 @@ module.exports = async function handler(req, res) {
     const phone = String(body.phone || "").trim();
     if (!name || (!email && !phone)) return res.status(400).json({ ok: false, error: "Missing contact details" });
     const payload = { ...body, name, email, phone, source: "Marketizo Brand Audit", tags: ["marketizo-brand-audit"], audit_tag: "marketizo-brand-audit" };
-    const response = await fetch(GHL_AUDIT_WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    const text = await response.text();
-    if (!response.ok) return res.status(502).json({ ok: false, error: "GHL webhook rejected the lead", detail: text.slice(0,300) });
+    const response = await fetch(GHL_AUDIT_WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10000) });
+    if (!response.ok) {
+      console.error("GHL webhook rejected the lead", (await response.text()).slice(0, 300));
+      return res.status(502).json({ ok: false, error: "CRM trenutno nije dostupan." });
+    }
     return res.status(200).json({ ok: true });
   } catch (error) {
     return res.status(500).json({ ok: false, error: "CRM request failed" });
