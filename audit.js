@@ -1,3 +1,20 @@
+
+(function(){
+ const style=document.createElement("style");
+ style.textContent=".feed-unavailable small{display:none}";
+ document.head.appendChild(style);
+ const findings=document.querySelector("#preview .findings");
+ if(findings&&findings.querySelectorAll("article").length===4){
+  findings.insertAdjacentHTML("beforeend",'<article><span>\u25C6</span><div><small>PORUKA I JASNO\u0106A PONUDE</small><strong id="previewMessage">Proveravamo \u0161ta profil zapravo komunicira</strong><p>Ponuda mora da bude jasna u prve tri sekunde.</p></div></article><article><span>\u25CE</span><div><small>LICE BRENDA</small><strong id="previewFace">Proveravamo da li se vidi osoba iza brenda</strong><p>Ljudi biraju osobu kojoj veruju, pa tek onda uslugu.</p></div></article>');
+ }
+ const kicker=document.querySelector(".analysis-kicker");
+ if(kicker&&!document.querySelector(".scan-eta")){
+  const eta=document.createElement("p");
+  eta.className="scan-eta";
+  eta.textContent="Detaljna analiza traje do 2 minuta. Ostani na stranici \u2014 pregledamo objave, Reelove i biografiju jednu po jednu.";
+  kicker.after(eta);
+ }
+})();
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);let step=1;
 const trackMeta=(event,params={},custom=false)=>{try{if(typeof window.fbq==="function")window.fbq(custom?"trackCustom":"track",event,params)}catch(error){console.warn("Meta event nije poslat.",error)}};
 $(".dash-head p").textContent="U nastavku vidiš glavne nalaze, prioritete i konkretne preporuke za svoj brend.";
