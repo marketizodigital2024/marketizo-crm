@@ -255,7 +255,7 @@ export default async function handler(request, response) {
   // jednako duzem od dva, a ne njihovom zbiru, i svaki poziv ima uzi zadatak.
   const aiDeadline = Date.now() + 200000;
   const [core, ideas] = await Promise.all([
-    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 120000, effort: "medium", deadline: aiDeadline })
+    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 110000, effort: "low", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(error => ({ ok: false, error })),
     askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 130000, effort: "low", deadline: aiDeadline })
