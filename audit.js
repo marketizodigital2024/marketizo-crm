@@ -53,9 +53,15 @@
  const base=renderPreviewFromAudit;
  renderPreviewFromAudit=function(audit,evidence){
   base(audit,evidence);
-  const text=audit&&audit.headline?String(audit.headline).trim():"";
   const head=document.querySelector("#preview .preview-top h2");
-  if(!text||!head)return;
+  if(!head||!audit)return;
+  let text=audit.headline?String(audit.headline).trim():"";
+  if(!text&&audit.mainConclusion){
+   const sentences=String(audit.mainConclusion).match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[];
+   text=sentences.slice(0,2).join(" ").trim();
+  }
+  if(!text)return;
+  if(typeof clientText==="function")text=clientText(text,evidence||[]);
   const parts=text.split(/(?<=[.!?])\s+/);
   head.textContent=parts[0]+(parts.length>1?" ":"");
   if(parts.length>1){
@@ -151,7 +157,7 @@ const response=await fetch("/api/analyze-content",{method:"POST",headers:{"Conte
  if(!response.ok)throw new Error(payload.error||"Dubinska analiza trenutno nije dostupna.");
  deepAudit=payload;localStorage.setItem("marketizoDeepAudit",JSON.stringify(payload));localStorage.setItem("marketizoDeepAuditOwner",saved().auditId||"");return payload;
 }
-async function loadDeepAuditWithRetry(data,profiles){return loadDeepAudit(data,profiles)}
+async function loadDeepAuditWithRetry(data,profiles){try{return await loadDeepAudit(data,profiles)}catch(error){console.warn("Prvi pokušaj dubinske analize nije uspeo, pokušavamo ponovo.",error);return await loadDeepAudit(data,profiles)}}
 function esc(value){return String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]))}
 function mediaUrl(value){if(!value)return"";try{return`/api/profile-preview?image=${encodeURIComponent(new URL(value).toString())}`}catch{return value}}
 function returnToProfiles(){show("wizard");setStep(1);$("[name=instagram]")?.focus()}
@@ -198,7 +204,7 @@ function renderPreviewFromAudit(a,evidence=[]){
   if(!card)return;
   card.querySelector("small").textContent=label;
   card.querySelector("strong").textContent=title;
-  card.querySelector("p").textContent=previewExcerpt(body,60);
+  card.querySelector("p").textContent=previewExcerpt(body,140);
  };
  if(a.urgency)$("#previewUrgency").textContent=clientText(a.urgency,evidence);
  if(a.consequence)$("#previewConsequence").textContent=clientText(a.consequence,evidence);
@@ -302,3 +308,40 @@ $("#auditForm").onsubmit=async e=>{
 $$('[data-content-tab]').forEach(button=>button.onclick=()=>{$$('[data-content-tab]').forEach(x=>x.classList.toggle('active',x===button));deepAudit?renderDeepIdeas(button.dataset.contentTab):renderContentPlan(saved(),button.dataset.contentTab)});
 $("#checkoutButton").onclick=()=>{trackMeta("InitiateCheckout",{content_name:"Marketizo Brand Audit",currency:"EUR",value:1});const base=window.MARKETIZO_STRIPE_CHECKOUT_URL,audit=saved();if(base){const url=new URL(base);if(audit.auditId)url.searchParams.set("client_reference_id",audit.auditId);location.href=url.toString();return}alert("Plaćanje trenutno nije dostupno. Pokušaj ponovo za nekoliko minuta.")};
 if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),owns=key=>Boolean(d.auditId)&&localStorage.getItem(key)===d.auditId,profiles=owns("marketizoPublicProfilesOwner")?JSON.parse(localStorage.getItem("marketizoPublicProfiles")||"[]"):[];deepAudit=owns("marketizoDeepAuditOwner")?JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null"):null;updateReportProfile(profiles);deepAudit?renderDeepAudit(d,deepAudit):render(d,profiles);show(paidForCurrentAudit()?"dashboard":"preview")}
+
+(function(){
+ // Sigurnosna mreza: ako dubinska analiza padne, rezervni sablon ne sme da doslovno
+ // ponovi ono sto je klijent na brzinu upisao u upitnik.
+ const sloppy=function(value){
+  const text=String(value||"").trim();
+  if(!text)return true;
+  const words=text.split(/\s+/);
+  if(words.length>5)return true;
+  return /\b(sve|svi|sva|svih|ovo|ono|nesto|nešto|neki|razno|ostalo)\b/i.test(text);
+ };
+ const tidy=function(data){
+  if(!data||typeof data!=="object"||Array.isArray(data))return data;
+  if(!sloppy(data.offer))return data;
+  const copy=Object.assign({},data);
+  copy.offer="tvoja glavna usluga";
+  return copy;
+ };
+ ["render","analysis","derivedAudit","evidenceFor","contentBlueprint","renderContentPlan","renderPrintContentPlan","renderReviewedExamples"].forEach(function(name){
+  const original=window[name];
+  if(typeof original!=="function")return;
+  window[name]=function(){
+   const args=Array.prototype.slice.call(arguments);
+   args[0]=tidy(args[0]);
+   return original.apply(this,args);
+  };
+ });
+})();
+
+(function(){
+ // Kartice pre placanja sada nose duzi tekst, pa im treba vise prostora.
+ const style=document.createElement("style");
+ style.textContent="#preview .findings article p{font-size:15px;line-height:1.6}"+
+  "#preview .findings{align-items:stretch}"+
+  "#preview .findings article{align-items:flex-start}";
+ document.head.appendChild(style);
+})();
