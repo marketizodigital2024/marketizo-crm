@@ -69,8 +69,8 @@ export default async function handler(request, response) {
   if (!secret) return response.status(503).json({ paid: false, error: "Provera uplate još nije povezana." });
 
   const sessionId = clean(request.body?.sessionId, 300);
-  const auditId = clean(request.body?.auditId, 100);
-  if (!auditId) return response.status(400).json({ paid: false, error: "Nedostaje oznaka analize." });
+  let auditId = clean(request.body?.auditId, 100);
+  if (!auditId && !sessionId.startsWith("cs_")) return response.status(400).json({ paid: false, error: "Nedostaje oznaka analize." });
 
   let session = null;
 
@@ -79,7 +79,11 @@ export default async function handler(request, response) {
       const stripeResponse = await stripeGet("/checkout/sessions/" + encodeURIComponent(sessionId), secret);
       if (stripeResponse.ok) session = await stripeResponse.json().catch(() => null);
     }
-    if (!isPaid(session)) session = await findByAuditId(auditId, secret);
+    // Klijent koji je platio u drugom browseru nema oznaku analize kod sebe.
+    // Uzimamo je iz same Stripe sesije, jer je tamo upisana pri plaćanju.
+    if (!auditId && isPaid(session) && session.client_reference_id) auditId = clean(session.client_reference_id, 100);
+    if (!auditId) return response.status(402).json({ paid: false, error: "Uplata za ovu analizu nije potvrđena." });
+    if (!isPaid(session) || session.client_reference_id !== auditId) session = await findByAuditId(auditId, secret);
   } catch (error) {
     console.error("Stripe lookup failed", error?.message);
     return response.status(503).json({ paid: false, retry: true, error: "Trenutno ne možemo da proverimo uplatu. Pokušaj za nekoliko sekundi." });
