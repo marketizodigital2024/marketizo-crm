@@ -5,19 +5,24 @@ const PLATFORM_CONFIG = {
     host: "instagram.com",
     actorEnv: "APIFY_INSTAGRAM_ACTOR_ID",
     fallbackActor: "apify~instagram-scraper",
-    input: (url) => ({ directUrls: [url], resultsType: "posts", resultsLimit: 12 }),
+    // Instagram sve cesce odbija citanje sa data-centar IP adresa i vrati "restricted".
+    // Zato prvo idemo preko rezidencijalnog proxija, pa tek onda obicnim putem.
+    attempts: (url) => [
+      { directUrls: [url], resultsType: "posts", resultsLimit: 12, proxy: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"] } },
+      { directUrls: [url], resultsType: "posts", resultsLimit: 12 },
+    ],
   },
   facebook: {
     host: "facebook.com",
     actorEnv: "APIFY_FACEBOOK_ACTOR_ID",
     fallbackActor: "netdesignr~facebook-posts-scraper",
-    input: (url) => ({ startUrls: [{ url }], pageOrProfileUrls: [url], maxPosts: 12, extractionMode: "balanced", includeTopComments: false }),
+    attempts: (url) => [{ startUrls: [{ url }], pageOrProfileUrls: [url], maxPosts: 12, extractionMode: "balanced", includeTopComments: false }],
   },
   tiktok: {
     host: "tiktok.com",
     actorEnv: "APIFY_TIKTOK_ACTOR_ID",
     fallbackActor: "clockworks~tiktok-scraper",
-    input: (url) => ({ profiles: [tiktokHandle(url)], profileScrapeSections: ["videos"], profileSorting: "latest", resultsPerPage: 12, shouldDownloadVideos: false, shouldDownloadCovers: true, shouldDownloadAvatars: true }),
+    attempts: (url) => [{ profiles: [tiktokHandle(url)], profileScrapeSections: ["videos"], profileSorting: "latest", resultsPerPage: 12, shouldDownloadVideos: false, shouldDownloadCovers: true, shouldDownloadAvatars: true }],
   },
 };
 
@@ -96,44 +101,83 @@ function normalize(platform, url, items, postItems) {
   };
 }
 
+const actorEndpoint = (actor) =>
+  `https://api.apify.com/v2/actors/${encodeURIComponent(actor)}/run-sync-get-dataset-items?clean=true&format=json`;
+
+// Jedan poziv Apify-ju koji nikada ne baca. Neuspeh znaci prazan niz, pa sledeci
+// pokusaj moze da nastavi umesto da cela analiza padne.
+async function runActor(endpoint, token, input, ms) {
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(ms),
+    });
+    if (!response.ok) return [];
+    const payload = await response.json().catch(() => []);
+    return Array.isArray(payload) ? payload : [];
+  } catch {
+    return [];
+  }
+}
+
+// Objave ponekad stignu ugnjezdene u detaljima profila umesto u glavnom prolazu.
+function nestedPosts(list) {
+  return list.flatMap((item) => [
+    ...(Array.isArray(item?.latestPosts) ? item.latestPosts : []),
+    ...(Array.isArray(item?.topPosts) ? item.topPosts : []),
+    ...(Array.isArray(item?.posts) ? item.posts : []),
+    ...(Array.isArray(item?.edge_owner_to_timeline_media?.edges)
+      ? item.edge_owner_to_timeline_media.edges.map((edge) => edge?.node).filter(Boolean)
+      : []),
+  ]);
+}
+
+function buildProfile(platform, url, list) {
+  let result = normalize(platform, url, list);
+  if (!result.posts.length) {
+    const nested = nestedPosts(list);
+    if (nested.length) result = normalize(platform, url, list, nested);
+  }
+  if (platform === "facebook" && /^(people|profile\.php|pages)$/i.test(result.username)) {
+    result.username = String(result.displayName || "Facebook profil").replace(/\s+/g, "");
+  }
+  return result;
+}
+
 async function fetchProfile(platform, rawUrl, token, debug) {
   const config = PLATFORM_CONFIG[platform];
   const url = safeUrl(rawUrl, config.host);
-  const actor = process.env[config.actorEnv] || config.fallbackActor;
-  const endpoint = `https://api.apify.com/v2/actors/${encodeURIComponent(actor)}/run-sync-get-dataset-items?clean=true&format=json`;
-  const run = input => fetch(endpoint, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(input), signal: AbortSignal.timeout(90000),
-  });
-  const extra=[];
-  if(platform==="instagram") extra.push(run({directUrls:[url],resultsType:"details",resultsLimit:1}));
-  if(platform==="facebook"){
-    const detailsEndpoint=`https://api.apify.com/v2/actors/${encodeURIComponent("apify~facebook-pages-scraper")}/run-sync-get-dataset-items?clean=true&format=json`;
-    extra.push(fetch(detailsEndpoint,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({startUrls:[{url}]}),signal:AbortSignal.timeout(90000)}));
+  const endpoint = actorEndpoint(process.env[config.actorEnv] || config.fallbackActor);
+  const attempts = config.attempts(url);
+
+  // Detalji profila (ime, opis, slika) idu paralelno sa prvim pokusajem.
+  const detailCalls = [];
+  if (platform === "instagram") {
+    detailCalls.push(runActor(endpoint, token, { directUrls: [url], resultsType: "details", resultsLimit: 1 }, 60000));
   }
-  const responses=await Promise.all([run(config.input(url)),...extra]);
-  const items=(await Promise.all(responses.map(async item=>item.ok?item.json():[]))).flat();
-  const list = Array.isArray(items) ? items : [];
-  let result = normalize(platform, url, list);
-  // Za neke profile Apify vrati objave samo ugnjezdene unutar detalja profila.
-  // Bez ovoga bi analiza ostala bez ijedne objave i pala bi na opsti tekst.
-  if (!result.posts.length) {
-    const nested = list.flatMap((item) => [
-      ...(Array.isArray(item?.latestPosts) ? item.latestPosts : []),
-      ...(Array.isArray(item?.topPosts) ? item.topPosts : []),
-      ...(Array.isArray(item?.posts) ? item.posts : []),
-      ...(Array.isArray(item?.edge_owner_to_timeline_media?.edges) ? item.edge_owner_to_timeline_media.edges.map((edge) => edge?.node).filter(Boolean) : []),
-    ]);
-    if (nested.length) result = normalize(platform, url, list, nested);
+  if (platform === "facebook") {
+    detailCalls.push(runActor(actorEndpoint("apify~facebook-pages-scraper"), token, { startUrls: [{ url }] }, 60000));
   }
-  if (platform === "facebook" && /^(people|profile\.php|pages)$/i.test(result.username)) result.username = String(result.displayName || "Facebook profil").replace(/\s+/g, "");
+
+  const list = [];
+  let result = null;
+  for (let index = 0; index < attempts.length; index += 1) {
+    const budget = index === 0 ? 60000 : 45000;
+    const batch = await Promise.all([runActor(endpoint, token, attempts[index], budget), ...(index === 0 ? detailCalls : [])]);
+    list.push(...batch.flat());
+    result = buildProfile(platform, url, list);
+    if (result.posts.length) break;
+  }
+
   const blocked = list.find((item) => item && (item.error || item.isRestrictedProfile || item.private));
   if (debug) {
     // Samo imena polja i brojevi, bez sadrzaja. Sluzi za trazenje uzroka kad objava nema.
     result.diagnostics = {
       items: list.length,
       posts: result.posts.length,
+      attempts: attempts.length,
       keys: list.slice(0, 3).map((item) => Object.keys(item || {}).slice(0, 40)),
       flags: list.slice(0, 3).map((item) => ({
         error: String(item?.error || "").slice(0, 90),
