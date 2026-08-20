@@ -1,3 +1,5 @@
+export const config = { maxDuration: 120 };
+
 const PLATFORM_CONFIG = {
   instagram: {
     host: "instagram.com",
@@ -15,9 +17,15 @@ const PLATFORM_CONFIG = {
     host: "tiktok.com",
     actorEnv: "APIFY_TIKTOK_ACTOR_ID",
     fallbackActor: "clockworks~tiktok-scraper",
-    input: (url) => ({ profiles: [new URL(url).pathname.split("/").filter(Boolean).pop().replace(/^@/,"")], profileScrapeSections: ["videos"], profileSorting: "latest", resultsPerPage: 12, shouldDownloadVideos: false, shouldDownloadCovers: true, shouldDownloadAvatars: true }),
+    input: (url) => ({ profiles: [tiktokHandle(url)], profileScrapeSections: ["videos"], profileSorting: "latest", resultsPerPage: 12, shouldDownloadVideos: false, shouldDownloadCovers: true, shouldDownloadAvatars: true }),
   },
 };
+
+function tiktokHandle(url) {
+  const handle = new URL(url).pathname.split("/").filter(Boolean).pop();
+  if (!handle) throw new Error("Link ne sadrži TikTok korisničko ime.");
+  return handle.replace(/^@/, "");
+}
 
 function safeUrl(raw, expectedHost) {
   const url = new URL(raw);
@@ -34,7 +42,7 @@ async function proxyImage(request, response) {
     const allowed = ["cdninstagram.com", "fbcdn.net", "tiktokcdn.com", "tiktokcdn-us.com", "tiktokcdn-eu.com", "byteimg.com", "ibytedtos.com", "akamaized.net", "api.apify.com"];
     if (url.protocol !== "https:" || !allowed.some((domain) => host === domain || host.endsWith(`.${domain}`))) return response.status(400).end();
     const headers = { "User-Agent": "Mozilla/5.0", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" };
-    if (host === "api.apify.com" && process.env.APIFY_TOKEN) headers.Authorization = `Bearer ${process.env.APIFY_TOKEN}`;
+    if (host === "api.apify.com" && process.env.APIFY_TOKEN && /^\/v2\/(key-value-stores|datasets)\//.test(url.pathname)) headers.Authorization = `Bearer ${process.env.APIFY_TOKEN}`;
     const upstream = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
     if (!upstream.ok) return response.status(404).end();
     const contentType = upstream.headers.get("content-type") || "image/jpeg";
@@ -120,7 +128,7 @@ export default async function handler(request, response) {
   const profiles = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
   const sharedAvatar = profiles.find((profile) => profile.avatar)?.avatar || "";
   profiles.forEach((profile) => { if (!profile.avatar && sharedAvatar) profile.avatar = sharedAvatar; });
-  const failures = settled.map((item, index) => ({ item, index })).filter(({ item }) => item.status === "rejected").map(({ item, index }) => ({ platform: entries[index]?.[0], message: item.reason?.message || "Profil nije dostupan." }));
+  const failures = settled.map((item, index) => ({ item, index })).filter(({ item }) => item.status === "rejected").map(({ item, index }) => ({ platform: entries[index]?.[0], message: /[čćžšđ]/i.test(String(item.reason?.message || "")) ? item.reason.message : "Profil nije javno dostupan ili link nije unet tačno." }));
   if (!profiles.length) {
     console.error("Profile preview failed", failures);
     return response.status(422).json({ error: "Nijedan profil nije mogao biti javno učitan.", failures });
