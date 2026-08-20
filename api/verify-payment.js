@@ -74,20 +74,25 @@ export default async function handler(request, response) {
 
   let session = null;
 
-  if (sessionId.startsWith("cs_")) {
-    const stripeResponse = await stripeGet("/checkout/sessions/" + encodeURIComponent(sessionId), secret);
-    if (stripeResponse.ok) session = await stripeResponse.json().catch(() => null);
+  try {
+    if (sessionId.startsWith("cs_")) {
+      const stripeResponse = await stripeGet("/checkout/sessions/" + encodeURIComponent(sessionId), secret);
+      if (stripeResponse.ok) session = await stripeResponse.json().catch(() => null);
+    }
+    if (!isPaid(session)) session = await findByAuditId(auditId, secret);
+  } catch (error) {
+    console.error("Stripe lookup failed", error?.message);
+    return response.status(503).json({ paid: false, retry: true, error: "Trenutno ne možemo da proverimo uplatu. Pokušaj za nekoliko sekundi." });
   }
-
-  if (!isPaid(session)) session = await findByAuditId(auditId, secret);
 
   if (!isPaid(session)) {
     return response.status(402).json({ paid: false, error: "Uplata za ovaj audit nije potvrđena." });
   }
 
-  // Uplata mora da pripada baš ovoj analizi.
-  if (session.client_reference_id && session.client_reference_id !== auditId) {
-    return response.status(409).json({ paid: false, error: "Uplata pripada drugoj analizi." });
+  // Uplata mora da pripada baš ovoj analizi. Bez te oznake ne otključavamo ništa,
+  // inače bi se jedna uplata mogla ponovo iskoristiti za bilo koju sledeću analizu.
+  if (session.client_reference_id !== auditId) {
+    return response.status(409).json({ paid: false, error: "Uplata nije povezana sa ovom analizom. Javi nam se i odmah je otključavamo ručno." });
   }
 
   if (!amountOk(session)) {
