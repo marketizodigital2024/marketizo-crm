@@ -4,6 +4,34 @@ const MAX_POSTS = 12;
 const MAX_VIDEOS = 12;
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 const MODEL = process.env.OPENAI_AUDIT_MODEL || "gpt-5.6-luna";
+const AUDIT_TABLE = process.env.MARKETIZO_AUDIT_TABLE || "marketizo_audits";
+
+// Sta klijent sme da vidi pre uplate. Sve ostalo ostaje na serveru.
+const FREE_FIELDS = ["overallScore", "offerRead", "headline", "mainConclusion", "mainReason", "urgency", "consequence", "previewCards", "coverage"];
+
+function store() {
+  const url = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!url || !key) return null;
+  return { url, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" } };
+}
+
+async function saveAudit(db, auditId, audit, evidence, form) {
+  const response = await fetch(`${db.url}/rest/v1/${AUDIT_TABLE}?on_conflict=id`, {
+    method: "POST",
+    headers: { ...db.headers, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      id: auditId,
+      audit,
+      evidence,
+      lead: { name: clean(form.name, 120), email: clean(form.email, 200), phone: clean(form.phone, 50), business: clean(form.business, 120), location: clean(form.location, 120) },
+      updated_at: new Date().toISOString(),
+    }),
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error(clean(await response.text(), 200) || "Čuvanje analize nije uspelo.");
+  return true;
+}
 
 function clean(value, max = 1200) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -211,5 +239,21 @@ export default async function handler(request, response) {
   }
 
   const audit = { ...core.result, contentIdeas: ideas.ok ? ideas.result.contentIdeas : null };
-  return response.status(200).json({ audit, evidence, partial: !ideas.ok, model: MODEL });
+
+  // Ako je baza povezana, ceo izvestaj ostaje na serveru i klijent dobija samo pregled.
+  // Bez baze aplikacija radi kao i ranije, da nista ne stane dok se baza ne podesi.
+  const db = store();
+  const auditId = clean(form.auditId, 100);
+  let gated = false;
+  if (db && auditId) {
+    try {
+      await saveAudit(db, auditId, audit, evidence, form);
+      gated = true;
+    } catch (error) {
+      console.error("Audit store write failed", error?.message);
+    }
+  }
+
+  const visible = gated ? Object.fromEntries(FREE_FIELDS.filter((key) => audit[key] !== undefined).map((key) => [key, audit[key]])) : audit;
+  return response.status(200).json({ audit: visible, evidence, gated, partial: !ideas.ok, model: MODEL });
 }
