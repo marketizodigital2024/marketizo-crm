@@ -79,6 +79,50 @@ async function sendViaResend({ apiKey, from, to, replyTo, subject, html }) {
   return true;
 }
 
+const GHL_LOCATION_ID = "J9svmFaKnsH9r8T04I0D";
+
+// Slanje preko GoHighLevel-a: mejl ide sa adrese koja je vec podesena u nalogu
+// i ostaje zapisan u razgovoru sa kontaktom, isto kao da je poslat rucno.
+async function sendViaGhl({ token, lead, email, name, subject, html }) {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" };
+  const [firstName, ...rest] = name.split(" ");
+
+  const upsert = await fetch("https://services.leadconnectorhq.com/contacts/upsert", {
+    method: "POST",
+    headers: { ...headers, Version: "2021-07-28" },
+    body: JSON.stringify({
+      locationId: process.env.MARKETIZO_GHL_LOCATION_ID || GHL_LOCATION_ID,
+      firstName: firstName || name,
+      lastName: rest.join(" ") || undefined,
+      name,
+      email,
+      phone: clean(lead.phone, 50) || undefined,
+      companyName: clean(lead.business, 120) || undefined,
+      source: "Marketizo Brand Audit",
+      tags: ["marketizo-brand-audit", "audit-analysis-ready"],
+    }),
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!upsert.ok) throw new Error(clean(await upsert.text(), 240) || "Kontakt nije upisan.");
+  const contactId = (await upsert.json().catch(() => ({})))?.contact?.id;
+  if (!contactId) throw new Error("Kontakt nije pronadjen.");
+
+  const message = await fetch("https://services.leadconnectorhq.com/conversations/messages", {
+    method: "POST",
+    headers: { ...headers, Version: "2021-04-15" },
+    body: JSON.stringify({
+      type: "Email",
+      contactId,
+      subject,
+      html,
+      emailFrom: process.env.MARKETIZO_GHL_EMAIL_FROM || undefined,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!message.ok) throw new Error(clean(await message.text(), 240) || "Mejl nije poslat.");
+  return true;
+}
+
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
 
@@ -131,20 +175,30 @@ export default async function handler(request, response) {
     result.crm = false;
   }
 
-  // 2) Ako je povezan servis za slanje mejla, saljemo ga odmah i sami.
+  // 2) Mejl saljemo sami, cim je povezan bilo koji od dva nacina slanja.
+  const subject = `${firstName}, tvoja Marketizo analiza je spremna${score ? ` (${score}/100)` : ""}`;
+  const html = emailHtml({ firstName, score, headline, offerRead, cards, reportUrl });
+
+  const ghlToken = process.env.MARKETIZO_GHL_TOKEN;
+  if (ghlToken) {
+    try {
+      await sendViaGhl({ token: ghlToken, lead, email, name, subject, html });
+      result.emailed = true;
+      result.via = "ghl";
+    } catch (error) {
+      console.error("GHL email failed", error?.message);
+      result.emailError = "Slanje mejla preko GoHighLevel-a nije uspelo.";
+    }
+  }
+
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.MARKETIZO_EMAIL_FROM;
-  if (apiKey && from) {
+  if (!result.emailed && apiKey && from) {
     try {
-      await sendViaResend({
-        apiKey,
-        from,
-        to: email,
-        replyTo: process.env.MARKETIZO_EMAIL_REPLY_TO || "",
-        subject: `${firstName}, tvoja Marketizo analiza je spremna${score ? ` (${score}/100)` : ""}`,
-        html: emailHtml({ firstName, score, headline, offerRead, cards, reportUrl }),
-      });
+      await sendViaResend({ apiKey, from, to: email, replyTo: process.env.MARKETIZO_EMAIL_REPLY_TO || "", subject, html });
       result.emailed = true;
+      result.via = "resend";
+      delete result.emailError;
     } catch (error) {
       console.error("Report email failed", error?.message);
       result.emailError = "Slanje mejla nije uspelo.";
