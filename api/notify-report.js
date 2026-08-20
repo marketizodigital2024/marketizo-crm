@@ -2,8 +2,12 @@ export const config = { maxDuration: 20 };
 
 // Isti GHL webhook koji koristi api/lead.js. Ovde saljemo i sadrzaj analize,
 // da se u GoHighLevel-u moze poslati mejl sa stvarnim nalazima, a ne samo obavestenje.
-const GHL_AUDIT_WEBHOOK =
+const GHL_LEAD_WEBHOOK =
   "https://services.leadconnectorhq.com/hooks/J9svmFaKnsH9r8T04I0D/webhook-trigger/dce8189c-7b35-444d-bea6-e2b38641512c";
+
+// Ako postoji poseban workflow za "analiza je gotova", koristi se on. Inace ide na isti
+// webhook kao i obican lead, pa se u GoHighLevel-u razdvaja po polju audit_headline.
+const GHL_AUDIT_WEBHOOK = process.env.MARKETIZO_GHL_REPORT_WEBHOOK || GHL_LEAD_WEBHOOK;
 
 const clean = (value, max = 500) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
@@ -108,6 +112,7 @@ export default async function handler(request, response) {
         business: clean(lead.business, 120),
         location: clean(lead.location, 120),
         source: "Marketizo Brand Audit",
+        event: "audit_analysis_ready",
         tags: ["marketizo-brand-audit", "audit-lead", "audit-analysis-ready"],
         audit_tag: "marketizo-brand-audit",
         audit_id: clean(body.auditId, 100),
