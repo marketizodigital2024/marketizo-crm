@@ -16,10 +16,14 @@ function contentTitle(post, index) {
   return words || `${post.video ? "Reel" : "Objava"} sa profila ${post.username ? `@${post.username}` : index + 1}`;
 }
 
+const MEDIA_HOSTS = ["cdninstagram.com", "fbcdn.net", "tiktokcdn.com", "tiktokcdn-us.com", "tiktokcdn-eu.com", "byteimg.com", "ibytedtos.com", "akamaized.net", "api.apify.com"];
+
 function safeMediaUrl(raw) {
   const url = new URL(raw);
   const host = url.hostname.toLowerCase();
-  if (url.protocol !== "https:" || host === "localhost" || host.endsWith(".local") || /^\d+\.\d+\.\d+\.\d+$/.test(host)) throw new Error("Nedozvoljen media URL.");
+  if (url.protocol !== "https:") throw new Error("Nedozvoljen media URL.");
+  if (host.startsWith("[") || host.includes(":")) throw new Error("Nedozvoljen media URL.");
+  if (!MEDIA_HOSTS.some((domain) => host === domain || host.endsWith("." + domain))) throw new Error("Nedozvoljen media URL.");
   return url.toString();
 }
 
@@ -137,15 +141,20 @@ async function ask({ apiKey, task, name, schema, evidenceInput, timeoutMs, effor
   });
   const payload = await aiResponse.json().catch(() => ({}));
   if (!aiResponse.ok) throw new Error(payload.error?.message || "Dubinska analiza nije uspela.");
-  return JSON.parse(outputText(payload));
+  const text = outputText(payload);
+  if (!text.trim()) throw new Error("Model nije vratio rezultat.");
+  return JSON.parse(text);
 }
 
 // Jedan pokusaj sa punim razmisljanjem, pa jedan brzi pokusaj ako prvi padne ili istekne.
+// Oba staju u isti rok, da ukupno cekanje nikada ne prodje ono sto browser ceka.
 async function askWithRetry(options) {
+  const left = () => options.deadline - Date.now();
   try {
-    return await ask(options);
+    return await ask({ ...options, timeoutMs: Math.max(15000, Math.min(options.timeoutMs, left())) });
   } catch (error) {
-    return await ask({ ...options, effort: "low", timeoutMs: Math.min(options.timeoutMs, 90000) });
+    if (left() < 40000) throw error;
+    return await ask({ ...options, effort: "low", timeoutMs: Math.max(15000, Math.min(80000, left())) });
   }
 }
 
@@ -155,7 +164,7 @@ export default async function handler(request, response) {
   if (!apiKey) return response.status(503).json({ error: "Dubinska analiza još nije povezana. Potreban je OPENAI_API_KEY." });
   const form = request.body?.form || {};
   const profiles = Array.isArray(request.body?.profiles) ? request.body.profiles : [];
-  const posts = profiles.flatMap(profile => (profile.posts || []).map(post => ({ ...post, platform: profile.platform, username: profile.username }))).slice(0, MAX_POSTS);
+  const posts = profiles.filter(profile => profile && typeof profile === "object").flatMap(profile => (Array.isArray(profile.posts) ? profile.posts : []).filter(post => post && typeof post === "object").map(post => ({ ...post, platform: profile.platform, username: profile.username }))).slice(0, MAX_POSTS);
   if (!posts.length) return response.status(400).json({ error: "Nema sadržaja za dubinsku analizu." });
 
   const videoPosts = posts.filter(post => post.video && post.videoUrl).slice(0, MAX_VIDEOS);
@@ -186,19 +195,21 @@ export default async function handler(request, response) {
 
   // Dva poziva idu paralelno: dijagnoza i plan sadrzaja. Tako je ukupno cekanje
   // jednako duzem od dva, a ne njihovom zbiru, i svaki poziv ima uzi zadatak.
+  const aiDeadline = Date.now() + 190000;
   const [core, ideas] = await Promise.all([
-    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 130000, effort: "medium" })
+    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 130000, effort: "medium", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(error => ({ ok: false, error })),
-    askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 150000, effort: "medium" })
+    askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 150000, effort: "medium", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(() => ({ ok: false }))
   ]);
 
   if (!core.ok) {
-    return response.status(502).json({ error: clean(core.error?.message, 240) || "Dubinska analiza nije uspela. Pokušaj ponovo." });
+    console.error("Deep audit failed", core.error?.message);
+    return response.status(502).json({ error: "Dubinska analiza nije uspela iz prvog pokušaja. Pokušaj ponovo za trenutak." });
   }
 
   const audit = { ...core.result, contentIdeas: ideas.ok ? ideas.result.contentIdeas : null };
-  return response.status(200).json({ audit, evidence, model: MODEL });
+  return response.status(200).json({ audit, evidence, partial: !ideas.ok, model: MODEL });
 }
