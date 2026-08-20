@@ -1,3 +1,10 @@
+
+/* Ekran analize: bez horizontalnog pomeranja i poruka o trajanju */
+html,body{overflow-x:hidden}
+.analyzing,.scan-layout,.profile-phone,.real-feed{max-width:100%;overflow-x:hidden}
+.profile-phone{touch-action:pan-y}
+.scan-eta{margin:14px auto 0;max-width:520px;text-align:center;font-size:14px;line-height:1.5;color:#9a9a9a}
+@media(max-width:760px){.scan-layout{padding-top:8px}.profile-phone{margin-top:8px}.scan-eta{margin-top:10px;font-size:13px}}
 :root{--bg:#080808;--panel:#111111;--panel2:#1b1b1b;--line:#2b2b2b;--text:#ffffff;--muted:#a8a8a8;--purple:#ff6b00;--purple2:#ff8a1d;--green:#00d66f;--orange:#ff8a1d}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
