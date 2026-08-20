@@ -273,7 +273,13 @@ export default async function handler(request, response) {
     return response.status(502).json(body);
   }
 
-  const audit = { ...core.result, contentIdeas: ideas.ok ? ideas.result.contentIdeas : null };
+  const reviewedCoverage = {
+    postsReviewed: evidence.length,
+    videosFound: videoPosts.length,
+    videosTranscribed: transcripts.filter(item => item.status === "transcribed").length,
+    limitations: Array.isArray(core.result.coverage?.limitations) ? core.result.coverage.limitations : [],
+  };
+  const audit = { ...core.result, coverage: reviewedCoverage, contentIdeas: ideas.ok ? ideas.result.contentIdeas : null };
 
   // Ako je baza povezana, ceo izvestaj ostaje na serveru i klijent dobija samo pregled.
   // Bez baze aplikacija radi kao i ranije, da nista ne stane dok se baza ne podesi.
