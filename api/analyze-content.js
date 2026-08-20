@@ -90,6 +90,23 @@ async function transcribe(post, apiKey, signal) {
   }
 }
 
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+
+async function inlineImage(rawUrl, signal) {
+  const url = safeMediaUrl(rawUrl);
+  const response = await fetch(url, {
+    redirect: "follow",
+    headers: { "User-Agent": "Mozilla/5.0", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" },
+    signal: withDeadline(signal, 12000),
+  });
+  if (!response.ok) throw new Error(`Slika nije dostupna (${response.status}).`);
+  const type = response.headers.get("content-type") || "image/jpeg";
+  if (!type.startsWith("image/")) throw new Error("Odgovor nije slika.");
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength > MAX_IMAGE_BYTES) throw new Error("Slika je prevelika.");
+  return `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
 const STRING = { type: "string" };
 
 function coreSchema() {
@@ -219,11 +236,19 @@ export default async function handler(request, response) {
     type: "input_text",
     text: `ODGOVORI IZ UPITNIKA (samo nagoveštaj, nikako izvor teksta):\n${JSON.stringify(form)}\n\nPREGLEDANI SADRŽAJ (ovo je tvoj glavni izvor):\n${JSON.stringify(evidence.map(({ image, ...item }) => item))}`
   }];
-  evidence.filter(item => item.image).slice(0, 4).forEach(item => {
-    try {
-      evidenceInput.push({ type: "input_text", text: `Vizuelni dokaz za sadržaj „${item.title}“:` });
-      evidenceInput.push({ type: "input_image", image_url: safeMediaUrl(item.image), detail: "high" });
-    } catch {}
+  const stopImages = new AbortController();
+  const imageTimer = setTimeout(() => stopImages.abort(), 20000);
+  const visuals = await Promise.all(
+    evidence.filter(item => item.image).slice(0, 4).map(item =>
+      inlineImage(item.image, stopImages.signal)
+        .then(data => ({ title: item.title, data }))
+        .catch(() => null)
+    )
+  );
+  clearTimeout(imageTimer);
+  visuals.filter(Boolean).forEach(visual => {
+    evidenceInput.push({ type: "input_text", text: `Vizuelni dokaz za sadržaj „${visual.title}“:` });
+    evidenceInput.push({ type: "input_image", image_url: visual.data, detail: "high" });
   });
 
   // Dva poziva idu paralelno: dijagnoza i plan sadrzaja. Tako je ukupno cekanje
