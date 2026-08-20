@@ -78,7 +78,7 @@ async function transcribe(post, apiKey) {
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form, signal: AbortSignal.timeout(28000) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error?.message || "Transkripcija nije uspela.");
-    return { status: "transcribed", transcript: clean(payload.text, 6000) };
+    return { status: "transcribed", transcript: clean(payload.text, 1500) };
   } catch (error) {
     return { status: "unavailable", transcript: "", error: clean(error.message, 240) };
   }
@@ -214,7 +214,7 @@ export default async function handler(request, response) {
     type: "input_text",
     text: `ODGOVORI IZ UPITNIKA (samo nagoveštaj, nikako izvor teksta):\n${JSON.stringify(form)}\n\nPREGLEDANI SADRŽAJ (ovo je tvoj glavni izvor):\n${JSON.stringify(evidence.map(({ image, ...item }) => item))}`
   }];
-  evidence.filter(item => item.image).slice(0, 5).forEach(item => {
+  evidence.filter(item => item.image).slice(0, 4).forEach(item => {
     try {
       evidenceInput.push({ type: "input_text", text: `Vizuelni dokaz za sadržaj „${item.title}“:` });
       evidenceInput.push({ type: "input_image", image_url: safeMediaUrl(item.image), detail: "high" });
@@ -223,9 +223,9 @@ export default async function handler(request, response) {
 
   // Dva poziva idu paralelno: dijagnoza i plan sadrzaja. Tako je ukupno cekanje
   // jednako duzem od dva, a ne njihovom zbiru, i svaki poziv ima uzi zadatak.
-  const aiDeadline = Date.now() + 195000;
+  const aiDeadline = Date.now() + 200000;
   const [core, ideas] = await Promise.all([
-    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 115000, effort: "medium", deadline: aiDeadline })
+    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 120000, effort: "medium", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(error => ({ ok: false, error })),
     askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 130000, effort: "low", deadline: aiDeadline })
