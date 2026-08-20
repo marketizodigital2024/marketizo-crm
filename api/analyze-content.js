@@ -82,9 +82,15 @@ export default async function handler(request, response) {
   const posts = profiles.flatMap(profile => (profile.posts || []).map(post => ({ ...post, platform: profile.platform, username: profile.username }))).slice(0, MAX_POSTS);
   if (!posts.length) return response.status(400).json({ error: "Nema sadržaja za dubinsku analizu." });
 
-  const videoPosts = posts.filter(post => post.video && post.videoUrl).slice(0, MAX_VIDEOS);
-  const transcripts = await Promise.all(videoPosts.map(post => transcribe(post, apiKey)));
-  let videoCursor = 0;
+    const videoPosts = posts.filter(post => post.video && post.videoUrl).slice(0, MAX_VIDEOS);
+  // Vremenski budzet: uzimamo sve Reelove koje stignemo da preslusamo, ostali se citaju iz opisa i slika.
+  const budget = Number(process.env.MARKETIZO_TRANSCRIBE_BUDGET_MS || 45000);
+  const deadline = Date.now() + budget;
+  const transcripts = await Promise.all(videoPosts.map(post => Promise.race([
+    transcribe(post, apiKey),
+    new Promise(resolve => setTimeout(() => resolve({ status: "unavailable", transcript: "" }), Math.max(0, deadline - Date.now()))),
+  ])));
+let videoCursor = 0;
   const evidence = posts.map((post, index) => {
     const transcript = post.video && post.videoUrl && videoCursor < transcripts.length ? transcripts[videoCursor++] : { status: "not_requested", transcript: "" };
     return { index, title: contentTitle(post, index), platform: post.platform, username: post.username, format: post.video ? "reel_video" : "post", caption: clean(post.caption, 4000), image: clean(post.image, 1000), url: clean(post.url, 1000), metrics: { likes: post.likes ?? null, comments: post.comments ?? null, views: post.views ?? null }, transcript };
