@@ -196,11 +196,6 @@ function renderPreviewFromAudit(a,evidence=[]){
   value:normalizeScore(item.value),
   reason:clientText(item.reason,evidence)
  })).filter(item=>item.name);
- if(!scores.length)return;
- const sorted=[...scores].sort((left,right)=>right.value-left.value);
- const strongest=sorted[0],weakest=sorted.at(-1);
- const findScore=term=>scores.find(item=>item.name.toLocaleLowerCase("sr").includes(term))||weakest;
- const path=findScore("put"),trust=findScore("poveren");
  const conclusion=previewExcerpt(clientText(a.mainConclusion,evidence),50);
  const reason=previewExcerpt(clientText(a.mainReason,evidence),36);
  $("#previewSummary").textContent=[conclusion,reason].filter(Boolean).join(" ");
@@ -215,6 +210,11 @@ function renderPreviewFromAudit(a,evidence=[]){
  if(a.consequence)$("#previewConsequence").textContent=clientText(a.consequence,evidence);
  const written=(a.previewCards||[]).filter(card=>card&&card.title);
  if(written.length){written.forEach((card,index)=>setCard(cards[index],clientText(card.label,evidence),clientText(card.title,evidence),clientText(card.body,evidence)));return;}
+ if(!scores.length)return;
+ const sorted=[...scores].sort((left,right)=>right.value-left.value);
+ const strongest=sorted[0],weakest=sorted.at(-1);
+ const findScore=term=>scores.find(item=>item.name.toLocaleLowerCase("sr").includes(term))||weakest;
+ const path=findScore("put"),trust=findScore("poveren");
  setCard(cards[0],"PRVI UTISAK KADA NEKO OTVORI TVOJ PROFIL",`Najbolje radiš: ${strongest.name.toLocaleLowerCase("sr")}`,`${strongest.reason} Ovaj deo analize dobio je ${strongest.value}/100, zato ovde već postoji dobra osnova na kojoj možeš da gradiš.`);
  setCard(cards[1],"GLAVNA PREPREKA ZA VIŠE UPITA",`Najviše prostora za rast: ${weakest.name.toLocaleLowerCase("sr")}`,`${weakest.reason} Ovaj deo je ocenjen sa ${weakest.value}/100 i trenutno je prvo mesto na kome potencijalni klijent može izgubiti razlog da nastavi dalje.`);
  setCard(cards[2],"PUT OD PAŽNJE DO KONKRETNOG UPITA","Da li sadržaj prirodno vodi do razgovora?",`${path.reason} Ocena ovog dela je ${path.value}/100. To pokazuje koliko je nekome lako da od zainteresovanog posetioca postane konkretan upit.`);
@@ -410,9 +410,19 @@ async function notifyReport(data,payload){
 })();
 
 
+async function loadPaidReport(auditId,sessionId){
+ const response=await fetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({auditId,sessionId})});
+ const payload=await response.json().catch(()=>({}));
+ if(!response.ok||!payload.paid||!payload.audit)throw new Error(payload.error||"Analiza još nije otključana.");
+ return payload;
+}
+
 (function(){
- if(new URLSearchParams(location.search).get("dashboard")!=="1")return;
+ const params=new URLSearchParams(location.search);
+ const requested=(params.get("report")||"").trim();
+ if(params.get("dashboard")!=="1"&&!requested)return;
  const data=saved();
+ const auditId=requested||data.auditId||"";
  let profiles=[];
  try{
   const owns=key=>Boolean(data.auditId)&&localStorage.getItem(key)===data.auditId;
@@ -420,6 +430,7 @@ async function notifyReport(data,payload){
   if(!Array.isArray(profiles))profiles=[];
   deepAudit=owns("marketizoDeepAuditOwner")?JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null"):null;
  }catch(error){profiles=[];deepAudit=null;console.warn("Sačuvana analiza nije mogla da se pročita.",error)}
+ // Prvo prikazujemo ono što već imamo, da klijent ne gleda u prazno dok proveravamo uplatu.
  try{
   updateReportProfile(profiles);
   if(deepAudit&&deepAudit.audit)renderDeepAudit(data,deepAudit);
@@ -428,5 +439,29 @@ async function notifyReport(data,payload){
   console.warn("Prikaz sačuvane analize nije uspeo.",error);
   try{render(data,profiles)}catch(inner){console.warn("Rezervni prikaz nije uspeo.",inner)}
  }
- show(paidForCurrentAudit()?"dashboard":"preview");
+ show(paidForCurrentAudit()&&deepAudit?.audit?.priorities?"dashboard":"preview");
+ if(!auditId)return;
+ // Pun izveštaj postoji samo na serveru i izdaje se tek kada Stripe potvrdi uplatu.
+ const sessionId=params.get("session_id")||localStorage.getItem("marketizoAuditPaymentSession")||"";
+ loadPaidReport(auditId,sessionId).then(payload=>{
+  const lead=Object.assign({},data,{auditId});
+  if(payload.lead&&payload.lead.name)lead.name=payload.lead.name;
+  if(payload.lead&&payload.lead.business&&!lead.business)lead.business=payload.lead.business;
+  if(payload.lead&&payload.lead.location&&!lead.location)lead.location=payload.lead.location;
+  deepAudit={audit:payload.audit,evidence:payload.evidence||[]};
+  try{
+   localStorage.setItem("marketizoAudit",JSON.stringify(lead));
+   localStorage.setItem("marketizoPaidAuditId",auditId);
+   localStorage.setItem("marketizoDeepAudit",JSON.stringify(deepAudit));
+   localStorage.setItem("marketizoDeepAuditOwner",auditId);
+  }catch(error){console.warn("Analiza nije mogla da se sačuva lokalno.",error)}
+  renderDeepAudit(lead,deepAudit);
+  show("dashboard");
+ }).catch(error=>{
+  console.warn("Pun izveštaj još nije dostupan.",error);
+  if(!deepAudit||!deepAudit.audit||!deepAudit.audit.priorities){
+   const note=$("#previewSummary");
+   if(note)note.textContent="Nismo uspeli da potvrdimo uplatu za ovu analizu. Ako je novac skinut, javi nam se i odmah je otključavamo.";
+  }
+ });
 })();
