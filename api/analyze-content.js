@@ -16,7 +16,25 @@ function store() {
   return { url, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" } };
 }
 
+async function existingRow(db, auditId) {
+  try {
+    const response = await fetch(`${db.url}/rest/v1/${AUDIT_TABLE}?id=eq.${encodeURIComponent(auditId)}&select=lead`, {
+      headers: db.headers,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+    return (await response.json().catch(() => []))[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function saveAudit(db, auditId, audit, evidence, form) {
+  // Ako je ova analiza vec placena, ne diramo je. Inace bi svako ko zna oznaku
+  // analize mogao da prepise izvestaj koji je klijent kupio.
+  const previous = await existingRow(db, auditId);
+  if (previous?.lead?.paidAt) return true;
+
   const response = await fetch(`${db.url}/rest/v1/${AUDIT_TABLE}?on_conflict=id`, {
     method: "POST",
     headers: { ...db.headers, Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -213,14 +231,34 @@ export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return response.status(503).json({ error: "Dubinska analiza još nije povezana. Potreban je OPENAI_API_KEY." });
+  // Browser prekida cekanje na 250 s. Server zato drzi ceo posao ispod ovoga,
+  // da klijent nikada ne dobije prazan odgovor posle punog cekanja.
+  const started = Date.now();
+  const CLIENT_LIMIT = Number(process.env.MARKETIZO_ANALYZE_LIMIT_MS) || 225000;
+  const remaining = () => CLIENT_LIMIT - (Date.now() - started);
   const form = request.body?.form || {};
   const profiles = Array.isArray(request.body?.profiles) ? request.body.profiles : [];
-  const posts = profiles.filter(profile => profile && typeof profile === "object").flatMap(profile => (Array.isArray(profile.posts) ? profile.posts : []).filter(post => post && typeof post === "object").map(post => ({ ...post, platform: profile.platform, username: profile.username }))).slice(0, MAX_POSTS);
+  // Uzimamo naizmenicno po jednu objavu iz svake povezane mreze. Ranije je prva
+  // mreza popunila celu kvotu, pa druga i treca nisu ulazile u analizu uopste.
+  const buckets = profiles
+    .filter(profile => profile && typeof profile === "object")
+    .map(profile => (Array.isArray(profile.posts) ? profile.posts : [])
+      .filter(post => post && typeof post === "object")
+      .map(post => ({ ...post, platform: profile.platform, username: profile.username })));
+  const posts = [];
+  for (let round = 0; posts.length < MAX_POSTS; round += 1) {
+    let added = false;
+    for (const bucket of buckets) {
+      if (round < bucket.length && posts.length < MAX_POSTS) { posts.push(bucket[round]); added = true; }
+    }
+    if (!added) break;
+  }
   if (!posts.length) return response.status(400).json({ error: "Nema sadržaja za dubinsku analizu." });
 
   const videoPosts = posts.filter(post => post.video && post.videoUrl).slice(0, MAX_VIDEOS);
   // Vremenski budzet: uzimamo sve Reelove koje stignemo da preslusamo, ostali se citaju iz opisa i slika.
-  const budget = Number(process.env.MARKETIZO_TRANSCRIBE_BUDGET_MS || 40000);
+  const wanted = Number(process.env.MARKETIZO_TRANSCRIBE_BUDGET_MS) || 40000;
+  const budget = Math.max(8000, Math.min(wanted, remaining() - 170000));
   const stopListening = new AbortController();
   const budgetTimer = setTimeout(() => stopListening.abort(), budget);
   const transcripts = await Promise.all(videoPosts.map(post => transcribe(post, apiKey, stopListening.signal)));
@@ -239,7 +277,7 @@ export default async function handler(request, response) {
   const withImage = evidence.filter(item => item.image);
   const visualOrder = [...withImage.filter(item => item.format === "reel_video"), ...withImage.filter(item => item.format !== "reel_video")].slice(0, 8);
   const stopImages = new AbortController();
-  const imageTimer = setTimeout(() => stopImages.abort(), 26000);
+  const imageTimer = setTimeout(() => stopImages.abort(), Math.max(6000, Math.min(26000, remaining() - 150000)));
   const visuals = await Promise.all(
     visualOrder.map(item =>
       inlineImage(item.image, stopImages.signal)
@@ -255,7 +293,7 @@ export default async function handler(request, response) {
 
   // Dva poziva idu paralelno: dijagnoza i plan sadrzaja. Tako je ukupno cekanje
   // jednako duzem od dva, a ne njihovom zbiru, i svaki poziv ima uzi zadatak.
-  const aiDeadline = Date.now() + 200000;
+  const aiDeadline = started + CLIENT_LIMIT;
   const [core, ideas] = await Promise.all([
     askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 110000, effort: "low", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
@@ -288,12 +326,17 @@ export default async function handler(request, response) {
   const db = store();
   const auditId = clean(form.auditId, 100);
   let gated = false;
-  if (db && auditId) {
+  if (db) {
+    // Bez oznake analize ne bismo znali za koju uplatu izdajemo izvestaj, pa bi
+    // ceo izvestaj otisao besplatno. Zato je oznaka obavezna kada baza postoji.
+    if (!auditId) return response.status(400).json({ error: "Nedostaje oznaka analize." });
     try {
       await saveAudit(db, auditId, audit, evidence, form);
       gated = true;
     } catch (error) {
+      // Ako izvestaj nije sacuvan, klijent posle uplate ne bi imao sta da otvori.
       console.error("Audit store write failed", error?.message);
+      return response.status(503).json({ error: "Analiza je gotova, ali je čuvanje trenutno nedostupno. Pokušaj ponovo za trenutak." });
     }
   }
 
