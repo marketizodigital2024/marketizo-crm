@@ -1,5 +1,23 @@
 
 (function(){
+ if(typeof renderPreviewFromAudit!=="function")return;
+ const base=renderPreviewFromAudit;
+ renderPreviewFromAudit=function(audit,evidence){
+  base(audit,evidence);
+  const text=audit&&audit.headline?String(audit.headline).trim():"";
+  const head=document.querySelector("#preview .preview-top h2");
+  if(!text||!head)return;
+  const parts=text.split(/(?<=[.!?])\s+/);
+  head.textContent=parts[0]+(parts.length>1?" ":"");
+  if(parts.length>1){
+   const em=document.createElement("em");
+   em.textContent=parts.slice(1).join(" ");
+   head.appendChild(em);
+  }
+ };
+})();
+
+(function(){
  const style=document.createElement("style");
  style.textContent=".feed-unavailable small{display:none}";
  document.head.appendChild(style);
