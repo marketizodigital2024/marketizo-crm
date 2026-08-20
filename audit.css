@@ -1,4 +1,11 @@
 
+/* Ispravka: ne secemo sadrzaj na desktopu i telefon ide uz vrh */
+.analyzing{overflow-x:visible;max-width:none}
+.scan-layout{overflow-x:visible;align-items:start}
+.scan-layout>*{min-width:0}
+.scan-copy h2{overflow-wrap:anywhere}
+@media(max-width:760px){html,body{overflow-x:hidden}.scan-layout,.profile-phone,.real-feed{max-width:100%;overflow-x:hidden}.scan-layout{align-items:stretch}}
+
 /* Ekran analize: bez horizontalnog pomeranja i poruka o trajanju */
 html,body{overflow-x:hidden}
 .analyzing,.scan-layout,.profile-phone,.real-feed{max-width:100%;overflow-x:hidden}
