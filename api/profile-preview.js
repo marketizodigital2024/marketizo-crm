@@ -21,6 +21,8 @@ const PLATFORM_CONFIG = {
   },
 };
 
+const NETWORK_NAME = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok" };
+
 function tiktokHandle(url) {
   const handle = new URL(url).pathname.split("/").filter(Boolean).pop();
   if (!handle) throw new Error("Link ne sadrži TikTok korisničko ime.");
@@ -126,11 +128,29 @@ async function fetchProfile(platform, rawUrl, token, debug) {
     if (nested.length) result = normalize(platform, url, list, nested);
   }
   if (platform === "facebook" && /^(people|profile\.php|pages)$/i.test(result.username)) result.username = String(result.displayName || "Facebook profil").replace(/\s+/g, "");
+  const blocked = list.find((item) => item && (item.error || item.isRestrictedProfile || item.private));
   if (debug) {
     // Samo imena polja i brojevi, bez sadrzaja. Sluzi za trazenje uzroka kad objava nema.
-    result.diagnostics = { items: list.length, posts: result.posts.length, keys: list.slice(0, 3).map((item) => Object.keys(item || {}).slice(0, 40)) };
+    result.diagnostics = {
+      items: list.length,
+      posts: result.posts.length,
+      keys: list.slice(0, 3).map((item) => Object.keys(item || {}).slice(0, 40)),
+      flags: list.slice(0, 3).map((item) => ({
+        error: String(item?.error || "").slice(0, 90),
+        reason: String(item?.restrictionReason || "").slice(0, 90),
+        restricted: Boolean(item?.isRestrictedProfile),
+        private: Boolean(item?.private),
+        latestPosts: Array.isArray(item?.latestPosts) ? item.latestPosts.length : null,
+      })),
+    };
   }
-  if (!result.posts.length && !result.avatar) throw new Error("Nema javno dostupnih objava za prikaz.");
+  // Analiza bez ijedne objave nema na cemu da se zasnuje. Takav profil je greska,
+  // a ne uspeh, jer bi klijent inace platio izvestaj pisan bez dokaza sa profila.
+  if (!result.posts.length) {
+    if (blocked?.private) throw new Error("Profil je privatan, pa ne možemo da pročitamo objave.");
+    if (blocked) throw new Error(`${NETWORK_NAME[platform] || "Mreža"} trenutno ne dozvoljava pregled ovog profila, pa nismo mogli da učitamo objave.`);
+    throw new Error("Na ovom profilu nismo pronašli nijednu javnu objavu.");
+  }
   return result;
 }
 
