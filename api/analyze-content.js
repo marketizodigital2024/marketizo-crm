@@ -230,12 +230,17 @@ export default async function handler(request, response) {
       .catch(error => ({ ok: false, error })),
     askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 130000, effort: "low", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
-      .catch(() => ({ ok: false }))
+      .catch(error => ({ ok: false, error }))
   ]);
 
   if (!core.ok) {
-    console.error("Deep audit failed", core.error?.message);
-    return response.status(502).json({ error: "Dubinska analiza nije uspela iz prvog pokušaja. Pokušaj ponovo za trenutak." });
+    console.error("Deep audit failed", core.error?.message, "| ideas:", ideas.error?.message);
+    const body = { error: "Dubinska analiza nije uspela iz prvog pokušaja. Pokušaj ponovo za trenutak." };
+    if (request.query?.debug === "1") {
+      body.detail = clean(core.error?.message, 300);
+      body.ideasDetail = clean(ideas.error?.message, 300);
+    }
+    return response.status(502).json(body);
   }
 
   const audit = { ...core.result, contentIdeas: ideas.ok ? ideas.result.contentIdeas : null };
