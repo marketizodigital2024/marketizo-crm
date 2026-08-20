@@ -195,12 +195,12 @@ export default async function handler(request, response) {
 
   // Dva poziva idu paralelno: dijagnoza i plan sadrzaja. Tako je ukupno cekanje
   // jednako duzem od dva, a ne njihovom zbiru, i svaki poziv ima uzi zadatak.
-  const aiDeadline = Date.now() + 190000;
+  const aiDeadline = Date.now() + 165000;
   const [core, ideas] = await Promise.all([
-    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 130000, effort: "medium", deadline: aiDeadline })
+    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 140000, effort: "medium", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(error => ({ ok: false, error })),
-    askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 150000, effort: "medium", deadline: aiDeadline })
+    askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 140000, effort: "low", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(() => ({ ok: false }))
   ]);
