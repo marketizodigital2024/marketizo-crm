@@ -1,5 +1,17 @@
 
 (function(){
+ // Sekcija analize je bila ogranicena na 600px sa velikom marginom, pa je desni tekst bio isecen.
+ const css=".analyzing{max-width:1180px;margin:40px auto}"+
+  ".scan-layout{align-items:start;max-width:920px}"+
+  ".scan-layout>*{min-width:0}"+
+  ".scan-copy h2{overflow-wrap:anywhere}"+
+  "@media(max-width:760px){.analyzing{margin:20px auto}.scan-layout,.profile-phone,.real-feed{max-width:100%;overflow-x:hidden}}";
+ const style=document.createElement("style");
+ style.textContent=css;
+ document.head.appendChild(style);
+})();
+
+(function(){
  // Stranica poziva audit.css sa starom oznakom verzije, pa browser vuce kes. Trazimo svezu verziju.
  const CSS_VERSION="21";
  const link=document.querySelector('link[href*="audit.css"]');
