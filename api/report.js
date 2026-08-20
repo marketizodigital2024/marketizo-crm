@@ -44,6 +44,30 @@ async function findByAuditId(auditId, secret) {
   return payload.data.find((item) => item.client_reference_id === auditId && isPaid(item)) || null;
 }
 
+function release(auditId, row) {
+  const lead = row.lead || {};
+  return {
+    paid: true,
+    auditId,
+    audit: row.audit,
+    evidence: Array.isArray(row.evidence) ? row.evidence : [],
+    lead: { name: clean(lead.name, 120), business: clean(lead.business, 120), location: clean(lead.location, 120) },
+  };
+}
+
+async function markPaid(db, auditId, lead, sessionId) {
+  try {
+    await fetch(`${db.url}/rest/v1/${AUDIT_TABLE}?id=eq.${encodeURIComponent(auditId)}`, {
+      method: "PATCH",
+      headers: { ...db.headers, Prefer: "return=minimal" },
+      body: JSON.stringify({ lead: { ...(lead || {}), paidAt: new Date().toISOString(), sessionId: clean(sessionId, 300) }, updated_at: new Date().toISOString() }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (error) {
+    console.error("Audit paid flag failed", error?.message);
+  }
+}
+
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
 
@@ -56,6 +80,22 @@ export default async function handler(request, response) {
   const auditId = clean(request.body?.auditId, 100);
   const sessionId = clean(request.body?.sessionId, 300);
   if (!auditId) return response.status(400).json({ paid: false, error: "Nedostaje oznaka analize." });
+
+  // Prvo citamo sacuvanu analizu. Ako je uplata vec jednom potvrdjena, izdajemo je
+  // odmah — bez ponovnog trazenja po Stripe-u, koje na drugom uredjaju ume da omane.
+  let row = null;
+  try {
+    const stored = await fetch(
+      `${db.url}/rest/v1/${AUDIT_TABLE}?id=eq.${encodeURIComponent(auditId)}&select=audit,evidence,lead`,
+      { headers: db.headers, signal: AbortSignal.timeout(12000) }
+    );
+    if (stored.ok) row = (await stored.json().catch(() => []))[0] || null;
+  } catch (error) {
+    console.error("Audit store read failed", error?.message);
+    return response.status(503).json({ paid: false, retry: true, error: "Trenutno ne možemo da otvorimo analizu. Pokušaj za nekoliko sekundi." });
+  }
+
+  if (row?.lead?.paidAt && row.audit) return response.status(200).json(release(auditId, row));
 
   let session = null;
   try {
@@ -76,27 +116,11 @@ export default async function handler(request, response) {
     return response.status(402).json({ paid: false, error: "Iznos uplate ne odgovara ovoj analizi." });
   }
 
-  let row = null;
-  try {
-    const stored = await fetch(
-      `${db.url}/rest/v1/${AUDIT_TABLE}?id=eq.${encodeURIComponent(auditId)}&select=audit,evidence,lead`,
-      { headers: db.headers, signal: AbortSignal.timeout(12000) }
-    );
-    if (stored.ok) row = (await stored.json().catch(() => []))[0] || null;
-  } catch (error) {
-    console.error("Audit store read failed", error?.message);
-  }
-
   if (!row || !row.audit) {
     return response.status(404).json({ paid: true, error: "Analiza nije pronađena. Javi nam se i poslaćemo je ručno." });
   }
 
-  const lead = row.lead || {};
-  return response.status(200).json({
-    paid: true,
-    auditId,
-    audit: row.audit,
-    evidence: Array.isArray(row.evidence) ? row.evidence : [],
-    lead: { name: clean(lead.name, 120), business: clean(lead.business, 120), location: clean(lead.location, 120) },
-  });
+  // Od sada je ova analiza otkljucana i na svakom drugom uredjaju.
+  await markPaid(db, auditId, row.lead, session.id);
+  return response.status(200).json(release(auditId, row));
 }
