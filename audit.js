@@ -84,7 +84,7 @@
  if(kicker&&!document.querySelector(".scan-eta")){
   const eta=document.createElement("p");
   eta.className="scan-eta";
-  eta.textContent="Detaljna analiza obično traje minut do dva. Ostani na stranici \u2014 pregledamo objave, Reelove i biografiju jednu po jednu.";
+  eta.textContent="Detaljna analiza obično traje dva do tri minuta. Ostani na stranici \u2014 pregledamo objave, Reelove i biografiju jednu po jednu.";
   kicker.after(eta);
  }
 })();
