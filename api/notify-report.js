@@ -56,7 +56,7 @@ function emailHtml({ firstName, score, headline, offerRead, cards, reportUrl }) 
     </td></tr>
     <tr><td style="padding:6px 28px 30px">
       <a href="${esc(reportUrl)}" style="display:inline-block;background:#ff7900;color:#111;text-decoration:none;font:700 16px/1 Arial,sans-serif;padding:16px 22px;border-radius:12px">Otvori celu analizu &rarr;</a>
-      <div style="font:400 13px/1.6 Arial,sans-serif;color:#8a8a8a;margin-top:12px">Analizu otvori u istom pregledaču u kom si je pokrenuo, da se rezultat učita.</div>
+      <div style="font:400 13px/1.6 Arial,sans-serif;color:#8a8a8a;margin-top:12px">Link radi na svakom uređaju. Analiza se otvara u celini kada je uplata potvrđena.</div>
     </td></tr>
     <tr><td style="background:#faf7f4;padding:20px 28px;font:400 13px/1.65 Arial,sans-serif;color:#777">
       Imaš pitanje o nalazima? Odgovori na ovaj mejl ili nam piši na WhatsApp: +43 681 811 44 747.<br>Marketizo &bull; Beč
@@ -92,7 +92,7 @@ export default async function handler(request, response) {
   const offerRead = clean(summary.offerRead, 160);
   const cards = normalizeCards(summary.cards);
   // Adresa se nikada ne uzima iz zahteva, da se mejlom ne bi mogao poslati tudji link.
-  const reportUrl = `${(process.env.MARKETIZO_AUDIT_ORIGIN || "https://audit.marketizo.com").replace(/\/$/, "")}/audit?dashboard=1`;
+  const reportUrl = `${(process.env.MARKETIZO_AUDIT_ORIGIN || "https://audit.marketizo.com").replace(/\/$/, "")}/audit?report=${encodeURIComponent(clean(body.auditId, 100))}`;
 
   const result = { crm: false, emailed: false };
 
