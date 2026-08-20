@@ -37,7 +37,7 @@
           mark.className = 'check'; mark.textContent = '✓';
           eyebrow.textContent = 'UPLATA JE POTVRĐENA';
           title.textContent = 'Hvala. Tvoja analiza je otključana.';
-          copy.textContent = 'Ceo izveštaj, prioriteti i mesečni plan sadržaja su ti sada dostupni. Link šaljemo i na email koji si ostavio.';
+          copy.textContent = 'Cela analiza, prioriteti i mesečni plan sadržaja su ti sada dostupni. Link šaljemo i na email koji si ostavio, pa je možeš otvoriti i sa telefona.';
           primary.hidden = false; helpLink.hidden = true;
         }
         if (state === 'failed') {
@@ -72,6 +72,7 @@
 
         localStorage.setItem('marketizoPaidAuditId', audit.auditId);
         localStorage.setItem('marketizoAuditPaymentSession', sessionId);
+        primary.href = '/audit?report=' + encodeURIComponent(audit.auditId) + '&session_id=' + encodeURIComponent(sessionId);
 
         const purchaseKey = 'marketizo_audit_purchase_' + sessionId;
         if (!localStorage.getItem(purchaseKey)) {
