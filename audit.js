@@ -1,5 +1,33 @@
 
 (function(){
+ const locked=document.querySelector("#preview .locked");
+ if(locked){
+  const stavke=[
+   "Zašto profil trenutno ne prodaje",
+   "Šta tačno treba da promeniš, redom",
+   "5 prioriteta sa objašnjenjem zašto baš ti",
+   "12 ideja za Reelove, napisanih za tvoj profil",
+   "12 ideja za storije za narednih 30 dana",
+   "1 objava i 1 karusel, sa gotovim tekstom",
+   "Konkretne prepravke tvojih postojećih objava",
+   "Ocena po svakoj oblasti i šta je diže"
+  ];
+  locked.innerHTML=stavke.map(function(t){return "<article>🔒 <strong>"+t+"</strong></article>";}).join("");
+  const jos=document.createElement("p");
+  jos.className="locked-more";
+  jos.textContent="Sve ovo je već napisano za tvoj profil i čeka otključavanje.";
+  locked.after(jos);
+  const st=document.createElement("style");
+  st.textContent=".locked-more{margin:14px 0 0;text-align:center;font-size:14px;color:#9a9a9a}";
+  document.head.appendChild(st);
+ }
+ const ponuda=document.querySelector("#preview .checkout span");
+ if(ponuda)ponuda.textContent="Otključaj celu analizu: nalaze, prioritete i 26 gotovih ideja za Reelove, storije i objave.";
+ const dugme=document.querySelector("#checkoutButton");
+ if(dugme)dugme.textContent="Otključaj celu analizu za 1 € →";
+})();
+
+(function(){
  // Sekcija analize je bila ogranicena na 600px sa velikom marginom, pa je desni tekst bio isecen.
  const css=".analyzing{max-width:1180px;margin:40px auto}"+
   ".scan-layout{align-items:start;max-width:920px}"+
