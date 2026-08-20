@@ -55,9 +55,15 @@ function safeMediaUrl(raw) {
   return url.toString();
 }
 
-async function downloadMedia(rawUrl) {
+function withDeadline(signal, ms) {
+  const timeout = AbortSignal.timeout(ms);
+  if (!signal) return timeout;
+  return typeof AbortSignal.any === "function" ? AbortSignal.any([signal, timeout]) : signal;
+}
+
+async function downloadMedia(rawUrl, signal) {
   const url = safeMediaUrl(rawUrl);
-  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(20000) });
+  const response = await fetch(url, { redirect: "follow", signal: withDeadline(signal, 20000) });
   if (!response.ok) throw new Error(`Video nije dostupan (${response.status}).`);
   const declared = Number(response.headers.get("content-length") || 0);
   if (declared > MAX_MEDIA_BYTES) throw new Error("Video je prevelik za ovu analizu.");
@@ -66,19 +72,19 @@ async function downloadMedia(rawUrl) {
   return { bytes, type: response.headers.get("content-type") || "video/mp4" };
 }
 
-async function transcribe(post, apiKey) {
+async function transcribe(post, apiKey, signal) {
   if (!post.videoUrl) return { status: "unavailable", transcript: "" };
   try {
-    const media = await downloadMedia(post.videoUrl);
+    const media = await downloadMedia(post.videoUrl, signal);
     const form = new FormData();
     form.append("model", process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe");
     form.append("language", "sr");
     form.append("prompt", "Marketing sadržaj na srpskom, bosanskom, hrvatskom ili nemačkom jeziku. Sačuvaj nazive brendova, proizvoda i cene tačno.");
     form.append("file", new Blob([media.bytes], { type: media.type }), "reel.mp4");
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form, signal: AbortSignal.timeout(28000) });
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form, signal: withDeadline(signal, 28000) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error?.message || "Transkripcija nije uspela.");
-    return { status: "transcribed", transcript: clean(payload.text, 1500) };
+    return { status: "transcribed", transcript: clean(payload.text, 3000) };
   } catch (error) {
     return { status: "unavailable", transcript: "", error: clean(error.message, 240) };
   }
@@ -197,12 +203,11 @@ export default async function handler(request, response) {
 
   const videoPosts = posts.filter(post => post.video && post.videoUrl).slice(0, MAX_VIDEOS);
   // Vremenski budzet: uzimamo sve Reelove koje stignemo da preslusamo, ostali se citaju iz opisa i slika.
-  const budget = Number(process.env.MARKETIZO_TRANSCRIBE_BUDGET_MS || 25000);
-  const deadline = Date.now() + budget;
-  const transcripts = await Promise.all(videoPosts.map(post => Promise.race([
-    transcribe(post, apiKey),
-    new Promise(resolve => setTimeout(() => resolve({ status: "unavailable", transcript: "" }), Math.max(0, deadline - Date.now()))),
-  ])));
+  const budget = Number(process.env.MARKETIZO_TRANSCRIBE_BUDGET_MS || 40000);
+  const stopListening = new AbortController();
+  const budgetTimer = setTimeout(() => stopListening.abort(), budget);
+  const transcripts = await Promise.all(videoPosts.map(post => transcribe(post, apiKey, stopListening.signal)));
+  clearTimeout(budgetTimer);
 
   let videoCursor = 0;
   const evidence = posts.map((post, index) => {
