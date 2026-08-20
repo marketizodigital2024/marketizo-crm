@@ -64,12 +64,13 @@ function authorOf(item = {}) {
   return item.owner || item.author || item.authorMeta || item.channel || item.user || item.userInfo?.user || {};
 }
 
-function normalize(platform, url, items) {
+function normalize(platform, url, items, postItems) {
   const usable = items.filter((item) => item && typeof item === "object");
   const profileScore=item=>{const author=authorOf(item);return (item.profilePicUrlHD?12:0)+(item.profilePicUrl?10:0)+(item.ownerProfilePicUrl?9:0)+(item.avatarUrl||item.avatar?8:0)+(author.avatarLarger||author.profilePicUrl?7:0)+(item.biography||item.bio||item.signature?4:0)+(item.fullName||item.ownerFullName||item.nickname?2:0)};
   const profile = [...usable].sort((a,b)=>profileScore(b)-profileScore(a))[0] || {};
   const author = authorOf(profile);
-  const posts = usable.map((item) => ({
+  const source = Array.isArray(postItems) && postItems.length ? postItems.filter((item) => item && typeof item === "object") : usable;
+  const posts = source.map((item) => ({
     image: imageOf(item),
     video: Boolean(item.videoUrl || item.isVideo || item.type === "Video" || item.mediaType === "VIDEO"),
     videoUrl: item.videoUrl || item.videoPlayUrl || item.downloadUrl || item.mediaUrl || "",
@@ -93,7 +94,7 @@ function normalize(platform, url, items) {
   };
 }
 
-async function fetchProfile(platform, rawUrl, token) {
+async function fetchProfile(platform, rawUrl, token, debug) {
   const config = PLATFORM_CONFIG[platform];
   const url = safeUrl(rawUrl, config.host);
   const actor = process.env[config.actorEnv] || config.fallbackActor;
@@ -111,8 +112,24 @@ async function fetchProfile(platform, rawUrl, token) {
   }
   const responses=await Promise.all([run(config.input(url)),...extra]);
   const items=(await Promise.all(responses.map(async item=>item.ok?item.json():[]))).flat();
-  const result = normalize(platform, url, Array.isArray(items) ? items : []);
+  const list = Array.isArray(items) ? items : [];
+  let result = normalize(platform, url, list);
+  // Za neke profile Apify vrati objave samo ugnjezdene unutar detalja profila.
+  // Bez ovoga bi analiza ostala bez ijedne objave i pala bi na opsti tekst.
+  if (!result.posts.length) {
+    const nested = list.flatMap((item) => [
+      ...(Array.isArray(item?.latestPosts) ? item.latestPosts : []),
+      ...(Array.isArray(item?.topPosts) ? item.topPosts : []),
+      ...(Array.isArray(item?.posts) ? item.posts : []),
+      ...(Array.isArray(item?.edge_owner_to_timeline_media?.edges) ? item.edge_owner_to_timeline_media.edges.map((edge) => edge?.node).filter(Boolean) : []),
+    ]);
+    if (nested.length) result = normalize(platform, url, list, nested);
+  }
   if (platform === "facebook" && /^(people|profile\.php|pages)$/i.test(result.username)) result.username = String(result.displayName || "Facebook profil").replace(/\s+/g, "");
+  if (debug) {
+    // Samo imena polja i brojevi, bez sadrzaja. Sluzi za trazenje uzroka kad objava nema.
+    result.diagnostics = { items: list.length, posts: result.posts.length, keys: list.slice(0, 3).map((item) => Object.keys(item || {}).slice(0, 40)) };
+  }
   if (!result.posts.length && !result.avatar) throw new Error("Nema javno dostupnih objava za prikaz.");
   return result;
 }
@@ -124,7 +141,8 @@ export default async function handler(request, response) {
   const supplied = request.body?.profiles || {};
   const entries = Object.entries(supplied).filter(([platform, url]) => PLATFORM_CONFIG[platform] && typeof url === "string" && url.trim());
   if (!entries.length) return response.status(400).json({ error: "Dodajte najmanje jedan profil." });
-  const settled = await Promise.allSettled(entries.map(([platform, url]) => fetchProfile(platform, url.trim(), process.env.APIFY_TOKEN)));
+  const debug = request.body?.debug === true;
+  const settled = await Promise.allSettled(entries.map(([platform, url]) => fetchProfile(platform, url.trim(), process.env.APIFY_TOKEN, debug)));
   const profiles = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
   const sharedAvatar = profiles.find((profile) => profile.avatar)?.avatar || "";
   profiles.forEach((profile) => { if (!profile.avatar && sharedAvatar) profile.avatar = sharedAvatar; });
