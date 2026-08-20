@@ -41,7 +41,7 @@
 
 (function(){
  // Stranica poziva audit.css sa starom oznakom verzije, pa browser vuce kes. Trazimo svezu verziju.
- const CSS_VERSION="21";
+ const CSS_VERSION="22";
  const link=document.querySelector('link[href*="audit.css"]');
  if(link&&link.getAttribute("href").indexOf("v="+CSS_VERSION)===-1){
   link.setAttribute("href","audit.css?v="+CSS_VERSION);
@@ -62,7 +62,7 @@
   }
   if(!text)return;
   if(typeof clientText==="function")text=clientText(text,evidence||[]);
-  const parts=text.split(/(?<=[.!?])\s+/);
+  const parts=(text.match(/[^.!?]+[.!?]*/g)||[text]).map(part=>part.trim()).filter(Boolean);
   head.textContent=parts[0]+(parts.length>1?" ":"");
   if(parts.length>1){
    const em=document.createElement("em");
@@ -74,7 +74,7 @@
 
 (function(){
  const style=document.createElement("style");
- style.textContent=".feed-unavailable small{display:none}";
+ style.textContent=".feed-unavailable small{display:none}.feed-unavailable.has-hint small{display:block;margin-top:8px}";
  document.head.appendChild(style);
  const findings=document.querySelector("#preview .findings");
  if(findings&&findings.querySelectorAll("article").length===4){
@@ -138,7 +138,7 @@ function renderReviewedExamples(d,profiles=[]){
  const posts=profiles.flatMap(p=>(p.posts||[]).map(post=>({...post,platform:p.platform,username:p.username}))).filter(p=>p.image&&p.caption);
  if(!posts.length){$("#reviewedExamples").innerHTML="<p class='empty-review'>Nismo dobili dovoljno javnih podataka za pouzdan primer.</p>";return}
  const selected=[];for(const platform of [...new Set(posts.map(p=>p.platform))]){const item=posts.find(p=>p.platform===platform&&!selected.includes(p));if(item)selected.push(item)}for(const item of posts){if(selected.length>=5)break;if(!selected.includes(item))selected.push(item)}
- $("#reviewedExamples").innerHTML=selected.map(item=>{const hasCta=/javi|piši|rezerv|zakaz|link|prijav|kupi|naruči|pozovi/i.test(item.caption),type=item.video?"Reel":"Objava",caption=item.caption.replace(/\s+/g," ").trim(),title=caption.split(/[.!?]/).find(x=>x.trim().length>10)?.trim().split(/\s+/).slice(0,9).join(" ")||`${type} sa profila`,offer=d.offer?.trim()||"ovu ponudu";return`<article><img src="${mediaUrl(item.image)}" alt="${type} sa profila @${item.username}"><div><small>${type.toUpperCase()} · @${item.username}</small><strong>${title}</strong><blockquote>${caption.slice(0,230)}${caption.length>230?"…":""}</blockquote><p><b>Šta je dobro:</b> ${hasCta?"Poziv na akciju već postoji i daje dobru osnovu za sledeći korak.":"Tema jasno predstavlja ono čime se brend bavi."}</p><p><b>Kako može bolje:</b> Počni konkretnom situacijom ili pitanjem u kome će se prava publika odmah prepoznati. Zatim pokaži rezultat i prirodno ga poveži sa ponudom „${offer}“.</p><p class="rewrite"><b>Primer drugačijeg ugla:</b> „Pre nego što izabereš ${offer.toLowerCase()}, proveri ove tri stvari.“</p></div></article>`}).join("");
+ $("#reviewedExamples").innerHTML=selected.map(item=>{const hasCta=/javi|piši|rezerv|zakaz|link|prijav|kupi|naruči|pozovi/i.test(item.caption),type=item.video?"Reel":"Objava",caption=item.caption.replace(/\s+/g," ").trim(),title=caption.split(/[.!?]/).find(x=>x.trim().length>10)?.trim().split(/\s+/).slice(0,9).join(" ")||`${type} sa profila`,offer=d.offer?.trim()||"ovu ponudu";return`<article><img src="${esc(mediaUrl(item.image))}" alt="${esc(type)} sa profila @${esc(item.username)}"><div><small>${esc(type.toUpperCase())} · @${esc(item.username)}</small><strong>${esc(title)}</strong><blockquote>${esc(caption.slice(0,230))}${caption.length>230?"…":""}</blockquote><p><b>Šta je dobro:</b> ${hasCta?"Poziv na akciju već postoji i daje dobru osnovu za sledeći korak.":"Tema jasno predstavlja ono čime se brend bavi."}</p><p><b>Kako može bolje:</b> Počni konkretnom situacijom ili pitanjem u kome će se prava publika odmah prepoznati. Zatim pokaži rezultat i prirodno ga poveži sa ponudom „${esc(offer)}“.</p><p class="rewrite"><b>Primer drugačijeg ugla:</b> „Pre nego što izabereš ${esc(offer.toLowerCase())}, proveri ove tri stvari.“</p></div></article>`}).join("");
 }
 function contentBlueprint(d){const offer=d.offer||"glavna ponuda",city=d.location||"tvom mestu",audience=d.audience||"idealni klijent",path=d.purchasePath?.toLowerCase()||"razgovor",program=/program|edukacij/i.test(`${d.offerType||""} ${d.business||""} ${offer}`),caseTitle=program?"Primer polaznika: od problema do rezultata":`Primer klijenta iz mesta ${city}`;return{
  reels:[[program?"Tri stvari koje treba proveriti pre izbora programa":`Tri stvari koje treba proveriti pre izbora ponude „${offer}“`,`Počni direktnim pitanjem, pokaži kriterijume i završi pozivom na ${path}.`],["Najčešća greška pre donošenja odluke",`Objasni grešku koju ${audience.toLowerCase()} često prave i pokaži bolji sledeći korak.`],[`Kome ponuda „${offer}“ nije namenjena`,`Iskreno reci kome ne možeš da pomogneš. Takav Reel gradi poverenje i filtrira upite.`],["Kako izgleda put od prvog razgovora do rezultata","Prikaži četiri kratka koraka, bez komplikovanih objašnjenja."],[caseTitle,"Pokaži početnu situaciju, odluku, način rada i merljiv rezultat."],["Najčešće pitanje koje dobijaš pre kupovine","Odgovori licem u kameru i ukloni jednu važnu dilemu."],["Mit koji publiku vodi u pogrešnom smeru","Navedi čestu tvrdnju iz industrije, objasni zašto nije potpuna i ponudi praktičan zaključak."],["Šta bih uradio drugačije da danas počinjem","Podeli tri konkretne lekcije iz iskustva i poveži ih sa potrebama klijenta."],["Iza scene: detalj koji pokazuje standard rada","Pokaži pripremu, proces ili kontrolu kvaliteta koju klijent obično ne vidi."],[`Zašto ponuda „${offer}“ košta koliko košta`,`Objasni vrednost kroz proces, stručnost, rizik koji uklanjaš i rezultat koji klijent dobija.`],["Reakcija na stvarnu dilemu klijenta","Prikaži pitanje na ekranu, odgovori kratko i završi jasnim sledećim korakom."],["Šta se menja kada klijent konačno reši problem","Naslikaj situaciju pre i posle, bez preteranih obećanja, uz realan rezultat."]],
@@ -147,19 +147,22 @@ function contentBlueprint(d){const offer=d.offer||"glavna ponuda",city=d.locatio
  carousels:[[program?"Kako da znaš da li je ovaj program pravi izbor":`Kako da znaš da li ti je potrebna ponuda „${offer}“`,`Prvi slajd postavlja jasno pitanje. Srednji slajdovi prikazuju situacije u kojima se publika prepoznaje, a poslednji vodi na ${path}.`]]};}
 function renderContentPlan(d,type="reels"){const plan=contentBlueprint(d)[type]||[];$("#contentPlan").innerHTML=plan.map(([title,body],i)=>`<article><span>${String(i+1).padStart(2,"0")}</span><div><strong>${title}</strong><p>${body}</p></div></article>`).join("")}
 function renderPrintContentPlan(d){let container=$("#printContentPlan");if(!container){container=document.createElement("div");container.id="printContentPlan";container.className="print-content-plan";$("#contentPlan").after(container)}const labels={reels:"12 Reelova",stories:"12 Story ideja",posts:"1 objava",carousels:"1 karusel"},fallback=contentBlueprint(d);container.innerHTML=Object.keys(labels).map(type=>{const ai=deepAudit?.audit?.contentIdeas?.[type],items=ai?ai.map(x=>[clientText(x.title,deepAudit.evidence||[]),clientText(x.execution,deepAudit.evidence||[])]):fallback[type];return`<section><h4>${labels[type]}</h4><div class="print-plan-grid">${items.map(([title,body],i)=>`<article><span>${String(i+1).padStart(2,"0")}</span><div><strong>${esc(title)}</strong><p>${esc(body)}</p></div></article>`).join("")}</div></section>`}).join("")}
-function updateReportProfile(profiles=[]){const profile=profiles.find(item=>item.platform==="instagram"&&item.avatar)||profiles.find(item=>item.avatar);let block=$(".report-profile");if(!block){block=document.createElement("div");block.className="report-profile";block.innerHTML='<img id="reportAvatar" alt="Profil analiziranog brenda"><div><small>ANALIZIRANI PROFIL</small><strong id="reportHandle"></strong></div>';$(".dash-head .secondary").before(block)}if(!profile){block.classList.add("empty");return}if(block.dataset.source==="instagram"&&profile.platform!=="instagram")return;block.dataset.source=profile.platform;block.classList.remove("empty");$("#reportAvatar").src=mediaUrl(profile.avatar);$("#reportHandle").textContent=`${networkLabel[profile.platform]||profile.platform} · @${String(profile.username||profile.displayName||"profil").replace(/^@/,"")}`}
-function render(d,profiles=[]){const base=analysis(d),r=derivedAudit(d,profiles,base),f=profileFacts(profiles),networks=[...new Set(profiles.map(p=>networkLabel[p.platform]||p.platform).filter(Boolean))].join(", ")||"povezanim mrežama",offer=d.offer?.trim()||"glavnu ponudu",path=d.purchasePath?.trim()||"upit";$("#previewScore").textContent=r.overall;$("#previewSummary").textContent=f.posts.length?`Pregledali smo ${f.posts.length} javnih objava: ${f.ctas.length} ima jasan poziv na akciju, a ${f.proof.length} pokazuje rezultat ili iskustvo klijenta.`:"Procena pokazuje koliko profil jasno gradi poverenje i vodi osobu ka upitu.";$("#previewStrength").textContent=r.strength;$("#previewStrengthReason").textContent=r.scores?.[0]?.[2]||"Profil već ima osnovu na kojoj možeš da gradiš poverenje.";$("#previewIssue").textContent=r.issue;$("#previewIssueReason").textContent=r.reason;const proofGap=f.posts.length?f.proof.length/f.posts.length:0,ctaGap=f.posts.length?f.ctas.length/f.posts.length:0;$("#previewUrgency").textContent=proofGap<.3?`${f.proof.length?`Rezultat ili iskustvo klijenta pojavljuje se u ${f.proof.length} od ${f.posts.length} pregledanih objava`:`Nijedna od ${f.posts.length} pregledanih objava ne pokazuje rezultat ili iskustvo klijenta`} — zato posetilac nema dovoljno dokaza da donese odluku.`:ctaGap<.45?`${f.ctas.length?`Poziv na sledeći korak postoji u ${f.ctas.length} od ${f.posts.length} pregledanih opisa`:`Nijedan od ${f.posts.length} pregledanih opisa ne vodi osobu ka sledećem koraku`} — interesovanje se zato gubi pre upita.`:`Pronašli smo jasnu prepreku: ${r.issue.toLowerCase()}.`;$("#previewConsequence").textContent=`Ako se ovo ne promeni, profil može nastaviti da dobija preglede i reakcije bez proporcionalnog rasta kvalitetnih upita.`;$("#previewCta").textContent=f.posts.length?(f.ctas.length?`${f.ctas.length} od ${f.posts.length} opisa jasno vodi na sledeći korak.`:`Nijedan od ${f.posts.length} opisa ne vodi jasno na sledeći korak.`):"Poziv na akciju nije moguće pouzdano proveriti.";$("#previewProof").textContent=f.posts.length?(f.proof.length?`Rezultat, iskustvo ili dokaz vidi se u ${f.proof.length} od ${f.posts.length} objava.`:`Nijedna od ${f.posts.length} objava ne pokazuje rezultat, iskustvo ili dokaz.`):"Dokazi i rezultati nisu bili javno dostupni za proveru.";$("#customerName").textContent=(d.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=r.overall;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${r.overall}%,#2b2b2b ${r.overall}%)`;$("#dashboardConclusion").textContent=f.posts.length?`Na mrežama ${networks} pregledali smo ${f.posts.length} javno dostupnih objava i uporedili ih sa ponudom „${offer}“. Profil ima sadržaj koji pokazuje stručnost i temu kojom se brend bavi, ali poruka nije uvek dovoljno dosledno povezana sa rezultatom koji klijent želi. Najveća prilika je da se u prvim sekundama jasnije prepozna problem, zatim pokaže konkretan dokaz i objasni zašto je baš ova ponuda sledeći logičan korak. Tako sadržaj neće služiti samo za pregled i reakcije, već će sistematski graditi poverenje i voditi ljude ka koraku „${path}“.`:`Ponuda „${offer}“ treba već pri prvom pogledu da objasni kome pomaže, koji rezultat donosi i koji je prirodan sledeći korak. Preporuke su zato povezane sa informacijama iz upitnika, ciljnom publikom i putem do upita.`;$("#dashboardReason").textContent=f.posts.length?`Od ${f.posts.length} pregledanih opisa, ${f.ctas.length} ima poziv na akciju, dok ${f.proof.length} sadrži rezultat, iskustvo ili drugi oblik dokaza. To znači da osnova postoji, ali je potrebno da dokaz, ponuda i poziv na sledeći korak budu prisutni u istoj priči i prilagođeni svakoj mreži. Prioritet nije da se objavljuje više nasumičnog sadržaja, već da svaki format dobije jasnu ulogu: privlačenje pažnje, izgradnju poverenja ili vođenje ka upitu.`:"Zaključak je pripremljen prema ponudi, publici, cilju i informacijama koje su unete u upitnik. Kada javni sadržaj bude dostupan, biće dopunjen konkretnim dokazima iz objava.";$("#scoreGrid").innerHTML=r.scores.map(([n,v,why])=>`<article><span>${n}</span><strong>${v}<small>/100</small></strong><i><b style="width:${v}%"></b></i><p>${why}</p></article>`).join("");$("#priorities").innerHTML=r.priorities.map(([t,w],i)=>`<article><span>${i+1}</span><div><strong>${t}</strong><p>${w}</p></div><b class="impact">VISOK UTICAJ</b></article>`).join("");$("#evidenceGrid").innerHTML=evidenceFor(d,profiles).map(([title,body])=>`<article><small>${title}</small><strong>${body}</strong></article>`).join("");renderReviewedExamples(d,profiles);renderContentPlan(d);renderPrintContentPlan(d)}
+function updateReportProfile(profiles=[]){const profile=profiles.find(item=>item.platform==="instagram"&&item.avatar)||profiles.find(item=>item.avatar);let block=$(".report-profile");if(!block){block=document.createElement("div");block.className="report-profile";block.innerHTML='<img id="reportAvatar" alt="Profil analiziranog brenda"><div><small>ANALIZIRANI PROFIL</small><strong id="reportHandle"></strong></div>';$(".dash-head .secondary").before(block)}if(!profile){block.classList.add("empty");return}if(block.dataset.source==="instagram"&&profile.platform!=="instagram")return;block.dataset.source=profile.platform;block.classList.remove("empty");$("#reportAvatar").src=mediaUrl(profile.avatar)||neutralAvatar();$("#reportHandle").textContent=`${networkLabel[profile.platform]||profile.platform} · @${String(profile.username||profile.displayName||"profil").replace(/^@/,"")}`}
+function render(d,profiles=[]){const base=analysis(d),r=derivedAudit(d,profiles,base),f=profileFacts(profiles),networks=[...new Set(profiles.map(p=>networkLabel[p.platform]||p.platform).filter(Boolean))].join(", ")||"povezanim mrežama",offer=d.offer?.trim()||"glavnu ponudu",path=d.purchasePath?.trim()||"upit";$("#previewScore").textContent=r.overall;$("#previewSummary").textContent=f.posts.length?`Pregledali smo ${postWord(f.posts.length)}. ${f.ctas.length?`Poziv na sledeći korak postoji u ${f.ctas.length} od njih`:"Nijedan opis ne vodi jasno na sledeći korak"}, ${f.proof.length?`a rezultat ili iskustvo klijenta vidi se u ${f.proof.length}`:"a rezultat ili iskustvo klijenta se ne vidi ni u jednoj"}.`:"Procena pokazuje koliko profil jasno gradi poverenje i vodi osobu ka upitu.";$("#previewStrength").textContent=r.strength;$("#previewStrengthReason").textContent=r.scores?.[0]?.[2]||"Profil već ima osnovu na kojoj možeš da gradiš poverenje.";$("#previewIssue").textContent=r.issue;$("#previewIssueReason").textContent=r.reason;const proofGap=f.posts.length?f.proof.length/f.posts.length:0,ctaGap=f.posts.length?f.ctas.length/f.posts.length:0;$("#previewUrgency").textContent=proofGap<.3?`${f.proof.length?`Rezultat ili iskustvo klijenta pojavljuje se u ${f.proof.length} od ${f.posts.length} pregledanih objava`:`Nijedna od ${f.posts.length} pregledanih objava ne pokazuje rezultat ili iskustvo klijenta`} — zato posetilac nema dovoljno dokaza da donese odluku.`:ctaGap<.45?`${f.ctas.length?`Poziv na sledeći korak postoji u ${f.ctas.length} od ${f.posts.length} pregledanih opisa`:`Nijedan od ${f.posts.length} pregledanih opisa ne vodi osobu ka sledećem koraku`} — interesovanje se zato gubi pre upita.`:`Pronašli smo jasnu prepreku: ${r.issue.toLowerCase()}.`;$("#previewConsequence").textContent=`Ako se ovo ne promeni, profil može nastaviti da dobija preglede i reakcije bez proporcionalnog rasta kvalitetnih upita.`;$("#previewCta").textContent=f.posts.length?(f.ctas.length?`Poziv na sledeći korak postoji u ${f.ctas.length} od ${f.posts.length} pregledanih opisa.`:`Nijedan od ${f.posts.length} pregledanih opisa ne vodi jasno na sledeći korak.`):"Poziv na akciju nije moguće pouzdano proveriti.";$("#previewProof").textContent=f.posts.length?(f.proof.length?`Rezultat, iskustvo ili dokaz vidi se u ${f.proof.length} od ${f.posts.length} pregledanih objava.`:`Nijedna od ${f.posts.length} pregledanih objava ne pokazuje rezultat, iskustvo ili dokaz.`):"Dokazi i rezultati nisu bili javno dostupni za proveru.";$("#customerName").textContent=(d.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=r.overall;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${r.overall}%,#2b2b2b ${r.overall}%)`;$("#dashboardConclusion").textContent=f.posts.length?`Na mrežama ${networks} pregledali smo ${f.posts.length} javno dostupnih objava i uporedili ih sa ponudom „${offer}“. Profil ima sadržaj koji pokazuje stručnost i temu kojom se brend bavi, ali poruka nije uvek dovoljno dosledno povezana sa rezultatom koji klijent želi. Najveća prilika je da se u prvim sekundama jasnije prepozna problem, zatim pokaže konkretan dokaz i objasni zašto je baš ova ponuda sledeći logičan korak. Tako sadržaj neće služiti samo za pregled i reakcije, već će sistematski graditi poverenje i voditi ljude ka koraku „${path}“.`:`Ponuda „${offer}“ treba već pri prvom pogledu da objasni kome pomaže, koji rezultat donosi i koji je prirodan sledeći korak. Preporuke su zato povezane sa informacijama iz upitnika, ciljnom publikom i putem do upita.`;$("#dashboardReason").textContent=f.posts.length?`Od ${f.posts.length} pregledanih opisa, ${f.ctas.length} ima poziv na akciju, dok ${f.proof.length} sadrži rezultat, iskustvo ili drugi oblik dokaza. To znači da osnova postoji, ali je potrebno da dokaz, ponuda i poziv na sledeći korak budu prisutni u istoj priči i prilagođeni svakoj mreži. Prioritet nije da se objavljuje više nasumičnog sadržaja, već da svaki format dobije jasnu ulogu: privlačenje pažnje, izgradnju poverenja ili vođenje ka upitu.`:"Zaključak je pripremljen prema ponudi, publici, cilju i informacijama koje su unete u upitnik. Kada javni sadržaj bude dostupan, biće dopunjen konkretnim dokazima iz objava.";$("#scoreGrid").innerHTML=r.scores.map(([n,v,why])=>`<article><span>${n}</span><strong>${v}<small>/100</small></strong><i><b style="width:${v}%"></b></i><p>${why}</p></article>`).join("");$("#priorities").innerHTML=r.priorities.map(([t,w],i)=>`<article><span>${i+1}</span><div><strong>${t}</strong><p>${w}</p></div><b class="impact">VISOK UTICAJ</b></article>`).join("");$("#evidenceGrid").innerHTML=evidenceFor(d,profiles).map(([title,body])=>`<article><small>${title}</small><strong>${body}</strong></article>`).join("");const messageCard=$("#previewMessage");if(messageCard)messageCard.textContent=r.issue||"Poruka profila može biti jasnija u prve tri sekunde";const faceCard=$("#previewFace");if(faceCard)faceCard.textContent=f.videos?.length?"Osoba iza brenda se pojavljuje u pregledanom sadržaju":"U pregledanom sadržaju nismo potvrdili dosledno lice brenda";renderReviewedExamples(d,profiles);renderContentPlan(d);renderPrintContentPlan(d)}
 let deepAudit=null;
 async function loadDeepAudit(data,profiles){
-  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),230000);
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),250000);
 const response=await fetch("/api/analyze-content",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({form:data,profiles}),signal:controller.signal}).finally(()=>clearTimeout(timeout));
  const payload=await response.json().catch(()=>({}));
  if(!response.ok)throw new Error(payload.error||"Dubinska analiza trenutno nije dostupna.");
- deepAudit=payload;localStorage.setItem("marketizoDeepAudit",JSON.stringify(payload));localStorage.setItem("marketizoDeepAuditOwner",saved().auditId||"");return payload;
+ deepAudit=payload;try{localStorage.setItem("marketizoDeepAudit",JSON.stringify(payload));localStorage.setItem("marketizoDeepAuditOwner",saved().auditId||"")}catch(error){console.warn("Analiza nije mogla da se sačuva lokalno.",error)}return payload;
 }
 async function loadDeepAuditWithRetry(data,profiles){try{return await loadDeepAudit(data,profiles)}catch(error){console.warn("Prvi pokušaj dubinske analize nije uspeo, pokušavamo ponovo.",error);return await loadDeepAudit(data,profiles)}}
+function postWord(count){const n=Math.abs(Number(count)||0),last=n%10,two=n%100;if(last===1&&two!==11)return n+" objava";if(last>=2&&last<=4&&(two<12||two>14))return n+" objave";return n+" objava"}
+function formatLabel(value,item){const raw=String(value||(item&&item.format)||"").toLowerCase();if(/reel|video|tiktok/.test(raw))return"REEL";if(/carousel|karusel|sidecar|album/.test(raw))return"KARUSEL";if(/story|storij/.test(raw))return"STORY";if(/post|objav|image|photo|slika|feed/.test(raw))return"OBJAVA";return item&&item.video?"REEL":"OBJAVA"}
+function friendlyError(error){const text=String((error&&error.message)||"").trim();return /[čćžšđČĆŽŠĐ]/.test(text)||/nije|nema|nismo|profil|link|analiz|mre[zž]/i.test(text)?text:"Profil nije javno dostupan ili link nije unet tačno."}
 function esc(value){return String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]))}
-function mediaUrl(value){if(!value)return"";try{return`/api/profile-preview?image=${encodeURIComponent(new URL(value).toString())}`}catch{return value}}
+function mediaUrl(value){if(!value)return"";try{return`/api/profile-preview?image=${encodeURIComponent(new URL(value).toString())}`}catch{return""}}
 function returnToProfiles(){show("wizard");setStep(1);$("[name=instagram]")?.focus()}
 function addRetryAction(){if($(".retry-analysis"))return;const button=document.createElement("button");button.type="button";button.className="secondary retry-analysis";button.textContent="Proveri link profila →";button.onclick=returnToProfiles;$("#analystNote").after(button)}
 function clientText(value,evidence=[]){
@@ -221,10 +224,10 @@ function renderDeepAudit(data,payload){
  renderPreviewFromAudit(a,e);
  $("#previewScore").textContent=overall;
  $("#customerName").textContent=(data.name||"Dobro došli").split(" ")[0];$("#overallScore").textContent=overall;$("#overallRing").style.background=`radial-gradient(circle,#111111 55%,transparent 57%),conic-gradient(var(--purple) 0 ${overall}%,#2b2b2b ${overall}%)`;$("#dashboardConclusion").textContent=conclusion.headline;$("#dashboardReason").textContent=[conclusion.rest,clientText(a.mainReason,e)].filter(Boolean).join(" ");
- $("#evidenceGrid").innerHTML=[["Pregledano",`${coverage.postsReviewed||e.length} objava`],["Reels i video",`${coverage.videosFound||0} pronađeno · ${coverage.videosTranscribed||0} detaljno analizirano`],["Povezane mreže",[...new Set(e.map(x=>x.platform))].filter(Boolean).join(", ")||"—"],["Osnova zaključaka",conciseCoverage(coverage.limitations)]].map(([t,b])=>`<article><small>${esc(t)}</small><strong>${esc(b)}</strong></article>`).join("");
- $("#scoreGrid").innerHTML=a.scores.map(x=>{const value=normalizeScore(x.value);return`<article><span>${esc(x.name)}</span><strong>${value}<small>/100</small></strong><i><b style="width:${value}%"></b></i><p>${esc(clientText(x.reason,e))}</p></article>`}).join("");
- $("#priorities").innerHTML=a.priorities.map((x,i)=>`<article><span>${i+1}</span><div><strong>${esc(clientText(x.title,e))}</strong><p>${esc(clientText(x.why,e))}</p><small class="priority-proof">Osnova preporuke: ${esc(clientText(x.evidence,e))}</small></div><b class="impact">VISOK UTICAJ</b></article>`).join("");
- $("#reviewedExamples").innerHTML=a.examples.map(x=>{const item=e.find(y=>y.index===x.postIndex)||{},title=item.title||clientText(x.observed,e)||"Pregledani sadržaj";return`<article>${item.image?`<img src="${esc(mediaUrl(item.image))}" alt="${esc(title)}">`:""}<div><small>${esc(x.format)} · ${esc(item.username?"@"+item.username:"")}</small><strong>${esc(title)}</strong><p><b>Šta već radi:</b> ${esc(clientText(x.works,e))}</p><p><b>Šta bih promenio:</b> ${esc(clientText(x.improve,e))}</p><p class="rewrite"><b>Konkretan primer:</b> ${esc(clientText(x.rewrite,e))}</p></div></article>`}).join("");
+ $("#evidenceGrid").innerHTML=[["Pregledano",postWord(coverage.postsReviewed||e.length)],["Reelovi i video",`${coverage.videosFound||0} pronađeno · ${coverage.videosTranscribed||0} detaljno analizirano`],["Povezane mreže",[...new Set(e.map(x=>networkLabel[x.platform]||x.platform))].filter(Boolean).join(", ")||"—"],["Osnova zaključaka",conciseCoverage(coverage.limitations)]].map(([t,b])=>`<article><small>${esc(t)}</small><strong>${esc(b)}</strong></article>`).join("");
+ $("#scoreGrid").innerHTML=(a.scores||[]).map(x=>{const value=normalizeScore(x.value);return`<article><span>${esc(x.name)}</span><strong>${value}<small>/100</small></strong><i><b style="width:${value}%"></b></i><p>${esc(clientText(x.reason,e))}</p></article>`}).join("");
+ $("#priorities").innerHTML=(a.priorities||[]).map((x,i)=>`<article><span>${i+1}</span><div><strong>${esc(clientText(x.title,e))}</strong><p>${esc(clientText(x.why,e))}</p><small class="priority-proof">Osnova preporuke: ${esc(clientText(x.evidence,e))}</small></div><b class="impact">VISOK UTICAJ</b></article>`).join("");
+ $("#reviewedExamples").innerHTML=(a.examples||[]).map(x=>{const item=e.find(y=>y.index===x.postIndex)||{},title=item.title||clientText(x.observed,e)||"Pregledani sadržaj";return`<article class="${item.image?"":"no-image"}">${item.image?`<img src="${esc(mediaUrl(item.image))}" alt="${esc(title)}">`:""}<div><small>${esc([formatLabel(x.format,item),item.username?"@"+item.username:""].filter(Boolean).join(" · "))}</small><strong>${esc(title)}</strong><p><b>Šta već radi:</b> ${esc(clientText(x.works,e))}</p><p><b>Šta bih promenio:</b> ${esc(clientText(x.improve,e))}</p><p class="rewrite"><b>Konkretan primer:</b> ${esc(clientText(x.rewrite,e))}</p></div></article>`}).join("");
  renderDeepIdeas("reels");renderPrintContentPlan(data);
 }
 function renderDeepIdeas(type){const ideas=deepAudit?.audit?.contentIdeas?.[type],evidence=deepAudit?.evidence||[];if(!ideas)return renderContentPlan(saved(),type);$("#contentPlan").innerHTML=ideas.map((x,i)=>`<article><span>${String(i+1).padStart(2,"0")}</span><div><strong>${esc(clientText(x.title,evidence))}</strong><p>${esc(clientText(x.execution,evidence))}</p><small class="idea-reason">Zašto: ${esc(clientText(x.reason,evidence))}</small></div></article>`).join("")}
@@ -262,7 +265,7 @@ function displayProfile(profile){
  avatar.classList.toggle("empty",!profile.avatar);
  const sourcePosts=profile.posts||[],posts=[...sourcePosts,...sourcePosts];
  const feed=$("#feedGrid");feed.classList.remove("loading-feed");
- feed.innerHTML=posts.length?posts.map((post,index)=>`<article class="real-post ${post.video?"video":""}" style="--order:${index}"><img src="${mediaUrl(post.image)}" alt="Javna objava profila ${profile.username}" loading="eager"><span>${post.video?"▶":""}</span><small>${post.caption||"Javna objava"}</small>${profile.platform==="facebook"?`<div class="facebook-post-meta"><b>${esc(profile.displayName||profile.username)}</b><em>${formatMetric(post.likes)} reakcija · ${formatMetric(post.comments)} komentara</em></div>`:""}</article>`).join(""):`<div class="feed-unavailable"><strong>Profil je učitan</strong><p>Javne objave ove mreže trenutno nisu dostupne za prikaz.</p></div>`;
+ feed.innerHTML=posts.length?posts.map((post,index)=>`<article class="real-post ${post.video?"video":""}" style="--order:${index}"><img src="${esc(mediaUrl(post.image))}" alt="Javna objava profila ${esc(profile.username)}" loading="eager"><span>${post.video?"▶":""}</span><small>${esc(post.caption||"Javna objava")}</small>${profile.platform==="facebook"?`<div class="facebook-post-meta"><b>${esc(profile.displayName||profile.username)}</b><em>${formatMetric(post.likes)} reakcija · ${formatMetric(post.comments)} komentara</em></div>`:""}</article>`).join(""):`<div class="feed-unavailable"><strong>Profil je učitan</strong><p>Javne objave ove mreže trenutno nisu dostupne za prikaz.</p></div>`;
  $("#scanLine").classList.remove("hidden");
 }
 function formatMetric(value){return value==null?"—":new Intl.NumberFormat("sr-Latn-RS",{notation:"compact"}).format(value)}
@@ -277,7 +280,7 @@ async function loadPublicProfiles(data){
  if(!response.ok)throw new Error(payload.error||"Javni profili trenutno nisu dostupni.");
  const firstProfile=payload.profiles?.[0];
  if(firstProfile)$("#networkTabs").innerHTML=`<span class="active" data-network="${esc(firstProfile.platform)}">${esc(networkLabel[firstProfile.platform]||firstProfile.platform)}</span>`;
- localStorage.setItem("marketizoPublicProfiles",JSON.stringify(payload.profiles));localStorage.setItem("marketizoPublicProfilesOwner",saved().auditId||"");
+ localStorage.setItem("marketizoPublicProfiles",JSON.stringify(payload.profiles||[]));localStorage.setItem("marketizoPublicProfilesOwner",saved().auditId||"");
  return payload.profiles;
 }
 function startProfilePrefetch(data){const key=socialKey(data);if(key===profilePrefetchKey&&profilePrefetch)return profilePrefetch;profilePrefetchKey=key;profilePrefetch=loadPublicProfiles(data).catch(error=>{profilePrefetch=null;throw error});return profilePrefetch}
@@ -296,18 +299,18 @@ $("#auditForm").onsubmit=async e=>{
  let waitingStep=0,waitingPercent=8;
  const waitingTimer=setInterval(()=>{$("#analysisStatus").textContent=waitingMessages[++waitingStep%waitingMessages.length];waitingPercent=Math.min(44,waitingPercent+3);$("#analysisPercent").textContent=waitingPercent+"%";$("#analysisBar").style.width=waitingPercent+"%"},1800);
  let publicProfiles=[];
- try{publicProfiles=await startProfilePrefetch(d);displayProfile(publicProfiles[0]);render(d,publicProfiles);show("analyzing");setTimeout(()=>inspectPost(publicProfiles[0]?.posts?.[0]),700);$("#analysisStatus").textContent=`${networkLabel[publicProfiles[0]?.platform]||"Prvi profil"} je učitan. Nastavljamo redom kroz sve povezane mreže.`}
- catch(error){show("analyzing");clearInterval(waitingTimer);$("#feedGrid").innerHTML=`<div class="feed-unavailable"><strong>Profil trenutno nije dostupan</strong><p>${esc(error.message)}</p><small>Proveri da li je profil javan i da li je link tačno unet.</small></div>`;$("#analysisStatus").textContent="Nastavljamo sa mrežama koje su dostupne.";if(submitter){submitter.disabled=false;submitter.textContent=submitter.dataset.original||"Pokreni analizu"}return}
+ try{publicProfiles=await startProfilePrefetch(d);if(!publicProfiles||!publicProfiles.length)throw new Error("Nismo pronašli javne objave na unetom profilu.");try{localStorage.setItem("marketizoPublicProfiles",JSON.stringify(publicProfiles));localStorage.setItem("marketizoPublicProfilesOwner",d.auditId||"")}catch(error){console.warn("Profili nisu sačuvani lokalno.",error)}displayProfile(publicProfiles[0]);render(d,publicProfiles);show("analyzing");setTimeout(()=>inspectPost(publicProfiles[0]?.posts?.[0]),700);$("#analysisStatus").textContent=`${networkLabel[publicProfiles[0]?.platform]||"Prvi profil"} je učitan. Nastavljamo redom kroz sve povezane mreže.`}
+ catch(error){show("analyzing");clearInterval(waitingTimer);$("#feedGrid").innerHTML=`<div class="feed-unavailable has-hint"><strong>Profil trenutno nije dostupan</strong><p>${esc(friendlyError(error))}</p><small>Proveri da li je profil javan i da li je link tačno unet.</small></div>`;$("#analysisStatus").textContent="Nismo uspeli da učitamo profil. Proveri link i pokušaj ponovo.";addRetryAction();if(submitter){submitter.disabled=false;submitter.textContent=submitter.dataset.original||"Pokreni analizu"}return}
  clearInterval(waitingTimer);$(".analysis-track").classList.remove("connecting");$(".progress-spinner").classList.add("ready");
  const phases=["Proveravamo da li se ponuda razume već pri prvom pogledu","Analiziramo poruke izgovorene u Reelovima","Pregledamo naslove, vizuale i prve kadrove","Čitamo opise i izdvajamo najvažnije poruke","Povezujemo sadržaj, rezultate i pozive na akciju","Usklađujemo nalaze sa svakom povezanom mrežom","Pretvaramo nalaze u jasne sledeće korake"];
  const notes=["Da li potencijalni klijent za pet sekundi zna kome pomažete?","Da li sadržaj zadržava pažnju ili samo lepo izgleda?","Da li tvrdnje imaju dokaz i dovoljno konteksta?","Da li svaka dobra objava vodi ka prirodnom sledećem koraku?","Kod skuplje ponude tražimo topliji put do razgovora.","Dobra poruka mora ostati ista, ali format treba prilagoditi mreži.","Svaku preporuku vezujemo za cilj, ponudu i ono što smo videli."];
  let p=0,visualCursor=0,checks=$$("#scanChecks li"),finished=false;
- const deepPromise=loadDeepAuditWithRetry(d,publicProfiles).then(result=>{renderDeepAudit(d,result);finished=true;return result}).catch(error=>{render(d,publicProfiles);$("#analysisStatus").textContent="Pregled je završen na osnovu dostupnih podataka.";console.warn("Detaljna analiza nije završena.",error);finished=true;return null});
+ const deepPromise=loadDeepAuditWithRetry(d,publicProfiles).then(result=>{renderDeepAudit(d,result);void notifyReport(d,result);finished=true;return result}).catch(error=>{render(d,publicProfiles);$("#analysisStatus").textContent="Pregled je završen na osnovu dostupnih podataka.";console.warn("Detaljna analiza nije završena.",error);finished=true;return null});
  const timer=setInterval(async()=>{const phaseIndex=Math.min(p,phases.length-1);checks[phaseIndex]?.classList.remove("active");checks[phaseIndex]?.classList.add("done");closePost();p++;visualCursor++;const profile=publicProfiles[visualCursor%publicProfiles.length];if(profile){displayProfile(profile);const posts=profile.posts||[],post=posts[Math.floor(visualCursor/publicProfiles.length)%Math.max(1,posts.length)];setTimeout(()=>inspectPost(post),500)}const percent=Math.min(finished?96:88,36+p*8);$("#analysisBar").style.width=percent+"%";$("#analysisPercent").textContent=Math.round(percent)+"%";if(p<phases.length){checks[p]?.classList.add("active");$("#analysisStatus").textContent=phases[p];$("#analystNote").querySelector("strong").textContent=notes[p]}else if(!finished){$("#analysisStatus").textContent="Završavamo pregled i pripremamo tvoje preporuke."}else{clearInterval(timer);await deepPromise;closePost();$("#analysisBar").style.width="100%";$("#analysisPercent").textContent="100%";$("#analysisStatus").textContent="Tvoja analiza je spremna";trackMeta("AuditCompleted",{content_name:"Marketizo Brand Audit"},true);setTimeout(()=>show(paidForCurrentAudit()?"dashboard":"preview"),500)}},2200)
 };
 $$('[data-content-tab]').forEach(button=>button.onclick=()=>{$$('[data-content-tab]').forEach(x=>x.classList.toggle('active',x===button));deepAudit?renderDeepIdeas(button.dataset.contentTab):renderContentPlan(saved(),button.dataset.contentTab)});
 $("#checkoutButton").onclick=()=>{trackMeta("InitiateCheckout",{content_name:"Marketizo Brand Audit",currency:"EUR",value:1});const base=window.MARKETIZO_STRIPE_CHECKOUT_URL,audit=saved();if(base){const url=new URL(base);if(audit.auditId)url.searchParams.set("client_reference_id",audit.auditId);location.href=url.toString();return}alert("Plaćanje trenutno nije dostupno. Pokušaj ponovo za nekoliko minuta.")};
-if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),owns=key=>Boolean(d.auditId)&&localStorage.getItem(key)===d.auditId,profiles=owns("marketizoPublicProfilesOwner")?JSON.parse(localStorage.getItem("marketizoPublicProfiles")||"[]"):[];deepAudit=owns("marketizoDeepAuditOwner")?JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null"):null;updateReportProfile(profiles);deepAudit?renderDeepAudit(d,deepAudit):render(d,profiles);show(paidForCurrentAudit()?"dashboard":"preview")}
+
 
 (function(){
  // Sigurnosna mreza: ako dubinska analiza padne, rezervni sablon ne sme da doslovno
@@ -315,8 +318,7 @@ if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),
  const sloppy=function(value){
   const text=String(value||"").trim();
   if(!text)return true;
-  const words=text.split(/\s+/);
-  if(words.length>5)return true;
+  if(text.split(/\s+/).length<2)return true;
   return /\b(sve|svi|sva|svih|ovo|ono|nesto|nešto|neki|razno|ostalo)\b/i.test(text);
  };
  const tidy=function(data){
@@ -344,4 +346,85 @@ if(new URLSearchParams(location.search).get("dashboard")==="1"){const d=saved(),
   "#preview .findings{align-items:stretch}"+
   "#preview .findings article{align-items:flex-start}";
  document.head.appendChild(style);
+})();
+
+async function notifyReport(data,payload){
+ try{
+  if(new URLSearchParams(location.search).has("test"))return;
+  const auditId=data&&data.auditId?String(data.auditId):"";
+  if(!auditId||!data.email)return;
+  if(localStorage.getItem("marketizoAuditNotified")===auditId)return;
+  localStorage.setItem("marketizoAuditNotified",auditId);
+  const audit=(payload&&payload.audit)||{},evidence=(payload&&payload.evidence)||[];
+  const cards=(audit.previewCards||[]).slice(0,3).map(card=>({
+   label:clientText(card.label,evidence),
+   title:clientText(card.title,evidence),
+   body:clientText(card.body,evidence)
+  }));
+  await fetch("/api/notify-report",{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({
+    auditId,
+    origin:location.origin,
+    lead:{name:data.name,email:data.email,phone:data.phone,business:data.business,location:data.location},
+    summary:{score:normalizeScore(audit.overallScore),headline:audit.headline||"",offerRead:audit.offerRead||"",cards}
+   })
+  });
+ }catch(error){console.warn("Obaveštenje o analizi nije poslato.",error)}
+}
+
+(function(){
+ // Na telefonu je ceo tekst o toku analize bio ispod maketa telefona, pa se nije video.
+ // Status, traka napretka i procenat se zato premestaju iznad telefona i ostaju zalepljeni na vrhu.
+ if(!window.matchMedia("(max-width:820px)").matches)return;
+ const kicker=document.querySelector(".analysis-kicker");
+ if(!kicker||document.querySelector(".mobile-progress"))return;
+ const status=document.querySelector("#analysisStatus");
+ const track=document.querySelector(".analysis-track");
+ const meta=document.querySelector(".analysis-meta");
+ if(!status||!track||!meta)return;
+ const strip=document.createElement("div");
+ strip.className="mobile-progress";
+ (document.querySelector(".scan-eta")||kicker).after(strip);
+ strip.append(status,track,meta);
+ const style=document.createElement("style");
+ style.textContent=".mobile-progress{position:sticky;top:8px;z-index:8;margin:16px auto 6px;padding:13px 15px;max-width:520px;border:1px solid #2c2c2c;border-radius:16px;background:#0d0d0d;box-shadow:0 14px 34px #000000cc;text-align:left}"+
+  ".mobile-progress #analysisStatus{margin:0 0 11px;font-size:14px;line-height:1.45;color:#fff;min-height:0}"+
+  ".mobile-progress .analysis-track{margin:0 0 11px}"+
+  ".mobile-progress .analysis-meta{margin:0;font-size:12px}"+
+  ".mobile-progress .analysis-meta>span{display:none}"+
+  "@media(max-width:820px){.analyzing,.scan-layout{overflow:visible}.scan-copy{text-align:left}.analyst-note{text-align:left}.analyzing{margin:6px auto 26px}.scan-copy .eyebrow,.scan-copy h2{display:none}.scan-eta{margin-top:10px;font-size:13px}.profile-phone{width:240px;height:410px}.analysis-kicker{margin-top:10px;font-size:12px;padding:9px 13px;max-width:calc(100% - 14px)}.scan-layout{margin-top:6px}}";
+ document.head.appendChild(style);
+})();
+
+(function(){
+ // iOS Safari uvecava celu stranicu kada se fokusira polje manje od 16px,
+ // pa se posle toga cela stranica moze vuci levo-desno. Zato su polja 16px na telefonu.
+ const style=document.createElement("style");
+ style.textContent="@media(max-width:900px){input,select,textarea{font-size:16px}}"+
+  "html,body{overflow-x:clip;max-width:100%}";
+ document.head.appendChild(style);
+})();
+
+
+(function(){
+ if(new URLSearchParams(location.search).get("dashboard")!=="1")return;
+ const data=saved();
+ let profiles=[];
+ try{
+  const owns=key=>Boolean(data.auditId)&&localStorage.getItem(key)===data.auditId;
+  profiles=owns("marketizoPublicProfilesOwner")?JSON.parse(localStorage.getItem("marketizoPublicProfiles")||"[]"):[];
+  if(!Array.isArray(profiles))profiles=[];
+  deepAudit=owns("marketizoDeepAuditOwner")?JSON.parse(localStorage.getItem("marketizoDeepAudit")||"null"):null;
+ }catch(error){profiles=[];deepAudit=null;console.warn("Sačuvana analiza nije mogla da se pročita.",error)}
+ try{
+  updateReportProfile(profiles);
+  if(deepAudit&&deepAudit.audit)renderDeepAudit(data,deepAudit);
+  else render(data,profiles);
+ }catch(error){
+  console.warn("Prikaz sačuvane analize nije uspeo.",error);
+  try{render(data,profiles)}catch(inner){console.warn("Rezervni prikaz nije uspeo.",inner)}
+ }
+ show(paidForCurrentAudit()?"dashboard":"preview");
 })();
