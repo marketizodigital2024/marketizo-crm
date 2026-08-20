@@ -1,5 +1,14 @@
 
 (function(){
+ // Stranica poziva audit.css sa starom oznakom verzije, pa browser vuce kes. Trazimo svezu verziju.
+ const CSS_VERSION="21";
+ const link=document.querySelector('link[href*="audit.css"]');
+ if(link&&link.getAttribute("href").indexOf("v="+CSS_VERSION)===-1){
+  link.setAttribute("href","audit.css?v="+CSS_VERSION);
+ }
+})();
+
+(function(){
  if(typeof renderPreviewFromAudit!=="function")return;
  const base=renderPreviewFromAudit;
  renderPreviewFromAudit=function(audit,evidence){
