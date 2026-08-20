@@ -158,7 +158,7 @@ DIJAGNOZA: najvažnije je da pogodiš pravi problem. Pre pisanja odredi tri stva
 
 FORMA: glavni zaključak 55 do 85 reči, 2 do 4 rečenice, sa ocenom profila, najvećom snagom, najvećom preprekom i poslovnim efektom. Obrazloženje 45 do 75 reči, sa konkretnim brojevima ili nazivima pregledanih sadržaja. Svaka ocena i svaki prioritet moraju navesti konkretan dokaz. Svaki primer prepravke mora biti potpuna, objavljiva i gramatički prirodna rečenica napisana baš za tu objavu, nikako po šablonu. Ograničenja objasni kratko i klijentskim jezikom, bez tehničkih detalja.
 
-LICE BRENDA: proceni da li se u pregledanom sadržaju dosledno pojavljuje prepoznatljiva osoba koja govori, objašnjava ili predstavlja brend. Ako to ne možeš potvrditi na najmanje dva sadržaja, među prva dva prioriteta jasno napiši da brendu nedostaje lice brenda i preporuči da vlasnik ili stalni predstavnik redovno govori pred kamerom. Ne tvrdi da lica nema ako vizuelni dokazi nisu dovoljni; tada napiši da dosledno lice brenda nije potvrđeno u pregledanom javnom sadržaju.
+LICE BRENDA: gledaj poslate vizuelne dokaze i ono što se čuje u Reelovima. Ako se ista osoba pojavljuje na dva ili više vizuelnih dokaza, ili ako iz govora jasno sledi da isti čovek vodi objašnjenje kroz više Reelova, to je potvrđeno lice brenda: napiši to kao snagu i opiši tu osobu onako kako se vidi, bez pogađanja imena. Gosti, saradnje, najave događaja i objave sa više ljudi ne obaraju tu ocenu i ne pominju se kao nedoslednost, jer ih ima malo. Da profil nema lice brenda napiši samo ako ni na jednom vizuelnom dokazu nema čoveka i ako se ni iz govora ne prepoznaje stalni glas; tek tada to ide među prva dva prioriteta. Ako si dobio manje od tri vizuelna dokaza, nemoj tvrditi ni da lice postoji ni da ne postoji, nego oceni ostale oblasti.
 
 NASLOV: polje headline je prvo što klijent vidi. Dve kratke rečenice, ukupno najviše dvanaest reči. Prva imenuje ono što u ovom konkretnom poslu već radiš dobro, druga imenuje šta te trenutno stanje košta. Naslov mora da pomene delatnost ili temu ovog profila tako da bi bio besmislen na bilo kom drugom profilu. Strogo je zabranjen svaki uopšten naslov tipa Tvoj trud se vidi, Profil tiho gubi klijente, Sadržaj ne prodaje i slično.
 
@@ -236,10 +236,12 @@ export default async function handler(request, response) {
     type: "input_text",
     text: `ODGOVORI IZ UPITNIKA (samo nagoveštaj, nikako izvor teksta):\n${JSON.stringify(form)}\n\nPREGLEDANI SADRŽAJ (ovo je tvoj glavni izvor):\n${JSON.stringify(evidence.map(({ image, ...item }) => item))}`
   }];
+  const withImage = evidence.filter(item => item.image);
+  const visualOrder = [...withImage.filter(item => item.format === "reel_video"), ...withImage.filter(item => item.format !== "reel_video")].slice(0, 8);
   const stopImages = new AbortController();
-  const imageTimer = setTimeout(() => stopImages.abort(), 20000);
+  const imageTimer = setTimeout(() => stopImages.abort(), 26000);
   const visuals = await Promise.all(
-    evidence.filter(item => item.image).slice(0, 4).map(item =>
+    visualOrder.map(item =>
       inlineImage(item.image, stopImages.signal)
         .then(data => ({ title: item.title, data }))
         .catch(() => null)
