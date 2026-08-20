@@ -465,3 +465,61 @@ async function loadPaidReport(auditId,sessionId){
   }
  });
 })();
+
+
+// Dugme za preuzimanje analize, odmah iznad WhatsApp kartice. Klijent sam skida
+// svoju analizu, pa ne moramo da mu je saljemo mejlom.
+(function(){
+ const button=document.getElementById("downloadReport"),copy=document.getElementById("copyReportLink"),note=document.getElementById("downloadNote");
+ if(!button)return;
+ // Instagram, Facebook i slicni ugradjeni pregledaci cesto nemaju stampu.
+ const inApp=/Instagram|FBAN|FBAV|FB_IAB|FBIOS|Line\/|Snapchat|TikTok|Pinterest|Twitter/i.test(navigator.userAgent||"");
+ const say=text=>{if(note)note.textContent=text};
+ if(inApp)say("Ako si stranicu otvorio iz Instagrama, prvo je otvori u Safariju ili Chromeu — tek tamo može da se sačuva PDF. Link kopiraj dugmetom ispod.");
+
+ // Naslov stranice postaje predlozeno ime PDF-a, pa klijent ne dobija "audit.html".
+ const fileName=()=>{
+  let who="";
+  try{const d=saved();who=(d.business||d.name||"").trim()}catch(error){who=""}
+  const clean=who.replace(/[\\/:*?"<>|]+/g," ").replace(/\s+/g," ").trim().slice(0,60);
+  return clean?`Marketizo analiza - ${clean}`:"Marketizo analiza"
+ };
+
+ button.addEventListener("click",()=>{
+  const title=document.title;
+  try{
+   if(typeof window.print!=="function")throw new Error("print nije dostupan");
+   document.title=fileName();
+   window.print();
+   setTimeout(()=>{document.title=title},1500);
+   if(!inApp)say("Ako se prozor nije otvorio, otvori stranicu u Safariju ili Chromeu pa probaj ponovo.");
+  }catch(error){
+   document.title=title;
+   console.warn("Štampa nije dostupna.",error);
+   say("Ovaj pregledač ne može da sačuva PDF. Otvori stranicu u Safariju ili Chromeu — link kopiraj dugmetom ispod.");
+  }
+ });
+
+ if(!copy)return;
+ const reportLink=()=>{
+  let id="";
+  try{id=(new URLSearchParams(location.search).get("report")||"").trim()||saved().auditId||localStorage.getItem("marketizoPaidAuditId")||""}catch(error){id=""}
+  return id?`${location.origin}/audit?report=${encodeURIComponent(id)}`:""
+ };
+ if(!reportLink()){copy.remove();return}
+ copy.addEventListener("click",async()=>{
+  const link=reportLink();
+  if(!link)return;
+  const done=()=>{const original=copy.textContent;copy.textContent="Link je kopiran ✓";setTimeout(()=>{copy.textContent=original},2600)};
+  try{
+   await navigator.clipboard.writeText(link);done()
+  }catch(error){
+   try{
+    const field=document.createElement("input");field.value=link;field.setAttribute("readonly","");field.style.position="fixed";field.style.opacity="0";
+    document.body.appendChild(field);field.select();field.setSelectionRange(0,link.length);
+    const ok=document.execCommand("copy");document.body.removeChild(field);
+    if(ok)done();else say("Link do analize: "+link)
+   }catch(inner){say("Link do analize: "+link)}
+  }
+ });
+})();
