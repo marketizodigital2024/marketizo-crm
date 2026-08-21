@@ -161,6 +161,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--purple)}
 .whatsapp-card h3{font:700 24px Montserrat;margin:10px 0}
 .whatsapp-card p{max-width:660px;color:var(--muted);font-size:13px;line-height:1.6}
 .whatsapp-button{display:inline-block;flex:0 0 auto;padding:15px 20px;background:#25d366;color:#07150d;border-radius:11px;text-decoration:none;font-weight:800;font-size:13px}
+.scan-error{display:none;margin:0 0 20px;padding:22px;border:1px solid #ff6b0055;border-radius:18px;background:linear-gradient(135deg,#2a1608,#150e07);text-align:left}
+.scan-error>span{display:block;color:var(--orange);font:800 10px Inter,sans-serif;letter-spacing:.12em}
+.scan-error strong{display:block;margin:10px 0 8px;font:700 20px Montserrat;line-height:1.35}
+.scan-error p{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.scan-error button{width:100%;max-width:290px;padding:14px 18px;background:linear-gradient(135deg,var(--purple),var(--purple2));color:#180b02;border:0;border-radius:11px;font:800 13px Inter,sans-serif;cursor:pointer}
+.analyzing.scan-failed .scan-error{display:block}
+.analyzing.scan-failed .profile-phone,.analyzing.scan-failed .scan-checks,.analyzing.scan-failed .analysis-track,.analyzing.scan-failed .analysis-meta,.analyzing.scan-failed .analyst-note,.analyzing.scan-failed .retry-analysis,.analyzing.scan-failed .scan-eta,.analyzing.scan-failed .analysis-kicker,.analyzing.scan-failed .mobile-progress,.analyzing.scan-failed .scan-copy>.eyebrow,.analyzing.scan-failed .scan-copy>h2,.analyzing.scan-failed #analysisStatus{display:none!important}
+.analyzing.scan-failed .scan-layout{grid-template-columns:1fr;max-width:640px}
 .download-card{display:flex;align-items:center;justify-content:space-between;gap:35px;margin-top:24px;padding:30px;background:linear-gradient(135deg,#2a1608,#150e07);border:1px solid #ff6b0055;border-radius:24px}
 .download-card h3{font:700 24px Montserrat;margin:10px 0}
 .download-card p{max-width:660px;color:var(--muted);font-size:13px;line-height:1.6}
