@@ -216,11 +216,13 @@ async function fetchProfile(platform, rawUrl, token, debug) {
   if (!result.posts.length) {
     // U poruci navodimo koji profil je pao, jer klijent cesto poveze vise mreza.
     const who = result.username ? `@${result.username}` : "ovog profila";
+    // U debug rezimu prosledjujemo i sirov odgovor servisa, da bismo znali sta nas je odbilo.
+    const fail = (message) => { const error = new Error(message); if (debug) error.diagnostics = result.diagnostics; return error; };
     // Kada nas sam servis odbije zbog ogranicenja, to nije greska klijentovog profila.
-    if (problems.some(isBusy)) throw new Error("Prikupljanje javnih objava je trenutno zauzeto. Sačekaj minut i pokušaj ponovo.");
-    if (blocked?.private) throw new Error(`Profil ${who} je privatan, pa ne možemo da pročitamo objave.`);
-    if (blocked) throw new Error(`${NETWORK_NAME[platform] || "Mreža"} trenutno ne dozvoljava pregled profila ${who}. Probaj ponovo za koji minut ili dodaj drugu mrežu.`);
-    throw new Error(`Na profilu ${who} nismo pronašli nijednu javnu objavu.`);
+    if (problems.some(isBusy)) throw fail("Prikupljanje javnih objava je trenutno zauzeto. Sačekaj minut i pokušaj ponovo.");
+    if (blocked?.private) throw fail(`Profil ${who} je privatan, pa ne možemo da pročitamo objave.`);
+    if (blocked) throw fail(`${NETWORK_NAME[platform] || "Mreža"} trenutno ne dozvoljava pregled profila ${who}. Probaj ponovo za koji minut ili dodaj drugu mrežu.`);
+    throw fail(`Na profilu ${who} nismo pronašli nijednu javnu objavu.`);
   }
   return result;
 }
@@ -237,7 +239,7 @@ export default async function handler(request, response) {
   const profiles = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
   const sharedAvatar = profiles.find((profile) => profile.avatar)?.avatar || "";
   profiles.forEach((profile) => { if (!profile.avatar && sharedAvatar) profile.avatar = sharedAvatar; });
-  const failures = settled.map((item, index) => ({ item, index })).filter(({ item }) => item.status === "rejected").map(({ item, index }) => ({ platform: entries[index]?.[0], message: /[čćžšđ]/i.test(String(item.reason?.message || "")) ? item.reason.message : "Profil nije javno dostupan ili link nije unet tačno." }));
+  const failures = settled.map((item, index) => ({ item, index })).filter(({ item }) => item.status === "rejected").map(({ item, index }) => ({ platform: entries[index]?.[0], message: /[čćžšđ]/i.test(String(item.reason?.message || "")) ? item.reason.message : "Profil nije javno dostupan ili link nije unet tačno.", diagnostics: debug ? item.reason?.diagnostics : undefined }));
   if (!profiles.length) {
     console.error("Profile preview failed", failures);
     return response.status(422).json({ error: "Nijedan profil nije mogao biti javno učitan.", failures });
