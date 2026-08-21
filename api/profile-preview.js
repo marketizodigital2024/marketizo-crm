@@ -106,7 +106,9 @@ const actorEndpoint = (actor) =>
 
 // Jedan poziv Apify-ju koji nikada ne baca. Neuspeh znaci prazan niz, pa sledeci
 // pokusaj moze da nastavi umesto da cela analiza padne.
-async function runActor(endpoint, token, input, ms) {
+async function runActor(endpoint, token, input, ms, attempt = 0) {
+  let status = 0;
+  let message = "";
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -114,13 +116,27 @@ async function runActor(endpoint, token, input, ms) {
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(ms),
     });
-    if (!response.ok) return [];
-    const payload = await response.json().catch(() => []);
-    return Array.isArray(payload) ? payload : [];
-  } catch {
-    return [];
+    status = response.status;
+    if (response.ok) {
+      const payload = await response.json().catch(() => []);
+      return { items: Array.isArray(payload) ? payload : [], status, message: "" };
+    }
+    message = (await response.text().catch(() => "")).slice(0, 220);
+  } catch (error) {
+    message = String(error?.message || "").slice(0, 220);
   }
+  // Zauzeto ili privremen kvar: jedan ponovni pokusaj posle kratke pauze.
+  if (attempt === 0 && (status === 0 || status === 429 || status >= 500)) {
+    await new Promise((done) => setTimeout(done, 3000));
+    return runActor(endpoint, token, input, ms, 1);
+  }
+  console.error("Apify run failed", status, message);
+  return { items: [], status, message };
 }
+
+// Prepoznajemo kada Apify odbija posao zbog ogranicenja, a ne zbog samog profila.
+const isBusy = (info) =>
+  info.status === 429 || info.status === 402 || /limit|quota|memory|concurren|exceed/i.test(info.message || "");
 
 // Objave ponekad stignu ugnjezdene u detaljima profila umesto u glavnom prolazu.
 function nestedPosts(list) {
@@ -162,13 +178,17 @@ async function fetchProfile(platform, rawUrl, token, debug) {
   }
 
   const list = [];
+  const problems = [];
   let result = null;
   for (let index = 0; index < attempts.length; index += 1) {
     // Instagram ume da odgovori i posle minuta. Kratak rok je ranije obarao
     // profil koji bi se inace uredno ucitao.
     const budget = index === 0 ? 100000 : 80000;
     const batch = await Promise.all([runActor(endpoint, token, attempts[index], budget), ...(index === 0 ? detailCalls : [])]);
-    list.push(...batch.flat());
+    batch.forEach((info) => {
+      list.push(...info.items);
+      if (!info.items.length && (info.status || info.message)) problems.push(info);
+    });
     result = buildProfile(platform, url, list);
     if (result.posts.length) break;
   }
@@ -180,6 +200,7 @@ async function fetchProfile(platform, rawUrl, token, debug) {
       items: list.length,
       posts: result.posts.length,
       attempts: attempts.length,
+      problems: problems.map((info) => ({ status: info.status, message: info.message })),
       keys: list.slice(0, 3).map((item) => Object.keys(item || {}).slice(0, 40)),
       flags: list.slice(0, 3).map((item) => ({
         error: String(item?.error || "").slice(0, 90),
@@ -195,6 +216,8 @@ async function fetchProfile(platform, rawUrl, token, debug) {
   if (!result.posts.length) {
     // U poruci navodimo koji profil je pao, jer klijent cesto poveze vise mreza.
     const who = result.username ? `@${result.username}` : "ovog profila";
+    // Kada nas sam servis odbije zbog ogranicenja, to nije greska klijentovog profila.
+    if (problems.some(isBusy)) throw new Error("Prikupljanje javnih objava je trenutno zauzeto. Sačekaj minut i pokušaj ponovo.");
     if (blocked?.private) throw new Error(`Profil ${who} je privatan, pa ne možemo da pročitamo objave.`);
     if (blocked) throw new Error(`${NETWORK_NAME[platform] || "Mreža"} trenutno ne dozvoljava pregled profila ${who}. Probaj ponovo za koji minut ili dodaj drugu mrežu.`);
     throw new Error(`Na profilu ${who} nismo pronašli nijednu javnu objavu.`);
