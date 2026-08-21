@@ -227,11 +227,43 @@ function renderDeepAudit(data,payload){
  renderDeepIdeas("reels");renderPrintContentPlan(data);
 }
 function renderDeepIdeas(type){const ideas=deepAudit?.audit?.contentIdeas?.[type],evidence=deepAudit?.evidence||[];if(!ideas)return renderContentPlan(saved(),type);$("#contentPlan").innerHTML=ideas.map((x,i)=>`<article><span>${String(i+1).padStart(2,"0")}</span><div><strong>${esc(clientText(x.title,evidence))}</strong><p>${esc(clientText(x.execution,evidence))}</p><small class="idea-reason">Zašto: ${esc(clientText(x.reason,evidence))}</small></div></article>`).join("")}
+const SOCIAL_HOST={instagram:"www.instagram.com",facebook:"www.facebook.com",tiktok:"www.tiktok.com"};
+// Klijenti nalepe link na deset nacina: bez https, sa @, sa razmakom, samo korisnicko
+// ime. Umesto da ih odbijamo porukom, sredimo link umesto njih.
+function tidyProfileUrl(raw,platform){
+ let value=String(raw||"").replace(/[\u200B-\u200D\uFEFF\u00A0]/g," ").trim();
+ if(!value)return "";
+ value=value.replace(/^[\"'<(\[]+/,"").replace(/[\"'>)\]]+$/,"").trim();
+ if(value.startsWith("@"))value=value.slice(1);
+ if(!/^https?:\/\//i.test(value)){
+  if(/^(www\.)?(instagram|facebook|tiktok)\.com/i.test(value))value="https://"+value;
+  else if(/^[A-Za-z0-9._-]+$/.test(value)&&SOCIAL_HOST[platform])value="https://"+SOCIAL_HOST[platform]+"/"+(platform==="tiktok"?"@":"")+value;
+  else value="https://"+value;
+ }
+ value=value.replace(/^http:/i,"https:");
+ try{
+  const url=new URL(value);
+  if(/^(instagram|facebook|tiktok)\.com$/i.test(url.hostname))url.hostname="www."+url.hostname;
+  url.hash="";url.search="";
+  return url.toString();
+ }catch(error){return value}
+}
+function wrongNetwork(field){
+ const host=SOCIAL_HOST[field.name];
+ if(!host)return false;
+ try{
+  const domain=host.replace(/^www\./,""),actual=new URL(field.value).hostname.replace(/^www\./,"").toLowerCase();
+  return !(actual===domain||actual.endsWith("."+domain));
+ }catch(error){return false}
+}
 $$("[data-start]").forEach(b=>b.onclick=()=>{trackMeta("AuditStarted",{content_name:"Marketizo Brand Audit"},true);show("wizard")});
 $$(".next").forEach(b=>b.onclick=()=>{if(step===1){const filled=["instagram","facebook","tiktok"].map(n=>$('[name="'+n+'"]')).filter(field=>field&&field.value.trim());if(!filled.length){$("#socialError").textContent="Dodaj link ka najmanje jednoj društvenoj mreži.";return}
  // Ako link nije ispravan, obrazac bi kasnije stao bez ijedne poruke, pa to hvatamo ovde.
+ filled.forEach(field=>{const fixed=tidyProfileUrl(field.value,field.name);if(fixed&&fixed!==field.value)field.value=fixed});
  const broken=filled.find(field=>!field.checkValidity());
- if(broken){$("#socialError").textContent="Link „"+broken.value.trim().slice(0,60)+"“ nije ispravan. Nalepi ceo link, na primer https://www.instagram.com/tvojprofil/";broken.focus();return}}
+ if(broken){$("#socialError").textContent="Link „"+broken.value.trim().slice(0,60)+"“ nije ispravan. Nalepi ceo link, na primer https://www.instagram.com/tvojprofil/";broken.focus();return}
+ const mismatch=filled.find(wrongNetwork);
+ if(mismatch){$("#socialError").textContent="Link „"+mismatch.value.trim().slice(0,60)+"“ nije "+(networkLabel[mismatch.name]||mismatch.name)+" profil. Nalepi ga u odgovarajuće polje.";mismatch.focus();return}}
  const active=$('.step[data-step="'+step+'"]');if(![...active.querySelectorAll("[required]")].every(i=>i.reportValidity()))return;$("#socialError").textContent="";if(step===1){const early=Object.fromEntries(new FormData($("#auditForm")));showProfileShell(early);void startProfilePrefetch(early).catch(()=>{})}setStep(step+1)});
 $$(".back").forEach(b=>b.onclick=()=>setStep(step-1));
 const networkLabel={instagram:"Instagram",facebook:"Facebook",tiktok:"TikTok"};
@@ -318,7 +350,7 @@ async function loadPublicProfiles(data){
 }
 function startProfilePrefetch(data){const key=socialKey(data);if(key===profilePrefetchKey&&profilePrefetch)return profilePrefetch;profilePrefetchKey=key;profilePrefetch=loadPublicProfiles(data).catch(error=>{profilePrefetch=null;throw error});return profilePrefetch}
 let profileWarmupTimer;
-$$('[name="instagram"],[name="facebook"],[name="tiktok"]').forEach(input=>{const warm=()=>{clearTimeout(profileWarmupTimer);profileWarmupTimer=setTimeout(()=>{const data=Object.fromEntries(new FormData($("#auditForm")));if(Object.values(socialProfiles(data)).some(Boolean))void startProfilePrefetch(data).catch(()=>{})},350)};input.addEventListener("change",warm);input.addEventListener("blur",warm)});
+$$('[name="instagram"],[name="facebook"],[name="tiktok"]').forEach(input=>{const warm=()=>{const fixed=tidyProfileUrl(input.value,input.name);if(fixed&&fixed!==input.value)input.value=fixed;clearTimeout(profileWarmupTimer);profileWarmupTimer=setTimeout(()=>{const data=Object.fromEntries(new FormData($("#auditForm")));if(Object.values(socialProfiles(data)).some(Boolean))void startProfilePrefetch(data).catch(()=>{})},350)};input.addEventListener("change",warm);input.addEventListener("blur",warm)});
 async function captureLead(data){
  try{
   const response=await fetch("/api/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),keepalive:true});
