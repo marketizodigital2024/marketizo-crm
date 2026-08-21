@@ -135,8 +135,10 @@ async function runActor(endpoint, token, input, ms, attempt = 0) {
 }
 
 // Prepoznajemo kada Apify odbija posao zbog ogranicenja, a ne zbog samog profila.
-const isBusy = (info) =>
-  info.status === 429 || info.status === 402 || /limit|quota|memory|concurren|exceed/i.test(info.message || "");
+const isBusy = (info) => info.status === 429 || /memory|concurren|rate limit/i.test(info.message || "");
+// Potroseni mesecni paket kod Apify nije privremena guzva i ne prolazi sam od sebe.
+const isOutOfCredit = (info) =>
+  info.status === 402 || /usage hard limit|monthly usage|quota|feature-disabled/i.test(info.message || "");
 
 // Objave ponekad stignu ugnjezdene u detaljima profila umesto u glavnom prolazu.
 function nestedPosts(list) {
@@ -219,6 +221,10 @@ async function fetchProfile(platform, rawUrl, token, debug) {
     // U debug rezimu prosledjujemo i sirov odgovor servisa, da bismo znali sta nas je odbilo.
     const fail = (message) => { const error = new Error(message); if (debug) error.diagnostics = result.diagnostics; return error; };
     // Kada nas sam servis odbije zbog ogranicenja, to nije greska klijentovog profila.
+    if (problems.some(isOutOfCredit)) {
+      console.error("Apify monthly limit reached", problems[0]?.message);
+      throw fail("Servis za čitanje javnih objava je privremeno nedostupan na našoj strani. Piši nam na WhatsApp i odmah ćemo ti poslati analizu.");
+    }
     if (problems.some(isBusy)) throw fail("Prikupljanje javnih objava je trenutno zauzeto. Sačekaj minut i pokušaj ponovo.");
     if (blocked?.private) throw fail(`Profil ${who} je privatan, pa ne možemo da pročitamo objave.`);
     if (blocked) throw fail(`${NETWORK_NAME[platform] || "Mreža"} trenutno ne dozvoljava pregled profila ${who}. Probaj ponovo za koji minut ili dodaj drugu mrežu.`);
