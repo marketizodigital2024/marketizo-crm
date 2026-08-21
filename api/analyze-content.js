@@ -256,13 +256,30 @@ export default async function handler(request, response) {
   if (!posts.length) return response.status(400).json({ error: "Nema sadržaja za dubinsku analizu." });
 
   const videoPosts = posts.filter(post => post.video && post.videoUrl).slice(0, MAX_VIDEOS);
-  // Vremenski budzet: uzimamo sve Reelove koje stignemo da preslusamo, ostali se citaju iz opisa i slika.
+
+  // Naslovne slike biramo iz samih objava, pa ne moraju da cekaju transkripte.
+  const indexed = posts.map((post, index) => ({ post, index })).filter(item => item.post.image);
+  const visualOrder = [...indexed.filter(item => item.post.video), ...indexed.filter(item => !item.post.video)].slice(0, 6);
+
+  // Slusanje Reelova i skidanje slika idu istovremeno. Ranije su isli jedno za
+  // drugim, pa se na svaku analizu gubilo i do pola minuta cistog cekanja.
   const wanted = Number(process.env.MARKETIZO_TRANSCRIBE_BUDGET_MS) || 40000;
-  const budget = Math.max(8000, Math.min(wanted, remaining() - 170000));
+  const listenBudget = Math.max(8000, Math.min(wanted, remaining() - 170000));
+  const imageBudget = Math.max(6000, Math.min(30000, remaining() - 170000));
   const stopListening = new AbortController();
-  const budgetTimer = setTimeout(() => stopListening.abort(), budget);
-  const transcripts = await Promise.all(videoPosts.map(post => transcribe(post, apiKey, stopListening.signal)));
+  const stopImages = new AbortController();
+  const budgetTimer = setTimeout(() => stopListening.abort(), listenBudget);
+  const imageTimer = setTimeout(() => stopImages.abort(), imageBudget);
+  const [transcripts, visuals] = await Promise.all([
+    Promise.all(videoPosts.map(post => transcribe(post, apiKey, stopListening.signal))),
+    Promise.all(visualOrder.map(item =>
+      inlineImage(item.post.image, stopImages.signal)
+        .then(data => ({ title: contentTitle(item.post, item.index), data }))
+        .catch(() => null)
+    )),
+  ]);
   clearTimeout(budgetTimer);
+  clearTimeout(imageTimer);
 
   let videoCursor = 0;
   const evidence = posts.map((post, index) => {
@@ -274,18 +291,6 @@ export default async function handler(request, response) {
     type: "input_text",
     text: `ODGOVORI IZ UPITNIKA (samo nagoveštaj, nikako izvor teksta):\n${JSON.stringify(form)}\n\nPREGLEDANI SADRŽAJ (ovo je tvoj glavni izvor):\n${JSON.stringify(evidence.map(({ image, ...item }) => item))}`
   }];
-  const withImage = evidence.filter(item => item.image);
-  const visualOrder = [...withImage.filter(item => item.format === "reel_video"), ...withImage.filter(item => item.format !== "reel_video")].slice(0, 6);
-  const stopImages = new AbortController();
-  const imageTimer = setTimeout(() => stopImages.abort(), Math.max(6000, Math.min(26000, remaining() - 150000)));
-  const visuals = await Promise.all(
-    visualOrder.map(item =>
-      inlineImage(item.image, stopImages.signal)
-        .then(data => ({ title: item.title, data }))
-        .catch(() => null)
-    )
-  );
-  clearTimeout(imageTimer);
   visuals.filter(Boolean).forEach(visual => {
     evidenceInput.push({ type: "input_text", text: `Vizuelni dokaz za sadržaj „${visual.title}“:` });
     evidenceInput.push({ type: "input_image", image_url: visual.data, detail: "high" });
