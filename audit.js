@@ -239,7 +239,28 @@ let profilePrefetch=null,profilePrefetchKey="";
 const socialProfiles=data=>({instagram:data.instagram||"",facebook:data.facebook||"",tiktok:data.tiktok||""});
 const socialKey=data=>JSON.stringify(socialProfiles(data));
 const neutralAvatar=()=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff7a00"/><stop offset="1" stop-color="#ffb000"/></linearGradient></defs><rect width="100" height="100" rx="50" fill="#171717"/><circle cx="50" cy="42" r="17" fill="url(#g)"/><path d="M22 84c4-20 18-29 28-29s24 9 28 29" fill="url(#g)"/></svg>`)}`;
+// Kada profil ne moze da se ucita, nema smisla drzati prazan telefon preko celog
+// ekrana. Sklanjamo ga i odmah na vrhu pokazujemo sta ne valja i dugme za povratak.
+function showScanError(message){
+ const wrap=document.querySelector(".analyzing");
+ if(wrap)wrap.classList.add("scan-failed");
+ const copy=document.querySelector(".scan-copy");
+ if(!copy)return;
+ let box=$("#scanError");
+ if(!box){
+  box=document.createElement("div");box.className="scan-error";box.id="scanError";
+  box.innerHTML='<span>PROFIL NIJE UČITAN</span><strong></strong><p></p><button type="button">Proveri link profila →</button>';
+  box.querySelector("button").onclick=()=>{clearScanError();returnToProfiles()};
+  copy.prepend(box);
+ }
+ box.querySelector("strong").textContent=message||"Profil trenutno nije dostupan.";
+ box.querySelector("p").textContent="Proveri da li je profil javan i da li je link unet u celini, na primer https://www.instagram.com/tvojprofil/";
+ const status=$("#analysisStatus");
+ if(status)status.textContent="Analiza je zaustavljena dok profil ne bude dostupan.";
+}
+function clearScanError(){document.querySelector(".analyzing")?.classList.remove("scan-failed")}
 function showProfileShell(data){
+ clearScanError();
  const entry=Object.entries(socialProfiles(data)).find(([,url])=>url);if(!entry)return;
  const [platform,rawUrl]=entry;let username=platform;
  try{username=new URL(rawUrl).pathname.split("/").filter(Boolean).find(part=>part!=="pages")||platform}catch{}
@@ -288,7 +309,8 @@ async function loadPublicProfiles(data){
  $("#networkTabs").innerHTML=Object.entries(profiles).filter(([,url])=>url).map(([name])=>`<span data-network="${name}">${networkLabel[name]}</span>`).join("");
  const response=await fetch("/api/profile-preview",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profiles})});
  const payload=await response.json().catch(()=>({}));
- if(!response.ok)throw new Error(payload.error||"Javni profili trenutno nisu dostupni.");
+ // Konkretan razlog po mrezi je korisniji od opste poruke.
+ if(!response.ok)throw new Error(payload.failures?.[0]?.message||payload.error||"Javni profili trenutno nisu dostupni.");
  const firstProfile=payload.profiles?.[0];
  if(firstProfile)$("#networkTabs").innerHTML=`<span class="active" data-network="${esc(firstProfile.platform)}">${esc(networkLabel[firstProfile.platform]||firstProfile.platform)}</span>`;
  try{localStorage.setItem("marketizoPublicProfiles",JSON.stringify(payload.profiles||[]));localStorage.setItem("marketizoPublicProfilesOwner",saved().auditId||"")}catch(error){console.warn("Profili nisu sačuvani lokalno.",error)}
@@ -315,7 +337,7 @@ $("#auditForm").onsubmit=async e=>{
  const waitingTimer=setInterval(()=>{$("#analysisStatus").textContent=waitingMessages[++waitingStep%waitingMessages.length];waitingPercent=Math.min(44,waitingPercent+3);$("#analysisPercent").textContent=waitingPercent+"%";$("#analysisBar").style.width=waitingPercent+"%"},1800);
  let publicProfiles=[];
  try{publicProfiles=await startProfilePrefetch(d);if(!publicProfiles||!publicProfiles.length)throw new Error("Nismo pronašli javne objave na unetom profilu.");try{localStorage.setItem("marketizoPublicProfiles",JSON.stringify(publicProfiles));localStorage.setItem("marketizoPublicProfilesOwner",d.auditId||"")}catch(error){console.warn("Profili nisu sačuvani lokalno.",error)}displayProfile(publicProfiles[0]);render(d,publicProfiles);show("analyzing");setTimeout(()=>inspectPost(publicProfiles[0]?.posts?.[0]),700);$("#analysisStatus").textContent=`${networkLabel[publicProfiles[0]?.platform]||"Prvi profil"} je učitan. Nastavljamo redom kroz sve povezane mreže.`}
- catch(error){show("analyzing");clearInterval(waitingTimer);$("#feedGrid").innerHTML=`<div class="feed-unavailable has-hint"><strong>Profil trenutno nije dostupan</strong><p>${esc(friendlyError(error))}</p><small>Proveri da li je profil javan i da li je link tačno unet.</small></div>`;$("#analysisStatus").textContent="Nismo uspeli da učitamo profil. Proveri link i pokušaj ponovo.";addRetryAction();if(submitter){submitter.disabled=false;submitter.textContent=submitter.dataset.original||"Pokreni analizu"}return}
+ catch(error){show("analyzing");clearInterval(waitingTimer);showScanError(friendlyError(error));if(submitter){submitter.disabled=false;submitter.textContent=submitter.dataset.original||"Pokreni analizu"}return}
  clearInterval(waitingTimer);$(".analysis-track").classList.remove("connecting");$(".progress-spinner").classList.add("ready");
  const phases=["Proveravamo da li se ponuda razume već pri prvom pogledu","Analiziramo poruke izgovorene u Reelovima","Pregledamo naslove, vizuale i prve kadrove","Čitamo opise i izdvajamo najvažnije poruke","Povezujemo sadržaj, rezultate i pozive na akciju","Usklađujemo nalaze sa svakom povezanom mrežom","Pretvaramo nalaze u jasne sledeće korake"];
  const notes=["Da li potencijalni klijent za pet sekundi zna kome pomažete?","Da li sadržaj zadržava pažnju ili samo lepo izgleda?","Da li tvrdnje imaju dokaz i dovoljno konteksta?","Da li svaka dobra objava vodi ka prirodnom sledećem koraku?","Kod skuplje ponude tražimo topliji put do razgovora.","Dobra poruka mora ostati ista, ali format treba prilagoditi mreži.","Svaku preporuku vezujemo za cilj, ponudu i ono što smo videli."];
