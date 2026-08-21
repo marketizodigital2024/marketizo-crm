@@ -1,4 +1,4 @@
-export const config = { maxDuration: 120 };
+export const config = { maxDuration: 300 };
 
 const PLATFORM_CONFIG = {
   instagram: {
@@ -155,16 +155,18 @@ async function fetchProfile(platform, rawUrl, token, debug) {
   // Detalji profila (ime, opis, slika) idu paralelno sa prvim pokusajem.
   const detailCalls = [];
   if (platform === "instagram") {
-    detailCalls.push(runActor(endpoint, token, { directUrls: [url], resultsType: "details", resultsLimit: 1 }, 60000));
+    detailCalls.push(runActor(endpoint, token, { directUrls: [url], resultsType: "details", resultsLimit: 1 }, 100000));
   }
   if (platform === "facebook") {
-    detailCalls.push(runActor(actorEndpoint("apify~facebook-pages-scraper"), token, { startUrls: [{ url }] }, 60000));
+    detailCalls.push(runActor(actorEndpoint("apify~facebook-pages-scraper"), token, { startUrls: [{ url }] }, 100000));
   }
 
   const list = [];
   let result = null;
   for (let index = 0; index < attempts.length; index += 1) {
-    const budget = index === 0 ? 60000 : 45000;
+    // Instagram ume da odgovori i posle minuta. Kratak rok je ranije obarao
+    // profil koji bi se inace uredno ucitao.
+    const budget = index === 0 ? 100000 : 80000;
     const batch = await Promise.all([runActor(endpoint, token, attempts[index], budget), ...(index === 0 ? detailCalls : [])]);
     list.push(...batch.flat());
     result = buildProfile(platform, url, list);
