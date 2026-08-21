@@ -193,9 +193,11 @@ async function fetchProfile(platform, rawUrl, token, debug) {
   // Analiza bez ijedne objave nema na cemu da se zasnuje. Takav profil je greska,
   // a ne uspeh, jer bi klijent inace platio izvestaj pisan bez dokaza sa profila.
   if (!result.posts.length) {
-    if (blocked?.private) throw new Error("Profil je privatan, pa ne možemo da pročitamo objave.");
-    if (blocked) throw new Error(`${NETWORK_NAME[platform] || "Mreža"} trenutno ne dozvoljava pregled ovog profila, pa nismo mogli da učitamo objave.`);
-    throw new Error("Na ovom profilu nismo pronašli nijednu javnu objavu.");
+    // U poruci navodimo koji profil je pao, jer klijent cesto poveze vise mreza.
+    const who = result.username ? `@${result.username}` : "ovog profila";
+    if (blocked?.private) throw new Error(`Profil ${who} je privatan, pa ne možemo da pročitamo objave.`);
+    if (blocked) throw new Error(`${NETWORK_NAME[platform] || "Mreža"} trenutno ne dozvoljava pregled profila ${who}. Probaj ponovo za koji minut ili dodaj drugu mrežu.`);
+    throw new Error(`Na profilu ${who} nismo pronašli nijednu javnu objavu.`);
   }
   return result;
 }
