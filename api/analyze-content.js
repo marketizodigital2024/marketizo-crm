@@ -1,7 +1,7 @@
 export const config = { maxDuration: 300 };
 
 const MAX_POSTS = 12;
-const MAX_VIDEOS = 12;
+const MAX_VIDEOS = 7;
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 const MODEL = process.env.OPENAI_AUDIT_MODEL || "gpt-5.6-luna";
 const AUDIT_TABLE = process.env.MARKETIZO_AUDIT_TABLE || "marketizo_audits";
@@ -102,7 +102,7 @@ async function transcribe(post, apiKey, signal) {
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form, signal: withDeadline(signal, 28000) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error?.message || "Transkripcija nije uspela.");
-    return { status: "transcribed", transcript: clean(payload.text, 3000) };
+    return { status: "transcribed", transcript: clean(payload.text, 1600) };
   } catch (error) {
     return { status: "unavailable", transcript: "", error: clean(error.message, 240) };
   }
@@ -267,7 +267,7 @@ export default async function handler(request, response) {
   let videoCursor = 0;
   const evidence = posts.map((post, index) => {
     const transcript = post.video && post.videoUrl && videoCursor < transcripts.length ? transcripts[videoCursor++] : { status: "not_requested", transcript: "" };
-    return { index, title: contentTitle(post, index), platform: post.platform, username: post.username, format: post.video ? "reel_video" : "post", caption: clean(post.caption, 2500), image: clean(post.image, 1000), url: clean(post.url, 1000), metrics: { likes: post.likes ?? null, comments: post.comments ?? null, views: post.views ?? null }, transcript };
+    return { index, title: contentTitle(post, index), platform: post.platform, username: post.username, format: post.video ? "reel_video" : "post", caption: clean(post.caption, 1000), image: clean(post.image, 1000), url: clean(post.url, 1000), metrics: { likes: post.likes ?? null, comments: post.comments ?? null, views: post.views ?? null }, transcript };
   });
 
   const evidenceInput = [{
@@ -275,7 +275,7 @@ export default async function handler(request, response) {
     text: `ODGOVORI IZ UPITNIKA (samo nagoveštaj, nikako izvor teksta):\n${JSON.stringify(form)}\n\nPREGLEDANI SADRŽAJ (ovo je tvoj glavni izvor):\n${JSON.stringify(evidence.map(({ image, ...item }) => item))}`
   }];
   const withImage = evidence.filter(item => item.image);
-  const visualOrder = [...withImage.filter(item => item.format === "reel_video"), ...withImage.filter(item => item.format !== "reel_video")].slice(0, 8);
+  const visualOrder = [...withImage.filter(item => item.format === "reel_video"), ...withImage.filter(item => item.format !== "reel_video")].slice(0, 6);
   const stopImages = new AbortController();
   const imageTimer = setTimeout(() => stopImages.abort(), Math.max(6000, Math.min(26000, remaining() - 150000)));
   const visuals = await Promise.all(
@@ -295,10 +295,10 @@ export default async function handler(request, response) {
   // jednako duzem od dva, a ne njihovom zbiru, i svaki poziv ima uzi zadatak.
   const aiDeadline = started + CLIENT_LIMIT;
   const [core, ideas] = await Promise.all([
-    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 110000, effort: "low", deadline: aiDeadline })
+    askWithRetry({ apiKey, task: CORE_TASK, name: "marketizo_brand_audit", schema: coreSchema(), evidenceInput, timeoutMs: 125000, effort: "low", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(error => ({ ok: false, error })),
-    askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 130000, effort: "low", deadline: aiDeadline })
+    askWithRetry({ apiKey, task: IDEAS_TASK, name: "marketizo_content_plan", schema: ideasSchema(), evidenceInput, timeoutMs: 125000, effort: "low", deadline: aiDeadline })
       .then(result => ({ ok: true, result }))
       .catch(error => ({ ok: false, error }))
   ]);
