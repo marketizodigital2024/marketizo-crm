@@ -36,5 +36,15 @@
     };
   }
 
+  if (typeof employeeExpectedHours === "function") {
+    const baseEmployeeExpectedHours = employeeExpectedHours;
+    employeeExpectedHours = function (employee, monthKey) {
+      return baseEmployeeExpectedHours(
+        { ...employee, weeklyHours: weeklyHoursForMonth(employee, monthKey) },
+        monthKey,
+      );
+    };
+  }
+
   window.marketizoWeeklyHoursForMonth = weeklyHoursForMonth;
 })();
