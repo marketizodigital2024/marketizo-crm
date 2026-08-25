@@ -855,6 +855,10 @@ function formatHours(value) {
   return Number.isInteger(number) ? String(number) : String(number).replace(".", ",");
 }
 
+function formatNumber(value) {
+  return formatHours(value);
+}
+
 function showToast(title, message = "", type = "ok") {
   const stack = document.getElementById("toastStack");
   if (!stack) return;

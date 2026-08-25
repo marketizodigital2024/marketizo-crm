@@ -151,6 +151,10 @@ function formatHours(value) {
   return Number.isInteger(number) ? String(number) : String(number).replace(".", ",");
 }
 
+function formatNumber(value) {
+  return formatHours(value);
+}
+
 function showToast(title, message = "", type = "ok") {
   const stack = document.getElementById("employeeToastStack");
   if (!stack) return;
@@ -1167,7 +1171,7 @@ document.getElementById("portalAbsenceForm")?.addEventListener("submit", (event)
   };
   state.employeeAbsences.unshift(absence);
   notifyOnce({
-    key: `employee-absence-request-${absence.id}`,
+    key: `absence-request-${absence.id}`,
     scope: "admin",
     type: "warn",
     title: "Zahtev za odmor",
