@@ -87,12 +87,20 @@ function loadState(sourceData = null) {
     employeeId: log.employeeId || "",
     date: log.date || currentDateKey(),
     hours: Number(log.hours || 0),
+    minutes: Number(log.minutes || Math.round(Number(log.hours || 0) * 60)),
+    activityId: log.activityId || "",
+    activityName: log.activityName || log.note || "Rad",
     type: log.type || "Rad",
     note: log.note || "",
     positive: log.positive || "",
     negative: log.negative || "",
     locked: log.locked !== false,
     submittedAt: log.submittedAt || new Date().toISOString(),
+  }));
+  data.employeeActivities = (data.employeeActivities || []).map((activity) => ({
+    id: activity.id || crypto.randomUUID(),
+    name: activity.name || "Aktivnost",
+    active: activity.active !== false,
   }));
   data.employeeDocuments = (data.employeeDocuments || []).map((documentItem) => ({
     id: documentItem.id || crypto.randomUUID(),
@@ -588,6 +596,15 @@ function renderEmployeePortal() {
   const absenceStart = document.querySelector('#portalAbsenceForm input[name="startDate"]');
   const absenceEnd = document.querySelector('#portalAbsenceForm input[name="endDate"]');
   if (hourDate && !hourDate.value) hourDate.value = currentDateKey();
+  const activitySelect = document.getElementById("portalActivitySelect");
+  if (activitySelect) {
+    const selected = activitySelect.value;
+    const activities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
+    activitySelect.innerHTML = activities.length
+      ? activities.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")
+      : `<option value="">Admin još nije dodao aktivnosti</option>`;
+    if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
+  }
   if (absenceStart && !absenceStart.value) absenceStart.value = currentDateKey();
   if (absenceEnd && !absenceEnd.value) absenceEnd.value = currentDateKey();
 
@@ -732,10 +749,11 @@ function renderPortalHourRows(logs) {
         <header>
           <div>
             <strong>${formatDate(log.date)}</strong>
-            <span>${formatHours(log.hours || 0)}h · ${log.locked === false ? "Otključano" : "Zaključano"}</span>
+            <span>${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))} min · ${log.locked === false ? "Otključano" : "Zaključano"}</span>
           </div>
         </header>
-        <p><b>Šta je rađeno:</b> ${log.note || "-"}</p>
+        <p><b>Aktivnost:</b> ${log.activityName || "Rad"}</p>
+        <p><b>Napomena:</b> ${log.note || "-"}</p>
         <div class="work-log-feedback">
           <span><b>Pozitivno:</b> ${log.positive || "-"}</span>
           <span><b>Negativno:</b> ${log.negative || "-"}</span>
@@ -970,6 +988,22 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema zaposlenih ispod ovog lidera.</div>`;
   const teamIds = new Set(team.map((employee) => employee.id));
+  const teamLogs = (state.employeeWorkLogs || [])
+    .filter((log) => teamIds.has(log.employeeId) && String(log.date || "").startsWith(portalMonth))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  document.getElementById("leaderActivityLogList").innerHTML = teamLogs.length
+    ? teamLogs
+        .map((log) => {
+          const employee = (state.employees || []).find((item) => item.id === log.employeeId);
+          const minutes = Number(log.minutes || Number(log.hours || 0) * 60);
+          return `
+          <div class="setup-item">
+            <strong>${formatNumber(minutes)} min</strong>
+            <span>${employee?.name || "Zaposleni"} · ${log.activityName || "Aktivnost"}<br />${formatDate(log.date)}${log.note ? ` · ${log.note}` : ""}</span>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema upisanih aktivnosti za izabrani mesec.</div>`;
   const absences = (state.employeeAbsences || [])
     .filter((absence) => teamIds.has(absence.employeeId) && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)))
     .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
@@ -1014,8 +1048,8 @@ function renderLeaderPanel() {
           const employee = (state.employees || []).find((item) => item.id === report.employeeId);
           return `
           <div class="setup-item">
-            <strong>${formatDate(report.date).slice(0, 5)}</strong>
-            <span>${employee?.name || "Zaposleni"}<br />+ ${report.positive || "-"}<br />- ${report.negative || "-"}</span>
+            <strong>${formatNumber(Number(report.minutes || Number(report.hours || 0) * 60))} min</strong>
+            <span>${employee?.name || "Zaposleni"} · ${report.activityName || "Aktivnost"}<br />${formatDate(report.date)} · + ${report.positive || "-"}<br />- ${report.negative || "-"}</span>
           </div>`;
         })
         .join("")
@@ -1058,6 +1092,12 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   const date = String(formData.get("date") || "");
+  const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
+  const minutes = Math.max(1, parseNumber(formData.get("minutes"), 0));
+  if (!activity) {
+    alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
+    return;
+  }
   if (hasWorkLogForDate(date)) {
     alert("Vreme za taj dan je već upisano i zaključano.");
     return;
@@ -1066,7 +1106,10 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     id: crypto.randomUUID(),
     employeeId: activeEmployee.id,
     date,
-    hours: parseNumber(formData.get("hours"), 0),
+    hours: Math.round((minutes / 60) * 10000) / 10000,
+    minutes,
+    activityId: activity.id,
+    activityName: activity.name,
     type: "Rad",
     note: formData.get("note"),
     positive: formData.get("positive"),
@@ -1082,6 +1125,10 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     recipientId,
     date,
     title: "Dnevni izveštaj",
+    hours: Math.round((minutes / 60) * 10000) / 10000,
+    minutes,
+    activityId: activity.id,
+    activityName: activity.name,
     positive: formData.get("positive"),
     negative: formData.get("negative"),
     note: formData.get("note"),
@@ -1098,7 +1145,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   saveState();
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
-  event.currentTarget.elements.hours.value = 8;
+  event.currentTarget.elements.minutes.value = 60;
   renderEmployeePortal();
   showToast("Sačuvano", "Sati i dnevni izveštaj su sačuvani.", "ok");
 });

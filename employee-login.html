@@ -208,6 +208,11 @@
                 <h3>Vreme tima</h3>
                 <div class="setup-list" id="leaderTeamHoursList"></div>
               </section>
+              <section class="span-2">
+                <h3>Upisane aktivnosti tima</h3>
+                <p class="muted">Detaljan pregled aktivnosti i minuta za izabrani mesec.</p>
+                <div class="setup-list" id="leaderActivityLogList"></div>
+              </section>
               <section>
                 <h3>Odmori i bolovanja</h3>
                 <div class="setup-list" id="leaderTeamAbsenceList"></div>
@@ -268,9 +273,10 @@
               <form id="portalHoursForm" class="admin-form">
                 <div class="form-grid">
                   <label>Datum<input name="date" type="date" required /></label>
-                  <label>Sati<input name="hours" type="number" min="0" max="16" step="0.25" value="8" /></label>
-                  <label class="span-2">Šta je rađeno
-                    <textarea name="note" rows="5" required placeholder="Napiši konkretno šta si radio/la tog dana da se uklopi sa brojem sati."></textarea>
+                  <label>Aktivnost<select id="portalActivitySelect" name="activityId" required></select></label>
+                  <label>Minuta<input name="minutes" type="number" min="1" max="960" step="1" value="60" required /></label>
+                  <label class="span-2">Napomena
+                    <textarea name="note" rows="5" placeholder="Opciono: rezultat ili detalj aktivnosti."></textarea>
                   </label>
                   <label>Šta je bilo pozitivno
                     <textarea name="positive" rows="4" required placeholder="Šta je danas išlo dobro?"></textarea>

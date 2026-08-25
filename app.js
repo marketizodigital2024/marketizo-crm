@@ -637,12 +637,20 @@ function migrateState(data) {
     employeeId: log.employeeId || employees[0]?.id || "",
     date: log.date || currentDateKey(),
     hours: Number(log.hours || 0),
+    minutes: Number(log.minutes || Math.round(Number(log.hours || 0) * 60)),
+    activityId: log.activityId || "",
+    activityName: log.activityName || log.note || "Rad",
     type: log.type || "Rad",
     note: log.note || "",
     positive: log.positive || "",
     negative: log.negative || "",
     locked: log.locked !== false,
     submittedAt: log.submittedAt || new Date().toISOString(),
+  }));
+  const employeeActivities = (data.employeeActivities || starterData.employeeActivities || []).map((activity) => ({
+    id: activity.id || crypto.randomUUID(),
+    name: activity.name || "Aktivnost",
+    active: activity.active !== false,
   }));
   const employeeDocuments = (data.employeeDocuments || starterData.employeeDocuments || []).map((documentItem) => ({
     id: documentItem.id || crypto.randomUUID(),
@@ -744,6 +752,7 @@ function migrateState(data) {
     employees,
     employeeAbsences,
     employeeWorkLogs,
+    employeeActivities,
     employeeDocuments,
     employeeLateRecords,
     employeeGoals,
@@ -1821,6 +1830,13 @@ function renderEmployeeOptions() {
       : `<option value="">Nema zaposlenih</option>`;
     if (employees.some((employee) => employee.id === selected)) select.value = selected;
   });
+  const activitySelect = document.getElementById("workActivitySelect");
+  if (activitySelect) {
+    const activities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
+    activitySelect.innerHTML = activities.length
+      ? activities.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")
+      : `<option value="">Admin prvo dodaje aktivnost</option>`;
+  }
   const leaderSelect = document.getElementById("employeeLeaderSelect");
   if (leaderSelect) {
     const selected = leaderSelect.value;
@@ -1835,6 +1851,7 @@ function renderEmployees() {
   state.employees = state.employees || [];
   state.employeeAbsences = state.employeeAbsences || [];
   state.employeeWorkLogs = state.employeeWorkLogs || [];
+  state.employeeActivities = state.employeeActivities || [];
   state.employeeDocuments = state.employeeDocuments || [];
   state.employeeLateRecords = state.employeeLateRecords || [];
   state.employeeGoals = state.employeeGoals || [];
@@ -1874,6 +1891,7 @@ function renderEmployees() {
   renderEmployeeAbsenceRequests();
   renderEmployeeCalendar(monthKey, employees);
   renderEmployeeWorkRows(monthKey);
+  renderEmployeeActivities();
   renderEmployeeOps(monthKey);
   renderEmployeeTeamTimeline(monthKey);
   updateEmployeeMonthlyPreview();
@@ -2121,7 +2139,6 @@ function deleteEmployee(id) {
 function renderEmployeeWorkRows(monthKey) {
   const rows = state.employeeWorkLogs
     .filter((log) => String(log.date || "").startsWith(monthKey))
-    .filter(selectedEmployeeFilter)
     .filter((log) => {
       const employee = employeeById(log.employeeId);
       return employee && bySearch({ ...log, employee: employee.name });
@@ -2133,14 +2150,37 @@ function renderEmployeeWorkRows(monthKey) {
       <tr>
         <td>${formatDate(log.date)}</td>
         <td>${employee?.name || "Obrisan zaposleni"}</td>
-        <td>${Number(log.hours || 0)}h</td>
-        <td>${log.note || ""}</td>
+        <td>${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))} min<br /><span>${formatHours(log.hours || 0)}h</span></td>
+        <td><strong>${log.activityName || "Rad"}</strong>${log.note ? `<br /><span>${log.note}</span>` : ""}</td>
         <td><strong>+</strong> ${log.positive || "-"}<br /><strong>-</strong> ${log.negative || "-"}</td>
-        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span></td>
+        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button danger-action" data-delete-work-log="${log.id}" type="button">Obriši</button></td>
       </tr>`;
     });
   setText("employeeWorkRowsCount", `${rows.length} unosa`);
   document.getElementById("employeeWorkRows").innerHTML = rows.join("") || `<tr><td colspan="6">Nema unetih sati za ovaj mesec.</td></tr>`;
+  document.querySelectorAll("[data-delete-work-log]").forEach((button) => button.addEventListener("click", () => {
+    const log = state.employeeWorkLogs.find((item) => item.id === button.dataset.deleteWorkLog);
+    if (!log || !confirm(`Obrisati unos od ${formatDate(log.date)} (${log.activityName || "Rad"})?`)) return;
+    state.employeeWorkLogs = state.employeeWorkLogs.filter((item) => item.id !== log.id);
+    saveState();
+    renderAll();
+    showToast("Obrisano", "Pogrešan unos vremena je uklonjen.", "ok");
+  }));
+}
+
+function renderEmployeeActivities() {
+  const target = document.getElementById("employeeActivityList");
+  if (!target) return;
+  const activities = state.employeeActivities || [];
+  target.innerHTML = activities.length
+    ? activities.map((activity) => `<div class="setup-item"><strong>${activity.name}</strong><button class="edit-button danger-action" data-delete-activity="${activity.id}" type="button">Obriši</button></div>`).join("")
+    : `<div class="empty-state">Dodaj prvu aktivnost koju zaposleni mogu da izaberu.</div>`;
+  target.querySelectorAll("[data-delete-activity]").forEach((button) => button.addEventListener("click", () => {
+    if (!confirm("Obrisati aktivnost iz ponuđene liste? Stari unosi ostaju sačuvani.")) return;
+    state.employeeActivities = state.employeeActivities.filter((item) => item.id !== button.dataset.deleteActivity);
+    saveState();
+    renderAll();
+  }));
 }
 
 function renderEmployeeAbsenceRequests() {
@@ -3002,8 +3042,14 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   const formData = new FormData(event.currentTarget);
   const employeeId = formData.get("employeeId");
   const date = formData.get("date");
+  const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
+  const minutes = Math.max(1, parseNumber(formData.get("minutes"), 0));
   if (!employeeId) {
     alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
+  if (!activity) {
+    alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
     return;
   }
   if (hasEmployeeWorkLog(employeeId, date)) {
@@ -3014,7 +3060,10 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
     id: crypto.randomUUID(),
     employeeId,
     date,
-    hours: parseNumber(formData.get("hours"), 0),
+    hours: Math.round((minutes / 60) * 10000) / 10000,
+    minutes,
+    activityId: activity.id,
+    activityName: activity.name,
     type: "Rad",
     note: formData.get("note"),
     locked: true,
@@ -3024,9 +3073,25 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   saveState();
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
-  event.currentTarget.elements.hours.value = 8;
+  event.currentTarget.elements.minutes.value = 60;
   renderAll();
   showToast("Sačuvano", "Sati su upisani za izabranog zaposlenog.", "ok");
+});
+
+document.getElementById("employeeActivityForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const name = String(new FormData(event.currentTarget).get("activityName") || "").trim();
+  if (!name) return;
+  state.employeeActivities = state.employeeActivities || [];
+  if (state.employeeActivities.some((activity) => activity.name.toLowerCase() === name.toLowerCase())) {
+    alert("Aktivnost sa tim nazivom već postoji.");
+    return;
+  }
+  state.employeeActivities.push({ id: crypto.randomUUID(), name, active: true });
+  saveState();
+  event.currentTarget.reset();
+  renderAll();
+  showToast("Sačuvano", "Aktivnost je dostupna zaposlenima.", "ok");
 });
 
 document.getElementById("employeeLateForm")?.addEventListener("submit", (event) => {

@@ -498,7 +498,22 @@
               </form>
             </section>
 
-            <section class="panel employee-work-panel">
+	            <section class="panel employee-work-panel">
+	            <div class="panel-head">
+	              <div>
+	                <p class="eyebrow">Aktivnosti</p>
+	                <h2>Aktivnosti zaposlenih</h2>
+	              </div>
+	              <span>admin definiše ponuđene aktivnosti</span>
+	            </div>
+	            <form id="employeeActivityForm" class="admin-form compact-action-form">
+	              <label class="span-2">Naziv aktivnosti<input name="activityName" required placeholder="npr. Pisanje scenarija, montaža, pozivi..." /></label>
+	              <button class="primary-button" type="submit">Dodaj aktivnost</button>
+	            </form>
+	            <div class="setup-list" id="employeeActivityList"></div>
+	            </section>
+
+	            <section class="panel employee-work-panel">
 	            <div class="panel-head">
 	              <div>
 	                <p class="eyebrow">Sati</p>
@@ -511,8 +526,9 @@
 	                <select id="workEmployeeSelect" name="employeeId" required></select>
 	              </label>
 	              <label>Datum<input name="date" type="date" required /></label>
-	              <label>Sati<input name="hours" type="number" min="0" max="16" step="0.25" value="8" /></label>
-              <label class="span-2">Šta je rađeno<input name="note" required placeholder="npr. 3 scenarija, montaža, pozivi..." /></label>
+	              <label>Aktivnost<select id="workActivitySelect" name="activityId" required></select></label>
+	              <label>Minuta<input name="minutes" type="number" min="1" max="960" step="1" value="60" required /></label>
+	              <label class="span-2">Napomena<input name="note" placeholder="opciono: rezultat ili detalj aktivnosti" /></label>
               <button class="primary-button" type="submit">Dodaj sate</button>
             </form>
             </section>
@@ -693,10 +709,10 @@
                   <tr>
                     <th>Datum</th>
                     <th>Zaposleni</th>
-                    <th>Sati</th>
-                    <th>Šta je rađeno</th>
+                    <th>Vreme</th>
+                    <th>Aktivnost / napomena</th>
                     <th>Pozitivno / negativno</th>
-                    <th>Status</th>
+                    <th>Status / akcija</th>
                   </tr>
                 </thead>
                 <tbody id="employeeWorkRows"></tbody>
