@@ -1062,8 +1062,9 @@ function renderLeaderPanel() {
 
 document.getElementById("employeeLoginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   await waitForOnlineHydration();
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(form);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
   activeEmployee = state.employees.find((employee) => String(employee.email || "").toLowerCase() === email && String(employee.password || "") === password);
