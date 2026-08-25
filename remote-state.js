@@ -6,6 +6,8 @@
   let saveTimer = null;
   let saveInFlight = false;
   let pendingPayload = null;
+  let lastUpdatedAt = "";
+  let pollTimer = null;
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value || {}));
@@ -32,6 +34,7 @@
       online = configured && response.ok && !data.error;
       lastError = data.error || "";
       if (data.payload && typeof data.payload === "object") {
+        lastUpdatedAt = data.updatedAt || lastUpdatedAt;
         setLocal(data.payload);
         return { configured, online, payload: clone(data.payload), updatedAt: data.updatedAt || "" };
       }
@@ -76,9 +79,23 @@
     saveTimer = window.setTimeout(flush, 350);
   }
 
+  function startPolling(onPayload, interval = 5000) {
+    window.clearInterval(pollTimer);
+    if (typeof onPayload !== "function" || isLocalFile()) return;
+    pollTimer = window.setInterval(async () => {
+      if (saveInFlight || pendingPayload || document.hidden) return;
+      const previousUpdatedAt = lastUpdatedAt;
+      const result = await load();
+      if (result.payload && result.updatedAt && result.updatedAt !== previousUpdatedAt) {
+        onPayload(clone(result.payload), result.updatedAt);
+      }
+    }, Math.max(3000, Number(interval) || 5000));
+  }
+
   window.MarketizoRemote = {
     load,
     save,
+    startPolling,
     status() {
       return { configured, online, error: lastError };
     },

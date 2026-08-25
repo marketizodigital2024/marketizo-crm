@@ -980,7 +980,7 @@ function renderLeaderPanel() {
           const balance = hourBalance(employee, portalMonth);
           const lateStatus = employeeLateStatus(employee.id, portalMonth);
           return `
-          <div class="setup-item alert-item ${balance < 0 || lateStatus.count > 3 ? "danger" : lateStatus.count === 3 ? "warn" : "ok"}">
+          <div class="setup-item alert-item employee-hours-row ${balance < 0 || lateStatus.count > 3 ? "danger" : lateStatus.count === 3 ? "warn" : "ok"}">
             <strong>${formatHourBalance(balance)}</strong>
             <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${lateStatus.label}<br />${carryoverLabel(employee, portalMonth)}</span>
           </div>`;
@@ -997,7 +997,7 @@ function renderLeaderPanel() {
           const employee = (state.employees || []).find((item) => item.id === log.employeeId);
           const minutes = Number(log.minutes || Number(log.hours || 0) * 60);
           return `
-          <div class="setup-item">
+          <div class="setup-item activity-log-row">
             <strong>${formatNumber(minutes)} min</strong>
             <span>${employee?.name || "Zaposleni"} · ${log.activityName || "Aktivnost"}<br />${formatDate(log.date)}${log.note ? ` · ${log.note}` : ""}</span>
           </div>`;
@@ -1030,7 +1030,7 @@ function renderLeaderPanel() {
         .map((note) => {
           const employee = (state.employees || []).find((item) => item.id === note.employeeId);
           return `
-          <div class="setup-item">
+          <div class="setup-item activity-log-row">
             <strong>${formatDate(note.date).slice(0, 5)}</strong>
             <span>${employee?.name || "Zaposleni"} · ${note.title || "1:1"}<br />${note.note || ""}</span>
           </div>`;
@@ -1227,4 +1227,11 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 
 setupPasswordToggles();
 renderLoginHint();
-onlineHydrationPromise = hydrateOnlineState().catch(() => null);
+onlineHydrationPromise = hydrateOnlineState().then(() => {
+  window.MarketizoRemote?.startPolling((payload) => {
+    const activeId = activeEmployee?.id;
+    state = loadState(payload);
+    activeEmployee = (state.employees || []).find((employee) => employee.id === activeId) || activeEmployee;
+    if (activeEmployee) renderEmployeePortal();
+  });
+}).catch(() => null);

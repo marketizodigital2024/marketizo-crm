@@ -1143,7 +1143,7 @@ function renderAdminEmployeeRisk(monthKey) {
           const lateStatus = employeeLateStatus(employee.id, monthKey);
           const status = balance < 0 || lateStatus.count > 3 ? "danger" : hours > expected || lateStatus.count === 3 ? "warn" : "ok";
           return `
-          <div class="setup-item alert-item clickable-item ${status}" data-go-view="employees" data-select-shortcut-employee="${employee.id}">
+          <div class="setup-item alert-item clickable-item employee-hours-row ${status}" data-go-view="employees" data-select-shortcut-employee="${employee.id}">
             <strong>${formatHourBalance(balance)}</strong>
             <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours || 40)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
           </div>`;
@@ -3512,5 +3512,10 @@ document.getElementById("backupNowBtn")?.addEventListener("click", () => {
 
 setupPasswordToggles();
 renderAll();
-hydrateOnlineState();
+hydrateOnlineState().then(() => {
+  window.MarketizoRemote?.startPolling((payload) => {
+    state = loadState(payload);
+    renderAll();
+  });
+});
 updateContextActions("admin");
