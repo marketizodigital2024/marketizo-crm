@@ -1076,6 +1076,71 @@ th {
   grid-column: span 2;
 }
 
+/* Employee operations: compact, readable cards without broken labels. */
+#employeeActivityList .setup-item {
+  align-items: center;
+  gap: 14px;
+  min-height: 54px;
+}
+
+#employeeActivityList .setup-item strong {
+  display: block;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  place-items: initial;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+#employeeActivityList .setup-item button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+#employeeActivityForm {
+  align-items: end;
+}
+
+#employeeActivityForm button {
+  width: auto;
+  min-width: 180px;
+}
+
+#leaderPanel .leader-grid {
+  align-items: start;
+}
+
+#leaderPanel .setup-list {
+  gap: 10px;
+}
+
+#leaderPanel .setup-item {
+  min-height: 58px;
+}
+
+#leaderPanel .leader-assignment-row span {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#leaderPanel .leader-assignment-row button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+@media (max-width: 760px) {
+  #employeeActivityForm button {
+    width: 100%;
+  }
+}
+
 .lead-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

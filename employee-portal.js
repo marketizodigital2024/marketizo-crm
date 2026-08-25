@@ -947,7 +947,7 @@ function renderLeaderPanel() {
   panel.hidden = !activeEmployee.isLeader;
   if (!activeEmployee.isLeader) return;
   setText("leaderTeamCount", `${team.length} osoba`);
-  const available = (state.employees || []).filter((employee) => employee.id !== activeEmployee.id);
+  const available = team;
   document.getElementById("leaderAssignmentList").innerHTML = available.length
     ? available
         .map((employee) => {
