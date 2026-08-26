@@ -20,7 +20,7 @@
     <meta name="theme-color" content="#ff6b00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=21" />
+    <link rel="stylesheet" href="styles.css?v=22" />
   </head>
   <body>
     <div class="app-shell">
@@ -870,7 +870,8 @@
                 <span id="invoiceMonthLabel">tekući mesec</span>
               </div>
               <div class="table-wrap">
-                <table class="invoice-table">
+                <div class="invoice-status-groups" id="invoiceStatusGroups"></div>
+                <table class="invoice-table legacy-invoice-table">
                   <thead>
                     <tr>
                       <th>Klijent</th>
@@ -972,7 +973,7 @@
     <script src="admin-auth.js?v=3"></script>
     <div class="toast-stack" id="toastStack" aria-live="polite"></div>
     <script src="remote-state.js?v=7"></script>
-    <script src="app.js?v=20"></script>
+    <script src="app.js?v=21"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

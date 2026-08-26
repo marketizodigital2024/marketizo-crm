@@ -1168,9 +1168,70 @@ th {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #0d0d0d;
+  background: #f7faf7;
   color: var(--ink);
   font-weight: 800;
+}
+
+.legacy-invoice-table { display: none !important; }
+
+.invoice-status-groups,
+.invoice-status-list { display: grid; gap: 10px; }
+
+.invoice-status-group {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.invoice-status-group summary {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.invoice-status-group summary::-webkit-details-marker { display: none; }
+.invoice-status-group summary em { padding: 6px 10px; border-radius: 999px; font-style: normal; font-weight: 800; }
+.invoice-status-dot { width: 11px; height: 11px; border-radius: 50%; }
+.invoice-status-paid { border-color: #bde8cf; background: #f4fcf7; }
+.invoice-status-paid .invoice-status-dot { background: #18a85f; }
+.invoice-status-paid summary em { color: #08773d; background: #d9f6e5; }
+.invoice-status-sent { border-color: #ffd2a8; background: #fff9f3; }
+.invoice-status-sent .invoice-status-dot { background: #ff7900; }
+.invoice-status-sent summary em { color: #a54b00; background: #ffead6; }
+.invoice-status-unpaid { border-color: #ffc7c7; background: #fff7f7; }
+.invoice-status-unpaid .invoice-status-dot { background: #df3b3b; }
+.invoice-status-unpaid summary em { color: #a42222; background: #ffe1e1; }
+.invoice-status-list { padding: 0 12px 12px; }
+
+.invoice-compact-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) auto repeat(3, minmax(145px, .8fr));
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.invoice-compact-client { display: grid; gap: 3px; }
+.invoice-compact-client span { color: var(--muted); font-size: 13px; }
+.invoice-compact-amount { align-self: center; white-space: nowrap; }
+.invoice-compact-row label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 800; }
+.invoice-compact-row select { min-width: 0; width: 100%; }
+.invoice-carryover-compact { margin: 0 !important; }
+
+@media (max-width: 900px) {
+  .invoice-status-group summary { grid-template-columns: auto 1fr auto; }
+  .invoice-status-group summary b, .invoice-status-group summary em { grid-column: 2 / -1; }
+  .invoice-compact-row { grid-template-columns: 1fr 1fr; }
+  .invoice-compact-client { grid-column: 1 / -1; }
 }
 
 .checkbox-field input {

@@ -1381,37 +1381,56 @@ function renderContractExpiryList() {
 }
 
 function renderMonthlyInvoices(clients, monthKey) {
-  const rows = clients
-    .sort((a, b) => Number(b.revenue || 0) - Number(a.revenue || 0))
-    .map((client) => {
+  const statusFor = (client) => {
+    const invoice = monthlyInvoice(client, monthKey);
+    if (invoice.paymentStatus === "Plaćeno") return "paid";
+    if (invoice.invoiceStatus === "Poslat") return "sent";
+    return "unpaid";
+  };
+  const groups = [
+    ["paid", "Plaćeni", "Plaćeno"],
+    ["sent", "Poslati, čekaju uplatu", "Poslat"],
+    ["unpaid", "Nisu plaćeni / nisu poslati", "Nije plaćeno"],
+  ];
+  const renderClient = (client) => {
       const invoice = monthlyInvoice(client, monthKey);
-      return `
-      <tr>
-        <td><strong>${client.name}</strong><br /><span>${client.country} · naplata dan ${client.billingDay || 1}</span></td>
-        <td>${currency.format(client.revenue || 0)}</td>
-        <td>
+      return `<div class="invoice-compact-row">
+        <div class="invoice-compact-client"><strong>${client.name}</strong><span>${client.country} · naplata ${client.billingDay || 1}.</span></div>
+        <strong class="invoice-compact-amount">${currency.format(client.revenue || 0)}</strong>
+        <label>Račun
           <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="invoiceStatus">
             ${option("Nije poslat", invoice.invoiceStatus)}
             ${option("Poslat", invoice.invoiceStatus)}
           </select>
-        </td>
-        <td>
+        </label>
+        <label>Plaćanje
           <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="paymentStatus">
             ${option("Nije plaćeno", invoice.paymentStatus)}
             ${option("Plaćeno", invoice.paymentStatus)}
             ${option("Kasni", invoice.paymentStatus)}
           </select>
-        </td>
-        <td>
+        </label>
+        <label>Način
           <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="paymentMethod">
             ${option("Firma", invoice.paymentMethod)}
             ${option("Keš", invoice.paymentMethod)}
           </select>
-        </td>
-      </tr>`;
-    })
-    .join("");
-  document.getElementById("monthlyInvoiceRows").innerHTML = rows || `<tr><td colspan="5">Nema klijenata za izabrani filter.</td></tr>`;
+        </label>
+      </div>`;
+  };
+  const sorted = [...clients].sort((a, b) => Number(b.revenue || 0) - Number(a.revenue || 0));
+  const target = document.getElementById("invoiceStatusGroups");
+  if (target) {
+    target.innerHTML = groups.map(([key, label, badge]) => {
+      const entries = sorted.filter((client) => statusFor(client) === key);
+      const total = entries.reduce((sum, client) => sum + Number(client.revenue || 0), 0);
+      return `<details class="invoice-status-group invoice-status-${key}" ${key === "unpaid" ? "open" : ""}>
+        <summary><span class="invoice-status-dot"></span><strong>${label}</strong><span>${entries.length} klijenata</span><b>${currency.format(total)}</b><em>${badge}</em></summary>
+        <div class="invoice-status-list">${entries.length ? entries.map(renderClient).join("") : `<div class="empty-state">Nema klijenata u ovoj grupi.</div>`}</div>
+      </details>`;
+    }).join("");
+  }
+  document.getElementById("monthlyInvoiceRows").innerHTML = "";
   bindInvoiceControls();
 }
 
@@ -1458,14 +1477,19 @@ function renderInvoiceCarryover(clients, monthKey) {
   setText("invoiceCarryoverCount", `${open.length} otvorenih`);
   const target = document.getElementById("invoiceCarryoverList");
   if (!target) return;
-  target.innerHTML = open.length
-    ? open.map((client) => {
+  const sent = open.filter((client) => monthlyInvoice(client, previousMonth).invoiceStatus === "Poslat");
+  const notSent = open.filter((client) => monthlyInvoice(client, previousMonth).invoiceStatus !== "Poslat");
+  const carryoverGroup = (items, key, label) => `<details class="invoice-status-group invoice-status-${key}">
+    <summary><span class="invoice-status-dot"></span><strong>${label}</strong><span>${items.length} klijenata</span><b>${currency.format(items.reduce((sum, client) => sum + Number(client.revenue || 0), 0))}</b></summary>
+    <div class="invoice-status-list">${items.map((client) => {
         const invoice = monthlyInvoice(client, previousMonth);
-        return `<div class="setup-item carryover-item">
+        return `<div class="setup-item carryover-item invoice-carryover-compact">
           <strong>${currency.format(client.revenue || 0)}</strong>
           <span>${client.name}<br />${monthLabel(previousMonth)} · ${invoice.invoiceStatus} · ${invoice.paymentStatus}</span>
         </div>`;
-      }).join("")
+      }).join("") || `<div class="empty-state">Nema klijenata u ovoj grupi.</div>`}</div></details>`;
+  target.innerHTML = open.length
+    ? carryoverGroup(sent, "sent", "Poslati, čekaju uplatu") + carryoverGroup(notSent, "unpaid", "Nisu poslati / nisu plaćeni")
     : `<div class="empty-state">Nema otvorenih računa za prenos iz ${monthLabel(previousMonth)}.</div>`;
 }
 
