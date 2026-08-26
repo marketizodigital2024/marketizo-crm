@@ -644,7 +644,7 @@ function currentDateKey() {
 }
 
 function selectedMonthKey() {
-  return document.getElementById("invoiceMonthFilter")?.value || monthFilter || currentMonthKey();
+  return monthFilter || document.getElementById("invoiceMonthFilter")?.value || currentMonthKey();
 }
 
 function monthLabel(monthKey) {
@@ -3380,6 +3380,7 @@ function setActiveView(viewName, updateUrl = false) {
   document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
   button.classList.add("active");
   view.classList.add("active");
+  document.body.dataset.activeView = viewName;
   setText("pageTitle", button.textContent);
   updateContextActions(viewName);
   if (updateUrl && !location.pathname.split("/").pop().startsWith("employees-")) {
@@ -3387,10 +3388,14 @@ function setActiveView(viewName, updateUrl = false) {
   }
 }
 
-const initialMainView = location.hash.replace(/^#/, "");
-if (initialMainView && document.getElementById(initialMainView) && document.querySelector(`.nav-item[data-view="${initialMainView}"]`)) {
-  setActiveView(initialMainView);
+function activateMainRoute() {
+  const requested = location.hash.replace(/^#/, "").split("/")[0];
+  const valid = requested && document.getElementById(requested) && document.querySelector(`.nav-item[data-view="${requested}"]`);
+  setActiveView(valid ? requested : "admin");
 }
+
+activateMainRoute();
+window.addEventListener("hashchange", activateMainRoute);
 
 function updateContextActions(view) {
   const leadButton = document.getElementById("openLeadModal");
@@ -3453,6 +3458,8 @@ document.getElementById("searchInput").addEventListener("input", (event) => {
 
 document.getElementById("monthFilter")?.addEventListener("input", (event) => {
   monthFilter = event.target.value;
+  const invoiceMonth = document.getElementById("invoiceMonthFilter");
+  if (invoiceMonth) invoiceMonth.value = monthFilter || currentMonthKey();
   renderAll();
 });
 
@@ -3477,6 +3484,8 @@ document.getElementById("resetFiltersBtn")?.addEventListener("click", () => {
   dateToFilter = "";
   countryFilter = "all";
   document.getElementById("monthFilter").value = "";
+  const invoiceMonth = document.getElementById("invoiceMonthFilter");
+  if (invoiceMonth) invoiceMonth.value = currentMonthKey();
   document.getElementById("dateFromFilter").value = "";
   document.getElementById("dateToFilter").value = "";
   document.getElementById("countryFilter").value = "all";
@@ -4049,7 +4058,16 @@ document.querySelector('#editClientForm select[name="package"]')?.addEventListen
   form.elements.contractMonths.value = values.contractMonths || 3;
 });
 
-document.getElementById("invoiceMonthFilter")?.addEventListener("change", () => renderAll());
+const invoiceMonthFilter = document.getElementById("invoiceMonthFilter");
+if (invoiceMonthFilter) {
+  invoiceMonthFilter.value = monthFilter || currentMonthKey();
+  invoiceMonthFilter.addEventListener("change", (event) => {
+    monthFilter = event.target.value;
+    const dashboardMonth = document.getElementById("monthFilter");
+    if (dashboardMonth) dashboardMonth.value = monthFilter;
+    renderAll();
+  });
+}
 
 const leadModal = document.getElementById("leadModal");
 const leadButton = document.getElementById("openLeadModal");

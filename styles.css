@@ -3485,3 +3485,8 @@ textarea {
     max-width: none !important;
   }
 }
+body:not([data-active-view="employees"]) .employee-subnav .active {
+  background: transparent;
+  border-left-color: transparent;
+  color: inherit;
+}
