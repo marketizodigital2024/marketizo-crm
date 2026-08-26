@@ -979,8 +979,12 @@ function formatNumber(value) {
 function showToast(title, message = "", type = "ok") {
   const stack = document.getElementById("toastStack");
   if (!stack) return;
+  const signature = `${title}|${message}`;
+  if ([...stack.children].some((item) => item.dataset.signature === signature)) return;
+  while (stack.children.length >= 3) stack.firstElementChild?.remove();
   const toast = document.createElement("div");
   toast.className = `toast-message ${notificationClass(type)}`;
+  toast.dataset.signature = signature;
   toast.innerHTML = `<strong>${title}</strong>${message ? `<span>${message}</span>` : ""}`;
   stack.appendChild(toast);
   window.setTimeout(() => {
@@ -1160,7 +1164,14 @@ function unhideNotification(id) {
 }
 
 function deleteNotification(id) {
-  state.notifications = (state.notifications || []).filter((item) => item.id !== id);
+  const notification = (state.notifications || []).find((item) => item.id === id);
+  if (!notification) return;
+  state.dismissedNotificationKeys = state.dismissedNotificationKeys || [];
+  if (notification.key && !state.dismissedNotificationKeys.includes(notification.key)) {
+    state.dismissedNotificationKeys.push(notification.key);
+    state.dismissedNotificationKeys = state.dismissedNotificationKeys.slice(-500);
+  }
+  state.notifications = state.notifications.filter((item) => item.id !== id);
   saveState();
   renderAll();
   showToast("Obrisano", "Obaveštenje je trajno uklonjeno.", "ok");
@@ -1170,11 +1181,11 @@ function showAdminNotificationPopups(notifications) {
   const shown = JSON.parse(sessionStorage.getItem("shownAdminNotifications") || "[]");
   const nextShown = new Set(shown);
   notifications
-    .filter((notification) => notification.title === "Zahtev za odmor" && !nextShown.has(notification.id))
+    .filter((notification) => notification.title === "Zahtev za odmor" && !nextShown.has(notification.key || notification.id))
     .slice(0, 3)
     .forEach((notification) => {
       showToast(notification.title, notification.message, notification.type);
-      nextShown.add(notification.id);
+      nextShown.add(notification.key || notification.id);
     });
   sessionStorage.setItem("shownAdminNotifications", JSON.stringify([...nextShown].slice(-50)));
 }
@@ -1882,6 +1893,8 @@ function contractEndDate(client) {
 
 function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title, message }) {
   state.notifications = state.notifications || [];
+  state.dismissedNotificationKeys = state.dismissedNotificationKeys || [];
+  if (key && state.dismissedNotificationKeys.includes(key)) return;
   if (key && state.notifications.some((notification) => notification.key === key)) return;
   state.notifications.unshift({
     id: crypto.randomUUID(),
@@ -1951,14 +1964,6 @@ function generateSystemNotifications() {
       });
     });
 
-  if (state.backup?.lastDownloadedAt?.slice(0, 10) !== today) {
-    notifyOnce({
-      key: `backup-missing-${today}`,
-      type: "warn",
-      title: "Backup nije skinut danas",
-      message: `Preporuka: skini JSON backup i prebaci ga u ${state.backup?.recommendedLocation || "Google Drive"}.`,
-    });
-  }
 }
 
 function visibleEmployees() {

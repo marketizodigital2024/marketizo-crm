@@ -176,9 +176,13 @@ function formatNumber(value) {
 function showToast(title, message = "", type = "ok") {
   const stack = document.getElementById("employeeToastStack");
   if (!stack) return;
+  const signature = `${title}|${message}`;
+  if ([...stack.children].some((item) => item.dataset.signature === signature)) return;
+  while (stack.children.length >= 3) stack.firstElementChild?.remove();
   const toast = document.createElement("div");
   const className = type === "danger" ? "danger" : type === "warn" ? "warn" : "ok";
   toast.className = `toast-message ${className}`;
+  toast.dataset.signature = signature;
   toast.innerHTML = `<strong>${title}</strong>${message ? `<span>${message}</span>` : ""}`;
   stack.appendChild(toast);
   window.setTimeout(() => toast.remove(), 4200);

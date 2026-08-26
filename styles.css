@@ -353,6 +353,21 @@ h3,
   line-height: 1.4;
 }
 
+.toast-message,
+.toast-message.warn,
+.toast-message.danger {
+  background: #ffffff !important;
+  color: #183126 !important;
+  border-color: #d5e0d8 !important;
+  border-left: 5px solid #18a05e !important;
+  box-shadow: 0 16px 40px rgba(24, 49, 38, 0.16) !important;
+}
+
+.toast-message.warn { border-left-color: #ff7a00 !important; }
+.toast-message.danger { border-left-color: #d74350 !important; }
+.toast-message strong { color: #183126 !important; }
+.toast-message span { color: #607168 !important; }
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--green);
