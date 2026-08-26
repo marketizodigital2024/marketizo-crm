@@ -3475,6 +3475,11 @@ function setActiveView(viewName, updateUrl = false) {
 }
 
 function activateMainRoute() {
+  const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
+  if (currentFile.startsWith("employees-")) {
+    setActiveView("employees");
+    return;
+  }
   const requested = location.hash.replace(/^#/, "").split("/")[0];
   const valid = requested && document.getElementById(requested) && document.querySelector(`.nav-item[data-view="${requested}"]`);
   setActiveView(valid ? requested : "admin");
