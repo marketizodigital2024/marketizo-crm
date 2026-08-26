@@ -1951,3 +1951,34 @@ select option {
     justify-content: flex-start;
   }
 }
+
+/* Light form controls across admin and employee portals. */
+input,
+select,
+textarea {
+  background: #ffffff !important;
+  color: #18251d !important;
+  border-color: #cfd9d2 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #748078 !important;
+  opacity: 1;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #ff6b00 !important;
+  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.14) !important;
+  outline: none;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: #eef2ef !important;
+  color: #657169 !important;
+}
