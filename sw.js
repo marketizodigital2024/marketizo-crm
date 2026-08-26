@@ -1,17 +1,22 @@
-const CACHE_NAME = "marketizo-crm-v15";
+const CACHE_NAME = "marketizo-crm-v17";
 const ASSETS = [
   "index.html",
   "client-login.html",
   "employee-login.html",
   "admin-login.html",
-  "styles.css?v=15",
+  "styles.css?v=16",
   "app.js?v=11",
   "client-portal.js?v=6",
-  "employee-portal.js?v=12",
+  "employee-portal.js?v=13",
   "remote-state.js?v=7",
   "admin-auth.js?v=3",
   "marketizo-logo.png",
-  "manifest.webmanifest"
+  "manifest.webmanifest",
+  "employee-manifest.webmanifest",
+  "icons/marketizo-180.png",
+  "icons/marketizo-192.png",
+  "icons/marketizo-512.png",
+  "icons/marketizo-maskable-512.png"
 ];
 
 self.addEventListener("install", (event) => {

@@ -1233,6 +1233,20 @@ window.addEventListener("beforeinstallprompt", (event) => {
   deferredInstallPrompt = event;
 });
 
+function syncEmployeeInstallButton() {
+  const button = document.getElementById("installEmployeeAppBtn");
+  if (!button) return;
+  const installed = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  button.hidden = installed;
+}
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  syncEmployeeInstallButton();
+});
+
+syncEmployeeInstallButton();
+
 document.getElementById("installEmployeeAppBtn")?.addEventListener("click", async () => {
   if (!deferredInstallPrompt) {
     const alertBox = document.getElementById("employeeMissingTimeAlert");
@@ -1251,12 +1265,19 @@ document.getElementById("installEmployeeAppBtn")?.addEventListener("click", asyn
   deferredInstallPrompt.prompt();
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
+  syncEmployeeInstallButton();
 });
 
-document.querySelectorAll("#employeeApp h2").forEach((heading) => {
-  if (heading.textContent.trim() === "Plan firme i odsustva tima") {
-    heading.closest(".panel")?.remove();
-  }
+document.querySelectorAll("[data-dashboard-section-button]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const dashboard = document.getElementById("employeeDashboard");
+    if (!dashboard) return;
+    dashboard.dataset.dashboardSection = button.dataset.dashboardSectionButton;
+    document.querySelectorAll("[data-dashboard-section-button]").forEach((item) => {
+      item.classList.toggle("active", item === button);
+    });
+    dashboard.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 });
 
 window.addEventListener("storage", (event) => {

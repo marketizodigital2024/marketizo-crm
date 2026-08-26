@@ -1,15 +1,15 @@
 {
-  "name": "Marketizo CRM",
-  "short_name": "Marketizo",
-  "id": "./index.html",
-  "start_url": "./index.html",
+  "name": "Marketizo Employee Portal",
+  "short_name": "Marketizo Tim",
+  "id": "./employee-login.html",
+  "start_url": "./employee-login.html",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#f4f6f1",
   "theme_color": "#ff6b00",
-  "description": "Marketizo CRM za klijente, naplatu i tim.",
+  "description": "Radni sati, aktivnosti, odsustva i bitni datumi Marketizo tima.",
   "icons": [
     {
       "src": "icons/marketizo-192.png",

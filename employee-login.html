@@ -7,8 +7,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=15" />
+    <link rel="manifest" href="employee-manifest.webmanifest" />
+    <meta name="theme-color" content="#ff6b00" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
+    <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
+    <link rel="stylesheet" href="styles.css?v=16" />
   </head>
   <body class="client-login-body">
     <main class="client-auth" id="employeeLoginScreen">
@@ -75,8 +80,14 @@
         </header>
         <div class="lead-toast employee-alert" id="employeeMissingTimeAlert" hidden></div>
 
-        <section class="client-tab active" id="employeeDashboard">
-          <div class="admin-kpi-grid compact-metric-grid employee-portal-metrics">
+        <section class="client-tab active" id="employeeDashboard" data-dashboard-section="overview">
+          <nav class="dashboard-subnav" aria-label="Sekcije dashboarda">
+            <button class="dashboard-subnav-button active" data-dashboard-section-button="overview" type="button">Pregled</button>
+            <button class="dashboard-subnav-button" data-dashboard-section-button="personal" type="button">Lično</button>
+            <button class="dashboard-subnav-button" data-dashboard-section-button="team" type="button">Tim</button>
+          </nav>
+
+          <div class="admin-kpi-grid compact-metric-grid employee-portal-metrics" data-dashboard-panel="overview">
             <article class="metric">
               <span>Radni dani</span>
               <strong id="portalWorkdays">0</strong>
@@ -123,7 +134,7 @@
           </div>
 
           <div class="admin-layout">
-            <section class="panel">
+            <section class="panel" data-dashboard-panel="overview">
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Obaveštenja</p>
@@ -133,7 +144,7 @@
               </div>
               <div class="setup-list" id="portalNotificationList"></div>
             </section>
-            <section class="panel">
+            <section class="panel" data-dashboard-panel="personal">
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Ciljevi</p>
@@ -146,7 +157,7 @@
           </div>
 
           <div class="admin-layout">
-            <section class="panel">
+            <section class="panel" data-dashboard-panel="personal">
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">1:1</p>
@@ -156,7 +167,7 @@
               </div>
               <div class="setup-list" id="portalOneOnOneList"></div>
             </section>
-            <section class="panel">
+            <section class="panel" data-dashboard-panel="personal">
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Kašnjenja</p>
@@ -169,7 +180,7 @@
           </div>
 
           <div class="admin-layout">
-            <section class="panel">
+            <section class="panel" data-dashboard-panel="overview">
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Plan firme</p>
@@ -179,7 +190,7 @@
               </div>
               <div class="setup-list" id="portalCompanyPlanList"></div>
             </section>
-            <section class="panel">
+            <section class="panel" data-dashboard-panel="personal">
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Izveštaj</p>
@@ -191,7 +202,7 @@
             </section>
           </div>
 
-          <section class="panel" id="leaderPanel" hidden>
+          <section class="panel" id="leaderPanel" data-dashboard-panel="team" hidden>
             <div class="panel-head">
               <div>
                 <p class="eyebrow">Lider pogled</p>
@@ -226,17 +237,6 @@
                 <div class="setup-list" id="leaderReportList"></div>
               </section>
             </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <div>
-                <p class="eyebrow">Datumi</p>
-                <h2>Plan firme i odsustva tima</h2>
-              </div>
-              <span>po datumu</span>
-            </div>
-            <div class="setup-list" id="portalTeamTimelineList"></div>
           </section>
 
         </section>
@@ -356,7 +356,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=12"></script>
+    <script src="employee-portal.js?v=13"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>
