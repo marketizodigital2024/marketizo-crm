@@ -1237,14 +1237,26 @@ document.getElementById("installEmployeeAppBtn")?.addEventListener("click", asyn
   if (!deferredInstallPrompt) {
     const alertBox = document.getElementById("employeeMissingTimeAlert");
     if (alertBox) {
-      alertBox.innerHTML = `<strong>Instalacija aplikacije</strong><span>Opcija se pojavljuje kada je portal online ili otvoren preko lokalnog servera.</span>`;
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      alertBox.innerHTML = isIOS
+        ? `<strong>Dodaj na početni ekran</strong><span>U Safariju pritisni Deli, pa izaberi "Dodaj na početni ekran".</span>`
+        : `<strong>Instalacija aplikacije</strong><span>Otvori meni browsera i izaberi "Instaliraj aplikaciju" ili "Dodaj na početni ekran".</span>`;
       alertBox.hidden = false;
+      window.setTimeout(() => {
+        alertBox.hidden = true;
+      }, 9000);
     }
     return;
   }
   deferredInstallPrompt.prompt();
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
+});
+
+document.querySelectorAll("#employeeApp h2").forEach((heading) => {
+  if (heading.textContent.trim() === "Plan firme i odsustva tima") {
+    heading.closest(".panel")?.remove();
+  }
 });
 
 window.addEventListener("storage", (event) => {
