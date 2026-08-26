@@ -581,6 +581,65 @@ function applyAugust2026ClickUpInvoiceSyncV2() {
   return true;
 }
 
+function applyMonthlyInvoiceRostersV3() {
+  state.backup = state.backup || {};
+  if (state.backup.monthlyInvoiceRostersV3) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const findClient = (...names) => (state.clients || []).find((client) =>
+    names.some((name) => normalize(client.name) === normalize(name))
+  );
+  const ensureRoster = (monthKey, roster) => {
+    const includedIds = new Set();
+    roster.forEach((names) => {
+      const client = findClient(...names);
+      if (!client) return;
+      includedIds.add(client.id);
+      client.invoices = client.invoices || {};
+      client.invoices[monthKey] = {
+        invoiceStatus: "Nije poslat",
+        paymentStatus: "Nije plaćeno",
+        paymentMethod: client.paymentMethod || "Firma",
+        sentAt: "",
+        paidAt: "",
+        amount: Number(client.revenue || 0),
+        ...(client.invoices[monthKey] || {}),
+      };
+    });
+    (state.clients || []).forEach((client) => {
+      if (!includedIds.has(client.id) && client.invoices) delete client.invoices[monthKey];
+    });
+  };
+
+  ensureRoster("2026-08", [
+    ["Mtel"], ["Mikrohaus", "Grünwand", "Grunwand", "Mikrohaus / Grünwand"], ["Balkan Express"],
+    ["Mladen Zivkovic", "Mladen Živković"], ["XXXL Restoran"], ["Ivica Kljajic", "Ivica Kljajić"],
+    ["Danilo Mitic", "Danilo Muzicar", "Danilo Mužičar"], ["Lilijana Rakita", "Ljilja Rakita"],
+    ["Isopur GmbH"], ["Violeta Djuric", "Violeta Đurić"], ["Pro Bike", "ProBike"], ["Laci Debljak"],
+    ["POSCH Graben", "Posch Graben"], ["Silvija Lalic", "Silvija Lalić"],
+    ["Stevo - Roditelji i deca", "Stevo"], ["Zlatno Ćoše", "Zlatno Cose"], ["A-Street", "A - Street"],
+    ["Sandra HIFU"], ["Restoran Dinar", "Dinar"], ["Marko Lon Cars", "Marko Cars"],
+    ["FR Foto Vladimir", "FR Foto"], ["SSG Reinigung"], ["Attar Parfemi"], ["Der Fleischer am Eck"],
+  ]);
+
+  ensureRoster("2026-09", [
+    ["Mladen Zivkovic", "Mladen Živković"], ["FR Foto Vladimir", "FR Foto"], ["POSCH Graben", "Posch Graben"],
+    ["Isopur GmbH"], ["Milos Erdbewegung", "Miloš Erdbewegung"], ["Hand2Hand"], ["Ukus Homolja"],
+    ["Verina Administracija", "Verina"], ["Nemanja Bager - Avgust", "Nemanja Bager"],
+    ["Stevo - Roditelji i deca", "Stevo"], ["Vlado Camp"], ["Ana Imhotep"],
+    ["Natasa Komsetikpraxis", "Natasa Kosmetikpraxis", "Nataša Kosmetikpraxis"],
+    ["Edin Dizdarevic", "Edin Dizdarević"], ["Attar Parfemi"], ["Marko Lon Cars", "Marko Cars"],
+    ["SSG Reinigung"], ["ReinDaheim"], ["Restoran Dinar", "Dinar"], ["Sandra HIFU"],
+    ["A-Street", "A - Street"], ["Laci Debljak"], ["Pro Bike", "ProBike"],
+    ["Ivica Kljajic", "Ivica Kljajić"], ["Danilo Mitic", "Danilo Muzicar", "Danilo Mužičar"],
+    ["Balkan Express"], ["Mikrohaus", "Grünwand", "Grunwand", "Mikrohaus / Grünwand"], ["Mtel"],
+    ["Silvija Lalic", "Silvija Lalić"], ["Violeta Djuric", "Violeta Đurić"],
+    ["Lilijana Rakita", "Ljilja Rakita"], ["Zlatno Ćoše", "Zlatno Cose"], ["XXXL Restoran"],
+  ]);
+  state.backup.monthlyInvoiceRostersV3 = true;
+  return true;
+}
+
 function applySladjan2026BalanceCorrections() {
   state.backup = state.backup || {};
   if (state.backup.sladjan2026BalancesCorrected) return false;
@@ -607,6 +666,7 @@ function applySladjan2026BalanceCorrections() {
 
 applyAugust2026FinanceCorrections();
 applyAugust2026ClickUpInvoiceSyncV2();
+applyMonthlyInvoiceRostersV3();
 applySladjan2026BalanceCorrections();
 saveState({ remote: false });
 let activeFilter = "all";
@@ -669,31 +729,23 @@ function withLoginDefaults(client) {
 }
 
 function withInvoiceDefaults(client) {
-  const monthKey = currentMonthKey();
   client.invoices = client.invoices || {};
-  client.invoices[monthKey] = {
-    invoiceStatus: client.invoiceStatus || "Nije poslat",
-    paymentStatus: client.paymentStatus || "Nije plaćeno",
-    paymentMethod: client.paymentMethod || "Firma",
-    sentAt: "",
-    paidAt: "",
-    ...client.invoices[monthKey],
-  };
   return client;
 }
 
 function monthlyInvoice(client, monthKey = selectedMonthKey()) {
   client.invoices = client.invoices || {};
-  if (!client.invoices[monthKey]) {
-    client.invoices[monthKey] = {
-      invoiceStatus: "Nije poslat",
-      paymentStatus: "Nije plaćeno",
-      paymentMethod: client.paymentMethod || "Firma",
-      sentAt: "",
-      paidAt: "",
-    };
-  }
-  return client.invoices[monthKey];
+  return client.invoices[monthKey] || {
+    invoiceStatus: "Nije poslat",
+    paymentStatus: "Nije plaćeno",
+    paymentMethod: client.paymentMethod || "Firma",
+    sentAt: "",
+    paidAt: "",
+  };
+}
+
+function clientsForInvoiceMonth(clients, monthKey) {
+  return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]));
 }
 
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
@@ -1042,8 +1094,9 @@ async function hydrateOnlineState() {
     state = loadState(result.payload);
     const financeCorrected = applyAugust2026FinanceCorrections();
     const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
+    const invoiceRostersCorrected = applyMonthlyInvoiceRostersV3();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || sladjanCorrected });
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
@@ -1209,16 +1262,16 @@ function clientLeadStats(client) {
 
 function renderAdminPanel() {
   const scopedClients = visibleClients();
-  const active = scopedClients.filter((client) => client.status === "Aktivan" || client.status === "Interni");
   const monthKey = monthFilter || currentMonthKey();
-  const mrr = active.reduce((sum, client) => sum + Number(client.revenue || 0), 0);
+  const active = clientsForInvoiceMonth(scopedClients, monthKey);
+  const mrr = active.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
   const paidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus === "Plaćeno");
   const unpaidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus !== "Plaćeno");
   const paidTotal = paidClients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
   const unpaidTotal = unpaidClients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
   const unsentClients = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
 
-  setText("adminTotalClients", scopedClients.length);
+  setText("adminTotalClients", active.length);
   setText("adminMrr", currency.format(mrr));
   setText("adminPaidTotal", currency.format(paidTotal));
   setText("adminPaidCount", `${paidClients.length} klijenata`);
@@ -1455,6 +1508,7 @@ function renderContractExpiryList() {
 }
 
 function renderMonthlyInvoices(clients, monthKey) {
+  clients = clientsForInvoiceMonth(clients, monthKey);
   const statusFor = (client) => {
     const invoice = monthlyInvoice(client, monthKey);
     if (invoice.paymentStatus === "Plaćeno") return "paid";
@@ -1533,6 +1587,7 @@ function bindInvoiceControls() {
 }
 
 function renderInvoiceSummary(clients, monthKey) {
+  clients = clientsForInvoiceMonth(clients, monthKey);
   const summary = clients.reduce(
     (acc, client) => {
       const invoice = monthlyInvoice(client, monthKey);
@@ -1547,7 +1602,7 @@ function renderInvoiceSummary(clients, monthKey) {
 
 function renderInvoiceCarryover(clients, monthKey) {
   const previousMonth = shiftMonth(monthKey, -1);
-  const open = clients.filter((client) => monthlyInvoice(client, previousMonth).paymentStatus !== "Plaćeno");
+  const open = clientsForInvoiceMonth(clients, previousMonth).filter((client) => monthlyInvoice(client, previousMonth).paymentStatus !== "Plaćeno");
   setText("invoiceCarryoverCount", `${open.length} otvorenih`);
   const target = document.getElementById("invoiceCarryoverList");
   if (!target) return;
