@@ -2565,7 +2565,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
 
 function setupEmployeeAdminSections() {
   const monthFilter = document.getElementById("employeeMonthFilter");
-  const root = monthFilter?.closest(".client-tab");
+  const root = monthFilter?.closest(".view");
   if (!root || root.dataset.sectionsReady) return;
   root.dataset.sectionsReady = "true";
   root.dataset.employeeSection = "overview";
