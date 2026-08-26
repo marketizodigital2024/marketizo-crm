@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=16" />
+    <link rel="stylesheet" href="styles.css?v=17" />
   </head>
   <body class="client-login-body">
     <main class="client-auth" id="employeeLoginScreen">
@@ -153,6 +153,14 @@
                 <span id="portalGoalCount">0</span>
               </div>
               <div class="setup-list" id="portalGoalList"></div>
+            </section>
+            <section class="panel" data-dashboard-panel="personal">
+              <div class="panel-head">
+                <div><p class="eyebrow">Ocene</p><h2>Mesečni učinak</h2></div>
+                <span id="portalRatingAverage">-</span>
+              </div>
+              <div class="rating-trend" id="portalRatingTrend"></div>
+              <div class="setup-list" id="portalRatingList"></div>
             </section>
           </div>
 
@@ -356,7 +364,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=13"></script>
+    <script src="employee-portal.js?v=14"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

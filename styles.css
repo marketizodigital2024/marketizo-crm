@@ -947,6 +947,36 @@ th {
   display: none !important;
 }
 
+#employeeApp .metric:has(#portalStartDate),
+#employeeApp .metric:has(#portalWeeklyHours) {
+  display: none !important;
+}
+
+.rating-trend {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  min-height: 150px;
+  margin: 8px 0 16px;
+  padding: 16px;
+  border: 1px solid #dfe8e1;
+  border-radius: 16px;
+  background: #f7faf7;
+}
+.rating-bar { display: grid; grid-template-rows: 92px auto; flex: 1; min-width: 28px; text-align: center; }
+.rating-bar > span { align-self: end; width: 100%; max-width: 38px; margin: auto; border-radius: 9px 9px 4px 4px; background: linear-gradient(180deg, #20b86a, #0f8d51); }
+.rating-bar small { margin-top: 7px; color: #64736a; font-weight: 750; }
+.goal-progress-row { grid-template-columns: auto minmax(0, 1fr) auto !important; }
+.goal-complete-button { white-space: nowrap !important; }
+
+@media (max-width: 760px) {
+  #employeeApp .employee-portal-metrics .metric { min-height: 104px !important; padding: 14px !important; }
+  #employeeApp .employee-portal-metrics .metric-value,
+  #employeeApp .employee-portal-metrics strong { font-size: clamp(25px, 8vw, 34px) !important; }
+  #employeeApp .goal-progress-row { grid-template-columns: auto minmax(0, 1fr) !important; }
+  #employeeApp .goal-complete-button { grid-column: 1 / -1; width: 100% !important; }
+}
+
 .dashboard-subnav {
   display: none;
 }

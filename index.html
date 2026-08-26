@@ -20,7 +20,7 @@
     <meta name="theme-color" content="#ff6b00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=16" />
+    <link rel="stylesheet" href="styles.css?v=17" />
   </head>
   <body>
     <div class="app-shell">
@@ -477,6 +477,27 @@
 
           <div class="employee-action-grid">
             <section class="panel">
+              <div class="panel-head">
+                <div><p class="eyebrow">Mesečna ocena</p><h2>Učinak zaposlenog</h2></div>
+                <span>vlasnik ili klijent · 1–5</span>
+              </div>
+              <form id="employeeRatingForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Zaposleni<select id="ratingEmployeeSelect" name="employeeId" required></select></label>
+                  <label>Mesec<input name="month" type="month" required /></label>
+                  <label>Ko ocenjuje<select name="source" required><option>Vlasnik</option><option>Klijent</option></select></label>
+                  <label>Ocena<select name="score" required><option value="5">5 · Odlično</option><option value="4">4 · Vrlo dobro</option><option value="3">3 · Dobro</option><option value="2">2 · Potrebno poboljšanje</option><option value="1">1 · Nezadovoljavajuće</option></select></label>
+                  <label class="span-2">Klijent / ocenjivač<input name="reviewer" placeholder="npr. Balkan Express ili Miljan" /></label>
+                  <label class="span-2">Komentar<textarea name="note" rows="3" placeholder="kratko obrazloženje ocene"></textarea></label>
+                </div>
+                <div class="admin-submit"><button class="primary-button" type="submit">Sačuvaj ocenu</button></div>
+              </form>
+              <div class="setup-list rating-admin-list" id="employeeRatingRows"></div>
+            </section>
+          </div>
+
+          <div class="employee-action-grid">
+            <section class="panel">
 	              <div class="panel-head">
 	                <div>
 	                  <p class="eyebrow">Odsustvo</p>
@@ -602,6 +623,12 @@
 	                <div class="form-grid">
 	                  <label>Zaposleni
 	                    <select id="goalEmployeeSelect" name="employeeId" required></select>
+	                  </label>
+	                  <label>Oblast razvoja
+	                    <select name="category">
+	                      <option>Stručne veštine</option><option>Komunikacija</option><option>Organizacija</option>
+	                      <option>Samostalnost</option><option>Liderstvo</option><option>Drugo</option>
+	                    </select>
 	                  </label>
 	                  <label>Status
 	                    <select name="status">
@@ -927,7 +954,7 @@
     <script src="admin-auth.js?v=3"></script>
     <div class="toast-stack" id="toastStack" aria-live="polite"></div>
     <script src="remote-state.js?v=7"></script>
-    <script src="app.js?v=11"></script>
+    <script src="app.js?v=12"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

@@ -124,6 +124,7 @@ function loadState(sourceData = null) {
     createdAt: record.createdAt || new Date().toISOString(),
   }));
   data.employeeGoals = data.employeeGoals || [];
+  data.employeeRatings = data.employeeRatings || [];
   data.employeeOneOnOnes = data.employeeOneOnOnes || [];
   data.employeeReports = data.employeeReports || [];
   data.companyPlans = data.companyPlans || [];
@@ -907,15 +908,52 @@ function renderPortalGoals() {
   document.getElementById("portalGoalList").innerHTML = goals.length
     ? goals
         .map((goal) => {
-          const status = goal.status === "Rizik" ? "danger" : goal.status === "Završeno" ? "ok" : "warn";
+          const daysLeft = Math.ceil((new Date(`${goal.endDate}T23:59:59`) - new Date()) / 86400000);
+          const isLate = goal.status !== "Završeno" && daysLeft < 0;
+          const isNear = goal.status !== "Završeno" && daysLeft >= 0 && daysLeft <= 7;
+          const status = isLate || goal.status === "Rizik" ? "danger" : goal.status === "Završeno" ? "ok" : "warn";
+          const deadline = goal.status === "Završeno"
+            ? `Završeno ${formatDate(goal.completedDate)}`
+            : isLate ? `Kasni ${Math.abs(daysLeft)} dana` : isNear ? `Rok za ${daysLeft} dana` : `Rok ${formatDate(goal.endDate)}`;
           return `
-          <div class="setup-item alert-item ${status}">
+          <div class="setup-item alert-item ${status} goal-progress-row">
             <strong>${goal.progress || 0}%</strong>
-            <span>${goal.title}<br />${goal.target || ""} · rok ${formatDate(goal.endDate)}</span>
+            <span>${goal.category || "Razvoj"} · ${goal.title}<br />${goal.target || ""} · ${deadline}</span>
+            ${goal.status !== "Završeno" ? `<button class="secondary-button goal-complete-button" data-complete-goal="${goal.id}" type="button">Označi završeno</button>` : ""}
           </div>`;
         })
         .join("")
     : `<div class="empty-state">Nema unetih ciljeva.</div>`;
+  renderPortalRatings();
+}
+
+function renderPortalRatings() {
+  const ratings = (state.employeeRatings || []).filter((rating) => rating.employeeId === activeEmployee.id);
+  const monthly = ratings.reduce((groups, rating) => {
+    groups[rating.month] = groups[rating.month] || [];
+    groups[rating.month].push(rating);
+    return groups;
+  }, {});
+  const months = Object.keys(monthly).sort().slice(-6);
+  const current = monthly[portalMonth] || [];
+  const owner = current.filter((item) => item.source === "Vlasnik");
+  const clients = current.filter((item) => item.source === "Klijent");
+  const ownerAverage = owner.length ? owner.reduce((sum, item) => sum + Number(item.score || 0), 0) / owner.length : null;
+  const clientAverage = clients.length ? clients.reduce((sum, item) => sum + Number(item.score || 0), 0) / clients.length : null;
+  const combined = ownerAverage !== null && clientAverage !== null ? (ownerAverage + clientAverage) / 2 : ownerAverage ?? clientAverage;
+  setText("portalRatingAverage", combined !== null ? `${combined.toFixed(1)}/5` : "Nema ocene");
+  const trend = document.getElementById("portalRatingTrend");
+  if (trend) trend.innerHTML = months.length
+    ? months.map((month) => {
+        const items = monthly[month];
+        const value = items.reduce((sum, item) => sum + Number(item.score || 0), 0) / items.length;
+        return `<div class="rating-bar"><span style="height:${value * 20}%"></span><small>${month.slice(5)}<br />${value.toFixed(1)}</small></div>`;
+      }).join("")
+    : `<div class="empty-state">Ocene će se prikazivati iz meseca u mesec.</div>`;
+  const list = document.getElementById("portalRatingList");
+  if (list) list.innerHTML = current.length
+    ? current.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${rating.source}${rating.reviewer ? ` · ${rating.reviewer}` : ""}<br />${rating.note || "Bez komentara"}</span></div>`).join("")
+    : "";
 }
 
 function renderPortalOneOnOnes() {
@@ -1278,6 +1316,18 @@ document.querySelectorAll("[data-dashboard-section-button]").forEach((button) =>
     });
     dashboard.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+});
+
+document.getElementById("portalGoalList")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-complete-goal]");
+  if (!button) return;
+  const goal = (state.employeeGoals || []).find((item) => item.id === button.dataset.completeGoal && item.employeeId === activeEmployee.id);
+  if (!goal) return;
+  goal.status = "Završeno";
+  goal.progress = 100;
+  goal.completedDate = currentDateKey();
+  saveState();
+  renderEmployeePortal();
 });
 
 window.addEventListener("storage", (event) => {
