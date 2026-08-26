@@ -2651,8 +2651,8 @@ function setupEmployeeAdminSections() {
       activate(section);
     });
   });
-  const currentFile = location.pathname.split("/").pop();
-  const routedSection = Object.entries(sectionRoutes).find(([, route]) => route === currentFile)?.[0];
+  const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
+  const routedSection = Object.entries(sectionRoutes).find(([, route]) => route.replace(/\.html$/, "") === currentFile)?.[0];
   if (routedSection && mainNav && !mainNav.classList.contains("active")) mainNav.click();
   const requestedSection = routedSection || (location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview");
   const initialSection = requestedSection === "development" ? "goals" : requestedSection;
