@@ -131,6 +131,24 @@ function loadState(sourceData = null) {
     ...notification,
     hiddenUntil: notification.hiddenUntil || "",
   }));
+  const sladjan = data.employees.find((employee) =>
+    String(employee.name || "").trim().toLowerCase().replace(/[đ]/g, "dj") === "sladjan simic"
+  );
+  if (sladjan) {
+    sladjan.openingHourBalance = 0;
+    sladjan.openingBalanceMonth = "2025-12";
+    sladjan.monthlyBalanceOverrides = {
+      ...(sladjan.monthlyBalanceOverrides || {}),
+      "2026-01": 2.5,
+      "2026-02": 1.5,
+      "2026-03": 3.5,
+      "2026-04": 0,
+      "2026-05": 0,
+      "2026-06": -2,
+      "2026-07": 1.5,
+      "2026-08": -0.5,
+    };
+  }
   localStorage.setItem("agencyCrmData", JSON.stringify(data));
   return data;
 }
@@ -425,7 +443,9 @@ function monthIndex(monthKey) {
 }
 
 function employeeMonthHasActivity(employeeId, monthKey) {
+  const employee = (state.employees || []).find((item) => item.id === employeeId);
   return (
+    Object.prototype.hasOwnProperty.call(employee?.monthlyBalanceOverrides || {}, monthKey) ||
     (state.employeeWorkLogs || []).some((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey)) ||
     (state.employeeLateRecords || []).some((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey)) ||
     (state.employeeAbsences || []).some((absence) => absence.employeeId === employeeId && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
@@ -433,6 +453,9 @@ function employeeMonthHasActivity(employeeId, monthKey) {
 }
 
 function monthBalance(employee, monthKey) {
+  if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
+    return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
+  }
   return Math.round((employeeMonthHours(employee, monthKey) - expectedHours(employee, monthKey)) * 100) / 100;
 }
 
