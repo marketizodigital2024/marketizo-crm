@@ -581,14 +581,22 @@ function applyAugust2026ClickUpInvoiceSyncV2() {
   return true;
 }
 
-function applyMonthlyInvoiceRostersV4() {
+function applyMonthlyInvoiceRostersV5() {
   state.backup = state.backup || {};
-  if (state.backup.monthlyInvoiceRostersV4) return false;
+  if (state.backup.monthlyInvoiceRostersV5) return false;
   const normalize = (value) => String(value || "").trim().toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
   const findClient = (...names) => (state.clients || []).find((client) =>
     names.some((name) => normalize(client.name) === normalize(name))
   );
+  if (!findClient("Der Fleischer am Eck")) {
+    state.clients.push(withLoginDefaults({
+      id: crypto.randomUUID(), name: "Der Fleischer am Eck", package: "Starter", revenue: 997,
+      country: "Austrija", status: "Neaktivan", startDate: "2026-08-01", contractMonths: 3,
+      billingDay: 1, paymentMethod: "Firma", invoiceStatus: "Nije poslat",
+      paymentStatus: "Nije plaćeno", invoices: {},
+    }));
+  }
   const ensureRoster = (monthKey, roster) => {
     const includedIds = new Set();
     roster.forEach((names) => {
@@ -636,7 +644,7 @@ function applyMonthlyInvoiceRostersV4() {
     ["Silvija Lalic", "Silvija Lalić"], ["Violeta Djuric", "Violeta Đurić"],
     ["Lilijana Rakita", "Ljilja Rakita"], ["Zlatno Ćoše", "Zlatno Cose"], ["XXXL Restoran"],
   ]);
-  state.backup.monthlyInvoiceRostersV4 = true;
+  state.backup.monthlyInvoiceRostersV5 = true;
   return true;
 }
 
@@ -666,7 +674,7 @@ function applySladjan2026BalanceCorrections() {
 
 applyAugust2026FinanceCorrections();
 applyAugust2026ClickUpInvoiceSyncV2();
-applyMonthlyInvoiceRostersV4();
+applyMonthlyInvoiceRostersV5();
 applySladjan2026BalanceCorrections();
 saveState({ remote: false });
 let activeFilter = "all";
@@ -677,6 +685,7 @@ let monthFilter = "";
 let dateFromFilter = "";
 let dateToFilter = "";
 let countryFilter = "all";
+const openInvoiceGroups = new Set(["unpaid"]);
 let selectedPortalClientId = state.clients[0]?.id || "";
 let employeeMonthFilter = currentMonthKey();
 let employeeStatusFilter = "all";
@@ -751,6 +760,14 @@ function clientsForInvoiceMonth(clients, monthKey) {
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
   const invoice = monthlyInvoice(client, monthKey);
   return Number(invoice.amount ?? client.revenue ?? 0);
+}
+
+function groupInvoiceSum(clients, field, monthKey) {
+  return clientsForInvoiceMonth(clients, monthKey).reduce((totals, client) => {
+    const key = client[field] || "Ostalo";
+    totals[key] = (totals[key] || 0) + invoiceAmount(client, monthKey);
+    return totals;
+  }, {});
 }
 
 function loadState(sourceData = null) {
@@ -1094,7 +1111,7 @@ async function hydrateOnlineState() {
     state = loadState(result.payload);
     const financeCorrected = applyAugust2026FinanceCorrections();
     const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
-    const invoiceRostersCorrected = applyMonthlyInvoiceRostersV4();
+    const invoiceRostersCorrected = applyMonthlyInvoiceRostersV5();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
     saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected });
     renderAll();
@@ -1552,11 +1569,18 @@ function renderMonthlyInvoices(clients, monthKey) {
     target.innerHTML = groups.map(([key, label, badge]) => {
       const entries = sorted.filter((client) => statusFor(client) === key);
       const total = entries.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
-      return `<details class="invoice-status-group invoice-status-${key}" ${key === "unpaid" ? "open" : ""}>
+      return `<details class="invoice-status-group invoice-status-${key}" data-invoice-group="${key}" ${openInvoiceGroups.has(key) ? "open" : ""}>
         <summary><span class="invoice-status-dot"></span><strong>${label}</strong><span>${entries.length} klijenata</span><b>${currency.format(total)}</b><em>${badge}</em></summary>
         <div class="invoice-status-list">${entries.length ? entries.map(renderClient).join("") : `<div class="empty-state">Nema klijenata u ovoj grupi.</div>`}</div>
       </details>`;
     }).join("");
+    target.querySelectorAll("[data-invoice-group]").forEach((details) => {
+      details.addEventListener("toggle", () => {
+        const key = details.dataset.invoiceGroup;
+        if (details.open) openInvoiceGroups.add(key);
+        else openInvoiceGroups.delete(key);
+      });
+    });
   }
   document.getElementById("monthlyInvoiceRows").innerHTML = "";
   bindInvoiceControls();
@@ -3166,16 +3190,16 @@ function renderClients() {
 
 function renderReports() {
   const clients = visibleClients();
-  const active = clients.filter((client) => client.status === "Aktivan" || client.status === "Interni");
   const monthKey = selectedMonthKey();
-  const revenueByCountry = groupSum(clients, "country", "revenue");
-  const revenueByStatus = groupSum(clients, "status", "revenue");
+  const invoiceClients = clientsForInvoiceMonth(clients, monthKey);
+  const revenueByCountry = groupInvoiceSum(invoiceClients, "country", monthKey);
+  const revenueByStatus = groupInvoiceSum(invoiceClients, "status", monthKey);
   renderBars("countryBars", revenueByCountry, "€");
   renderBars("revenueBars", revenueByStatus, "€");
   setText("invoiceMonthLabel", monthLabel(monthKey));
-  renderInvoiceCarryover(active, monthKey);
-  renderInvoiceSummary(active, monthKey);
-  renderMonthlyInvoices(active, monthKey);
+  renderInvoiceCarryover(clients, monthKey);
+  renderInvoiceSummary(invoiceClients, monthKey);
+  renderMonthlyInvoices(invoiceClients, monthKey);
 }
 
 function selectedPortalClient() {
