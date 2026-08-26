@@ -987,14 +987,29 @@ function visibleClients() {
 }
 
 function byCountry(client) {
-  return countryFilter === "all" || client.country === countryFilter;
+  if (countryFilter === "all") return true;
+  const aliases = {
+    austria: "austrija",
+    österreich: "austrija",
+    austrija: "austrija",
+    germany: "nemačka",
+    deutschland: "nemačka",
+    nemačka: "nemačka",
+    srbija: "srbija",
+    serbia: "srbija",
+    hrvatska: "hrvatska",
+    croatia: "hrvatska",
+  };
+  const normalize = (value) => aliases[String(value || "").trim().toLowerCase()] || String(value || "").trim().toLowerCase();
+  return normalize(client.country) === normalize(countryFilter);
 }
 
 function byDateRange(client) {
   if (!dateFromFilter && !dateToFilter) return true;
-  if (!client.startDate) return false;
+  if (!client.startDate) return true;
   const start = new Date(client.startDate);
-  if (dateFromFilter && start < new Date(dateFromFilter)) return false;
+  // Period filter shows clients already active during the selected period,
+  // not only clients whose cooperation started inside that exact range.
   if (dateToFilter && start > new Date(dateToFilter)) return false;
   return true;
 }
@@ -1207,7 +1222,7 @@ function renderAdminNotifications() {
 }
 
 function renderAdminClientSnapshot(clients) {
-  const baseClients = clients.length ? clients : state.clients.filter(bySearch);
+  const baseClients = clients;
   const rows = [...baseClients]
     .sort((a, b) => {
       const aStats = clientLeadStats(a);

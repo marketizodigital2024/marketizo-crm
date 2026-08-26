@@ -2734,6 +2734,26 @@ textarea {
   color: #52665a;
 }
 
+/* No dark action controls in either admin or employee portal. */
+.mini-action:not(.danger-action),
+.edit-button:not(.danger-action),
+.password-toggle,
+.notification-button {
+  background: #ffffff !important;
+  color: #183126 !important;
+  border: 1px solid #cfdcd4 !important;
+  box-shadow: 0 5px 14px rgba(24, 49, 38, 0.08) !important;
+}
+
+.mini-action:not(.danger-action):hover,
+.edit-button:not(.danger-action):hover,
+.password-toggle:hover,
+.notification-button:hover {
+  background: #eef8f2 !important;
+  color: #0f6f43 !important;
+  border-color: #9fc8ad !important;
+}
+
 .alert-item {
   grid-template-columns: auto minmax(0, 1fr) auto !important;
 }
