@@ -2653,7 +2653,11 @@ function setupEmployeeAdminSections() {
   });
   const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
   const routedSection = Object.entries(sectionRoutes).find(([, route]) => route.replace(/\.html$/, "") === currentFile)?.[0];
-  if (routedSection && mainNav && !mainNav.classList.contains("active")) mainNav.click();
+  if (routedSection) {
+    document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
+    root.classList.add("active");
+    document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.toggle("active", item === mainNav));
+  }
   const requestedSection = routedSection || (location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview");
   const initialSection = requestedSection === "development" ? "goals" : requestedSection;
   activate(sections.some(([key]) => key === initialSection) ? initialSection : "overview");
