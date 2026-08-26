@@ -368,6 +368,156 @@ h3,
 .toast-message strong { color: #183126 !important; }
 .toast-message span { color: #607168 !important; }
 
+/* Employee portal: phone and tablet layout. */
+@media (max-width: 760px) {
+  .employee-app .sidebar {
+    position: sticky !important;
+    top: 0;
+    z-index: 40;
+    width: 100% !important;
+    padding: 8px 12px !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    border-bottom: 1px solid #dbe5de !important;
+    backdrop-filter: blur(14px);
+  }
+
+  .employee-app .sidebar .nav {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    gap: 5px !important;
+    overflow: visible !important;
+  }
+
+  .employee-app .sidebar .nav-item {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 7px 3px !important;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1.1;
+    text-align: center;
+    border-radius: 11px !important;
+  }
+
+  .employee-app .main {
+    padding-top: 16px !important;
+  }
+
+  .employee-app .top-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px !important;
+  }
+
+  .employee-app .employee-month-search {
+    grid-column: 1 / -1;
+  }
+
+  #installEmployeeAppBtn,
+  #logoutEmployee {
+    width: 100% !important;
+    min-height: 46px;
+    color: #183126 !important;
+    background: #ffffff !important;
+  }
+
+  .employee-portal-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .employee-portal-metrics .metric {
+    min-height: 118px !important;
+    padding: 16px !important;
+  }
+
+  .employee-portal-metrics .metric strong {
+    font-size: clamp(24px, 8vw, 34px) !important;
+    overflow-wrap: anywhere;
+  }
+
+  .employee-portal-metrics .metric:has(#portalPosition) {
+    grid-column: 1 / -1;
+  }
+
+  .employee-app textarea {
+    min-height: 118px !important;
+  }
+
+  .employee-app .employee-calendar {
+    display: block !important;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto !important;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 10px;
+  }
+
+  .employee-app .calendar-weekdays,
+  .employee-app .calendar-grid {
+    width: 760px !important;
+    min-width: 760px !important;
+  }
+
+  .employee-app .calendar-day {
+    min-height: 126px !important;
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 420px) {
+  .employee-app .panel,
+  .employee-app .metric {
+    border-radius: 15px !important;
+  }
+
+  .employee-app .main {
+    padding-inline: 12px !important;
+  }
+
+  .employee-app .panel {
+    padding: 15px !important;
+  }
+}
+
+/* Final light-surface guard across every portal. */
+select option,
+select optgroup {
+  background: #ffffff !important;
+  color: #18251d !important;
+}
+
+.work-log-feedback span,
+.admin-client-card,
+.pipeline-column,
+.calendar-day,
+.calendar-day.weekend,
+.calendar-day.holiday,
+.lead-details,
+.document-item,
+.employee-alert,
+.notification-archive .setup-item {
+  background: #ffffff !important;
+  color: #183126 !important;
+  border-color: #d8e3dc !important;
+}
+
+.work-log-feedback span,
+.lead-details span,
+.admin-client-card span {
+  color: #607168 !important;
+}
+
+dialog,
+.modal-card {
+  background: #ffffff !important;
+  color: #183126 !important;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--green);
