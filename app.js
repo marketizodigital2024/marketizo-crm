@@ -514,7 +514,32 @@ function applyAugust2026FinanceCorrections() {
   return true;
 }
 
+function applySladjan2026BalanceCorrections() {
+  state.backup = state.backup || {};
+  if (state.backup.sladjan2026BalancesCorrected) return false;
+  const employee = (state.employees || []).find((item) =>
+    String(item.name || "").trim().toLowerCase().replace(/[đ]/g, "dj") === "sladjan simic"
+  );
+  if (!employee) return false;
+  employee.openingHourBalance = 0;
+  employee.openingBalanceMonth = "2025-12";
+  employee.monthlyBalanceOverrides = {
+    ...(employee.monthlyBalanceOverrides || {}),
+    "2026-01": 2.5,
+    "2026-02": 1.5,
+    "2026-03": 3.5,
+    "2026-04": 0,
+    "2026-05": 0,
+    "2026-06": -2,
+    "2026-07": 1.5,
+    "2026-08": -0.5,
+  };
+  state.backup.sladjan2026BalancesCorrected = true;
+  return true;
+}
+
 applyAugust2026FinanceCorrections();
+applySladjan2026BalanceCorrections();
 saveState({ remote: false });
 let activeFilter = "all";
 let activeStatusFilter = "all";
@@ -919,7 +944,9 @@ async function hydrateOnlineState() {
   const result = await window.MarketizoRemote.load();
   if (result.payload) {
     state = loadState(result.payload);
-    saveState({ remote: false });
+    const financeCorrected = applyAugust2026FinanceCorrections();
+    const sladjanCorrected = applySladjan2026BalanceCorrections();
+    saveState({ remote: financeCorrected || sladjanCorrected });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
@@ -1760,7 +1787,9 @@ function monthIndex(monthKey) {
 }
 
 function employeeMonthHasActivity(employeeId, monthKey) {
+  const employee = employeeById(employeeId);
   return (
+    Object.prototype.hasOwnProperty.call(employee?.monthlyBalanceOverrides || {}, monthKey) ||
     state.employeeWorkLogs.some((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey)) ||
     (state.employeeLateRecords || []).some((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey)) ||
     (state.employeeAbsences || []).some((absence) => absence.employeeId === employeeId && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
@@ -1768,6 +1797,9 @@ function employeeMonthHasActivity(employeeId, monthKey) {
 }
 
 function employeeMonthBalance(employee, monthKey) {
+  if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
+    return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
+  }
   return Math.round((employeeMonthHours(employee.id, monthKey) - employeeExpectedHours(employee, monthKey)) * 100) / 100;
 }
 
