@@ -2043,3 +2043,153 @@ textarea:disabled {
   font-weight: 700 !important;
   overflow-wrap: anywhere;
 }
+
+/* Polished monthly calendar shared by admin and employee portals. */
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 0 4px;
+}
+
+.calendar-weekdays span {
+  color: #718078 !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px !important;
+}
+
+.calendar-day {
+  position: relative;
+  min-width: 0;
+  min-height: 142px !important;
+  padding: 11px !important;
+  overflow: hidden;
+}
+
+.calendar-day.empty {
+  min-height: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.calendar-day > strong {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 5px;
+  place-items: center;
+  border-radius: 9px;
+  background: #edf2ee;
+  color: #26342b;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.calendar-day.weekend {
+  background: #f6f7f5 !important;
+}
+
+.calendar-day.weekend > strong {
+  background: #e5e9e6;
+  color: #69756e;
+}
+
+.calendar-day.holiday {
+  background: #fff8f6 !important;
+  border-color: #ffd4cc !important;
+}
+
+.calendar-day.has-absence {
+  border-color: #f0c7ab !important;
+}
+
+.calendar-day.has-hours {
+  box-shadow: inset 0 -3px 0 #20b86a, 0 4px 16px rgba(27, 51, 36, 0.05) !important;
+}
+
+.calendar-note {
+  display: block !important;
+  width: 100%;
+  margin-top: 5px !important;
+  padding: 6px 8px !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-weight: 750 !important;
+  line-height: 1.25 !important;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.calendar-note.vacation-note {
+  background: #fff0e5 !important;
+  border-color: #ffd2b3 !important;
+  color: #984308 !important;
+}
+
+.calendar-note.sick-note {
+  background: #ffeded !important;
+  border-color: #ffc8c8 !important;
+  color: #a12f2f !important;
+}
+
+.calendar-note.holiday-note {
+  background: #ffe9e6 !important;
+  border-color: #ffc6be !important;
+  color: #a83c30 !important;
+}
+
+.calendar-note.company-note,
+.calendar-note.plan-note {
+  background: #edf5ff !important;
+  border-color: #cbdfff !important;
+  color: #285b9c !important;
+}
+
+.calendar-note.hours-note {
+  background: #e9f8ef !important;
+  border-color: #bde8cd !important;
+  color: #147443 !important;
+}
+
+@media (max-width: 900px) {
+  .calendar-weekdays,
+  .calendar-grid {
+    gap: 6px !important;
+  }
+
+  .calendar-day {
+    min-height: 105px !important;
+    padding: 7px !important;
+  }
+
+  .calendar-note {
+    padding: 5px 6px !important;
+    font-size: 10px !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .calendar-weekdays,
+  .calendar-grid {
+    min-width: 760px;
+  }
+
+  #portalEmployeeCalendar,
+  #employeeCalendar,
+  #adminTeamCalendar {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+}
