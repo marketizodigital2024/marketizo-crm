@@ -463,6 +463,21 @@ h3 {
   color: var(--orange);
 }
 
+.filter-divider {
+  width: 1px;
+  min-height: 34px;
+  margin: 4px 2px;
+  background: var(--mk-line);
+}
+
+@media (max-width: 780px) {
+  .filter-divider {
+    width: 100%;
+    min-height: 1px;
+    margin: 2px 0;
+  }
+}
+
 .view {
   display: none;
 }
@@ -2672,5 +2687,157 @@ textarea {
   .secondary-button {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* Final legibility and employee layout fixes. */
+.worklog-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, 0.7fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin: 4px 0 18px;
+  padding: 16px;
+  background: #f4f8f5;
+  border: 1px solid #dbe5de;
+  border-radius: 16px;
+}
+
+.worklog-filters label {
+  display: grid;
+  gap: 7px;
+  color: #52665a;
+  font-weight: 800;
+}
+
+.worklog-filters .secondary-button {
+  min-height: 52px;
+}
+
+.notification-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.absence-archive {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #c9d8ce;
+}
+
+.absence-archive > strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #52665a;
+}
+
+.alert-item {
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+}
+
+.notification-archive button,
+.employee-alert button,
+.alert-list button {
+  background: #ffffff !important;
+  color: #183126 !important;
+  border: 1px solid #cfdcd4 !important;
+  box-shadow: 0 6px 16px rgba(24, 49, 38, 0.08);
+  white-space: nowrap;
+}
+
+.danger-action,
+#employeeActivityList .setup-item button,
+.employee-table button {
+  position: static !important;
+  width: auto !important;
+  min-width: 72px;
+  max-width: 100%;
+  padding: 9px 13px !important;
+  background: #fff7f7 !important;
+  color: #b4232f !important;
+  border: 1px solid #efb4ba !important;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.employee-workspace {
+  align-items: start;
+}
+
+.employee-directory-panel,
+.employee-detail-panel {
+  align-self: start;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.employee-detail-panel .panel-heading {
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.employee-detail-panel .panel-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+#employeeActivityList .setup-item {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  overflow: hidden;
+}
+
+#employeeActivityList .setup-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.employee-table td:last-child {
+  min-width: 112px;
+}
+
+.employee-table td:last-child > * {
+  margin-right: 0 !important;
+}
+
+@media (max-width: 760px) {
+  .worklog-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-divider {
+    display: none;
+  }
+
+  .employee-detail-panel .panel-heading,
+  .employee-detail-panel .panel-actions {
+    flex-wrap: wrap;
+  }
+
+  #employeeActivityList .setup-item {
+    grid-template-columns: 1fr;
+  }
+
+  #employeeActivityList .setup-item button {
+    width: 100% !important;
+  }
+
+  .alert-item {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+  }
+
+  .notification-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .notification-actions button {
+    flex: 1 1 140px;
   }
 }

@@ -194,6 +194,11 @@
               <button class="chip" data-filter="Nemačka" type="button">Nemačka</button>
               <button class="chip" data-filter="Srbija" type="button">Srbija</button>
               <button class="chip" data-filter="Hrvatska" type="button">Hrvatska</button>
+              <span class="filter-divider" aria-hidden="true"></span>
+              <button class="chip active" data-status-filter="all" type="button">Svi statusi</button>
+              <button class="chip" data-status-filter="Aktivan" type="button">Aktivni</button>
+              <button class="chip" data-status-filter="Neaktivan" type="button">Neaktivni</button>
+              <button class="chip" data-status-filter="Arhiviran" type="button">Arhivirani</button>
             </div>
           </div>
           <section class="panel admin-form-panel client-add-panel" id="clientAddPanel" hidden>
@@ -700,8 +705,22 @@
 
           <section class="panel wide">
             <div class="panel-head">
-              <h2>Uneti sati izabranog</h2>
+              <div>
+                <p class="eyebrow">Evidencija rada</p>
+                <h2>Uneti sati zaposlenih</h2>
+              </div>
               <span id="employeeWorkRowsCount">0</span>
+            </div>
+            <div class="worklog-filters">
+              <label>Zaposleni
+                <select id="employeeWorkPersonFilter">
+                  <option value="all">Svi zaposleni</option>
+                </select>
+              </label>
+              <label>Mesec
+                <input id="employeeWorkMonthFilter" type="month" />
+              </label>
+              <button class="secondary-button" id="resetEmployeeWorkFilters" type="button">Prikaži sve</button>
             </div>
             <div class="table-wrap">
               <table class="invoice-table employee-table">
