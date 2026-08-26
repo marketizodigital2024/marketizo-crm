@@ -1982,3 +1982,64 @@ textarea:disabled {
   background: #eef2ef !important;
   color: #657169 !important;
 }
+
+/* Calendar: readable light cards instead of the legacy black grid. */
+.calendar-grid,
+.calendar-days,
+.absence-calendar {
+  gap: 10px !important;
+}
+
+.calendar-day,
+.calendar-cell,
+.day-cell {
+  background: #ffffff !important;
+  color: #18251d !important;
+  border: 1px solid #d8e1db !important;
+  border-radius: 14px !important;
+  padding: 12px !important;
+  min-height: 150px;
+  box-shadow: 0 4px 16px rgba(27, 51, 36, 0.05) !important;
+}
+
+.calendar-day.weekend,
+.calendar-cell.weekend,
+.day-cell.weekend,
+.calendar-day.is-weekend,
+.calendar-cell.is-weekend {
+  background: #f3f5f2 !important;
+  border-color: #dde3de !important;
+}
+
+.calendar-day.today,
+.calendar-cell.today,
+.day-cell.today {
+  background: #fff7f1 !important;
+  border-color: #ff9b5a !important;
+  box-shadow: 0 0 0 2px rgba(255, 107, 0, 0.1) !important;
+}
+
+.calendar-day-number,
+.day-number,
+.calendar-date {
+  background: #edf1ee !important;
+  color: #26342b !important;
+  border-radius: 9px !important;
+}
+
+.calendar-event,
+.absence-event,
+.event-chip,
+.calendar-chip {
+  display: block;
+  background: #fff0e6 !important;
+  color: #8b3d09 !important;
+  border: 1px solid #ffd0b1 !important;
+  border-radius: 9px !important;
+  padding: 7px 9px !important;
+  margin-top: 6px !important;
+  font-size: 13px !important;
+  line-height: 1.3 !important;
+  font-weight: 700 !important;
+  overflow-wrap: anywhere;
+}
