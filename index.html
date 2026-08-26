@@ -149,17 +149,7 @@
             </section>
           </div>
 
-          <div class="admin-layout">
-            <section class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="eyebrow">Backup baze</p>
-                  <h2>Dnevna kopija</h2>
-                </div>
-                <button class="secondary-button" id="backupNowBtn" type="button">Skini backup</button>
-              </div>
-              <div class="setup-list" id="backupStatusList"></div>
-            </section>
+          <div class="admin-layout single-highlight">
             <section class="panel">
               <div class="panel-head">
                 <div>
@@ -175,8 +165,8 @@
           <div class="admin-layout">
             <section class="panel">
               <div class="panel-head">
-                <h2>Paketi mesečno</h2>
-                <span>zbir</span>
+                <h2>Klijenti po paketima</h2>
+                <span>broj klijenata i mesečni prihod</span>
               </div>
               <div class="setup-list" id="adminPackageSummary"></div>
             </section>
@@ -259,6 +249,16 @@
                 <label>Login lozinka<input name="loginPassword" placeholder="npr. 123456" /></label>
                 <label>Dan naplate<input name="billingDay" type="number" min="1" max="31" value="1" /></label>
                 <label>Meta Page ID<input name="metaPageId" placeholder="kasnije povezujemo" /></label>
+                <label>Izrada sajta
+                  <select name="websiteService"><option value="Ne">Ne</option><option value="Da">Da</option></select>
+                </label>
+                <label>Cena izrade sajta (€)<input name="websitePrice" type="number" min="0" step="1" value="0" /></label>
+                <label>Hosting provajder<input name="hostingProvider" placeholder="npr. Hostinger" /></label>
+                <label>Hosting ističe<input name="hostingExpiresAt" type="date" /></label>
+                <label>Hosting godišnje (€)<input name="hostingPrice" type="number" min="0" step="1" value="0" /></label>
+                <label>Domen<input name="domainName" placeholder="npr. klijent.at" /></label>
+                <label>Domen ističe<input name="domainExpiresAt" type="date" /></label>
+                <label>Domen godišnje (€)<input name="domainPrice" type="number" min="0" step="1" value="0" /></label>
               </div>
               <div class="admin-submit">
                 <button class="primary-button" type="submit">Sačuvaj klijenta</button>
@@ -774,8 +774,21 @@
               <p class="eyebrow">Računi</p>
               <h2>Slanje računa i plaćanja</h2>
             </div>
+            <label class="invoice-month-control">Mesec računa
+              <input id="invoiceMonthFilter" type="month" value="2026-09" />
+            </label>
           </div>
           <div class="report-grid">
+            <section class="panel wide carryover-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Prenos iz prethodnog meseca</p>
+                  <h2>Otvoreni računi iz avgusta</h2>
+                </div>
+                <span id="invoiceCarryoverCount">0 otvorenih</span>
+              </div>
+              <div class="setup-list" id="invoiceCarryoverList"></div>
+            </section>
             <section class="panel">
               <h2>Prihod po državi</h2>
               <div class="bars" id="countryBars"></div>
@@ -870,6 +883,16 @@
           <label>WhatsApp povezivanje<input disabled value="Klijent podešava u svom CRM-u" /></label>
           <label>Login email<input name="loginEmail" type="email" /></label>
           <label>Login lozinka<input name="loginPassword" /></label>
+          <label>Izrada sajta
+            <select name="websiteService"><option value="Ne">Ne</option><option value="Da">Da</option></select>
+          </label>
+          <label>Cena izrade sajta (€)<input name="websitePrice" type="number" min="0" step="1" /></label>
+          <label>Hosting provajder<input name="hostingProvider" /></label>
+          <label>Hosting ističe<input name="hostingExpiresAt" type="date" /></label>
+          <label>Hosting godišnje (€)<input name="hostingPrice" type="number" min="0" step="1" /></label>
+          <label>Domen<input name="domainName" /></label>
+          <label>Domen ističe<input name="domainExpiresAt" type="date" /></label>
+          <label>Domen godišnje (€)<input name="domainPrice" type="number" min="0" step="1" /></label>
         </div>
         <section class="client-lead-summary" id="editClientLeadSummary"></section>
         <menu class="modal-actions">

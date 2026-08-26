@@ -470,7 +470,7 @@ function currentDateKey() {
 }
 
 function selectedMonthKey() {
-  return monthFilter || currentMonthKey();
+  return document.getElementById("invoiceMonthFilter")?.value || monthFilter || currentMonthKey();
 }
 
 function monthLabel(monthKey) {
@@ -556,6 +556,14 @@ function migrateState(data) {
         loginEmail: "",
         loginPassword: "",
         invoices: {},
+        websiteService: "Ne",
+        websitePrice: 0,
+        hostingProvider: "",
+        hostingExpiresAt: "",
+        hostingPrice: 0,
+        domainName: "",
+        domainExpiresAt: "",
+        domainPrice: 0,
         ...client,
         ...packageValues(client.package, client.revenue, client.contractMonths),
         status: normalizeClientStatus(client.status),
@@ -994,7 +1002,6 @@ function renderAdminPanel() {
   renderAdminNotifications();
   renderAdminClientSnapshot(active);
   renderAdminEmployeeRisk(monthKey);
-  renderBackupStatus();
   renderContractExpiryList();
   renderPackageSummary(active);
   renderBars("adminCountryBars", groupSum(active, "country", "revenue"), "€");
@@ -1268,6 +1275,23 @@ function renderInvoiceSummary(clients, monthKey) {
   renderBars("adminPaymentBars", summary, "");
 }
 
+function renderInvoiceCarryover(clients, monthKey) {
+  const previousMonth = shiftMonth(monthKey, -1);
+  const open = clients.filter((client) => monthlyInvoice(client, previousMonth).paymentStatus !== "Plaćeno");
+  setText("invoiceCarryoverCount", `${open.length} otvorenih`);
+  const target = document.getElementById("invoiceCarryoverList");
+  if (!target) return;
+  target.innerHTML = open.length
+    ? open.map((client) => {
+        const invoice = monthlyInvoice(client, previousMonth);
+        return `<div class="setup-item carryover-item">
+          <strong>${currency.format(client.revenue || 0)}</strong>
+          <span>${client.name}<br />${monthLabel(previousMonth)} · ${invoice.invoiceStatus} · ${invoice.paymentStatus}</span>
+        </div>`;
+      }).join("")
+    : `<div class="empty-state">Nema otvorenih računa za prenos iz ${monthLabel(previousMonth)}.</div>`;
+}
+
 function option(value, selected, label = value) {
   return `<option value="${value}" ${String(value) === String(selected) ? "selected" : ""}>${label}</option>`;
 }
@@ -1378,7 +1402,7 @@ function renderPackageSummary(clients) {
       ([packageName, info]) => `
       <div class="setup-item">
         <strong>${info.count}</strong>
-        <span>${packageName} · ${currency.format(info.total)}/mes</span>
+        <span>${info.count === 1 ? "1 klijent" : `${info.count} klijenata`} · ${packageName} · ${currency.format(info.total)}/mes</span>
       </div>`
     )
     .join("");
@@ -2528,6 +2552,7 @@ function renderReports() {
   renderBars("countryBars", revenueByCountry, "€");
   renderBars("revenueBars", revenueByStatus, "€");
   setText("invoiceMonthLabel", monthLabel(monthKey));
+  renderInvoiceCarryover(active, monthKey);
   renderInvoiceSummary(active, monthKey);
   renderMonthlyInvoices(active, monthKey);
 }
@@ -3291,6 +3316,14 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     contractNote: formData.get("contractNote"),
     metaPageId: formData.get("metaPageId"),
     metaFormId: formData.get("metaFormId") || "",
+    websiteService: formData.get("websiteService") || "Ne",
+    websitePrice: Number(formData.get("websitePrice") || 0),
+    hostingProvider: formData.get("hostingProvider") || "",
+    hostingExpiresAt: formData.get("hostingExpiresAt") || "",
+    hostingPrice: Number(formData.get("hostingPrice") || 0),
+    domainName: formData.get("domainName") || "",
+    domainExpiresAt: formData.get("domainExpiresAt") || "",
+    domainPrice: Number(formData.get("domainPrice") || 0),
   });
   withLoginDefaults(state.clients[0]);
   saveState();
@@ -3335,6 +3368,14 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     loginEmail: formData.get("loginEmail"),
     loginPassword: formData.get("loginPassword"),
     contractNote: formData.get("contractNote"),
+    websiteService: formData.get("websiteService") || "Ne",
+    websitePrice: Number(formData.get("websitePrice") || 0),
+    hostingProvider: formData.get("hostingProvider") || "",
+    hostingExpiresAt: formData.get("hostingExpiresAt") || "",
+    hostingPrice: Number(formData.get("hostingPrice") || 0),
+    domainName: formData.get("domainName") || "",
+    domainExpiresAt: formData.get("domainExpiresAt") || "",
+    domainPrice: Number(formData.get("domainPrice") || 0),
   });
   if (formData.has("whatsapp")) client.whatsapp = formData.get("whatsapp");
   if (contractFile?.name) {
@@ -3409,6 +3450,8 @@ document.querySelector('#editClientForm select[name="package"]')?.addEventListen
   if (event.target.value !== "Custom") form.elements.revenue.value = values.revenue;
   form.elements.contractMonths.value = values.contractMonths || 3;
 });
+
+document.getElementById("invoiceMonthFilter")?.addEventListener("change", () => renderAll());
 
 const leadModal = document.getElementById("leadModal");
 const leadButton = document.getElementById("openLeadModal");
