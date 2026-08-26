@@ -3515,8 +3515,8 @@ document.getElementById("backupNowBtn")?.addEventListener("click", () => {
 });
 
 setupPasswordToggles();
-renderAll();
 hydrateOnlineState().then(() => {
+  renderAll();
   window.MarketizoRemote?.startPolling((payload) => {
     state = loadState(payload);
     renderAll();
