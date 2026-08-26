@@ -514,6 +514,73 @@ function applyAugust2026FinanceCorrections() {
   return true;
 }
 
+function applyAugust2026ClickUpInvoiceSyncV2() {
+  state.backup = state.backup || {};
+  if (state.backup.august2026ClickUpInvoiceSyncV2) return false;
+
+  const monthKey = "2026-08";
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const findClient = (...names) => (state.clients || []).find((client) =>
+    names.some((name) => normalize(client.name) === normalize(name))
+  );
+  const syncInvoice = (names, amount, invoiceStatus, paymentStatus, extra = {}) => {
+    const client = findClient(...names);
+    if (!client) return;
+    client.invoices = client.invoices || {};
+    client.invoices[monthKey] = {
+      paymentMethod: client.paymentMethod || "Firma",
+      sentAt: invoiceStatus === "Poslat" ? "2026-08-26T00:00:00.000Z" : "",
+      paidAt: paymentStatus === "Plaćeno" ? "2026-08-26T00:00:00.000Z" : "",
+      ...(client.invoices[monthKey] || {}),
+      amount,
+      invoiceStatus,
+      paymentStatus,
+      ...extra,
+    };
+  };
+
+  [
+    [["Mtel"], 1497],
+    [["Mikrohaus", "Grünwand", "Grunwand", "Mikrohaus / Grünwand"], 1997],
+    [["Balkan Express"], 497],
+    [["Mladen Zivkovic", "Mladen Živković"], 1567],
+    [["XXXL Restoran"], 1997],
+    [["Ivica Kljajic", "Ivica Kljajić"], 1997],
+    [["Danilo Mitic", "Danilo Muzicar", "Danilo Mužičar"], 1997],
+    [["Isopur GmbH"], 1997],
+    [["Pro Bike", "ProBike"], 1997],
+    [["Laci Debljak"], 1997],
+    [["POSCH Graben", "Posch Graben"], 1997],
+    [["Silvija Lalic", "Silvija Lalić"], 997],
+    [["Marko Lon Cars", "Marko Cars"], 1897],
+  ].forEach(([names, amount]) => syncInvoice(names, amount, "Poslat", "Plaćeno"));
+
+  [
+    [["Lilijana Rakita", "Ljilja Rakita"], 1997],
+    [["Zlatno Ćoše", "Zlatno Cose"], 1997],
+    [["A-Street", "A - Street"], 997],
+    [["Sandra HIFU"], 1997],
+    [["Restoran Dinar", "Dinar"], 500],
+    [["SSG Reinigung"], 1997],
+  ].forEach(([names, amount]) => syncInvoice(names, amount, "Poslat", "Nije plaćeno"));
+
+  syncInvoice(["Violeta Djuric", "Violeta Đurić"], 1997, "Poslat", "Delimično", {
+    paidAmount: 600,
+    note: "Uplaćeno 600 €",
+  });
+  syncInvoice(["Stevo - Roditelji i deca", "Stevo"], 997, "Nije poslat", "Plaćeno");
+  syncInvoice(["Attar Parfemi"], 997, "Nije poslat", "Plaćeno", {
+    paidAt: "2026-07-31T00:00:00.000Z",
+    note: "Plaćeno u julu za avgust",
+  });
+  syncInvoice(["FR Foto Vladimir", "FR Foto"], 997, "Nije poslat", "Nije plaćeno");
+  syncInvoice(["Der Fleischer am Eck"], 997, "Nije poslat", "Nije plaćeno");
+
+  state.backup.august2026ClickUpInvoiceSyncV2 = true;
+  return true;
+}
+
 function applySladjan2026BalanceCorrections() {
   state.backup = state.backup || {};
   if (state.backup.sladjan2026BalancesCorrected) return false;
@@ -539,6 +606,7 @@ function applySladjan2026BalanceCorrections() {
 }
 
 applyAugust2026FinanceCorrections();
+applyAugust2026ClickUpInvoiceSyncV2();
 applySladjan2026BalanceCorrections();
 saveState({ remote: false });
 let activeFilter = "all";
@@ -626,6 +694,11 @@ function monthlyInvoice(client, monthKey = selectedMonthKey()) {
     };
   }
   return client.invoices[monthKey];
+}
+
+function invoiceAmount(client, monthKey = selectedMonthKey()) {
+  const invoice = monthlyInvoice(client, monthKey);
+  return Number(invoice.amount ?? client.revenue ?? 0);
 }
 
 function loadState(sourceData = null) {
@@ -968,8 +1041,9 @@ async function hydrateOnlineState() {
   if (result.payload) {
     state = loadState(result.payload);
     const financeCorrected = applyAugust2026FinanceCorrections();
+    const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
-    saveState({ remote: financeCorrected || sladjanCorrected });
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || sladjanCorrected });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
@@ -1140,8 +1214,8 @@ function renderAdminPanel() {
   const mrr = active.reduce((sum, client) => sum + Number(client.revenue || 0), 0);
   const paidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus === "Plaćeno");
   const unpaidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus !== "Plaćeno");
-  const paidTotal = paidClients.reduce((sum, client) => sum + Number(client.revenue || 0), 0);
-  const unpaidTotal = unpaidClients.reduce((sum, client) => sum + Number(client.revenue || 0), 0);
+  const paidTotal = paidClients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
+  const unpaidTotal = unpaidClients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
   const unsentClients = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
 
   setText("adminTotalClients", scopedClients.length);
@@ -1396,7 +1470,7 @@ function renderMonthlyInvoices(clients, monthKey) {
       const invoice = monthlyInvoice(client, monthKey);
       return `<div class="invoice-compact-row">
         <div class="invoice-compact-client"><strong>${client.name}</strong><span>${client.country} · naplata ${client.billingDay || 1}.</span></div>
-        <strong class="invoice-compact-amount">${currency.format(client.revenue || 0)}</strong>
+        <strong class="invoice-compact-amount">${currency.format(invoiceAmount(client, monthKey))}</strong>
         <label>Račun
           <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="invoiceStatus">
             ${option("Nije poslat", invoice.invoiceStatus)}
@@ -1418,12 +1492,12 @@ function renderMonthlyInvoices(clients, monthKey) {
         </label>
       </div>`;
   };
-  const sorted = [...clients].sort((a, b) => Number(b.revenue || 0) - Number(a.revenue || 0));
+  const sorted = [...clients].sort((a, b) => invoiceAmount(b, monthKey) - invoiceAmount(a, monthKey));
   const target = document.getElementById("invoiceStatusGroups");
   if (target) {
     target.innerHTML = groups.map(([key, label, badge]) => {
       const entries = sorted.filter((client) => statusFor(client) === key);
-      const total = entries.reduce((sum, client) => sum + Number(client.revenue || 0), 0);
+      const total = entries.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
       return `<details class="invoice-status-group invoice-status-${key}" ${key === "unpaid" ? "open" : ""}>
         <summary><span class="invoice-status-dot"></span><strong>${label}</strong><span>${entries.length} klijenata</span><b>${currency.format(total)}</b><em>${badge}</em></summary>
         <div class="invoice-status-list">${entries.length ? entries.map(renderClient).join("") : `<div class="empty-state">Nema klijenata u ovoj grupi.</div>`}</div>
@@ -1480,11 +1554,11 @@ function renderInvoiceCarryover(clients, monthKey) {
   const sent = open.filter((client) => monthlyInvoice(client, previousMonth).invoiceStatus === "Poslat");
   const notSent = open.filter((client) => monthlyInvoice(client, previousMonth).invoiceStatus !== "Poslat");
   const carryoverGroup = (items, key, label) => `<details class="invoice-status-group invoice-status-${key}">
-    <summary><span class="invoice-status-dot"></span><strong>${label}</strong><span>${items.length} klijenata</span><b>${currency.format(items.reduce((sum, client) => sum + Number(client.revenue || 0), 0))}</b></summary>
+    <summary><span class="invoice-status-dot"></span><strong>${label}</strong><span>${items.length} klijenata</span><b>${currency.format(items.reduce((sum, client) => sum + invoiceAmount(client, previousMonth), 0))}</b></summary>
     <div class="invoice-status-list">${items.map((client) => {
         const invoice = monthlyInvoice(client, previousMonth);
         return `<div class="setup-item carryover-item invoice-carryover-compact">
-          <strong>${currency.format(client.revenue || 0)}</strong>
+          <strong>${currency.format(invoiceAmount(client, previousMonth))}</strong>
           <span>${client.name}<br />${monthLabel(previousMonth)} · ${invoice.invoiceStatus} · ${invoice.paymentStatus}</span>
         </div>`;
       }).join("") || `<div class="empty-state">Nema klijenata u ovoj grupi.</div>`}</div></details>`;
@@ -3288,11 +3362,17 @@ function renderAll() {
 
 document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => {
-    setActiveView(button.dataset.view);
+    const viewName = button.dataset.view;
+    const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
+    if (currentFile.startsWith("employees-") && viewName !== "employees") {
+      location.href = `index.html#${viewName}`;
+      return;
+    }
+    setActiveView(viewName, true);
   });
 });
 
-function setActiveView(viewName) {
+function setActiveView(viewName, updateUrl = false) {
   const button = document.querySelector(`.nav-item[data-view="${viewName}"]`);
   const view = document.getElementById(viewName);
   if (!button || !view) return;
@@ -3302,6 +3382,14 @@ function setActiveView(viewName) {
   view.classList.add("active");
   setText("pageTitle", button.textContent);
   updateContextActions(viewName);
+  if (updateUrl && !location.pathname.split("/").pop().startsWith("employees-")) {
+    history.replaceState(null, "", `#${viewName}`);
+  }
+}
+
+const initialMainView = location.hash.replace(/^#/, "");
+if (initialMainView && document.getElementById(initialMainView) && document.querySelector(`.nav-item[data-view="${initialMainView}"]`)) {
+  setActiveView(initialMainView);
 }
 
 function updateContextActions(view) {
