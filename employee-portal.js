@@ -125,6 +125,7 @@ function loadState(sourceData = null) {
   }));
   data.employeeGoals = data.employeeGoals || [];
   data.employeeRatings = data.employeeRatings || [];
+  data.employeeRecognitions = data.employeeRecognitions || [];
   data.employeeOneOnOnes = data.employeeOneOnOnes || [];
   data.employeeReports = data.employeeReports || [];
   data.companyPlans = data.companyPlans || [];
@@ -924,6 +925,15 @@ function renderPortalGoals() {
         })
         .join("")
     : `<div class="empty-state">Nema unetih ciljeva.</div>`;
+  const featured = goals
+    .filter((goal) => goal.status !== "Završeno")
+    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))[0];
+  setText("portalFeaturedGoalTitle", featured?.title || "Nema aktivnog cilja");
+  setText("portalFeaturedGoalTarget", featured?.target || "Admin može da doda razvojni cilj.");
+  setText("portalFeaturedGoalDeadline", featured ? formatDate(featured.endDate) : "-");
+  const featuredProgress = document.getElementById("portalFeaturedGoalProgress");
+  if (featuredProgress) featuredProgress.style.width = `${Math.min(100, Math.max(0, Number(featured?.progress || 0)))}%`;
+  setText("portalContributionGoals", goals.filter((goal) => goal.status === "Završeno" && String(goal.completedDate || "").startsWith(portalMonth)).length);
   renderPortalRatings();
 }
 
@@ -942,6 +952,10 @@ function renderPortalRatings() {
   const clientAverage = clients.length ? clients.reduce((sum, item) => sum + Number(item.score || 0), 0) / clients.length : null;
   const combined = ownerAverage !== null && clientAverage !== null ? (ownerAverage + clientAverage) / 2 : ownerAverage ?? clientAverage;
   setText("portalRatingAverage", combined !== null ? `${combined.toFixed(1)}/5` : "Nema ocene");
+  setText("portalMotivationRating", combined !== null ? `${combined.toFixed(1)}/5` : "Bez ocene");
+  setText("portalContributionRatings", current.filter((item) => Number(item.score) >= 4).length);
+  setText("portalContributionActivities", employeeWorkLogs(portalMonth).length);
+  setText("portalContributionLate", employeeLateRecords().filter((item) => String(item.date || "").startsWith(portalMonth)).length ? "Ne" : "Da");
   const trend = document.getElementById("portalRatingTrend");
   if (trend) trend.innerHTML = months.length
     ? months.map((month) => {
@@ -954,6 +968,19 @@ function renderPortalRatings() {
   if (list) list.innerHTML = current.length
     ? current.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${rating.source}${rating.reviewer ? ` · ${rating.reviewer}` : ""}<br />${rating.note || "Bez komentara"}</span></div>`).join("")
     : "";
+  renderPortalRecognitions();
+}
+
+function renderPortalRecognitions() {
+  const rows = (state.employeeRecognitions || [])
+    .filter((item) => item.employeeId === activeEmployee.id && item.month === portalMonth)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  setText("portalRecognitionCount", `${rows.length} poruka`);
+  const target = document.getElementById("portalRecognitionList");
+  if (!target) return;
+  target.innerHTML = rows.length
+    ? rows.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span><b>${item.type}</b> · ${item.author}<br />${item.text}</span></div>`).join("")
+    : `<div class="empty-state">Nema poruke za ovaj mesec.</div>`;
 }
 
 function renderPortalOneOnOnes() {

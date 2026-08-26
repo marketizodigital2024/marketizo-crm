@@ -811,6 +811,15 @@ function migrateState(data) {
     note: rating.note || "",
     createdAt: rating.createdAt || new Date().toISOString(),
   }));
+  const employeeRecognitions = (data.employeeRecognitions || []).map((item) => ({
+    id: item.id || crypto.randomUUID(),
+    employeeId: item.employeeId || employees[0]?.id || "",
+    month: item.month || currentMonthKey(),
+    type: item.type || "Pohvala",
+    author: item.author || "Admin",
+    text: item.text || "",
+    createdAt: item.createdAt || new Date().toISOString(),
+  }));
   const employeeOneOnOnes = (data.employeeOneOnOnes || starterData.employeeOneOnOnes || []).map((note) => ({
     id: note.id || crypto.randomUUID(),
     employeeId: note.employeeId || employees[0]?.id || "",
@@ -884,6 +893,7 @@ function migrateState(data) {
     employeeLateRecords,
     employeeGoals,
     employeeRatings,
+    employeeRecognitions,
     employeeOneOnOnes,
     employeeReports,
     companyPlans,
@@ -2006,7 +2016,7 @@ function teamUnderLeader(leaderId) {
 }
 
 function setSelectedEmployeeOnForms(employeeId) {
-  ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
+  ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
     select.value = [...select.options].some((option) => option.value === employeeId) ? employeeId : "";
@@ -2015,7 +2025,7 @@ function setSelectedEmployeeOnForms(employeeId) {
 
 function renderEmployeeOptions() {
   const employees = state.employees || [];
-  ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
+  ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
     const selected = select.value;
@@ -2050,6 +2060,7 @@ function renderEmployees() {
   state.employeeLateRecords = state.employeeLateRecords || [];
   state.employeeGoals = state.employeeGoals || [];
   state.employeeRatings = state.employeeRatings || [];
+  state.employeeRecognitions = state.employeeRecognitions || [];
   state.employeeOneOnOnes = state.employeeOneOnOnes || [];
   state.employeeReports = state.employeeReports || [];
   state.companyPlans = state.companyPlans || [];
@@ -2324,6 +2335,7 @@ function deleteEmployee(id) {
   state.employeeLateRecords = (state.employeeLateRecords || []).filter((item) => item.employeeId !== id);
   state.employeeGoals = (state.employeeGoals || []).filter((item) => item.employeeId !== id);
   state.employeeRatings = (state.employeeRatings || []).filter((item) => item.employeeId !== id);
+  state.employeeRecognitions = (state.employeeRecognitions || []).filter((item) => item.employeeId !== id);
   state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((item) => item.employeeId !== id);
   state.employeeReports = (state.employeeReports || []).filter((item) => item.employeeId !== id && item.recipientId !== id);
   selectedEmployeeId = state.employees[0]?.id || "";
@@ -2486,6 +2498,16 @@ function renderEmployeeGoalRows() {
   ratingTarget.innerHTML = ratings.length
     ? ratings.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${rating.month} · ${rating.source}${rating.reviewer ? ` · ${rating.reviewer}` : ""}<br />${rating.note || "Bez komentara"}</span></div>`).join("")
     : `<div class="empty-state">Nema mesečnih ocena.</div>`;
+
+  const recognitionTarget = document.getElementById("employeeRecognitionRows");
+  if (!recognitionTarget) return;
+  const recognitions = (state.employeeRecognitions || [])
+    .filter(selectedEmployeeFilter)
+    .sort((a, b) => String(b.month).localeCompare(String(a.month)))
+    .slice(0, 10);
+  recognitionTarget.innerHTML = recognitions.length
+    ? recognitions.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span>${item.month} · ${item.type} · ${item.author}<br />${item.text}</span></div>`).join("")
+    : `<div class="empty-state">Nema unetih pohvala ili fokusa.</div>`;
 }
 
 document.getElementById("employeeRatingForm")?.addEventListener("submit", (event) => {
@@ -2519,6 +2541,26 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) 
     saveState();
     renderAll();
   }, 0);
+});
+
+document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  state.employeeRecognitions = state.employeeRecognitions || [];
+  state.employeeRecognitions.push({
+    id: crypto.randomUUID(),
+    employeeId: data.employeeId,
+    month: data.month,
+    type: data.type,
+    author: data.author.trim() || "Admin",
+    text: data.text.trim(),
+    createdAt: new Date().toISOString(),
+  });
+  saveState();
+  form.reset();
+  form.elements.month.value = currentMonthKey();
+  renderAll();
 });
 
 function renderEmployeeOneOnOneRows() {

@@ -20,7 +20,7 @@
     <meta name="theme-color" content="#ff6b00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=17" />
+    <link rel="stylesheet" href="styles.css?v=18" />
   </head>
   <body>
     <div class="app-shell">
@@ -498,6 +498,23 @@
 
           <div class="employee-action-grid">
             <section class="panel">
+              <div class="panel-head"><div><p class="eyebrow">Motivacija</p><h2>Pohvala ili fokus</h2></div><span>vidljivo zaposlenom</span></div>
+              <form id="employeeRecognitionForm" class="admin-form">
+                <div class="form-grid">
+                  <label>Zaposleni<select id="recognitionEmployeeSelect" name="employeeId" required></select></label>
+                  <label>Mesec<input name="month" type="month" required /></label>
+                  <label>Tip<select name="type" required><option>Pohvala</option><option>Fokus za napredak</option></select></label>
+                  <label>Autor<input name="author" placeholder="Miljan, Ivana ili lider" /></label>
+                  <label class="span-2">Poruka<textarea name="text" rows="3" required placeholder="konkretno šta je bilo dobro ili na čemu treba raditi"></textarea></label>
+                </div>
+                <div class="admin-submit"><button class="primary-button" type="submit">Sačuvaj poruku</button></div>
+              </form>
+              <div class="setup-list" id="employeeRecognitionRows"></div>
+            </section>
+          </div>
+
+          <div class="employee-action-grid">
+            <section class="panel">
 	              <div class="panel-head">
 	                <div>
 	                  <p class="eyebrow">Odsustvo</p>
@@ -954,7 +971,7 @@
     <script src="admin-auth.js?v=3"></script>
     <div class="toast-stack" id="toastStack" aria-live="polite"></div>
     <script src="remote-state.js?v=7"></script>
-    <script src="app.js?v=12"></script>
+    <script src="app.js?v=13"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>
