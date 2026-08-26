@@ -987,7 +987,37 @@ th {
 .recognition-row.ok { border-left: 4px solid #20b86a !important; }
 .recognition-row.warn { border-left: 4px solid #ff8a35 !important; }
 
+.employee-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 24px 0 12px;
+  padding: 0 4px;
+}
+.employee-section-heading h2 { margin: 3px 0 0; font-size: 28px; }
+.employee-section-heading > span { color: #6d7a71; font-weight: 750; }
+.employee-development-grid { align-items: start !important; }
+.employee-development-grid > .panel { height: 100%; }
+.employee-detail-panel {
+  max-height: 720px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.employee-detail-panel #selectedEmployeeAbsenceList {
+  max-height: 390px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 5px;
+}
+.employee-detail-panel #selectedEmployeeAbsenceList::-webkit-scrollbar { width: 7px; }
+.employee-detail-panel #selectedEmployeeAbsenceList::-webkit-scrollbar-thumb { border-radius: 999px; background: #cbd8cf; }
+
 @media (max-width: 760px) {
+  .employee-section-heading { align-items: start; flex-direction: column; gap: 4px; margin-top: 18px; }
+  .employee-section-heading h2 { font-size: 23px; }
+  .employee-development-grid { grid-template-columns: 1fr !important; }
   #employeeApp .employee-portal-metrics .metric { min-height: 104px !important; padding: 14px !important; }
   #employeeApp .employee-portal-metrics .metric-value,
   #employeeApp .employee-portal-metrics strong { font-size: clamp(25px, 8vw, 34px) !important; }
