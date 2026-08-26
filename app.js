@@ -2574,9 +2574,20 @@ function setupEmployeeAdminSections() {
     ["overview", "Pregled"],
     ["hours", "Sati i aktivnosti"],
     ["absences", "Odsustva"],
-    ["development", "Razvoj i učinak"],
+    ["ratings", "Ocene"],
+    ["recognitions", "Pohvale i fokus"],
+    ["goals", "Ciljevi razvoja"],
     ["settings", "Podešavanja tima"],
   ];
+  const sectionRoutes = {
+    overview: "employees-overview.html",
+    hours: "employees-hours.html",
+    absences: "employees-absences.html",
+    ratings: "employees-ratings.html",
+    recognitions: "employees-recognitions.html",
+    goals: "employees-goals.html",
+    settings: "employees-settings.html",
+  };
 
   const classifyPanel = (panel) => {
     const heading = [...panel.querySelectorAll("h2, h3")].map((item) => item.textContent.trim().toLowerCase()).join(" ");
@@ -2584,7 +2595,9 @@ function setupEmployeeAdminSections() {
     const result = new Set(["overview"]);
     if (/dodaj sate|aktivnosti zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("hours");
     if (/dodaj odsustvo|odmori za odobrenje|lista odsustava|odsustv/.test(heading)) result.add("absences");
-    if (/cilj|1:1|učinak zaposlenog|pohvala ili fokus|razvoj|motivacij/.test(heading)) result.add("development");
+    if (/učinak zaposlenog|mesečna ocena/.test(heading)) result.add("ratings");
+    if (/pohvala ili fokus|motivacij/.test(heading)) result.add("recognitions");
+    if (/cilj zaposlenog|ciljevi razvoja|napredak/.test(heading)) result.add("goals");
     if (/dodaj zaposlenog|izmeni zaposlenog|dokumenti|pristup|podešavanj/.test(heading) || panel.classList.contains("employee-detail-panel")) result.add("settings");
     if (/admin definiše ponuđene aktivnosti/.test(text)) result.add("settings");
     if (result.size > 1) result.delete("overview");
@@ -2618,7 +2631,7 @@ function setupEmployeeAdminSections() {
     });
     document.querySelectorAll("[data-employee-admin-section]").forEach((button) => button.classList.toggle("active", button.dataset.employeeAdminSection === section));
     root.querySelectorAll(".employee-action-grid").forEach((grid) => grid.classList.toggle("employee-grid-empty", !grid.querySelector(".panel:not(.employee-section-hidden)")));
-    root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", section !== "development"));
+    root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", !["ratings", "recognitions", "goals"].includes(section)));
     const sectionLabel = sections.find(([key]) => key === section)?.[1] || "Pregled";
     const pageTitle = document.querySelector(".main .topbar h1");
     if (pageTitle) pageTitle.textContent = section === "overview" ? "Zaposleni" : sectionLabel;
@@ -2628,11 +2641,21 @@ function setupEmployeeAdminSections() {
 
   document.querySelectorAll("[data-employee-admin-section]").forEach((button) => {
     button.addEventListener("click", () => {
+      const section = button.dataset.employeeAdminSection;
+      const route = sectionRoutes[section];
+      if (route && !location.pathname.endsWith(route)) {
+        location.href = route;
+        return;
+      }
       if (mainNav && !mainNav.classList.contains("active")) mainNav.click();
-      activate(button.dataset.employeeAdminSection);
+      activate(section);
     });
   });
-  const initialSection = location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview";
+  const currentFile = location.pathname.split("/").pop();
+  const routedSection = Object.entries(sectionRoutes).find(([, route]) => route === currentFile)?.[0];
+  if (routedSection && mainNav && !mainNav.classList.contains("active")) mainNav.click();
+  const requestedSection = routedSection || (location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview");
+  const initialSection = requestedSection === "development" ? "goals" : requestedSection;
   activate(sections.some(([key]) => key === initialSection) ? initialSection : "overview");
 }
 
