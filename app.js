@@ -581,9 +581,9 @@ function applyAugust2026ClickUpInvoiceSyncV2() {
   return true;
 }
 
-function applyMonthlyInvoiceRostersV3() {
+function applyMonthlyInvoiceRostersV4() {
   state.backup = state.backup || {};
-  if (state.backup.monthlyInvoiceRostersV3) return false;
+  if (state.backup.monthlyInvoiceRostersV4) return false;
   const normalize = (value) => String(value || "").trim().toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
   const findClient = (...names) => (state.clients || []).find((client) =>
@@ -626,8 +626,8 @@ function applyMonthlyInvoiceRostersV3() {
     ["Mladen Zivkovic", "Mladen Živković"], ["FR Foto Vladimir", "FR Foto"], ["POSCH Graben", "Posch Graben"],
     ["Isopur GmbH"], ["Milos Erdbewegung", "Miloš Erdbewegung"], ["Hand2Hand"], ["Ukus Homolja"],
     ["Verina Administracija", "Verina"], ["Nemanja Bager - Avgust", "Nemanja Bager"],
-    ["Stevo - Roditelji i deca", "Stevo"], ["Vlado Camp"], ["Ana Imhotep"],
-    ["Natasa Komsetikpraxis", "Natasa Kosmetikpraxis", "Nataša Kosmetikpraxis"],
+    ["Stevo - Roditelji i deca", "Stevo"], ["Vlado Camp", "Vlado Kamp"], ["Ana Imhotep"],
+    ["Natasa Komsetikpraxis", "Natasa Kosmetikpraxis", "Nataša Kosmetikpraxis", "Natasa Beauty"],
     ["Edin Dizdarevic", "Edin Dizdarević"], ["Attar Parfemi"], ["Marko Lon Cars", "Marko Cars"],
     ["SSG Reinigung"], ["ReinDaheim"], ["Restoran Dinar", "Dinar"], ["Sandra HIFU"],
     ["A-Street", "A - Street"], ["Laci Debljak"], ["Pro Bike", "ProBike"],
@@ -636,7 +636,7 @@ function applyMonthlyInvoiceRostersV3() {
     ["Silvija Lalic", "Silvija Lalić"], ["Violeta Djuric", "Violeta Đurić"],
     ["Lilijana Rakita", "Ljilja Rakita"], ["Zlatno Ćoše", "Zlatno Cose"], ["XXXL Restoran"],
   ]);
-  state.backup.monthlyInvoiceRostersV3 = true;
+  state.backup.monthlyInvoiceRostersV4 = true;
   return true;
 }
 
@@ -666,7 +666,7 @@ function applySladjan2026BalanceCorrections() {
 
 applyAugust2026FinanceCorrections();
 applyAugust2026ClickUpInvoiceSyncV2();
-applyMonthlyInvoiceRostersV3();
+applyMonthlyInvoiceRostersV4();
 applySladjan2026BalanceCorrections();
 saveState({ remote: false });
 let activeFilter = "all";
@@ -1094,7 +1094,7 @@ async function hydrateOnlineState() {
     state = loadState(result.payload);
     const financeCorrected = applyAugust2026FinanceCorrections();
     const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
-    const invoiceRostersCorrected = applyMonthlyInvoiceRostersV3();
+    const invoiceRostersCorrected = applyMonthlyInvoiceRostersV4();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
     saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected });
     renderAll();
@@ -1602,6 +1602,13 @@ function renderInvoiceSummary(clients, monthKey) {
 
 function renderInvoiceCarryover(clients, monthKey) {
   const previousMonth = shiftMonth(monthKey, -1);
+  setText("invoiceCarryoverTitle", `Otvoreni računi iz ${monthLabel(previousMonth)}`);
+  if (monthKey <= "2026-08") {
+    setText("invoiceCarryoverCount", "0 otvorenih");
+    const initialTarget = document.getElementById("invoiceCarryoverList");
+    if (initialTarget) initialTarget.innerHTML = `<div class="empty-state">Praćenje prenosa otvorenih računa počinje od avgusta 2026.</div>`;
+    return;
+  }
   const open = clientsForInvoiceMonth(clients, previousMonth).filter((client) => monthlyInvoice(client, previousMonth).paymentStatus !== "Plaćeno");
   setText("invoiceCarryoverCount", `${open.length} otvorenih`);
   const target = document.getElementById("invoiceCarryoverList");
