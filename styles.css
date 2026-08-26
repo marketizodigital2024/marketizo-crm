@@ -1048,8 +1048,60 @@ th {
   box-shadow: inset 3px 0 0 #20b86a;
 }
 
-.client-tab[data-employee-section]:not([data-employee-section="overview"]) .admin-kpi-grid {
+.view[data-employee-section]:not([data-employee-section="overview"]) .employee-filter-panel,
+.view[data-employee-section]:not([data-employee-section="overview"]) .admin-kpi-grid {
   display: none !important;
+}
+
+.view[data-employee-section]:not([data-employee-section="overview"]) .employee-admin-grid {
+  margin-top: 0;
+}
+
+.legacy-client-filter {
+  display: none !important;
+}
+
+.compact-client-filters {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.compact-client-filters label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.compact-client-filters select {
+  min-width: 170px;
+  height: 48px;
+  padding: 0 40px 0 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background-color: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .compact-client-filters {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin-left: 0;
+  }
+
+  .compact-client-filters select {
+    width: 100%;
+    min-width: 0;
+  }
 }
 
 @media (max-width: 760px) {

@@ -2619,6 +2619,10 @@ function setupEmployeeAdminSections() {
     document.querySelectorAll("[data-employee-admin-section]").forEach((button) => button.classList.toggle("active", button.dataset.employeeAdminSection === section));
     root.querySelectorAll(".employee-action-grid").forEach((grid) => grid.classList.toggle("employee-grid-empty", !grid.querySelector(".panel:not(.employee-section-hidden)")));
     root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", section !== "development"));
+    const sectionLabel = sections.find(([key]) => key === section)?.[1] || "Pregled";
+    const pageTitle = document.querySelector(".main .topbar h1");
+    if (pageTitle) pageTitle.textContent = section === "overview" ? "Zaposleni" : sectionLabel;
+    if (location.hash.startsWith("#employees")) history.replaceState(null, "", `#employees/${section}`);
     root.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -2628,10 +2632,45 @@ function setupEmployeeAdminSections() {
       activate(button.dataset.employeeAdminSection);
     });
   });
-  activate("overview");
+  const initialSection = location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview";
+  activate(sections.some(([key]) => key === initialSection) ? initialSection : "overview");
 }
 
 setupEmployeeAdminSections();
+
+function setupCompactClientFilters() {
+  const root = document.getElementById("clients");
+  if (!root || root.dataset.compactFiltersReady) return;
+  root.dataset.compactFiltersReady = "true";
+  const allButtons = [...root.querySelectorAll("button")];
+  const countries = ["Svi", "Austrija", "Nemačka", "Srbija", "Hrvatska"];
+  const statuses = ["Svi statusi", "Aktivni", "Neaktivni", "Arhivirani"];
+  const countryButtons = allButtons.filter((button) => countries.includes(button.textContent.trim()));
+  const statusButtons = allButtons.filter((button) => statuses.includes(button.textContent.trim()));
+  const anchor = countryButtons[0]?.parentElement || statusButtons[0]?.parentElement;
+  if (!anchor) return;
+  [...countryButtons, ...statusButtons].forEach((button) => button.classList.add("legacy-client-filter"));
+  const filters = document.createElement("div");
+  filters.className = "compact-client-filters";
+  filters.innerHTML = `
+    <label><span>Država</span><select id="compactClientCountry">${countries.map((label) => `<option>${label}</option>`).join("")}</select></label>
+    <label><span>Status</span><select id="compactClientStatus">${statuses.map((label) => `<option>${label}</option>`).join("")}</select></label>`;
+  anchor.append(filters);
+  filters.querySelector("#compactClientCountry").addEventListener("change", (event) => countryButtons.find((button) => button.textContent.trim() === event.target.value)?.click());
+  filters.querySelector("#compactClientStatus").addEventListener("change", (event) => statusButtons.find((button) => button.textContent.trim() === event.target.value)?.click());
+}
+
+function hideJsonDownloadAction() {
+  [...document.querySelectorAll(".top-actions button, .topbar button")]
+    .filter((button) => button.textContent.trim() === "⇩")
+    .forEach((button) => {
+      button.hidden = true;
+      button.setAttribute("aria-hidden", "true");
+    });
+}
+
+setupCompactClientFilters();
+hideJsonDownloadAction();
 
 function renderEmployeeOneOnOneRows() {
   const rows = (state.employeeOneOnOnes || [])
