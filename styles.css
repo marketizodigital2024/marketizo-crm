@@ -1014,7 +1014,76 @@ th {
 .employee-detail-panel #selectedEmployeeAbsenceList::-webkit-scrollbar { width: 7px; }
 .employee-detail-panel #selectedEmployeeAbsenceList::-webkit-scrollbar-thumb { border-radius: 999px; background: #cbd8cf; }
 
+.employee-section-hidden,
+.employee-grid-empty {
+  display: none !important;
+}
+.employee-admin-subnav {
+  display: none;
+}
+.employee-side-subnav {
+  display: grid;
+  gap: 3px;
+  margin: -3px 0 8px 20px;
+  padding: 5px 0 4px 12px;
+  border-left: 1px solid #d9e3dc;
+}
+.employee-side-subnav button {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #6a776f;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+.employee-side-subnav button:hover { background: #f0f5f1; color: #183126; }
+.employee-side-subnav button.active {
+  background: #eaf7ef;
+  color: #0f7a47;
+  box-shadow: inset 3px 0 0 #20b86a;
+}
+
+.client-tab[data-employee-section]:not([data-employee-section="overview"]) .admin-kpi-grid {
+  display: none !important;
+}
+
 @media (max-width: 760px) {
+  .employee-side-subnav { display: none !important; }
+  .employee-admin-subnav {
+    position: sticky;
+    top: 8px;
+    z-index: 15;
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    padding: 6px;
+    overflow-x: auto;
+    border: 1px solid #d8e3dc;
+    border-radius: 15px;
+    background: rgba(255,255,255,.95);
+    box-shadow: 0 9px 24px rgba(24,49,38,.1);
+    scrollbar-width: none;
+  }
+  .employee-admin-subnav::-webkit-scrollbar { display: none; }
+  .employee-admin-subnav button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #65736a;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .employee-admin-subnav button.active { background: #183126; color: #fff; }
   .employee-section-heading { align-items: start; flex-direction: column; gap: 4px; margin-top: 18px; }
   .employee-section-heading h2 { font-size: 23px; }
   .employee-development-grid { grid-template-columns: 1fr !important; }

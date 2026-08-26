@@ -2563,6 +2563,76 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
   renderAll();
 });
 
+function setupEmployeeAdminSections() {
+  const monthFilter = document.getElementById("employeeMonthFilter");
+  const root = monthFilter?.closest(".client-tab");
+  if (!root || root.dataset.sectionsReady) return;
+  root.dataset.sectionsReady = "true";
+  root.dataset.employeeSection = "overview";
+
+  const sections = [
+    ["overview", "Pregled"],
+    ["hours", "Sati i aktivnosti"],
+    ["absences", "Odsustva"],
+    ["development", "Razvoj i učinak"],
+    ["settings", "Podešavanja tima"],
+  ];
+
+  const classifyPanel = (panel) => {
+    const heading = [...panel.querySelectorAll("h2, h3")].map((item) => item.textContent.trim().toLowerCase()).join(" ");
+    const text = panel.textContent.toLowerCase();
+    const result = new Set(["overview"]);
+    if (/dodaj sate|aktivnosti zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("hours");
+    if (/dodaj odsustvo|odmori za odobrenje|lista odsustava|odsustv/.test(heading)) result.add("absences");
+    if (/cilj|1:1|učinak zaposlenog|pohvala ili fokus|razvoj|motivacij/.test(heading)) result.add("development");
+    if (/dodaj zaposlenog|izmeni zaposlenog|dokumenti|pristup|podešavanj/.test(heading) || panel.classList.contains("employee-detail-panel")) result.add("settings");
+    if (/admin definiše ponuđene aktivnosti/.test(text)) result.add("settings");
+    if (result.size > 1) result.delete("overview");
+    if (panel.classList.contains("employee-detail-panel")) result.add("overview");
+    return [...result];
+  };
+
+  root.querySelectorAll(".panel").forEach((panel) => {
+    panel.dataset.employeeSections = classifyPanel(panel).join(" ");
+  });
+
+  const mobileNav = document.createElement("nav");
+  mobileNav.className = "employee-admin-subnav";
+  mobileNav.setAttribute("aria-label", "Sekcije zaposlenih");
+  mobileNav.innerHTML = sections.map(([key, label], index) => `<button class="${index === 0 ? "active" : ""}" data-employee-admin-section="${key}" type="button">${label}</button>`).join("");
+  root.prepend(mobileNav);
+
+  const mainNav = [...document.querySelectorAll(".sidebar .nav-item")].find((item) => item.textContent.trim() === "Zaposleni");
+  let sideNav;
+  if (mainNav) {
+    sideNav = document.createElement("div");
+    sideNav.className = "employee-side-subnav";
+    sideNav.innerHTML = sections.map(([key, label], index) => `<button class="${index === 0 ? "active" : ""}" data-employee-admin-section="${key}" type="button">${label}</button>`).join("");
+    mainNav.insertAdjacentElement("afterend", sideNav);
+  }
+
+  const activate = (section) => {
+    root.dataset.employeeSection = section;
+    root.querySelectorAll(".panel[data-employee-sections]").forEach((panel) => {
+      panel.classList.toggle("employee-section-hidden", !panel.dataset.employeeSections.split(" ").includes(section));
+    });
+    document.querySelectorAll("[data-employee-admin-section]").forEach((button) => button.classList.toggle("active", button.dataset.employeeAdminSection === section));
+    root.querySelectorAll(".employee-action-grid").forEach((grid) => grid.classList.toggle("employee-grid-empty", !grid.querySelector(".panel:not(.employee-section-hidden)")));
+    root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", section !== "development"));
+    root.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  document.querySelectorAll("[data-employee-admin-section]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (mainNav && !mainNav.classList.contains("active")) mainNav.click();
+      activate(button.dataset.employeeAdminSection);
+    });
+  });
+  activate("overview");
+}
+
+setupEmployeeAdminSections();
+
 function renderEmployeeOneOnOneRows() {
   const rows = (state.employeeOneOnOnes || [])
     .filter(selectedEmployeeFilter)
