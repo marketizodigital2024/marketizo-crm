@@ -2765,6 +2765,7 @@ function renderEmployeeLateRows(monthKey) {
 }
 
 function renderEmployeeGoalRows() {
+  const selectedEmployee = employeeById(selectedEmployeeId);
   const rows = (state.employeeGoals || [])
     .filter(selectedEmployeeFilter)
     .sort((a, b) => new Date(b.endDate) - new Date(a.endDate))
@@ -2789,7 +2790,7 @@ function renderEmployeeGoalRows() {
           </div>`;
         })
         .join("")
-    : `<div class="empty-state">Nema ciljeva.</div>`;
+    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih ciljeva.` : "Nema ciljeva."}</div>`;
 
   const ratingTarget = document.getElementById("employeeRatingRows");
   if (!ratingTarget) return;
@@ -2799,7 +2800,7 @@ function renderEmployeeGoalRows() {
     .slice(0, 12);
   ratingTarget.innerHTML = ratings.length
     ? ratings.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${rating.month} · ${rating.source}${rating.reviewer ? ` · ${rating.reviewer}` : ""}<br />${rating.note || "Bez komentara"}</span></div>`).join("")
-    : `<div class="empty-state">Nema mesečnih ocena.</div>`;
+    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema mesečnih ocena.` : "Nema mesečnih ocena."}</div>`;
 
   const recognitionTarget = document.getElementById("employeeRecognitionRows");
   if (!recognitionTarget) return;
@@ -2808,8 +2809,8 @@ function renderEmployeeGoalRows() {
     .sort((a, b) => String(b.month).localeCompare(String(a.month)))
     .slice(0, 10);
   recognitionTarget.innerHTML = recognitions.length
-    ? recognitions.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span>${item.month} · ${item.type} · ${item.author}<br />${item.text}</span></div>`).join("")
-    : `<div class="empty-state">Nema unetih pohvala ili fokusa.</div>`;
+    ? recognitions.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span>${item.month} · ${item.type} · ${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}</span></div>`).join("")
+    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih pohvala ili fokusa.` : "Nema unetih pohvala ili fokusa."}</div>`;
 }
 
 document.getElementById("employeeRatingForm")?.addEventListener("submit", (event) => {
@@ -2851,6 +2852,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
+  selectedEmployeeId = data.employeeId;
   state.employeeRecognitions = state.employeeRecognitions || [];
   state.employeeRecognitions.push({
     id: crypto.randomUUID(),
@@ -2864,6 +2866,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
   saveState();
   form.reset();
   form.elements.month.value = currentMonthKey();
+  setSelectedEmployeeOnForms(selectedEmployeeId);
   renderAll();
 });
 
