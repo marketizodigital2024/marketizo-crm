@@ -3043,6 +3043,12 @@ function setupEmployeeAdminSections() {
   if (!root || root.dataset.sectionsReady) return;
   root.dataset.sectionsReady = "true";
   root.dataset.employeeSection = "overview";
+  const simpleLabels = { admin: "Početna", clients: "Klijenti", employees: "Tim", calendar: "Kalendar", reports: "Finansije" };
+  document.querySelectorAll(".sidebar .nav-item[data-view]").forEach((item) => {
+    if (simpleLabels[item.dataset.view]) item.textContent = simpleLabels[item.dataset.view];
+  });
+  const employeeTitle = document.getElementById("pageTitle");
+  if (employeeTitle) employeeTitle.textContent = "Tim";
 
   const sections = [
     ["overview", "Tim"],
