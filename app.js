@@ -800,6 +800,7 @@ let selectedEmployeeId = state.employees?.some((employee) => employee.id === req
   ? requestedEmployeeId
   : state.employees?.[0]?.id || "";
 let employeeProfileTab = "summary";
+let employeeOverviewFilter = "all";
 
 const currency = new Intl.NumberFormat("de-AT", {
   style: "currency",
@@ -2778,20 +2779,25 @@ function renderEmployeePerformanceOverview() {
   if (isEmployeeProfilePage && urlEmployeeId && (state.employees || []).some((item) => item.id === urlEmployeeId)) selectedEmployeeId = urlEmployeeId;
   const availableEmployees = (state.employees || []).filter((employee) => employee.status !== "Arhiviran");
   if (profileSelect) {
-    profileSelect.innerHTML = availableEmployees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("");
-    if (availableEmployees.some((employee) => employee.id === selectedEmployeeId)) profileSelect.value = selectedEmployeeId;
+    profileSelect.innerHTML = `${isEmployeeProfilePage ? "" : `<option value="all">Svi zaposleni</option>`}${availableEmployees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")}`;
+    profileSelect.value = isEmployeeProfilePage ? selectedEmployeeId : employeeOverviewFilter;
     if (!profileSelect.dataset.bound) {
       profileSelect.dataset.bound = "true";
       profileSelect.addEventListener("change", () => {
-        selectedEmployeeId = profileSelect.value;
-        setSelectedEmployeeOnForms(selectedEmployeeId);
+        if (isEmployeeProfilePage) {
+          selectedEmployeeId = profileSelect.value;
+          setSelectedEmployeeOnForms(selectedEmployeeId);
+          history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
+        } else {
+          employeeOverviewFilter = profileSelect.value;
+        }
         renderAll();
       });
     }
   }
   const employees = isEmployeeProfilePage
     ? availableEmployees.filter((employee) => employee.id === selectedEmployeeId).slice(0, 1)
-    : availableEmployees;
+    : employeeOverviewFilter === "all" ? availableEmployees : availableEmployees.filter((employee) => employee.id === employeeOverviewFilter);
   target.innerHTML = employees.length
     ? employees.map((employee) => {
         const ratings = (state.employeeRatings || [])
@@ -4064,10 +4070,6 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
     alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
     return;
   }
-  if (hasEmployeeWorkLog(employeeId, date)) {
-    alert("Za ovog zaposlenog već postoji zaključan unos za taj dan.");
-    return;
-  }
   state.employeeWorkLogs.unshift({
     id: crypto.randomUUID(),
     employeeId,
@@ -4083,6 +4085,27 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   });
   selectedEmployeeId = employeeId;
   saveState();
+  const employee = state.employees.find((item) => item.id === employeeId);
+  const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
+  const fullTimeTarget = dayOfWeek >= 1 && dayOfWeek <= 4 ? 480 : dayOfWeek === 5 ? 390 : 0;
+  const weeklyHours = Number(employee?.weeklyHours || 0);
+  const isWorkingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
+  const isCameraperson = String(employee?.position || "").toLowerCase().includes("snimatelj");
+  const dailyTarget = isCameraperson
+    ? 0
+    : weeklyHours === 20
+      ? (isWorkingDay ? 240 : 0)
+      : weeklyHours === 38.5
+        ? fullTimeTarget
+        : (isWorkingDay ? Math.round((weeklyHours * 60) / 5) : 0);
+  const dailyMinutes = state.employeeWorkLogs
+    .filter((item) => item.employeeId === employeeId && item.date === date)
+    .reduce((sum, item) => sum + Number(item.minutes || Math.round(Number(item.hours || 0) * 60)), 0);
+  if (dailyTarget > 0 && dailyMinutes < dailyTarget) {
+    alert(`Aktivnost je sačuvana. Danas je upisano ${dailyMinutes} min. Nedostaje još ${dailyTarget - dailyMinutes} min aktivnosti do dnevne kvote od ${dailyTarget} min.`);
+  } else if (dailyTarget > 0) {
+    alert(`Aktivnost je sačuvana. Dnevna kvota je ispunjena: ${dailyMinutes}/${dailyTarget} min.`);
+  }
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.minutes.value = 60;
