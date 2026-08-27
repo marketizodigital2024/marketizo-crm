@@ -795,7 +795,11 @@ let employeeMonthFilter = currentMonthKey();
 let employeeStatusFilter = "all";
 let employeeWorkPersonFilter = "all";
 let employeeWorkMonthFilter = currentMonthKey();
-let selectedEmployeeId = state.employees?.[0]?.id || "";
+const requestedEmployeeId = new URLSearchParams(location.search).get("employee");
+let selectedEmployeeId = state.employees?.some((employee) => employee.id === requestedEmployeeId)
+  ? requestedEmployeeId
+  : state.employees?.[0]?.id || "";
+let employeeProfileTab = "summary";
 
 const currency = new Intl.NumberFormat("de-AT", {
   style: "currency",
@@ -2768,7 +2772,10 @@ function renderEmployeePerformanceOverview() {
   const target = document.getElementById("employeePerformanceRows");
   if (!target) return;
   const month = document.getElementById("employeeMonthFilter")?.value || currentMonthKey();
+  const isEmployeeProfilePage = location.pathname.endsWith("/employee-profile") || location.pathname.endsWith("/employee-profile.html");
   const profileSelect = document.getElementById("employeeProfileFilter");
+  const urlEmployeeId = new URLSearchParams(location.search).get("employee");
+  if (isEmployeeProfilePage && urlEmployeeId && (state.employees || []).some((item) => item.id === urlEmployeeId)) selectedEmployeeId = urlEmployeeId;
   const availableEmployees = (state.employees || []).filter((employee) => employee.status !== "Arhiviran");
   if (profileSelect) {
     profileSelect.innerHTML = availableEmployees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("");
@@ -2782,7 +2789,9 @@ function renderEmployeePerformanceOverview() {
       });
     }
   }
-  const employees = availableEmployees.filter((employee) => employee.id === selectedEmployeeId).slice(0, 1);
+  const employees = isEmployeeProfilePage
+    ? availableEmployees.filter((employee) => employee.id === selectedEmployeeId).slice(0, 1)
+    : availableEmployees;
   target.innerHTML = employees.length
     ? employees.map((employee) => {
         const ratings = (state.employeeRatings || [])
@@ -2806,7 +2815,7 @@ function renderEmployeePerformanceOverview() {
         const recognitionHistory = recognitions.length
           ? recognitions.map((item) => `${item.month}: ${item.type} · ${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}`).join("<hr />")
           : "Nema pohvala ili fokusa.";
-        return `<tr class="performance-employee-row ${employee.id === selectedEmployeeId ? "selected-row" : ""}" data-performance-employee="${employee.id}" tabindex="0" role="button" aria-label="Otvori pregled za ${employee.name}">
+        return `<tr class="performance-employee-row ${employee.id === selectedEmployeeId ? "selected-row" : ""}" data-performance-employee="${employee.id}" tabindex="0" role="button" aria-label="Otvori dosije za ${employee.name}">
           <td><strong>${employee.name}</strong><br /><span class="muted">${employee.position || "Zaposleni"}</span></td>
           <td><strong>${score === null ? "Bez ocene" : `${score.toFixed(1).replace(".", ",")}/5`}</strong><br /><span class="muted">${monthlyRatings.length} ${monthlyRatings.length === 1 ? "ocena" : "ocena"} za mesec</span></td>
           <td><strong>${progress === null ? "Nema aktivnog cilja" : `${progress}%`}</strong><br /><span class="muted">${goals.length} aktivnih ciljeva</span></td>
@@ -2817,28 +2826,91 @@ function renderEmployeePerformanceOverview() {
     : `<tr><td colspan="5"><div class="empty-state">Nema zaposlenih za prikaz.</div></td></tr>`;
   const profileTarget = document.getElementById("employeeCompleteHistory");
   const employee = employees[0];
-  if (profileTarget && employee) {
+  if (profileTarget && employee && isEmployeeProfilePage) {
     const ratings = (state.employeeRatings || []).filter((item) => item.employeeId === employee.id).sort((a, b) => String(b.month).localeCompare(String(a.month)));
     const goals = (state.employeeGoals || []).filter((item) => item.employeeId === employee.id).sort((a, b) => String(b.endDate).localeCompare(String(a.endDate)));
     const recognitions = (state.employeeRecognitions || []).filter((item) => item.employeeId === employee.id).sort((a, b) => String(b.month).localeCompare(String(a.month)));
     const absences = (state.employeeAbsences || []).filter((item) => item.employeeId === employee.id).sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)));
     const workLogs = (state.employeeWorkLogs || []).filter((item) => item.employeeId === employee.id).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const lateRecords = (state.employeeLateRecords || []).filter((item) => item.employeeId === employee.id).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const notes = state.employeeInternalNotes || {};
+    const monthRatings = ratings.filter((item) => item.month === month);
+    const previousMonthDate = new Date(`${month}-01T12:00:00`);
+    previousMonthDate.setMonth(previousMonthDate.getMonth() - 1);
+    const previousMonth = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, "0")}`;
+    const previousRatings = ratings.filter((item) => item.month === previousMonth);
+    const average = (items) => items.length ? items.reduce((sum, item) => sum + Number(item.score || 0), 0) / items.length : null;
+    const currentScore = average(monthRatings);
+    const previousScore = average(previousRatings);
+    const monthLogs = workLogs.filter((item) => String(item.date || "").startsWith(month));
+    const monthMinutes = monthLogs.reduce((sum, item) => sum + Number(item.minutes || Number(item.hours || 0) * 60), 0);
+    const expectedHours = employeeExpectedHours(employee, month);
+    const balance = monthMinutes / 60 - expectedHours;
+    const activeGoals = goals.filter((item) => item.status !== "Završeno");
+    const goalProgress = activeGoals.length ? Math.round(activeGoals.reduce((sum, item) => sum + Number(item.progress || 0), 0) / activeGoals.length) : 0;
+    const alerts = [
+      !monthRatings.length ? "Mesečna ocena nije uneta." : "",
+      !monthLogs.length ? "Nema unetih sati za izabrani mesec." : "",
+      activeGoals.some((item) => item.endDate && new Date(`${item.endDate}T23:59:59`) < new Date()) ? "Postoji cilj kome je istekao rok." : "",
+      balance < -8 ? `Saldo sati je ${formatHourBalance(balance)}.` : "",
+    ].filter(Boolean);
+    const trendMonths = [...new Set(ratings.map((item) => item.month))].sort().slice(-6);
+    const trend = trendMonths.map((key) => ({ key, value: average(ratings.filter((item) => item.month === key)) }));
     const list = (items, empty, render) => items.length ? items.map(render).join("") : `<div class="empty-state">${empty}</div>`;
     profileTarget.innerHTML = `
-      <section class="employee-history-section"><div class="panel-head"><div><p class="eyebrow">Ocene</p><h3>Istorija ocena</h3></div><span>${ratings.length} unosa</span></div>${list(ratings, "Nema ocena.", (item) => `<div class="history-record"><strong>${item.score}/5 · ${item.month}</strong><span>${item.source || "Ocena"}${item.reviewer ? ` · ${item.reviewer}` : ""}<br />${item.note || "Bez komentara"}</span></div>`)}</section>
-      <section class="employee-history-section"><div class="panel-head"><div><p class="eyebrow">Razvoj</p><h3>Ciljevi</h3></div><span>${goals.length} ciljeva</span></div>${list(goals, "Nema ciljeva.", (item) => `<div class="history-record"><strong>${item.progress || 0}% · ${item.status || "U toku"}</strong><span>${item.title}<br />${item.target || ""} · rok ${formatDate(item.endDate)}</span></div>`)}</section>
-      <section class="employee-history-section"><div class="panel-head"><div><p class="eyebrow">Motivacija</p><h3>Pohvale i fokus</h3></div><span>${recognitions.length} poruka</span></div>${list(recognitions, "Nema pohvala ili fokusa.", (item) => `<div class="history-record"><strong>${item.type} · ${item.month}</strong><span>${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}</span></div>`)}</section>
-      <section class="employee-history-section"><div class="panel-head"><div><p class="eyebrow">Evidencija</p><h3>Sati i aktivnosti</h3></div><span>${workLogs.length} unosa</span></div>${list(workLogs, "Nema upisanih aktivnosti.", (item) => `<div class="history-record"><strong>${formatDate(item.date)} · ${item.minutes || Math.round(Number(item.hours || 0) * 60)} min</strong><span>${item.activityName || "Rad"}${item.clientName ? ` · ${item.clientName}` : ""}<br />${item.note || "Bez napomene"}</span></div>`)}</section>
-      <section class="employee-history-section"><div class="panel-head"><div><p class="eyebrow">Odsustva</p><h3>Odmori i bolovanja</h3></div><span>${absences.length} unosa</span></div>${list(absences, "Nema odsustava.", (item) => `<div class="history-record"><strong>${item.type}</strong><span>${formatDate(item.startDate)} – ${formatDate(item.endDate)} · ${item.status || "Upisano"}<br />${item.note || ""}</span></div>`)}</section>
-      <section class="employee-history-section"><div class="panel-head"><div><p class="eyebrow">Kašnjenja</p><h3>Evidencija</h3></div><span>${lateRecords.length} unosa</span></div>${list(lateRecords, "Nema kašnjenja.", (item) => `<div class="history-record"><strong>${formatDate(item.date)} · ${item.minutes} min</strong><span>${item.reason || "Bez napomene"}</span></div>`)}</section>`;
+      <section class="employee-profile-hero">
+        <div><p class="eyebrow">Dosije zaposlenog</p><h2>${employee.name}</h2><p>${employee.position || "Zaposleni"} · ${employee.status || "Aktivan"}</p></div>
+        <div class="profile-header-actions"><label>Mesec<input id="employeeProfileMonth" type="month" value="${month}" /></label><div class="profile-quick-actions"><a class="secondary-button" href="/employees-ratings?employee=${employee.id}">Dodaj ocenu</a><a class="secondary-button" href="/employees-goals?employee=${employee.id}">Dodaj cilj</a><a class="secondary-button" href="/employees-recognitions?employee=${employee.id}">Dodaj pohvalu</a></div></div>
+      </section>
+      <nav class="employee-profile-tabs" aria-label="Sekcije dosijea"><button data-profile-tab="summary" type="button">Sažetak</button><button data-profile-tab="performance" type="button">Učinak</button><button data-profile-tab="time" type="button">Sati</button><button data-profile-tab="absence" type="button">Odsustva</button><button data-profile-tab="admin" type="button">Admin beleške</button></nav>
+      <section class="employee-summary-grid profile-panel" data-profile-panel="summary">
+        <article><span>Ocena</span><strong>${currentScore === null ? "Bez ocene" : `${currentScore.toFixed(1).replace(".", ",")}/5`}</strong><small>${previousScore === null || currentScore === null ? "Nema poređenja" : `${currentScore >= previousScore ? "Rast" : "Pad"} ${Math.abs(currentScore - previousScore).toFixed(1).replace(".", ",")} prema prošlom mesecu`}</small></article>
+        <article><span>Sati</span><strong>${formatHours(monthMinutes / 60)}h</strong><small>od ${formatHours(expectedHours)}h</small></article>
+        <article><span>Saldo</span><strong>${formatHourBalance(balance)}</strong><small>za izabrani mesec</small></article>
+        <article><span>Ciljevi</span><strong>${goalProgress}%</strong><small>${activeGoals.length} aktivnih</small></article>
+      </section>
+      <section class="employee-alerts profile-panel ${alerts.length ? "has-alerts" : "all-clear"}" data-profile-panel="summary"><div><p class="eyebrow">Pažnja</p><h3>${alerts.length ? "Potrebna reakcija" : "Sve je uredno"}</h3></div>${alerts.length ? `<ul>${alerts.map((item) => `<li>${item}</li>`).join("")}</ul>` : `<p>Nema aktivnih upozorenja za izabrani mesec.</p>`}</section>
+      <section class="employee-history-section employee-trend profile-panel" data-profile-panel="summary"><div class="panel-head"><div><p class="eyebrow">Trend</p><h3>Ocene poslednjih 6 meseci</h3></div></div><div class="score-trend">${trend.length ? trend.map((item) => `<div><span style="height:${Math.max(8, Number(item.value || 0) * 20)}%"></span><strong>${item.value?.toFixed(1).replace(".", ",")}</strong><small>${item.key.slice(5)}</small></div>`).join("") : `<div class="empty-state">Nema dovoljno ocena za grafikon.</div>`}</div></section>
+      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Ocene</p><h3>Istorija ocena</h3></div><span>${ratings.length} unosa</span></div>${list(ratings, "Nema ocena.", (item) => `<div class="history-record"><strong>${item.score}/5 · ${item.month}</strong><span>${item.source || "Ocena"}${item.reviewer ? ` · ${item.reviewer}` : ""}<br />${item.note || "Bez komentara"}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Razvoj</p><h3>Ciljevi</h3></div><span>${goals.length} ciljeva</span></div>${list(goals, "Nema ciljeva.", (item) => `<div class="history-record"><strong>${item.progress || 0}% · ${item.status || "U toku"}</strong><span>${item.title}<br />${item.target || ""} · rok ${formatDate(item.endDate)}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Motivacija</p><h3>Pohvale i fokus</h3></div><span>${recognitions.length} poruka</span></div>${list(recognitions, "Nema pohvala ili fokusa.", (item) => `<div class="history-record"><strong>${item.type} · ${item.month}</strong><span>${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel profile-panel-wide" data-profile-panel="time"><div class="panel-head"><div><p class="eyebrow">Evidencija</p><h3>Sati i aktivnosti za ${month}</h3></div><span>${monthLogs.length} unosa</span></div>${list(monthLogs.slice(0, 20), "Nema upisanih aktivnosti za izabrani mesec.", (item) => `<div class="history-record"><strong>${formatDate(item.date)} · ${item.minutes || Math.round(Number(item.hours || 0) * 60)} min</strong><span>${item.activityName || "Rad"}${item.clientName ? ` · ${item.clientName}` : ""}<br />${item.note || "Bez napomene"}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="absence"><div class="panel-head"><div><p class="eyebrow">Odsustva</p><h3>Odmori i bolovanja</h3></div><span>${absences.length} unosa</span></div>${list(absences, "Nema odsustava.", (item) => `<div class="history-record"><strong>${item.type}</strong><span>${formatDate(item.startDate)} – ${formatDate(item.endDate)} · ${item.status || "Upisano"}<br />${item.note || ""}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="absence"><div class="panel-head"><div><p class="eyebrow">Kašnjenja</p><h3>Evidencija</h3></div><span>${lateRecords.length} unosa</span></div>${list(lateRecords, "Nema kašnjenja.", (item) => `<div class="history-record"><strong>${formatDate(item.date)} · ${item.minutes} min</strong><span>${item.reason || "Bez napomene"}</span></div>`)}</section>
+      <section class="employee-history-section employee-internal-note profile-panel profile-panel-wide" data-profile-panel="admin"><div class="panel-head"><div><p class="eyebrow">Samo za vlasnike</p><h3>Interna napomena</h3></div><span>nije vidljivo zaposlenom</span></div><textarea id="employeeInternalNote" rows="5" placeholder="Interna zapažanja o zaposlenom...">${notes[employee.id] || ""}</textarea><button class="primary-button" id="saveEmployeeInternalNote" type="button">Sačuvaj napomenu</button></section>`;
+    const activateProfileTab = () => {
+      profileTarget.querySelectorAll("[data-profile-panel]").forEach((panel) => panel.hidden = panel.dataset.profilePanel !== employeeProfileTab);
+      profileTarget.querySelectorAll("[data-profile-tab]").forEach((button) => button.classList.toggle("active", button.dataset.profileTab === employeeProfileTab));
+    };
+    profileTarget.querySelectorAll("[data-profile-tab]").forEach((button) => button.addEventListener("click", () => {
+      employeeProfileTab = button.dataset.profileTab;
+      activateProfileTab();
+    }));
+    document.getElementById("employeeProfileMonth")?.addEventListener("change", (event) => {
+      employeeMonthFilter = event.target.value || currentMonthKey();
+      const globalMonth = document.getElementById("employeeMonthFilter");
+      if (globalMonth) globalMonth.value = employeeMonthFilter;
+      renderAll();
+    });
+    activateProfileTab();
+    document.getElementById("saveEmployeeInternalNote")?.addEventListener("click", () => {
+      state.employeeInternalNotes = state.employeeInternalNotes || {};
+      state.employeeInternalNotes[employee.id] = document.getElementById("employeeInternalNote")?.value.trim() || "";
+      saveState();
+      showToast("Sačuvano", "Interna napomena je sačuvana samo za admina.", "ok");
+    });
   }
   target.querySelectorAll("[data-performance-employee]").forEach((row) => {
     const openEmployee = () => {
       selectedEmployeeId = row.dataset.performanceEmployee;
       setSelectedEmployeeOnForms(selectedEmployeeId);
       renderAll();
-      document.querySelector(".employee-detail-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (isEmployeeProfilePage) {
+        history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
+        document.getElementById("employeeCompleteHistory")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        location.href = `/employee-profile?employee=${selectedEmployeeId}`;
+      }
     };
     row.addEventListener("click", (event) => {
       if (event.target.closest("details, summary, button, a")) return;
@@ -2967,13 +3039,13 @@ function setupEmployeeAdminSections() {
   root.dataset.employeeSection = "overview";
 
   const sections = [
-    ["overview", "Pregled"],
-    ["hours", "Sati i aktivnosti"],
+    ["overview", "Tim"],
+    ["hours", "Evidencija rada"],
     ["absences", "Odsustva"],
     ["ratings", "Ocene"],
-    ["recognitions", "Pohvale i fokus"],
-    ["goals", "Ciljevi razvoja"],
-    ["settings", "Podešavanja tima"],
+    ["recognitions", "Pohvale"],
+    ["goals", "Razvoj"],
+    ["settings", "Podešavanja"],
   ];
   const sectionRoutes = {
     overview: "employees-overview.html",
