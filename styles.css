@@ -370,7 +370,7 @@ h3,
 
 /* Employee portal: phone and tablet layout. */
 @media (max-width: 760px) {
-  .employee-app .sidebar {
+  #employeeApp .sidebar {
     position: sticky !important;
     top: 0;
     z-index: 40;
@@ -381,7 +381,7 @@ h3,
     backdrop-filter: blur(14px);
   }
 
-  .employee-app .sidebar .nav {
+  #employeeApp .sidebar .nav {
     display: grid !important;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100%;
@@ -389,7 +389,7 @@ h3,
     overflow: visible !important;
   }
 
-  .employee-app .sidebar .nav-item {
+  #employeeApp .sidebar .nav-item {
     width: 100%;
     min-width: 0;
     min-height: 42px;
@@ -401,17 +401,17 @@ h3,
     border-radius: 11px !important;
   }
 
-  .employee-app .main {
+  #employeeApp .main {
     padding-top: 16px !important;
   }
 
-  .employee-app .top-actions {
+  #employeeApp .top-actions {
     display: grid !important;
     grid-template-columns: 1fr 1fr;
     gap: 9px !important;
   }
 
-  .employee-app .employee-month-search {
+  #employeeApp .employee-month-search {
     grid-column: 1 / -1;
   }
 
@@ -442,11 +442,11 @@ h3,
     grid-column: 1 / -1;
   }
 
-  .employee-app textarea {
+  #employeeApp textarea {
     min-height: 118px !important;
   }
 
-  .employee-app .employee-calendar {
+  #employeeApp .employee-calendar {
     display: block !important;
     width: 100%;
     max-width: 100%;
@@ -457,29 +457,29 @@ h3,
     padding-bottom: 10px;
   }
 
-  .employee-app .calendar-weekdays,
-  .employee-app .calendar-grid {
+  #employeeApp .calendar-weekdays,
+  #employeeApp .calendar-grid {
     width: 760px !important;
     min-width: 760px !important;
   }
 
-  .employee-app .calendar-day {
+  #employeeApp .calendar-day {
     min-height: 126px !important;
     scroll-snap-align: start;
   }
 }
 
 @media (max-width: 420px) {
-  .employee-app .panel,
-  .employee-app .metric {
+  #employeeApp .panel,
+  #employeeApp .metric {
     border-radius: 15px !important;
   }
 
-  .employee-app .main {
+  #employeeApp .main {
     padding-inline: 12px !important;
   }
 
-  .employee-app .panel {
+  #employeeApp .panel {
     padding: 15px !important;
   }
 }

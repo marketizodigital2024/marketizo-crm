@@ -2350,6 +2350,13 @@ function renderEmployeeOptions() {
   }
 }
 
+function syncRequestedEmployee() {
+  const employeeId = new URLSearchParams(location.search).get("employee");
+  if (employeeId && (state.employees || []).some((employee) => employee.id === employeeId)) {
+    selectedEmployeeId = employeeId;
+  }
+}
+
 const employeeSelectionIds = new Set(["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"]);
 document.addEventListener("change", (event) => {
   if (!employeeSelectionIds.has(event.target.id) || !event.target.value) return;
@@ -2359,6 +2366,7 @@ document.addEventListener("change", (event) => {
 
 function renderEmployees() {
   if (!document.getElementById("employees")) return;
+  syncRequestedEmployee();
   state.employees = state.employees || [];
   state.employeeAbsences = state.employeeAbsences || [];
   state.employeeWorkLogs = state.employeeWorkLogs || [];
@@ -2790,6 +2798,7 @@ function renderEmployeePerformanceOverview() {
           history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
         } else {
           employeeOverviewFilter = profileSelect.value;
+          if (employeeOverviewFilter !== "all") selectedEmployeeId = employeeOverviewFilter;
         }
         renderAll();
       });

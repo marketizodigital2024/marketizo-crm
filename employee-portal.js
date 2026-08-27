@@ -383,7 +383,12 @@ function unhideNotification(id) {
 
 function leaderTeam() {
   if (!activeEmployee?.isLeader) return [];
-  return (state.employees || []).filter((employee) => employee.leaderId === activeEmployee.id);
+  const activeName = String(activeEmployee.name || "").toLowerCase();
+  return (state.employees || []).filter((employee) => {
+    if (employee.leaderId === activeEmployee.id) return true;
+    const employeeName = String(employee.name || "").toLowerCase();
+    return activeName.includes("sladjan") && employeeName.includes("milica blagojevic");
+  });
 }
 
 function reportRecipientId() {
@@ -511,6 +516,23 @@ function formatHourBalance(value) {
 
 function hasWorkLogForDate(date) {
   return (state.employeeWorkLogs || []).some((log) => log.employeeId === activeEmployee.id && log.date === date);
+}
+
+function loggedMinutesForDate(date) {
+  return (state.employeeWorkLogs || [])
+    .filter((log) => log.employeeId === activeEmployee.id && log.date === date)
+    .reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+}
+
+function expectedMinutesForDate(employee, date) {
+  if (!employee || !isAustrianWorkingDay(date)) return 0;
+  const position = String(employee.position || "").toLowerCase();
+  if (position.includes("snimatelj")) return 0;
+  const weeklyHours = Number(employee.weeklyHours || 0);
+  const day = parseDate(date).getDay();
+  if (weeklyHours >= 38) return day === 5 ? 390 : 510;
+  if (weeklyHours <= 20) return 240;
+  return Math.round((weeklyHours * 60) / 5);
 }
 
 function absenceCoversDate(date) {
@@ -675,12 +697,15 @@ function renderMissingTimeAlert() {
   const alertBox = document.getElementById("employeeMissingTimeAlert");
   if (!alertBox || !activeEmployee) return;
   const previousDay = previousWorkingDay();
-  const missing = !hasWorkLogForDate(previousDay) && !absenceCoversDate(previousDay);
+  const expected = expectedMinutesForDate(activeEmployee, previousDay);
+  const logged = loggedMinutesForDate(previousDay);
+  const missingMinutes = Math.max(0, expected - logged);
+  const missing = expected > 0 && missingMinutes > 0 && !absenceCoversDate(previousDay);
   alertBox.hidden = !missing;
   if (!missing) return;
   alertBox.innerHTML = `
-    <strong>Nedostaje unos vremena</strong>
-    <span>Nisi upisao/la vreme za prethodni radni dan: ${formatDate(previousDay)}.</span>`;
+    <strong>Nedostaju aktivnosti ili minuti</strong>
+    <span>Za ${formatDate(previousDay)} upisano je ${logged} od očekivanih ${expected} min. Nedostaje ${missingMinutes} min.</span>`;
 }
 
 function renderPortalCalendar() {
@@ -1220,10 +1245,6 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     alert("Izaberi klijenta za kog si radio/la ovu aktivnost.");
     return;
   }
-  if (hasWorkLogForDate(date)) {
-    alert("Vreme za taj dan je već upisano i zaključano.");
-    return;
-  }
   state.employeeWorkLogs.unshift({
     id: crypto.randomUUID(),
     employeeId: activeEmployee.id,
@@ -1244,24 +1265,24 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   });
   const recipientId = reportRecipientId();
   state.employeeReports = state.employeeReports || [];
-  state.employeeReports.unshift({
-    id: crypto.randomUUID(),
-    employeeId: activeEmployee.id,
-    recipientId,
-    date,
-    title: "Dnevni izveštaj",
-    hours: Math.round((minutes / 60) * 10000) / 10000,
-    minutes,
-    activityId: activity.id,
-    activityName: activity.name,
-    activityCategory: activity.category || "Ostalo",
-    clientId: client.id,
-    clientName: client.name,
-    positive: formData.get("positive"),
-    negative: formData.get("negative"),
-    note: formData.get("note"),
-    createdAt: new Date().toISOString(),
-  });
+  const dailyReport = state.employeeReports.find((report) => report.employeeId === activeEmployee.id && report.date === date);
+  if (dailyReport) {
+    dailyReport.minutes = Number(dailyReport.minutes || Number(dailyReport.hours || 0) * 60) + minutes;
+    dailyReport.hours = Math.round((dailyReport.minutes / 60) * 10000) / 10000;
+    dailyReport.activityName = "Dnevni zbir aktivnosti";
+    dailyReport.note = [dailyReport.note, formData.get("note")].filter(Boolean).join(" | ");
+    dailyReport.positive = [dailyReport.positive, formData.get("positive")].filter(Boolean).join(" | ");
+    dailyReport.negative = [dailyReport.negative, formData.get("negative")].filter(Boolean).join(" | ");
+    dailyReport.updatedAt = new Date().toISOString();
+  } else {
+    state.employeeReports.unshift({
+      id: crypto.randomUUID(), employeeId: activeEmployee.id, recipientId, date,
+      title: "Dnevni izveštaj", hours: Math.round((minutes / 60) * 10000) / 10000, minutes,
+      activityId: activity.id, activityName: activity.name, activityCategory: activity.category || "Ostalo",
+      clientId: client.id, clientName: client.name, positive: formData.get("positive"),
+      negative: formData.get("negative"), note: formData.get("note"), createdAt: new Date().toISOString(),
+    });
+  }
   notifyOnce({
     key: `employee-report-${activeEmployee.id}-${date}`,
     scope: recipientId === "admin" ? "admin" : "employee",
