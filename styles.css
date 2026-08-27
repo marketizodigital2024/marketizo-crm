@@ -3490,3 +3490,17 @@ body:not([data-active-view="employees"]) .employee-subnav .active {
   border-left-color: transparent;
   color: inherit;
 }
+.employee-performance-overview { margin-bottom: 24px; }
+.employee-performance-table td { vertical-align: top; min-width: 150px; }
+.employee-performance-table td:first-child { min-width: 210px; }
+.employee-performance-table .muted { color: var(--muted); }
+.employee-rating-history { margin-top: 10px; min-width: 260px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); line-height: 1.65; }
+.compact-button { display: inline-flex; width: auto; cursor: pointer; list-style: none; white-space: nowrap; }
+.compact-button::-webkit-details-marker { display: none; }
+.history-link { margin-top: 8px; color: var(--green); font-weight: 800; cursor: pointer; }
+.employee-rating-history hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+
+@media (max-width: 760px) {
+  .employee-performance-overview .table-wrap { overflow-x: auto; }
+  .employee-performance-table { min-width: 900px; }
+}

@@ -2764,7 +2764,47 @@ function renderEmployeeLateRows(monthKey) {
     : `<div class="empty-state">Nema kašnjenja u ovom mesecu.</div>`;
 }
 
+function renderEmployeePerformanceOverview() {
+  const target = document.getElementById("employeePerformanceRows");
+  if (!target) return;
+  const month = document.getElementById("employeeMonthFilter")?.value || currentMonthKey();
+  const employees = (state.employees || []).filter((employee) => employee.status !== "Arhiviran");
+  target.innerHTML = employees.length
+    ? employees.map((employee) => {
+        const ratings = (state.employeeRatings || [])
+          .filter((item) => item.employeeId === employee.id)
+          .sort((a, b) => String(b.month).localeCompare(String(a.month)) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+        const monthlyRatings = ratings.filter((item) => item.month === month);
+        const score = monthlyRatings.length
+          ? monthlyRatings.reduce((sum, item) => sum + Number(item.score || 0), 0) / monthlyRatings.length
+          : null;
+        const goals = (state.employeeGoals || []).filter((item) => item.employeeId === employee.id && item.status !== "Završeno");
+        const progress = goals.length
+          ? Math.round(goals.reduce((sum, item) => sum + Number(item.progress || 0), 0) / goals.length)
+          : null;
+        const recognitions = (state.employeeRecognitions || [])
+          .filter((item) => item.employeeId === employee.id)
+          .sort((a, b) => String(b.month).localeCompare(String(a.month)) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+        const recognition = recognitions[0];
+        const history = ratings.length
+          ? ratings.map((item) => `${item.month}: ${Number(item.score || 0).toLocaleString("sr-RS")}/5 · ${item.source || "Ocena"}${item.reviewer ? ` · ${item.reviewer}` : ""}`).join("<br />")
+          : "Nema ranijih ocena.";
+        const recognitionHistory = recognitions.length
+          ? recognitions.map((item) => `${item.month}: ${item.type} · ${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}`).join("<hr />")
+          : "Nema pohvala ili fokusa.";
+        return `<tr>
+          <td><strong>${employee.name}</strong><br /><span class="muted">${employee.position || "Zaposleni"}</span></td>
+          <td><strong>${score === null ? "Bez ocene" : `${score.toFixed(1).replace(".", ",")}/5`}</strong><br /><span class="muted">${monthlyRatings.length} ${monthlyRatings.length === 1 ? "ocena" : "ocena"} za mesec</span></td>
+          <td><strong>${progress === null ? "Nema aktivnog cilja" : `${progress}%`}</strong><br /><span class="muted">${goals.length} aktivnih ciljeva</span></td>
+          <td>${recognition ? `<strong>${recognition.type}</strong><br /><span class="muted">${recognition.text || recognition.message || "Bez poruke"}</span><details><summary class="history-link">Sve poruke (${recognitions.length})</summary><div class="employee-rating-history">${recognitionHistory}</div></details>` : `<span class="muted">Nema poruke</span>`}</td>
+          <td><details><summary class="secondary-button compact-button">Istorija ocena (${ratings.length})</summary><div class="employee-rating-history">${history}</div></details></td>
+        </tr>`;
+      }).join("")
+    : `<tr><td colspan="5"><div class="empty-state">Nema zaposlenih za prikaz.</div></td></tr>`;
+}
+
 function renderEmployeeGoalRows() {
+  renderEmployeePerformanceOverview();
   const selectedEmployee = employeeById(selectedEmployeeId);
   const rows = (state.employeeGoals || [])
     .filter(selectedEmployeeFilter)
