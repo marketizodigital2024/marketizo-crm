@@ -3493,6 +3493,8 @@ body:not([data-active-view="employees"]) .employee-subnav .active {
 .employee-performance-overview { margin-bottom: 24px; }
 .employee-performance-table td { vertical-align: top; min-width: 150px; }
 .employee-performance-table td:first-child { min-width: 210px; }
+.performance-employee-row { cursor: pointer; }
+.performance-employee-row:hover td { background: var(--surface-soft); }
 .employee-performance-table .muted { color: var(--muted); }
 .employee-rating-history { margin-top: 10px; min-width: 260px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); line-height: 1.65; }
 .compact-button { display: inline-flex; width: auto; cursor: pointer; list-style: none; white-space: nowrap; }

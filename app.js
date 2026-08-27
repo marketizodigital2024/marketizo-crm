@@ -2792,7 +2792,7 @@ function renderEmployeePerformanceOverview() {
         const recognitionHistory = recognitions.length
           ? recognitions.map((item) => `${item.month}: ${item.type} · ${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}`).join("<hr />")
           : "Nema pohvala ili fokusa.";
-        return `<tr>
+        return `<tr class="performance-employee-row ${employee.id === selectedEmployeeId ? "selected-row" : ""}" data-performance-employee="${employee.id}" tabindex="0" role="button" aria-label="Otvori pregled za ${employee.name}">
           <td><strong>${employee.name}</strong><br /><span class="muted">${employee.position || "Zaposleni"}</span></td>
           <td><strong>${score === null ? "Bez ocene" : `${score.toFixed(1).replace(".", ",")}/5`}</strong><br /><span class="muted">${monthlyRatings.length} ${monthlyRatings.length === 1 ? "ocena" : "ocena"} za mesec</span></td>
           <td><strong>${progress === null ? "Nema aktivnog cilja" : `${progress}%`}</strong><br /><span class="muted">${goals.length} aktivnih ciljeva</span></td>
@@ -2801,6 +2801,23 @@ function renderEmployeePerformanceOverview() {
         </tr>`;
       }).join("")
     : `<tr><td colspan="5"><div class="empty-state">Nema zaposlenih za prikaz.</div></td></tr>`;
+  target.querySelectorAll("[data-performance-employee]").forEach((row) => {
+    const openEmployee = () => {
+      selectedEmployeeId = row.dataset.performanceEmployee;
+      setSelectedEmployeeOnForms(selectedEmployeeId);
+      renderAll();
+      document.querySelector(".employee-detail-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("details, summary, button, a")) return;
+      openEmployee();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openEmployee();
+    });
+  });
 }
 
 function renderEmployeeGoalRows() {
