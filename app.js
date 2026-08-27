@@ -3083,20 +3083,11 @@ function setupEmployeeAdminSections() {
     panel.dataset.employeeSections = classifyPanel(panel).join(" ");
   });
 
+  // Glavna navigacija ostaje kratka. Sve informacije o jednoj osobi
+  // otvaraju se iz njenog dosijea, umesto kroz dodatni bočni podmeni.
+  // Elementi postoje samo interno da ostatak rutiranja ostane kompatibilan.
   const mobileNav = document.createElement("nav");
-  mobileNav.className = "employee-admin-subnav";
-  mobileNav.setAttribute("aria-label", "Sekcije zaposlenih");
-  mobileNav.innerHTML = sections.map(([key, label], index) => `<button class="${index === 0 ? "active" : ""}" data-employee-admin-section="${key}" type="button">${label}</button>`).join("");
-  root.prepend(mobileNav);
-
-  const mainNav = [...document.querySelectorAll(".sidebar .nav-item")].find((item) => item.textContent.trim() === "Zaposleni");
-  let sideNav;
-  if (mainNav) {
-    sideNav = document.createElement("div");
-    sideNav.className = "employee-side-subnav";
-    sideNav.innerHTML = sections.map(([key, label], index) => `<button class="${index === 0 ? "active" : ""}" data-employee-admin-section="${key}" type="button">${label}</button>`).join("");
-    mainNav.insertAdjacentElement("afterend", sideNav);
-  }
+  const sideNav = document.createElement("div");
 
   const activate = (section) => {
     root.dataset.employeeSection = section;
