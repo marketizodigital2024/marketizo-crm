@@ -726,11 +726,60 @@ function applyProductionDataCleanupV1() {
   return true;
 }
 
+function applyQa20260827Cleanup() {
+  state.backup = state.backup || {};
+  if (state.backup.qa20260827CleanupV1) return false;
+  const marker = "qa-20260827";
+  const containsMarker = (value) => String(value || "").toLowerCase().includes(marker);
+  const qaEmployeeIds = new Set((state.employees || []).filter((item) => containsMarker(item.name) || containsMarker(item.email)).map((item) => item.id));
+  const qaClientIds = new Set((state.clients || []).filter((item) => containsMarker(item.name) || containsMarker(item.loginEmail)).map((item) => item.id));
+  const qaActivityIds = new Set((state.employeeActivities || []).filter((item) => containsMarker(item.name)).map((item) => item.id));
+
+  state.employees = (state.employees || []).filter((item) => !qaEmployeeIds.has(item.id));
+  state.clients = (state.clients || []).filter((item) => !qaClientIds.has(item.id));
+  state.employeeActivities = (state.employeeActivities || []).filter((item) => !qaActivityIds.has(item.id));
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !qaActivityIds.has(item.activityId) && !containsMarker(item.note) && !containsMarker(item.activityName));
+  state.employeeAbsences = (state.employeeAbsences || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.note));
+  state.employeeLateRecords = (state.employeeLateRecords || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.reason));
+  state.employeeGoals = (state.employeeGoals || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.title) && !containsMarker(item.target));
+  state.employeeRatings = (state.employeeRatings || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.comment));
+  state.employeeRecognitions = (state.employeeRecognitions || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.message));
+  state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.title) && !containsMarker(item.note));
+  state.employeeReports = (state.employeeReports || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !qaActivityIds.has(item.activityId) && !containsMarker(item.note) && !containsMarker(item.activityName));
+  state.notifications = (state.notifications || []).filter((item) => !qaEmployeeIds.has(item.targetId) && !containsMarker(item.key) && !containsMarker(item.title) && !containsMarker(item.message));
+  state.leads = (state.leads || []).filter((item) => !containsMarker(item.client) && !containsMarker(item.name));
+  state.teamMembers = (state.teamMembers || []).filter((item) => !containsMarker(item.client) && !containsMarker(item.name));
+  state.backup.qa20260827CleanupV1 = true;
+  return true;
+}
+
+function applyEmployeeActivityCatalogV1() {
+  state.backup = state.backup || {};
+  if (state.backup.employeeActivityCatalogV1) return false;
+  const catalog = {
+    SMM: ["Dizajn postova", "Dizajn storija", "Komunikacija sa klijentom", "Pravljenje taskova"],
+    Scenario: ["Pisanje scenarija", "Ispravke scenarija", "Istraživanje ideja", "Putovanje"],
+    Sastanci: ["Sastanak Daily", "Sastanak mesečni", "Sastanak sa klijentom", "Sastanak sa liderima", "Sastanak 1:1", "Hitan sastanak"],
+    Snimatelji: ["Snimanje na terenu", "Putovanje"],
+    "Sales tim": ["Prodajni sastanak", "Kvalifikacioni poziv"],
+    Editori: ["Edit klipova", "Ispravka klipova", "Istraživanje ideja za edit"],
+    "Media Buying": ["Puštanje reklama", "Provera reklama", "Istraživanje novih stvari oko Ads Managera", "Rešavanje problema oko Ads Managera"],
+  };
+  state.employeeActivities = state.employeeActivities || [];
+  Object.entries(catalog).forEach(([category, names]) => names.forEach((name) => {
+    if (!state.employeeActivities.some((item) => item.name === name && item.category === category)) state.employeeActivities.push({ id: crypto.randomUUID(), name, category, active: true });
+  }));
+  state.backup.employeeActivityCatalogV1 = true;
+  return true;
+}
+
 applyAugust2026FinanceCorrections();
 applyAugust2026ClickUpInvoiceSyncV2();
 applyMonthlyInvoiceRostersV5();
 applySladjan2026BalanceCorrections();
 applyProductionDataCleanupV1();
+applyQa20260827Cleanup();
+applyEmployeeActivityCatalogV1();
 saveState({ remote: false });
 let activeFilter = "all";
 let activeStatusFilter = "all";
@@ -952,6 +1001,9 @@ function migrateState(data) {
     minutes: Number(log.minutes || Math.round(Number(log.hours || 0) * 60)),
     activityId: log.activityId || "",
     activityName: log.activityName || log.note || "Rad",
+    activityCategory: log.activityCategory || "Ostalo",
+    clientId: log.clientId || "",
+    clientName: log.clientName || "",
     type: log.type || "Rad",
     note: log.note || "",
     positive: log.positive || "",
@@ -962,6 +1014,7 @@ function migrateState(data) {
   const employeeActivities = (data.employeeActivities || starterData.employeeActivities || []).map((activity) => ({
     id: activity.id || crypto.randomUUID(),
     name: activity.name || "Aktivnost",
+    category: activity.category || "Ostalo",
     active: activity.active !== false,
   }));
   const employeeDocuments = (data.employeeDocuments || starterData.employeeDocuments || []).map((documentItem) => ({
@@ -1169,7 +1222,9 @@ async function hydrateOnlineState() {
     const invoiceRostersCorrected = applyMonthlyInvoiceRostersV5();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
     const productionDataCleaned = applyProductionDataCleanupV1();
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || productionDataCleaned });
+    const qaDataCleaned = applyQa20260827Cleanup();
+    const activityCatalogAdded = applyEmployeeActivityCatalogV1();
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || productionDataCleaned || qaDataCleaned || activityCatalogAdded });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
@@ -3007,6 +3062,7 @@ function approveAbsence(id) {
   absence.status = "Odobreno";
   absence.approvedAt = new Date().toISOString();
   absence.approvedBy = "Admin";
+  state.notifications = (state.notifications || []).filter((item) => item.key !== `absence-request-${absence.id}`);
   const employee = employeeById(absence.employeeId);
   notifyOnce({
     key: `absence-approved-${absence.id}`,
@@ -3870,7 +3926,7 @@ document.getElementById("employeeActivityForm")?.addEventListener("submit", (eve
     alert("Aktivnost sa tim nazivom već postoji.");
     return;
   }
-  state.employeeActivities.push({ id: crypto.randomUUID(), name, active: true });
+  state.employeeActivities.push({ id: crypto.randomUUID(), name, category: "Ostalo", active: true });
   saveState();
   event.currentTarget.reset();
   renderAll();
@@ -3923,10 +3979,16 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) 
     alert("Izaberi zaposlenog za ovaj unos.");
     return;
   }
+  const title = String(formData.get("title") || "").trim();
+  const duplicate = (state.employeeGoals || []).some((item) => item.employeeId === employeeId && String(item.title || "").trim().toLowerCase() === title.toLowerCase() && item.startDate === formData.get("startDate") && item.endDate === formData.get("endDate"));
+  if (duplicate) {
+    showToast("Već postoji", "Isti cilj je već dodat zaposlenom.", "warn");
+    return;
+  }
   const goal = {
     id: crypto.randomUUID(),
     employeeId,
-    title: formData.get("title"),
+    title,
     target: formData.get("target"),
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
@@ -4027,7 +4089,18 @@ document.getElementById("openClientModal").addEventListener("click", () => {
 
 document.getElementById("adminClientForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const name = String(formData.get("name") || "").trim();
+  const loginEmail = String(formData.get("loginEmail") || "").trim().toLowerCase();
+  const duplicate = state.clients.some((item) => String(item.name || "").trim().toLowerCase() === name.toLowerCase() || (loginEmail && String(item.loginEmail || "").trim().toLowerCase() === loginEmail));
+  if (duplicate) {
+    showToast("Klijent već postoji", "Proveri naziv ili login email pre novog unosa.", "warn");
+    return;
+  }
+  const submitButton = form.querySelector('[type="submit"]');
+  if (submitButton?.disabled) return;
+  if (submitButton) submitButton.disabled = true;
   const values = packageValues(formData.get("package"), formData.get("revenue"), formData.get("contractMonths"));
   const contractFile = formData.get("contractFile");
   const invoiceStatus = "Nije poslat";
@@ -4035,7 +4108,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const paymentMethod = "Firma";
   state.clients.unshift({
     id: crypto.randomUUID(),
-    name: formData.get("name"),
+    name,
     niche: formData.get("niche"),
     country: formData.get("country"),
     status: formData.get("status"),
@@ -4048,7 +4121,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
     whatsapp: "",
-    loginEmail: formData.get("loginEmail"),
+    loginEmail,
     loginPassword: formData.get("loginPassword"),
     billingDay: Number(formData.get("billingDay")),
     paymentStatus,
@@ -4081,7 +4154,8 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   });
   withLoginDefaults(state.clients[0]);
   saveState();
-  event.currentTarget.reset();
+  form.reset();
+  if (submitButton) submitButton.disabled = false;
   document.getElementById("clientAddPanel")?.setAttribute("hidden", "");
   renderAll();
   showToast("Sačuvano", "Klijent je dodat u bazu.", "ok");

@@ -90,6 +90,9 @@ function loadState(sourceData = null) {
     minutes: Number(log.minutes || Math.round(Number(log.hours || 0) * 60)),
     activityId: log.activityId || "",
     activityName: log.activityName || log.note || "Rad",
+    activityCategory: log.activityCategory || "Ostalo",
+    clientId: log.clientId || "",
+    clientName: log.clientName || "",
     type: log.type || "Rad",
     note: log.note || "",
     positive: log.positive || "",
@@ -100,6 +103,7 @@ function loadState(sourceData = null) {
   data.employeeActivities = (data.employeeActivities || []).map((activity) => ({
     id: activity.id || crypto.randomUUID(),
     name: activity.name || "Aktivnost",
+    category: activity.category || "Ostalo",
     active: activity.active !== false,
   }));
   data.employeeDocuments = (data.employeeDocuments || []).map((documentItem) => ({
@@ -633,10 +637,21 @@ function renderEmployeePortal() {
   if (activitySelect) {
     const selected = activitySelect.value;
     const activities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
+    const groups = activities.reduce((result, activity) => {
+      (result[activity.category || "Ostalo"] ||= []).push(activity);
+      return result;
+    }, {});
     activitySelect.innerHTML = activities.length
-      ? activities.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")
+      ? `<option value="">Izaberi aktivnost</option>${Object.entries(groups).map(([category, items]) => `<optgroup label="${category}">${items.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")}</optgroup>`).join("")}`
       : `<option value="">Admin još nije dodao aktivnosti</option>`;
     if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
+  }
+  const clientSelect = document.getElementById("portalClientSelect");
+  if (clientSelect) {
+    const selected = clientSelect.value;
+    const clients = (state.clients || []).filter((client) => client.status === "Aktivan").sort((a, b) => a.name.localeCompare(b.name, "sr"));
+    clientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${client.id}">${client.name}</option>`).join("")}`;
+    if (clients.some((client) => client.id === selected)) clientSelect.value = selected;
   }
   if (absenceStart && !absenceStart.value) absenceStart.value = currentDateKey();
   if (absenceEnd && !absenceEnd.value) absenceEnd.value = currentDateKey();
@@ -785,7 +800,8 @@ function renderPortalHourRows(logs) {
             <span>${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))} min · ${log.locked === false ? "Otključano" : "Zaključano"}</span>
           </div>
         </header>
-        <p><b>Aktivnost:</b> ${log.activityName || "Rad"}</p>
+        <p><b>Aktivnost:</b> ${log.activityCategory || "Ostalo"} · ${log.activityName || "Rad"}</p>
+        <p><b>Klijent:</b> ${log.clientName || "Nije naveden"}</p>
         <p><b>Napomena:</b> ${log.note || "-"}</p>
         <div class="work-log-feedback">
           <span><b>Pozitivno:</b> ${log.positive || "-"}</span>
@@ -807,7 +823,7 @@ function renderPortalAbsences() {
           return `
           <div class="setup-item">
             <strong>${days}</strong>
-            <span>${absence.type} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br />${absence.note || absence.status || ""}</span>
+            <span>${absence.type} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br /><b>${absence.status || "Odobreno"}</b>${absence.note ? ` · ${absence.note}` : ""}</span>
           </div>`;
         })
         .join("")
@@ -1142,10 +1158,13 @@ function renderLeaderPanel() {
     ? reports
         .map((report) => {
           const employee = (state.employees || []).find((item) => item.id === report.employeeId);
+          const matchingLog = (state.employeeWorkLogs || []).find((item) => item.employeeId === report.employeeId && item.date === report.date && (!report.activityId || item.activityId === report.activityId));
+          const minutes = Number(report.minutes || matchingLog?.minutes || Number(report.hours || matchingLog?.hours || 0) * 60);
+          const activityName = report.activityName || matchingLog?.activityName || (state.employeeActivities || []).find((item) => item.id === report.activityId)?.name || "Aktivnost";
           return `
           <div class="setup-item">
-            <strong>${formatNumber(Number(report.minutes || Number(report.hours || 0) * 60))} min</strong>
-            <span>${employee?.name || "Zaposleni"} · ${report.activityName || "Aktivnost"}<br />${formatDate(report.date)} · + ${report.positive || "-"}<br />- ${report.negative || "-"}</span>
+            <strong>${formatNumber(minutes)} min</strong>
+            <span>${employee?.name || "Zaposleni"} · ${activityName}<br />${formatDate(report.date)} · + ${report.positive || matchingLog?.positive || "-"}<br />- ${report.negative || matchingLog?.negative || "-"}</span>
           </div>`;
         })
         .join("")
@@ -1190,9 +1209,14 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   const formData = new FormData(event.currentTarget);
   const date = String(formData.get("date") || "");
   const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
+  const client = (state.clients || []).find((item) => item.id === formData.get("clientId"));
   const minutes = Math.max(1, parseNumber(formData.get("minutes"), 0));
   if (!activity) {
     alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
+    return;
+  }
+  if (!client) {
+    alert("Izaberi klijenta za kog si radio/la ovu aktivnost.");
     return;
   }
   if (hasWorkLogForDate(date)) {
@@ -1207,6 +1231,9 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     minutes,
     activityId: activity.id,
     activityName: activity.name,
+    activityCategory: activity.category || "Ostalo",
+    clientId: client.id,
+    clientName: client.name,
     type: "Rad",
     note: formData.get("note"),
     positive: formData.get("positive"),
@@ -1226,6 +1253,9 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     minutes,
     activityId: activity.id,
     activityName: activity.name,
+    activityCategory: activity.category || "Ostalo",
+    clientId: client.id,
+    clientName: client.name,
     positive: formData.get("positive"),
     negative: formData.get("negative"),
     note: formData.get("note"),
