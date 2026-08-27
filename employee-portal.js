@@ -969,8 +969,7 @@ function renderPortalRatings() {
   const combined = ownerAverage !== null && clientAverage !== null ? (ownerAverage + clientAverage) / 2 : ownerAverage ?? clientAverage;
   setText("portalRatingAverage", combined !== null ? `${combined.toFixed(1)}/5` : "Nema ocene");
   setText("portalMotivationRating", combined !== null ? `${combined.toFixed(1)}/5` : "Bez ocene");
-  setText("portalContributionRatings", current.filter((item) => Number(item.score) >= 4).length);
-  setText("portalContributionActivities", employeeWorkLogs(portalMonth).length);
+  setText("portalContributionRatings", combined !== null ? `${combined.toFixed(1)}/5` : "Bez ocene");
   setText("portalContributionLate", employeeLateRecords().filter((item) => String(item.date || "").startsWith(portalMonth)).length ? "Ne" : "Da");
   const trend = document.getElementById("portalRatingTrend");
   if (trend) trend.innerHTML = months.length
@@ -1015,10 +1014,12 @@ function renderPortalOneOnOnes() {
 }
 
 function renderPortalLateRecords() {
+  const list = document.getElementById("portalLateList");
+  if (!list) return;
   const records = employeeLateRecords().sort((a, b) => new Date(b.date) - new Date(a.date));
   const lateStatus = employeeLateStatus(activeEmployee.id, portalMonth);
   setText("portalLateCount", lateStatus.label);
-  document.getElementById("portalLateList").innerHTML = records.length
+  list.innerHTML = records.length
     ? records
         .map(
           (record) => {

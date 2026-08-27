@@ -2323,7 +2323,7 @@ function renderEmployeeOptions() {
   ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
-    const selected = select.value;
+    const selected = select.value || selectedEmployeeId;
     select.innerHTML = employees.length
       ? employees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")
       : `<option value="">Nema zaposlenih</option>`;
@@ -2344,6 +2344,13 @@ function renderEmployeeOptions() {
     if (leaders.some((employee) => employee.id === selected)) leaderSelect.value = selected;
   }
 }
+
+const employeeSelectionIds = new Set(["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"]);
+document.addEventListener("change", (event) => {
+  if (!employeeSelectionIds.has(event.target.id) || !event.target.value) return;
+  selectedEmployeeId = event.target.value;
+  setSelectedEmployeeOnForms(selectedEmployeeId);
+});
 
 function renderEmployees() {
   if (!document.getElementById("employees")) return;
@@ -2809,6 +2816,7 @@ document.getElementById("employeeRatingForm")?.addEventListener("submit", (event
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
+  selectedEmployeeId = data.employeeId;
   state.employeeRatings = state.employeeRatings || [];
   state.employeeRatings.push({
     id: crypto.randomUUID(),
@@ -2823,6 +2831,7 @@ document.getElementById("employeeRatingForm")?.addEventListener("submit", (event
   saveState();
   form.reset();
   form.elements.month.value = currentMonthKey();
+  setSelectedEmployeeOnForms(selectedEmployeeId);
   renderAll();
 });
 
