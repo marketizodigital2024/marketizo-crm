@@ -672,10 +672,65 @@ function applySladjan2026BalanceCorrections() {
   return true;
 }
 
+function applyProductionDataCleanupV1() {
+  state.backup = state.backup || {};
+  if (state.backup.productionDataCleanupV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const sladjan = (state.employees || []).find((employee) => normalize(employee.name) === "sladjan simic");
+  const removedAbsenceIds = new Set();
+
+  state.employeeAbsences = (state.employeeAbsences || []).filter((absence) => {
+    const isSladjanTest = sladjan && absence.employeeId === sladjan.id
+      && absence.startDate === "2026-08-26" && absence.endDate === "2026-08-26";
+    const isStarterDemo = (
+      absence.employeeId === "emp-aleksandar" && absence.startDate === "2026-07-20" && absence.endDate === "2026-07-24"
+    ) || (
+      absence.employeeId === "emp-luka" && absence.startDate === "2026-07-08" && absence.endDate === "2026-07-09"
+    );
+    if (isSladjanTest || isStarterDemo) removedAbsenceIds.add(absence.id);
+    return !isSladjanTest && !isStarterDemo;
+  });
+
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => !(
+    log.date === "2026-07-06" && ["emp-ivana", "emp-aleksandar", "emp-luka"].includes(log.employeeId)
+    && ["Operativa i klijenti", "Scenarija", "Editovanje"].includes(log.note)
+  ));
+  state.employeeLateRecords = (state.employeeLateRecords || []).filter((record) => !(
+    record.employeeId === "emp-luka" && record.date === "2026-07-06" && record.minutes === 12
+  ));
+  state.employeeGoals = (state.employeeGoals || []).filter((goal) => !(
+    goal.employeeId === "emp-aleksandar" && goal.startDate === "2026-07-01" && goal.endDate === "2026-07-31"
+  ));
+  state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((note) => !(
+    note.employeeId === "emp-luka" && note.date === "2026-07-05" && note.title === "1:1 razvoj editora"
+  ));
+  state.employeeReports = (state.employeeReports || []).filter((report) => !(
+    report.employeeId === "emp-aleksandar" && report.date === "2026-07-06" && report.title === "Dnevni izveštaj"
+  ));
+  state.employeeDocuments = (state.employeeDocuments || []).filter((documentItem) => !(
+    documentItem.employeeId === "emp-ivana" && documentItem.month === "2026-07" && documentItem.fileName === "lohnzettel-jul.pdf"
+  ));
+  state.companyPlans = (state.companyPlans || []).filter((plan) => !(
+    plan.date === "2026-07-15" && normalize(plan.title).includes("webinar")
+  ));
+  state.notifications = (state.notifications || []).filter((notification) => {
+    const linkedToRemovedAbsence = [...removedAbsenceIds].some((id) => String(notification.key || "").includes(id));
+    const isSladjanTestNotification = sladjan && notification.targetId === sladjan.id
+      && String(notification.message || "").includes("26.08.2026");
+    const isAdminSladjanTestNotification = normalize(notification.message).includes("sladjan simic")
+      && String(notification.message || "").includes("26.08.2026");
+    return !linkedToRemovedAbsence && !isSladjanTestNotification && !isAdminSladjanTestNotification;
+  });
+  state.backup.productionDataCleanupV1 = true;
+  return true;
+}
+
 applyAugust2026FinanceCorrections();
 applyAugust2026ClickUpInvoiceSyncV2();
 applyMonthlyInvoiceRostersV5();
 applySladjan2026BalanceCorrections();
+applyProductionDataCleanupV1();
 saveState({ remote: false });
 let activeFilter = "all";
 let activeStatusFilter = "all";
@@ -1113,7 +1168,8 @@ async function hydrateOnlineState() {
     const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
     const invoiceRostersCorrected = applyMonthlyInvoiceRostersV5();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected });
+    const productionDataCleaned = applyProductionDataCleanupV1();
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || productionDataCleaned });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
