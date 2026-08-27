@@ -3068,16 +3068,20 @@ function setupEmployeeAdminSections() {
     goals: "employees-goals.html",
     settings: "employees-settings.html",
   };
+  const validSections = new Set(Object.keys(sectionRoutes));
 
   const classifyPanel = (panel) => {
     const heading = [...panel.querySelectorAll("h2, h3")].map((item) => item.textContent.trim().toLowerCase()).join(" ");
     const text = panel.textContent.toLowerCase();
     const result = new Set();
     if (/dodaj sate|aktivnosti zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("hours");
+    if (/dodaj kašnjenje|kašnjenj/.test(heading)) result.add("hours");
     if (/dodaj odsustvo|odmori za odobrenje|lista odsustava|odsustv/.test(heading)) result.add("absences");
     if (/učinak zaposlenog|mesečna ocena/.test(heading)) result.add("ratings");
     if (/pohvala ili fokus|motivacij/.test(heading)) result.add("recognitions");
+    if (/beleške sa sastanka|1:1/.test(heading)) result.add("recognitions");
     if (/cilj zaposlenog|ciljevi razvoja|napredak/.test(heading)) result.add("goals");
+    if (/datumi i ciljevi za tim|plan firme/.test(heading)) result.add("goals");
     if (/dodaj zaposlenog|izmeni zaposlenog|dokumenti|pristup|podešavanj/.test(heading) || panel.classList.contains("employee-detail-panel")) result.add("settings");
     if (/admin definiše ponuđene aktivnosti/.test(text)) result.add("settings");
     if (result.size > 1) result.delete("overview");
@@ -3097,6 +3101,7 @@ function setupEmployeeAdminSections() {
   const sideNav = document.createElement("div");
 
   const activate = (section) => {
+    if (!validSections.has(section)) section = "overview";
     root.dataset.employeeSection = section;
     root.querySelectorAll(".panel[data-employee-sections]").forEach((panel) => {
       panel.classList.toggle("employee-section-hidden", !panel.dataset.employeeSections.split(" ").includes(section));
@@ -3110,6 +3115,7 @@ function setupEmployeeAdminSections() {
     if (location.hash.startsWith("#employees")) history.replaceState(null, "", `#employees/${section}`);
     root.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+  window.activateEmployeeAdminSection = activate;
 
   document.querySelectorAll("[data-employee-admin-section]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -3123,7 +3129,7 @@ function setupEmployeeAdminSections() {
       activate(section);
     });
   });
-  const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
+  const currentFile = location.pathname.replace(/\/+$/, "").split("/").pop().replace(/\.html$/, "");
   const routedSection = Object.entries(sectionRoutes).find(([, route]) => route.replace(/\.html$/, "") === currentFile)?.[0];
   if (routedSection) {
     document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
@@ -3133,23 +3139,20 @@ function setupEmployeeAdminSections() {
   const requestedSection = routedSection || (location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview");
   const initialSection = requestedSection === "development" ? "goals" : requestedSection;
   activate(sections.some(([key]) => key === initialSection) ? initialSection : "overview");
+
+  window.addEventListener("hashchange", () => {
+    if (!location.hash.startsWith("#employees/")) return;
+    const nextSection = location.hash.split("/")[1];
+    activate(validSections.has(nextSection) ? nextSection : "overview");
+  });
 }
 
 setupEmployeeAdminSections();
 
 function normalizeVisibleLayouts() {
-  const employeeOverviewActive = location.hash === "#employees" || location.hash === "#employees/overview";
-  if (employeeOverviewActive) {
-    const allowedHeadings = new Set([
-      "Period i status",
-      "Kompletan pregled",
-      "Detaljan pregled za izabranog zaposlenog"
-    ]);
-    document.querySelectorAll("#employees .panel").forEach((panel) => {
-      const heading = panel.querySelector("h2, h3")?.textContent?.trim() || "";
-      panel.hidden = !allowedHeadings.has(heading);
-    });
-  }
+  document.querySelectorAll("#employees .panel[hidden]").forEach((panel) => {
+    panel.hidden = false;
+  });
 
   document.querySelectorAll(".admin-layout").forEach((layout) => {
     const visiblePanels = [...layout.children].filter((panel) => {
