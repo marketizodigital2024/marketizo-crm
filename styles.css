@@ -3491,6 +3491,14 @@ body:not([data-active-view="employees"]) .employee-subnav .active {
   color: inherit;
 }
 .employee-performance-overview { margin-bottom: 24px; }
+.employee-profile-filter { min-width: 280px; font-weight: 800; }
+.employee-profile-filter select { margin-top: 8px; width: 100%; }
+.employee-complete-history { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 22px; }
+.employee-history-section { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-soft); }
+.employee-history-section .panel-head { margin-bottom: 12px; }
+.history-record { display: grid; grid-template-columns: minmax(110px, .35fr) 1fr; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.history-record:first-of-type { border-top: 0; }
+.history-record span { color: var(--muted); line-height: 1.45; }
 .employee-performance-table td { vertical-align: top; min-width: 150px; }
 .employee-performance-table td:first-child { min-width: 210px; }
 .performance-employee-row { cursor: pointer; }
@@ -3503,6 +3511,9 @@ body:not([data-active-view="employees"]) .employee-subnav .active {
 .employee-rating-history hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
 
 @media (max-width: 760px) {
+  .employee-profile-filter { min-width: 100%; }
+  .employee-complete-history { grid-template-columns: 1fr; }
+  .history-record { grid-template-columns: 1fr; gap: 5px; }
   .employee-performance-overview .table-wrap { overflow-x: auto; }
   .employee-performance-table { min-width: 900px; }
 }
