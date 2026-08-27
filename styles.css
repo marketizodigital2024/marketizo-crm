@@ -3496,6 +3496,56 @@ body:not([data-active-view="employees"]) .employee-subnav .active {
 #employees .employee-workspace { display: none !important; }
 #employees .employee-performance-overview { width: 100%; margin: 0; }
 #employees .employee-performance-overview .table-wrap { width: 100%; }
+.admin-layout.single-visible { grid-template-columns: minmax(0, 1fr) !important; }
+.admin-layout.single-visible > .panel { grid-column: 1 / -1 !important; width: 100%; }
+#employees[data-employee-section="overview"] .employee-performance-overview,
+#employees[data-employee-section="overview"] .employee-filter-panel { grid-column: 1 / -1; width: 100%; }
+.sidebar-section-label {
+  display: block;
+  margin: 18px 16px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.team-navigation {
+  display: grid;
+  gap: 4px;
+  margin: -2px 10px 16px 24px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.team-navigation-link {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background .18s ease, color .18s ease, transform .18s ease;
+}
+.team-navigation-link:hover { color: var(--ink); background: rgba(24, 170, 104, .08); transform: translateX(2px); }
+.team-navigation-link.active {
+  color: #087d49;
+  background: #e8f7ef;
+  box-shadow: inset 3px 0 0 #18aa68;
+}
+@media (max-width: 760px) {
+  .sidebar-section-label { display: none; }
+  .team-navigation {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    margin: 8px 14px 12px;
+    padding: 0 0 4px;
+    border: 0;
+    scrollbar-width: none;
+  }
+  .team-navigation::-webkit-scrollbar { display: none; }
+  .team-navigation-link { flex: 0 0 auto; white-space: nowrap; background: #fff; border: 1px solid var(--line); }
+}
 .employee-complete-history { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 22px; }
 .employee-profile-hero { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px; border-radius: 20px; background: linear-gradient(135deg, #fff7ef, #edf9f2); border: 1px solid var(--line); }
 .employee-profile-hero h2 { margin: 4px 0; font-size: clamp(28px, 3vw, 44px); }

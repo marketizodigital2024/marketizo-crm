@@ -3072,7 +3072,7 @@ function setupEmployeeAdminSections() {
   const classifyPanel = (panel) => {
     const heading = [...panel.querySelectorAll("h2, h3")].map((item) => item.textContent.trim().toLowerCase()).join(" ");
     const text = panel.textContent.toLowerCase();
-    const result = new Set(["overview"]);
+    const result = new Set();
     if (/dodaj sate|aktivnosti zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("hours");
     if (/dodaj odsustvo|odmori za odobrenje|lista odsustava|odsustv/.test(heading)) result.add("absences");
     if (/učinak zaposlenog|mesečna ocena/.test(heading)) result.add("ratings");
@@ -3082,6 +3082,7 @@ function setupEmployeeAdminSections() {
     if (/admin definiše ponuđene aktivnosti/.test(text)) result.add("settings");
     if (result.size > 1) result.delete("overview");
     if (panel.classList.contains("employee-detail-panel")) result.add("overview");
+    if (!result.size) result.add("overview");
     return [...result];
   };
 
@@ -3135,6 +3136,82 @@ function setupEmployeeAdminSections() {
 }
 
 setupEmployeeAdminSections();
+
+function normalizeVisibleLayouts() {
+  const employeeOverviewActive = location.hash === "#employees" || location.hash === "#employees/overview";
+  if (employeeOverviewActive) {
+    const allowedHeadings = new Set([
+      "Period i status",
+      "Kompletan pregled",
+      "Detaljan pregled za izabranog zaposlenog"
+    ]);
+    document.querySelectorAll("#employees .panel").forEach((panel) => {
+      const heading = panel.querySelector("h2, h3")?.textContent?.trim() || "";
+      panel.hidden = !allowedHeadings.has(heading);
+    });
+  }
+
+  document.querySelectorAll(".admin-layout").forEach((layout) => {
+    const visiblePanels = [...layout.children].filter((panel) => {
+      const style = getComputedStyle(panel);
+      return !panel.hidden && style.display !== "none" && style.visibility !== "hidden";
+    });
+    layout.classList.toggle("single-visible", visiblePanels.length === 1);
+  });
+}
+
+window.addEventListener("hashchange", () => setTimeout(normalizeVisibleLayouts, 0));
+window.addEventListener("load", () => setTimeout(normalizeVisibleLayouts, 150));
+new MutationObserver(() => requestAnimationFrame(normalizeVisibleLayouts)).observe(document.body, {
+  childList: true,
+  subtree: true
+});
+
+function buildStructuredSidebar() {
+  const sidebar = document.querySelector(".sidebar");
+  const teamButton = sidebar?.querySelector('.nav-item[data-view="employees"]');
+  if (!sidebar || !teamButton || sidebar.querySelector(".team-navigation")) return;
+
+  const labels = {
+    admin: "Početna",
+    clients: "Klijenti",
+    employees: "Tim",
+    calendar: "Kalendar",
+    reports: "Finansije"
+  };
+  sidebar.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+    if (labels[item.dataset.view]) item.textContent = labels[item.dataset.view];
+  });
+
+  const teamPages = [
+    ["Pregled tima", "#employees/overview"],
+    ["Evidencija rada", "#employees/hours"],
+    ["Odsustva", "#employees/absences"],
+    ["Ocene", "#employees/ratings"],
+    ["Pohvale i fokus", "#employees/recognitions"],
+    ["Razvoj", "#employees/goals"],
+    ["Podešavanja", "#employees/settings"]
+  ];
+  const navigation = document.createElement("nav");
+  navigation.className = "team-navigation";
+  navigation.setAttribute("aria-label", "Sekcije tima");
+  navigation.innerHTML = `<span class="sidebar-section-label">Upravljanje timom</span>${teamPages
+    .map(([label, href]) => `<a class="team-navigation-link" href="${href}">${label}</a>`)
+    .join("")}`;
+  teamButton.insertAdjacentElement("afterend", navigation);
+
+  const syncActiveLink = () => {
+    const current = location.hash || "#admin";
+    navigation.querySelectorAll("a").forEach((link) => {
+      link.classList.toggle("active", current === link.getAttribute("href") ||
+        (current === "#employees" && link.getAttribute("href") === "#employees/overview"));
+    });
+  };
+  window.addEventListener("hashchange", syncActiveLink);
+  syncActiveLink();
+}
+
+buildStructuredSidebar();
 
 function setupCompactClientFilters() {
   const root = document.getElementById("clients");
