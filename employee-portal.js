@@ -88,6 +88,7 @@ function restoreEmployeeSession() {
   document.getElementById("employeeApp").hidden = false;
   renderEmployeePortal();
   setupDailyMinuteProgress();
+  setupPauseActivityEntry();
   return true;
 }
 
@@ -150,6 +151,9 @@ function loadState(sourceData = null) {
     category: activity.category || "Ostalo",
     active: activity.active !== false,
   }));
+  if (!data.employeeActivities.some((activity) => String(activity.name || "").toLowerCase() === "pauza")) {
+    data.employeeActivities.push({ id: "activity-pause", name: "Pauza", category: "Interno", active: true });
+  }
   data.employeeDocuments = (data.employeeDocuments || []).map((documentItem) => ({
     id: documentItem.id || crypto.randomUUID(),
     employeeId: documentItem.employeeId || "",
@@ -618,6 +622,34 @@ function setupDailyMinuteProgress() {
   form.addEventListener("submit", () => window.setTimeout(render, 150));
   window.refreshDailyMinuteProgress = render;
   render();
+}
+
+function setupPauseActivityEntry() {
+  const activitySelect = document.querySelector('#employeeHours select[name="activityId"]');
+  const form = activitySelect?.closest("form");
+  const clientSelect = form?.querySelector('select[name="clientId"]');
+  const minutesInput = form?.querySelector('input[name="minutes"]');
+  if (!form || !activitySelect || !clientSelect || !minutesInput || form.dataset.pauseReady) return;
+  form.dataset.pauseReady = "true";
+  const note = document.createElement("p");
+  note.className = "pause-entry-note";
+  note.hidden = true;
+  note.textContent = "Pauza se evidentira u dnevnom prisustvu, ali se ne vezuje za klijenta niti ulazi u trošak klijenta.";
+  clientSelect.closest("label")?.insertAdjacentElement("afterend", note);
+  const sync = () => {
+    const selected = activitySelect.options[activitySelect.selectedIndex];
+    const isPause = String(selected?.textContent || "").trim().toLowerCase() === "pauza";
+    clientSelect.required = !isPause;
+    clientSelect.disabled = isPause;
+    note.hidden = !isPause;
+    if (isPause) {
+      clientSelect.value = "";
+      minutesInput.value = "30";
+    }
+  };
+  activitySelect.addEventListener("change", sync);
+  form.addEventListener("reset", () => window.setTimeout(sync, 0));
+  sync();
 }
 
 function absenceCoversDate(date) {
