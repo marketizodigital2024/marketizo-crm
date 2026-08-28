@@ -3524,7 +3524,7 @@ function setupClientCostAnalysis() {
   };
   const employeeName = (id) => (state.employees || []).find((item) => item.id === id)?.name || "Nepoznat zaposleni";
   const clientName = (log) => log.clientName || (state.clients || []).find((item) => item.id === log.clientId)?.name || "Bez klijenta";
-  const hourlyRate = (employee) => Number(employee?.grossSalary || employee?.salary || 0) / Math.max(1, Number(employee?.weeklyHours || 40) * 52 / 12);
+  const hourlyRate = (employee) => Number(employee?.salary || 0) / Math.max(1, Number(employee?.weeklyHours || 40) * 52 / 12);
   const money = (amount) => `€ ${Math.round(amount).toLocaleString("de-DE")}`;
   const hours = (minutes) => `${(minutes / 60).toLocaleString("sr-RS", { maximumFractionDigits: 2 })}h`;
 
@@ -3641,35 +3641,6 @@ function setupEmployeeActivityCategories() {
 
 setupEmployeeActivityCategories();
 
-function setupEmployeeGrossSalaryField() {
-  const form = document.getElementById("employeeProfileForm");
-  const salaryInput = form?.elements?.salary;
-  if (!form || !salaryInput || form.elements.grossSalary) return;
-  const field = document.createElement("label");
-  field.className = "gross-salary-field";
-  field.innerHTML = `Bruto plata (€)<input name="grossSalary" type="number" min="0" step="1" value="0" /><small class="field-note">Interno, koristi se za obračun troška klijenata.</small>`;
-  salaryInput.closest("label").insertAdjacentElement("afterend", field);
-  const grossInput = form.elements.grossSalary;
-  const syncValue = () => {
-    const employee = employeeById(selectedEmployeeId);
-    grossInput.value = Number(employee?.grossSalary || 0);
-  };
-  new MutationObserver(() => {
-    if (!document.getElementById("employeeProfilePanel")?.hidden) syncValue();
-  }).observe(document.getElementById("employeeProfilePanel"), { attributes: true, attributeFilter: ["hidden", "class"] });
-  form.addEventListener("submit", () => {
-    const grossSalary = Number(grossInput.value || 0);
-    const email = form.elements.email?.value.trim().toLowerCase();
-    window.setTimeout(() => {
-      const employee = employeeById(selectedEmployeeId) || (state.employees || []).find((item) => String(item.email || "").toLowerCase() === email);
-      if (!employee) return;
-      employee.grossSalary = grossSalary;
-      saveState();
-    }, 0);
-  }, true);
-}
-
-setupEmployeeGrossSalaryField();
 
 function setupCompactClientFilters() {
   const root = document.getElementById("clients");
