@@ -672,6 +672,79 @@ function applySladjan2026BalanceCorrections() {
   return true;
 }
 
+function applyHazim2026ActualsV1() {
+  state.backup = state.backup || {};
+  if (state.backup.hazim2026ActualsV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "hazim hadzic");
+  if (!employee) return false;
+
+  employee.weeklyHours = 30;
+  employee.weeklyHoursByMonth = {
+    ...(employee.weeklyHoursByMonth || {}),
+    "2026-01": 20,
+    "2026-02": 20,
+    "2026-03": 20,
+    "2026-04": 20,
+    "2026-05": 20,
+    "2026-06": 20,
+    "2026-07": 30,
+    "2026-08": 30,
+  };
+  employee.monthlyAbsenceDays = {
+    ...(employee.monthlyAbsenceDays || {}),
+    "2026-04": { "Godišnji odmor": 4 },
+    "2026-05": { "Poklon dan": 1 },
+    "2026-06": { "Godišnji odmor": 1 },
+    "2026-07": { "Godišnji odmor": 5 },
+    "2026-08": { "Godišnji odmor": 5 },
+  };
+
+  const monthlyHours = {
+    "2026-01": 88,
+    "2026-02": 82,
+    "2026-03": 82,
+    "2026-04": 60,
+    "2026-05": 80,
+    "2026-06": 120,
+    "2026-07": 108,
+    "2026-08": 96,
+  };
+  state.employeeWorkLogs = state.employeeWorkLogs || [];
+  Object.entries(monthlyHours).forEach(([monthKey, targetHours]) => {
+    state.employeeWorkLogs = state.employeeWorkLogs.filter((log) => !(
+      log.employeeId === employee.id && String(log.date || "").startsWith(monthKey)
+      && (log.activityName === "Migracija iz ClickUp-a" || log.note === "Hazim - usklađen mesečni zbir")
+    ));
+    const existingHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
+    if (Math.abs(correctionHours) < 0.01) return;
+    const [year, month] = monthKey.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    state.employeeWorkLogs.push({
+      id: `hazim-actual-${monthKey}`,
+      employeeId: employee.id,
+      date: `${monthKey}-${String(lastDay).padStart(2, "0")}`,
+      hours: correctionHours,
+      minutes: Math.round(correctionHours * 60),
+      activityId: "",
+      activityName: "Prenos stvarnog mesečnog zbira",
+      activityCategory: "Evidencija",
+      clientId: "",
+      clientName: "",
+      type: "Rad",
+      note: "Hazim - usklađen mesečni zbir",
+      locked: true,
+      submittedAt: new Date().toISOString(),
+    });
+  });
+  state.backup.hazim2026ActualsV1 = true;
+  return true;
+}
+
 function applyProductionDataCleanupV1() {
   state.backup = state.backup || {};
   if (state.backup.productionDataCleanupV1) return false;
@@ -777,6 +850,7 @@ applyAugust2026FinanceCorrections();
 applyAugust2026ClickUpInvoiceSyncV2();
 applyMonthlyInvoiceRostersV5();
 applySladjan2026BalanceCorrections();
+applyHazim2026ActualsV1();
 applyProductionDataCleanupV1();
 applyQa20260827Cleanup();
 applyEmployeeActivityCatalogV1();
@@ -862,29 +936,8 @@ function monthlyInvoice(client, monthKey = selectedMonthKey()) {
   };
 }
 
-function clientFinanceStartMonth(client) {
-  return client.financeStartMonth
-    || String(client.startDate || "").slice(0, 7)
-    || String(client.createdAt || "").slice(0, 7);
-}
-
 function clientsForInvoiceMonth(clients, monthKey) {
-  return clients.filter((client) => {
-    if (normalizeClientStatus(client.status) === "Arhiviran") return false;
-    if (client.invoices && client.invoices[monthKey]) return true;
-    const financeStartMonth = clientFinanceStartMonth(client);
-    if (!financeStartMonth || monthKey < financeStartMonth || normalizeClientStatus(client.status) !== "Aktivan") return false;
-    client.invoices = client.invoices || {};
-    client.invoices[monthKey] = {
-      invoiceStatus: "Nije poslat",
-      paymentStatus: "Nije plaćeno",
-      paymentMethod: client.paymentMethod || "Firma",
-      amount: Number(client.revenue || 0),
-      sentAt: "",
-      paidAt: "",
-    };
-    return true;
-  });
+  return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]));
 }
 
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
@@ -1247,10 +1300,11 @@ async function hydrateOnlineState() {
     const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
     const invoiceRostersCorrected = applyMonthlyInvoiceRostersV5();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
+    const hazimCorrected = applyHazim2026ActualsV1();
     const productionDataCleaned = applyProductionDataCleanupV1();
     const qaDataCleaned = applyQa20260827Cleanup();
     const activityCatalogAdded = applyEmployeeActivityCatalogV1();
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || productionDataCleaned || qaDataCleaned || activityCatalogAdded });
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || hazimCorrected || productionDataCleaned || qaDataCleaned || activityCatalogAdded });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
@@ -2051,10 +2105,16 @@ function absenceWorkdays(absence) {
 function employeeYearAbsenceDays(employeeId, year, type) {
   const employee = employeeById(employeeId);
   const openingUsed = type === "Godišnji odmor" && year === Number(currentDateKey().slice(0, 4)) ? parseNumber(employee?.openingVacationUsed || 0) : 0;
-  return openingUsed + state.employeeAbsences
+  const overrides = employee?.monthlyAbsenceDays || {};
+  const overriddenMonths = new Set(Object.keys(overrides).filter((monthKey) => monthKey.startsWith(`${year}-`)));
+  const overriddenDays = [...overriddenMonths].reduce((sum, monthKey) => {
+    const monthValues = overrides[monthKey] || {};
+    return sum + (type ? parseNumber(monthValues[type] || 0) : Object.values(monthValues).reduce((monthSum, value) => monthSum + parseNumber(value || 0), 0));
+  }, 0);
+  return openingUsed + overriddenDays + state.employeeAbsences
     .filter((absence) => absence.employeeId === employeeId && absence.type === type && absence.status !== "Zatraženo")
     .reduce((sum, absence) => {
-      const days = absenceWorkdays(absence).filter((day) => day.startsWith(`${year}-`));
+      const days = absenceWorkdays(absence).filter((day) => day.startsWith(`${year}-`) && !overriddenMonths.has(day.slice(0, 7)));
       return sum + days.length;
     }, 0);
 }
@@ -2073,6 +2133,13 @@ function employeeVacationAllowance(employee, year) {
 }
 
 function employeeMonthAbsenceDays(employeeId, monthKey, type = "") {
+  const employee = employeeById(employeeId);
+  const override = employee?.monthlyAbsenceDays?.[monthKey];
+  if (override) {
+    return type
+      ? parseNumber(override[type] || 0)
+      : Object.values(override).reduce((sum, value) => sum + parseNumber(value || 0), 0);
+  }
   return state.employeeAbsences
     .filter((absence) => absence.employeeId === employeeId && absence.status !== "Zatraženo" && (!type || absence.type === type))
     .reduce((sum, absence) => {
@@ -2113,7 +2180,8 @@ function employeeLateStatus(employeeId, monthKey) {
 }
 
 function employeeExpectedHours(employee, monthKey) {
-  const dailyHours = Number(employee.weeklyHours || 40) / 5;
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
   const absenceDays = employeeMonthAbsenceDays(employee.id, monthKey);
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !employee.startDate || day >= employee.startDate);
   const plannedDays = Math.max(eligibleWorkdays.length - absenceDays, 0);
@@ -2371,6 +2439,13 @@ function renderEmployeeOptions() {
   }
 }
 
+function syncRequestedEmployee() {
+  const employeeId = new URLSearchParams(location.search).get("employee");
+  if (employeeId && (state.employees || []).some((employee) => employee.id === employeeId)) {
+    selectedEmployeeId = employeeId;
+  }
+}
+
 const employeeSelectionIds = new Set(["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"]);
 document.addEventListener("change", (event) => {
   if (!employeeSelectionIds.has(event.target.id) || !event.target.value) return;
@@ -2380,6 +2455,7 @@ document.addEventListener("change", (event) => {
 
 function renderEmployees() {
   if (!document.getElementById("employees")) return;
+  syncRequestedEmployee();
   state.employees = state.employees || [];
   state.employeeAbsences = state.employeeAbsences || [];
   state.employeeWorkLogs = state.employeeWorkLogs || [];
@@ -2811,6 +2887,7 @@ function renderEmployeePerformanceOverview() {
           history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
         } else {
           employeeOverviewFilter = profileSelect.value;
+          if (employeeOverviewFilter !== "all") selectedEmployeeId = employeeOverviewFilter;
         }
         renderAll();
       });
@@ -3551,9 +3628,6 @@ function renderClients() {
           const endDate = contractEndDate(client);
           const daysLeft = endDate ? daysBetween(currentDateKey(), endDate) : null;
           const contractLabel = endDate ? `do ${formatDate(endDate)}` : "nije unet";
-          const contractDownload = client.contractFileData
-            ? `<a class="document-link" href="${client.contractFileData}" download="${client.contractFileName || "ugovor"}">Preuzmi ugovor</a>`
-            : `<span>Ugovor nije dodat</span>`;
           const leadStats = clientLeadStats(client);
           const leadClass = leadStats.late ? "danger" : leadStats.open ? "warn" : "ok";
           const archiveLabel = client.status === "Arhiviran" ? "Vrati" : "Arhiva";
@@ -3561,7 +3635,7 @@ function renderClients() {
           <tr>
             <td><strong>${client.name}</strong><br /><span>${client.niche} · ${client.country}</span></td>
             <td><strong>${displayPackage(client.package)}</strong><br /><span>${currency.format(client.revenue || 0)}/mes</span></td>
-            <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
+            <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span></td>
             <td><span class="status ${statusClass(client)}">${client.status || "Aktivan"}</span></td>
             <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
             <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "123456"}</span></td>
@@ -4403,8 +4477,6 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const invoiceStatus = "Nije poslat";
   const paymentStatus = "Nije plaćeno";
   const paymentMethod = "Firma";
-  const createdAt = new Date().toISOString();
-  const financeStartMonth = String(formData.get("startDate") || "").slice(0, 7) || currentMonthKey();
   state.clients.unshift({
     id: crypto.randomUUID(),
     name,
@@ -4426,14 +4498,11 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     paymentStatus,
     invoiceStatus,
     paymentMethod,
-    createdAt,
-    financeStartMonth,
     invoices: {
-      [financeStartMonth]: {
+      [selectedMonthKey()]: {
         invoiceStatus,
         paymentStatus,
         paymentMethod,
-        amount: values.revenue,
         sentAt: invoiceStatus === "Poslat" ? new Date().toISOString() : "",
         paidAt: paymentStatus === "Plaćeno" ? new Date().toISOString() : "",
       },
