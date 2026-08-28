@@ -13,10 +13,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=32" />
+    <link rel="stylesheet" href="styles.css?v=33" />
   </head>
   <body class="client-login-body">
-    <main class="client-auth" id="employeeLoginScreen" hidden>
+    <main class="client-auth" id="employeeLoginScreen">
       <section class="panel login-card">
         <div class="brand login-brand">
           <img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital" />
@@ -31,17 +31,16 @@
             <h1>Marketizo Team Hub</h1>
           </div>
           <label>Email
-            <input name="email" type="email" required placeholder="ime@marketizo.local" />
+            <input name="email" type="email" required autocomplete="username" placeholder="ime@marketizo.local" />
           </label>
           <label>Lozinka
             <span class="password-field">
-              <input name="password" type="password" required placeholder="Lozinka" />
+              <input name="password" type="password" required autocomplete="current-password" placeholder="Lozinka" />
               <button class="password-toggle" type="button" data-toggle-password aria-label="Prikaži lozinku">Prikaži</button>
             </span>
           </label>
           <button class="primary-button" type="submit">Uloguj se</button>
           <p class="login-error" id="employeeLoginError" hidden>Login podaci nisu tačni. Ako je nalog dodat na drugom uređaju, treba nam zajednička baza da bi ga telefon video.</p>
-          <div class="login-hint" id="employeeLoginHint"></div>
         </form>
       </section>
     </main>
@@ -377,7 +376,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=19"></script>
+    <script src="employee-portal.js?v=17"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

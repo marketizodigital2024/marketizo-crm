@@ -745,6 +745,78 @@ function applyHazim2026ActualsV1() {
   return true;
 }
 
+function applyMilica2026ActualsV1() {
+  state.backup = state.backup || {};
+  if (state.backup.milica2026ActualsV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "milica blagojevic");
+  if (!employee) return false;
+
+  employee.startDate = "2026-07-06";
+  employee.weeklyHours = 38.5;
+  employee.weeklyHoursByMonth = {
+    ...(employee.weeklyHoursByMonth || {}),
+    "2026-07": 38.5,
+    "2026-08": 38.5,
+  };
+  employee.monthlyAbsenceDays = {
+    ...(employee.monthlyAbsenceDays || {}),
+    "2026-08": { "Godišnji odmor": 7 },
+  };
+
+  state.employeeAbsences = state.employeeAbsences || [];
+  const augustVacation = state.employeeAbsences.find((absence) =>
+    absence.employeeId === employee.id
+    && absence.type === "Godišnji odmor"
+    && String(absence.startDate || "").startsWith("2026-08")
+  );
+  const vacationData = {
+    employeeId: employee.id,
+    type: "Godišnji odmor",
+    startDate: "2026-08-06",
+    endDate: "2026-08-14",
+    note: "Milica - potvrđen godišnji odmor",
+    status: "Odobreno",
+  };
+  if (augustVacation) Object.assign(augustVacation, vacationData);
+  else state.employeeAbsences.push({ id: "milica-vacation-2026-08", ...vacationData });
+
+  const monthlyHours = { "2026-07": 154, "2026-08": 94.5 };
+  state.employeeWorkLogs = state.employeeWorkLogs || [];
+  Object.entries(monthlyHours).forEach(([monthKey, targetHours]) => {
+    state.employeeWorkLogs = state.employeeWorkLogs.filter((log) => !(
+      log.employeeId === employee.id && String(log.date || "").startsWith(monthKey)
+      && (log.activityName === "Migracija iz ClickUp-a" || log.note === "Milica - usklađen mesečni zbir")
+    ));
+    const existingHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
+    if (Math.abs(correctionHours) < 0.01) return;
+    const [year, month] = monthKey.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    state.employeeWorkLogs.push({
+      id: `milica-actual-${monthKey}`,
+      employeeId: employee.id,
+      date: `${monthKey}-${String(lastDay).padStart(2, "0")}`,
+      hours: correctionHours,
+      minutes: Math.round(correctionHours * 60),
+      activityId: "",
+      activityName: "Prenos stvarnog mesečnog zbira",
+      activityCategory: "Evidencija",
+      clientId: "",
+      clientName: "",
+      type: "Rad",
+      note: "Milica - usklađen mesečni zbir",
+      locked: true,
+      submittedAt: new Date().toISOString(),
+    });
+  });
+  state.backup.milica2026ActualsV1 = true;
+  return true;
+}
+
 function applyProductionDataCleanupV1() {
   state.backup = state.backup || {};
   if (state.backup.productionDataCleanupV1) return false;
@@ -851,6 +923,7 @@ applyAugust2026ClickUpInvoiceSyncV2();
 applyMonthlyInvoiceRostersV5();
 applySladjan2026BalanceCorrections();
 applyHazim2026ActualsV1();
+applyMilica2026ActualsV1();
 applyProductionDataCleanupV1();
 applyQa20260827Cleanup();
 applyEmployeeActivityCatalogV1();
