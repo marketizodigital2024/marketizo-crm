@@ -3558,6 +3558,7 @@ body.employee-editor-open {
 .activity-category-field { display: grid; gap: 7px; margin-top: 14px; color: #334139; font-weight: 800; }
 .activity-category-field select, .activity-category-field input { width: 100%; min-height: 50px; padding: 10px 13px; border: 1px solid #d3ddd6; border-radius: 13px; background: #fff; color: #18251d; font: inherit; }
 .activity-category-badge { display: inline-flex; width: max-content; margin: 4px 8px 4px 0; padding: 5px 9px; border-radius: 999px; background: #e7f7ee; color: #11864d; font-size: 11px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.gross-salary-field { padding: 12px; border: 1px solid #bfe4cf; border-radius: 14px; background: #f1fbf5; }
 
 #employeeProfilePanel.employee-editor-modal {
   display: block !important;
