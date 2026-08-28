@@ -2511,7 +2511,7 @@ function generateSystemNotifications() {
   if (dayOfWeek >= 1 && dayOfWeek <= 5) {
     (state.employees || [])
       .filter((employee) => employee.status === "Aktivan")
-      .filter((employee) => !normalize(employee.position).includes("snimatelj"))
+      .filter((employee) => !String(employee.position || "").trim().toLocaleLowerCase("sr-Latn").includes("snimatelj"))
       .forEach((employee) => {
         const hasApprovedAbsence = (state.employeeAbsences || []).some((absence) =>
           absence.employeeId === employee.id
