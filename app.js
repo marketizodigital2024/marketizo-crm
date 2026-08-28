@@ -2451,6 +2451,9 @@ function generateSystemNotifications() {
   const monthKey = selectedMonthKey();
   const today = currentDateKey();
 
+  // Dnevni izvestaji su evidencija rada, ne stavka koja trazi reakciju admina.
+  state.notifications = (state.notifications || []).filter((notification) => !String(notification.key || "").startsWith("employee-report-"));
+
   state.clients.forEach((client) => {
     const invoice = monthlyInvoice(client, monthKey);
     if (invoice.invoiceStatus === "Poslat" && invoice.paymentStatus !== "Plaćeno" && invoice.sentAt && hoursSince(invoice.sentAt) >= 8 * 24) {
@@ -2500,6 +2503,42 @@ function generateSystemNotifications() {
         message: `${employee?.name || "Zaposleni"} traži ${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)}.`,
       });
     });
+
+  const yesterdayDate = new Date(`${today}T12:00:00`);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = localDate(yesterdayDate);
+  const dayOfWeek = yesterdayDate.getDay();
+  if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+    (state.employees || [])
+      .filter((employee) => employee.status === "Aktivan")
+      .filter((employee) => !normalize(employee.position).includes("snimatelj"))
+      .forEach((employee) => {
+        const hasApprovedAbsence = (state.employeeAbsences || []).some((absence) =>
+          absence.employeeId === employee.id
+          && absence.status === "Odobreno"
+          && absence.startDate <= yesterday
+          && absence.endDate >= yesterday
+        );
+        if (hasApprovedAbsence) return;
+        const weeklyHours = Number(employee.weeklyHours || 0);
+        const targetMinutes = weeklyHours === 20
+          ? 240
+          : weeklyHours >= 38
+            ? (dayOfWeek === 5 ? 390 : 510)
+            : Math.round((weeklyHours * 60) / 5);
+        if (targetMinutes <= 0) return;
+        const enteredMinutes = (state.employeeWorkLogs || [])
+          .filter((log) => log.employeeId === employee.id && log.date === yesterday)
+          .reduce((sum, log) => sum + Number(log.minutes || Math.round(Number(log.hours || 0) * 60)), 0);
+        if (enteredMinutes >= targetMinutes) return;
+        notifyOnce({
+          key: `employee-hours-shortage-${employee.id}-${yesterday}`,
+          type: "danger",
+          title: "Nedostaju sati",
+          message: `${employee.name}: za ${formatDate(yesterday)} upisano je ${enteredMinutes}/${targetMinutes} min. Nedostaje ${targetMinutes - enteredMinutes} min.`,
+        });
+      });
+  }
 
 }
 
@@ -2596,7 +2635,9 @@ function renderEmployees() {
   const monthKey = employeeMonthKey();
   const year = Number(monthKey.slice(0, 4));
   const employees = visibleEmployees();
-  const totalSalary = employees.reduce((sum, employee) => sum + Number(employee.salary || 0), 0);
+  const totalSalary = employees
+    .filter((employee) => employee.status === "Aktivan")
+    .reduce((sum, employee) => sum + Number(employee.salary || 0), 0);
   const totalHourBalance = employees.reduce((sum, employee) => sum + employeeHourBalance(employee, monthKey), 0);
   const vacationUsed = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Godišnji odmor"), 0);
   const sickDays = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Bolovanje"), 0);
@@ -2915,12 +2956,14 @@ function renderEmployeeWorkRows(monthKey) {
         <td>${employee?.name || "Obrisan zaposleni"}</td>
         <td>${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))} min<br /><span>${formatHours(log.hours || 0)}h</span></td>
         <td><strong>${log.activityName || "Rad"}</strong>${log.note ? `<br /><span>${log.note}</span>` : ""}</td>
+        <td>${log.clientName || "Bez klijenta"}</td>
         <td><strong>+</strong> ${log.positive || "-"}<br /><strong>-</strong> ${log.negative || "-"}</td>
-        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button danger-action" data-delete-work-log="${log.id}" type="button">Obriši</button></td>
+        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button" data-edit-work-log="${log.id}" type="button">Izmeni</button> <button class="edit-button danger-action" data-delete-work-log="${log.id}" type="button">Obriši</button></td>
       </tr>`;
     });
   setText("employeeWorkRowsCount", `${rows.length} unosa`);
-  document.getElementById("employeeWorkRows").innerHTML = rows.join("") || `<tr><td colspan="6">Nema unetih sati za izabrani mesec i zaposlenog.</td></tr>`;
+  document.getElementById("employeeWorkRows").innerHTML = rows.join("") || `<tr><td colspan="7">Nema unetih sati za izabrani mesec i zaposlenog.</td></tr>`;
+  document.querySelectorAll("[data-edit-work-log]").forEach((button) => button.addEventListener("click", () => openWorkLogEditor(button.dataset.editWorkLog)));
   document.querySelectorAll("[data-delete-work-log]").forEach((button) => button.addEventListener("click", () => {
     const log = state.employeeWorkLogs.find((item) => item.id === button.dataset.deleteWorkLog);
     if (!log || !confirm(`Obrisati unos od ${formatDate(log.date)} (${log.activityName || "Rad"})?`)) return;
@@ -2929,6 +2972,59 @@ function renderEmployeeWorkRows(monthKey) {
     renderAll();
     showToast("Obrisano", "Pogrešan unos vremena je uklonjen.", "ok");
   }));
+}
+
+function openWorkLogEditor(id) {
+  const log = (state.employeeWorkLogs || []).find((item) => item.id === id);
+  if (!log) return;
+  let dialog = document.getElementById("workLogEditorDialog");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "workLogEditorDialog";
+    dialog.className = "work-log-editor-dialog";
+    document.body.append(dialog);
+  }
+  const activityOptions = (state.employeeActivities || []).filter((item) => item.active !== false)
+    .map((item) => `<option value="${item.id}" ${item.id === log.activityId ? "selected" : ""}>${item.category || "Ostalo"} · ${item.name}</option>`).join("");
+  const clientOptions = (state.clients || []).filter((item) => item.status === "Aktivan")
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((item) => `<option value="${item.id}" ${item.id === log.clientId ? "selected" : ""}>${item.name}</option>`).join("");
+  dialog.innerHTML = `<form method="dialog" class="work-log-editor-form">
+    <div class="panel-head"><div><p class="eyebrow">Evidencija rada</p><h2>Izmeni unos</h2></div><button class="icon-button" value="cancel" type="submit">×</button></div>
+    <label>Datum<input name="date" type="date" value="${log.date}" required /></label>
+    <label>Minuta<input name="minutes" type="number" min="1" value="${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))}" required /></label>
+    <label>Aktivnost<select name="activityId" required>${activityOptions}</select></label>
+    <label>Klijent<select name="clientId"><option value="">Bez klijenta</option>${clientOptions}</select></label>
+    <label class="wide">Napomena<textarea name="note" rows="3">${log.note || ""}</textarea></label>
+    <div class="dialog-actions wide"><button class="secondary-button" value="cancel" type="submit">Otkaži</button><button class="primary-button" value="save" type="submit">Sačuvaj izmenu</button></div>
+  </form>`;
+  dialog.addEventListener("close", () => {
+    if (dialog.returnValue !== "save") return;
+    const form = dialog.querySelector("form");
+    const data = new FormData(form);
+    const activity = (state.employeeActivities || []).find((item) => item.id === data.get("activityId"));
+    const client = (state.clients || []).find((item) => item.id === data.get("clientId"));
+    const isAggregate = normalize(log.activityName).includes("migracija") || normalize(log.activityName).includes("prenos stvarnog");
+    if (!client && !isAggregate) {
+      alert("Izaberi klijenta za ovu aktivnost.");
+      openWorkLogEditor(id);
+      return;
+    }
+    const minutes = Math.max(1, parseNumber(data.get("minutes"), 1));
+    Object.assign(log, {
+      date: String(data.get("date") || log.date), minutes,
+      hours: Math.round((minutes / 60) * 10000) / 10000,
+      activityId: activity?.id || log.activityId,
+      activityName: activity?.name || log.activityName,
+      activityCategory: activity?.category || log.activityCategory || "Ostalo",
+      clientId: client?.id || "", clientName: client?.name || "",
+      note: String(data.get("note") || ""), updatedAt: new Date().toISOString(),
+    });
+    saveState();
+    renderAll();
+    showToast("Sačuvano", "Unos sati je izmenjen i odmah je vidljiv zaposlenom.", "ok");
+  }, { once: true });
+  dialog.showModal();
 }
 
 function renderEmployeeActivities() {
@@ -3328,20 +3424,20 @@ function setupEmployeeAdminSections() {
 
   const sections = [
     ["overview", "Tim"],
-    ["hours", "Evidencija rada"],
-    ["absences", "Odsustva"],
-    ["ratings", "Ocene"],
-    ["recognitions", "Pohvale"],
-    ["goals", "Razvoj"],
+    ["entries", "Unosi rada"],
+    ["leave", "Odmori i kalendar"],
+    ["meetings", "1:1 sastanci"],
+    ["performance", "Učinak i ciljevi"],
+    ["activities", "Aktivnosti"],
     ["settings", "Podešavanja"],
   ];
   const sectionRoutes = {
     overview: "employees-overview.html",
-    hours: "employees-hours.html",
-    absences: "employees-absences.html",
-    ratings: "employees-ratings.html",
-    recognitions: "employees-recognitions.html",
-    goals: "employees-goals.html",
+    entries: "employees-hours.html",
+    leave: "employees-absences.html",
+    meetings: "employees-recognitions.html",
+    performance: "employees-ratings.html",
+    activities: "employees-goals.html",
     settings: "employees-settings.html",
   };
   const validSections = new Set(Object.keys(sectionRoutes));
@@ -3350,16 +3446,14 @@ function setupEmployeeAdminSections() {
     const heading = [...panel.querySelectorAll("h2, h3")].map((item) => item.textContent.trim().toLowerCase()).join(" ");
     const text = panel.textContent.toLowerCase();
     const result = new Set();
-    if (/dodaj sate|aktivnosti zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("hours");
-    if (/dodaj kašnjenje|kašnjenj/.test(heading)) result.add("hours");
-    if (/dodaj odsustvo|odmori za odobrenje|lista odsustava|odsustv/.test(heading)) result.add("absences");
-    if (/učinak zaposlenog|mesečna ocena/.test(heading)) result.add("ratings");
-    if (/pohvala ili fokus|motivacij/.test(heading)) result.add("recognitions");
-    if (/beleške sa sastanka|1:1/.test(heading)) result.add("recognitions");
-    if (/cilj zaposlenog|ciljevi razvoja|napredak/.test(heading)) result.add("goals");
-    if (/datumi i ciljevi za tim|plan firme/.test(heading)) result.add("goals");
+    if (/dodaj sate|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("entries");
+    if (/dodaj kašnjenje/.test(heading)) result.add("entries");
+    if (/dodaj odsustvo/.test(heading)) result.add("entries");
+    if (/odmori za odobrenje|datumi, plan firme i odsustva tima|ko je na odmoru|odsustva po danima|lista odsustava/.test(heading)) result.add("leave");
+    if (/beleške sa sastanka|1:1/.test(heading)) result.add("meetings");
+    if (/učinak zaposlenog|mesečna ocena|pohvala ili fokus|motivacij|cilj zaposlenog|ciljevi razvoja|napredak|datumi i ciljevi za tim/.test(heading)) result.add("performance");
+    if (/aktivnosti zaposlenih/.test(heading) || /admin definiše ponuđene aktivnosti/.test(text)) result.add("activities");
     if (/dodaj zaposlenog|izmeni zaposlenog|dokumenti|pristup|podešavanj/.test(heading) || panel.classList.contains("employee-detail-panel")) result.add("settings");
-    if (/admin definiše ponuđene aktivnosti/.test(text)) result.add("settings");
     if (result.size > 1) result.delete("overview");
     if (panel.classList.contains("employee-detail-panel")) result.add("overview");
     if (!result.size) result.add("overview");
@@ -3384,7 +3478,7 @@ function setupEmployeeAdminSections() {
     });
     document.querySelectorAll("[data-employee-admin-section]").forEach((button) => button.classList.toggle("active", button.dataset.employeeAdminSection === section));
     root.querySelectorAll(".employee-action-grid").forEach((grid) => grid.classList.toggle("employee-grid-empty", !grid.querySelector(".panel:not(.employee-section-hidden)")));
-    root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", !["ratings", "recognitions", "goals"].includes(section)));
+    root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", section !== "performance"));
     const sectionLabel = sections.find(([key]) => key === section)?.[1] || "Pregled";
     const pageTitle = document.querySelector(".main .topbar h1");
     if (pageTitle) pageTitle.textContent = section === "overview" ? "Zaposleni" : sectionLabel;
@@ -3413,7 +3507,8 @@ function setupEmployeeAdminSections() {
     document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.toggle("active", item === mainNav));
   }
   const requestedSection = routedSection || (location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview");
-  const initialSection = requestedSection === "development" ? "goals" : requestedSection;
+  const legacySections = { hours: "entries", absences: "leave", ratings: "performance", recognitions: "meetings", goals: "activities", development: "performance" };
+  const initialSection = legacySections[requestedSection] || requestedSection;
   activate(sections.some(([key]) => key === initialSection) ? initialSection : "overview");
 
   window.addEventListener("hashchange", () => {
@@ -3464,11 +3559,10 @@ function buildStructuredSidebar() {
 
   const teamPages = [
     ["Pregled tima", "#employees/overview"],
-    ["Evidencija rada", "#employees/hours"],
-    ["Odsustva", "#employees/absences"],
-    ["Ocene", "#employees/ratings"],
-    ["Pohvale i fokus", "#employees/recognitions"],
-    ["Razvoj", "#employees/goals"],
+    ["Odmori i kalendar", "#employees/leave"],
+    ["1:1 sastanci", "#employees/meetings"],
+    ["Učinak i ciljevi", "#employees/performance"],
+    ["Aktivnosti", "#employees/activities"],
     ["Podešavanja", "#employees/settings"]
   ];
   const navigation = document.createElement("nav");
@@ -3479,12 +3573,19 @@ function buildStructuredSidebar() {
     .join("")}`;
   teamButton.insertAdjacentElement("afterend", navigation);
 
+  const workEvidenceLink = document.createElement("a");
+  workEvidenceLink.className = "nav-item work-evidence-nav";
+  workEvidenceLink.href = "employees-hours.html";
+  workEvidenceLink.textContent = "Unosi rada";
+  navigation.insertAdjacentElement("afterend", workEvidenceLink);
+
   const syncActiveLink = () => {
     const current = location.hash || "#admin";
     navigation.querySelectorAll("a").forEach((link) => {
       link.classList.toggle("active", current === link.getAttribute("href") ||
         (current === "#employees" && link.getAttribute("href") === "#employees/overview"));
     });
+    workEvidenceLink.classList.toggle("active", location.pathname.endsWith("employees-hours.html") || current === "#employees/entries");
   };
   window.addEventListener("hashchange", syncActiveLink);
   syncActiveLink();
@@ -3553,7 +3654,7 @@ function setupClientCostAnalysis() {
   const hours = (minutes) => `${(minutes / 60).toLocaleString("sr-RS", { maximumFractionDigits: 2 })}h`;
 
   const populate = () => {
-    clientSelect.innerHTML = `<option value="">Svi klijenti</option>${(state.clients || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("")}`;
+    clientSelect.innerHTML = `<option value="">Svi aktivni klijenti</option>${(state.clients || []).filter((item) => item.status === "Aktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("")}`;
     employeeSelect.innerHTML = (state.employees || []).filter((item) => item.status !== "Neaktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
     employeeList.innerHTML = [...employeeSelect.options].map((item) => `<label data-employee-name="${item.textContent.toLowerCase()}"><input type="checkbox" value="${item.value}" /><span>${item.textContent}</span></label>`).join("");
     employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
@@ -3890,9 +3991,8 @@ function renderEmployeeCalendar(monthKey, employees, targetId = "employeeCalenda
   const offset = firstDay === 0 ? 6 : firstDay - 1;
   const blanks = Array.from({ length: offset }, () => `<div class="calendar-day empty"></div>`).join("");
   const monthAbsences = calendarAbsences(monthKey, includeRequests);
-  const monthLogs = state.employeeWorkLogs.filter((log) => String(log.date || "").startsWith(monthKey));
   const monthPlans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(monthKey));
-  setText(summaryId, `${monthLabel(monthKey)} · ${monthAbsences.length} odsustava`);
+  setText(summaryId, `${monthLabel(monthKey)} · ${monthAbsences.length} odsustava · ${monthPlans.length} bitnih datuma`);
   target.innerHTML = `
     <div class="calendar-weekdays">
       <span>Pon</span><span>Uto</span><span>Sre</span><span>Čet</span><span>Pet</span><span>Sub</span><span>Ned</span>
@@ -3904,38 +4004,37 @@ function renderEmployeeCalendar(monthKey, employees, targetId = "employeeCalenda
           const holiday = publicHolidayName(day);
           const companyDay = companySpecialDayName(day);
           const absences = monthAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(day));
-          const logs = monthLogs.filter((log) => log.date === day);
           const plans = monthPlans.filter((plan) => plan.date === day);
           const classes = ["calendar-day"];
           if (isWeekend(day)) classes.push("weekend");
           if (holiday) classes.push("holiday");
           if (absences.length) classes.push("has-absence");
-          if (logs.length) classes.push("has-hours");
+          const absentNames = absences.map((absence) => (employees.find((item) => item.id === absence.employeeId) || employeeById(absence.employeeId))?.name || "Zaposleni");
           return `
-          <div class="${classes.join(" ")}">
+          <div class="${classes.join(" ")}" data-calendar-date="${day}" role="button" tabindex="0">
             <strong>${Number(day.slice(-2))}</strong>
             ${holiday ? `<span class="calendar-note holiday-note">${holiday}</span>` : ""}
             ${companyDay ? `<span class="calendar-note company-note">${companyDay}</span>` : ""}
-            ${plans.map((plan) => `<span class="calendar-note plan-note">${plan.type}: ${plan.title}</span>`).join("")}
-            ${
-              absences
-                .slice(0, 3)
-                .map((absence) => {
-                  const employee = employees.find((item) => item.id === absence.employeeId) || employeeById(absence.employeeId);
-                  const requestLabel = absence.status === "Zatraženo" ? " · zahtev" : "";
-                  return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${employee?.name || "Zaposleni"} · ${absence.type}${requestLabel}</span>`;
-                })
-                .join("")
-            }
-            ${
-              logs.length
-                ? `<span class="calendar-note hours-note">${logs.reduce((sum, log) => sum + Number(log.hours || 0), 0)}h uneto</span>`
-                : ""
-            }
+            ${plans.length ? `<span class="calendar-note plan-note">${plans[0].title}${plans.length > 1 ? ` +${plans.length - 1}` : ""}</span>` : ""}
+            ${absentNames.length ? `<span class="calendar-note vacation-note">${absentNames.slice(0, 2).join(", ")}${absentNames.length > 2 ? ` +${absentNames.length - 2}` : ""}</span>` : ""}
           </div>`;
         })
         .join("")}
     </div>`;
+  target.querySelectorAll("[data-calendar-date]").forEach((cell) => {
+    const showDetails = () => {
+      const day = cell.dataset.calendarDate;
+      const absences = monthAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(day));
+      const plans = monthPlans.filter((plan) => plan.date === day);
+      if (!absences.length && !plans.length) return;
+      const lines = [formatDate(day)];
+      plans.forEach((plan) => lines.push(`Bitni datum: ${plan.title}${plan.note ? ` - ${plan.note}` : ""}`));
+      absences.forEach((absence) => lines.push(`${employeeById(absence.employeeId)?.name || "Zaposleni"}: ${absence.type}${absence.status === "Zatraženo" ? " (zahtev)" : ""}`));
+      alert(lines.join("\n"));
+    };
+    cell.addEventListener("click", showDetails);
+    cell.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") showDetails(); });
+  });
 }
 
 function renderAdminTeamCalendar() {

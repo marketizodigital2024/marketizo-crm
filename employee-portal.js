@@ -1401,14 +1401,6 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
       negative: formData.get("negative"), note: formData.get("note"), createdAt: new Date().toISOString(),
     });
   }
-  notifyOnce({
-    key: `employee-report-${activeEmployee.id}-${date}`,
-    scope: recipientId === "admin" ? "admin" : "employee",
-    targetId: recipientId === "admin" ? "" : recipientId,
-    type: "info",
-    title: "Novi izveštaj zaposlenog",
-    message: `${activeEmployee.name} je upisao/la sate i dnevni izveštaj za ${formatDate(date)}.`,
-  });
   saveState();
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
