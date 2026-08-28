@@ -817,6 +817,57 @@ function applyMilica2026ActualsV1() {
   return true;
 }
 
+function applyAleksa2026ActualsV1() {
+  state.backup = state.backup || {};
+  if (state.backup.aleksa2026ActualsV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "aleksa damjanovic");
+  if (!employee) return false;
+
+  employee.weeklyHours = 38.5;
+  employee.weeklyHoursByMonth = {
+    ...(employee.weeklyHoursByMonth || {}),
+    "2026-06": 20,
+    "2026-07": 20,
+    "2026-08": 38.5,
+  };
+
+  const monthlyHours = { "2026-06": 39.5, "2026-07": 91, "2026-08": 155.5 };
+  state.employeeWorkLogs = state.employeeWorkLogs || [];
+  Object.entries(monthlyHours).forEach(([monthKey, targetHours]) => {
+    state.employeeWorkLogs = state.employeeWorkLogs.filter((log) => !(
+      log.employeeId === employee.id && String(log.date || "").startsWith(monthKey)
+      && (log.activityName === "Migracija iz ClickUp-a" || log.note === "Aleksa - usklađen mesečni zbir")
+    ));
+    const existingHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
+    if (Math.abs(correctionHours) < 0.01) return;
+    const [year, month] = monthKey.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    state.employeeWorkLogs.push({
+      id: `aleksa-actual-${monthKey}`,
+      employeeId: employee.id,
+      date: `${monthKey}-${String(lastDay).padStart(2, "0")}`,
+      hours: correctionHours,
+      minutes: Math.round(correctionHours * 60),
+      activityId: "",
+      activityName: "Prenos stvarnog mesečnog zbira",
+      activityCategory: "Evidencija",
+      clientId: "",
+      clientName: "",
+      type: "Rad",
+      note: "Aleksa - usklađen mesečni zbir",
+      locked: true,
+      submittedAt: new Date().toISOString(),
+    });
+  });
+  state.backup.aleksa2026ActualsV1 = true;
+  return true;
+}
+
 function applyProductionDataCleanupV1() {
   state.backup = state.backup || {};
   if (state.backup.productionDataCleanupV1) return false;
@@ -924,6 +975,7 @@ applyMonthlyInvoiceRostersV5();
 applySladjan2026BalanceCorrections();
 applyHazim2026ActualsV1();
 applyMilica2026ActualsV1();
+applyAleksa2026ActualsV1();
 applyProductionDataCleanupV1();
 applyQa20260827Cleanup();
 applyEmployeeActivityCatalogV1();
