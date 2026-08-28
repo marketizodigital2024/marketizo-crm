@@ -2921,6 +2921,7 @@ function deleteEmployee(id) {
   state.employeeRecognitions = (state.employeeRecognitions || []).filter((item) => item.employeeId !== id);
   state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((item) => item.employeeId !== id);
   state.employeeReports = (state.employeeReports || []).filter((item) => item.employeeId !== id && item.recipientId !== id);
+  state.notifications = (state.notifications || []).filter((item) => item.targetId !== id);
   selectedEmployeeId = state.employees[0]?.id || "";
   hideEmployeeProfileForm();
   saveState();
