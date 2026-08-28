@@ -808,6 +808,7 @@ function renderEmployeePortal() {
   renderLeaderPanel();
   renderLateAcknowledgement();
   showEmployeeNotificationPopups();
+  window.refreshDailyMinuteProgress?.();
 }
 
 function renderMissingTimeAlert() {
