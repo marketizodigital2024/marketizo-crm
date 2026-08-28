@@ -2797,7 +2797,16 @@ function showEmployeeProfileForm(employee = null) {
   const panel = document.getElementById("employeeProfilePanel");
   const form = document.getElementById("employeeForm");
   if (!panel || !form) return;
+  if (panel.parentElement !== document.body) document.body.appendChild(panel);
+  panel.classList.add("employee-editor-modal");
   panel.hidden = false;
+  document.body.classList.add("employee-editor-open");
+  const deleteButton = document.getElementById("deleteSelectedEmployeeBtn");
+  const modalHead = panel.querySelector(".compact-head");
+  if (deleteButton && modalHead) {
+    modalHead.appendChild(deleteButton);
+    deleteButton.hidden = !employee;
+  }
   renderEmployeeOptions();
   if (employee) {
     setText("employeeProfileMode", "Izmena");
@@ -2848,7 +2857,11 @@ function updateEmployeeMonthlyPreview() {
 
 function hideEmployeeProfileForm() {
   const panel = document.getElementById("employeeProfilePanel");
-  if (panel) panel.hidden = true;
+  if (panel) {
+    panel.hidden = true;
+    panel.classList.remove("employee-editor-modal");
+  }
+  document.body.classList.remove("employee-editor-open");
 }
 
 function deleteEmployee(id) {
@@ -4233,8 +4246,16 @@ document.getElementById("newEmployeeBtn")?.addEventListener("click", () => {
   setActiveView("employees");
   window.setTimeout(() => {
     showEmployeeProfileForm();
-    document.getElementById("employeeProfilePanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, 0);
+});
+
+document.getElementById("manageSelectedEmployeeBtn")?.addEventListener("click", () => {
+  const employee = selectedEmployee();
+  if (!employee) {
+    alert("Prvo izaberi zaposlenog iz pregleda.");
+    return;
+  }
+  showEmployeeProfileForm(employee);
 });
 
 document.getElementById("editSelectedEmployeeBtn")?.addEventListener("click", () => {

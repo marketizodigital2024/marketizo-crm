@@ -3494,6 +3494,74 @@ body:not([data-active-view="employees"]) .employee-subnav .active {
 .employee-profile-filter { min-width: 280px; font-weight: 800; }
 .employee-profile-filter select { margin-top: 8px; width: 100%; }
 #employees .employee-workspace { display: none !important; }
+
+body.employee-editor-open {
+  overflow: hidden;
+}
+
+#employeeProfilePanel.employee-editor-modal {
+  display: block !important;
+  position: fixed;
+  inset: 24px;
+  z-index: 10000;
+  width: min(920px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  margin: auto;
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 28px 90px rgba(17, 36, 27, 0.24);
+}
+
+#employeeProfilePanel.employee-editor-modal::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgba(18, 34, 27, 0.46);
+  backdrop-filter: blur(4px);
+}
+
+#employeeProfilePanel.employee-editor-modal .compact-head {
+  position: sticky;
+  top: -24px;
+  z-index: 2;
+  margin: -24px -24px 20px;
+  padding: 22px 24px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+#employeeProfilePanel.employee-editor-modal .icon-button {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: #f4f7f5;
+  color: var(--ink);
+}
+
+#employeeProfilePanel.employee-editor-modal #deleteSelectedEmployeeBtn {
+  margin-left: auto;
+}
+
+@media (max-width: 780px) {
+  #employeeProfilePanel.employee-editor-modal {
+    inset: 10px;
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  #employeeProfilePanel.employee-editor-modal .compact-head {
+    top: -18px;
+    margin: -18px -18px 18px;
+    padding: 18px;
+  }
+}
 #employees.employee-settings-page .employee-workspace {
   display: grid !important;
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
