@@ -3552,6 +3552,11 @@ body.employee-editor-open {
 .client-cost-employee-list label:hover { background: #f1faf5; }
 .client-cost-employee-list input { width: 18px; height: 18px; accent-color: #20b86a; }
 .client-cost-employee-list span { font-weight: 750; }
+.admin-goal-progress { display: grid; grid-template-columns: minmax(130px, 1fr) 50px auto; gap: 10px; align-items: center; width: min(480px, 100%); margin-top: 10px; }
+.admin-goal-progress input { width: 100%; accent-color: #20b86a; }
+.admin-goal-progress output { color: #11864d; font-weight: 900; }
+.admin-goal-progress button { padding: 9px 12px; border: 1px solid #b9dcc8; border-radius: 10px; background: #edf9f2; color: #107c47; font-weight: 900; cursor: pointer; }
+@media (max-width: 600px) { .admin-goal-progress { grid-template-columns: 1fr 45px; } .admin-goal-progress button { grid-column: 1 / -1; } }
 .client-cost-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
 .client-cost-kpis article { padding: 22px; border: 1px solid #d7e1da; border-radius: 20px; background: linear-gradient(145deg, #fff, #f4faf6); }
 .client-cost-kpis span { display: block; color: #748078; font-weight: 700; }

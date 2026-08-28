@@ -3205,13 +3205,35 @@ function renderEmployeeGoalRows() {
             ? `Završeno ${formatDate(goal.completedDate)}`
             : isLate ? `Kasni ${Math.abs(daysLeft)} dana` : isNear ? `Rok za ${daysLeft} dana` : `Rok ${formatDate(goal.endDate)}`;
           return `
-          <div class="setup-item alert-item ${status}">
+          <div class="setup-item alert-item ${status}" data-admin-goal-id="${goal.id}">
             <strong>${goal.progress || 0}%</strong>
             <span>${employee?.name || "Zaposleni"} · ${goal.category || "Razvoj"} · ${goal.title}<br />${goal.target || ""} · ${deadline}</span>
+            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${goal.title}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div>
           </div>`;
         })
         .join("")
     : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih ciljeva.` : "Nema ciljeva."}</div>`;
+
+  target.querySelectorAll("[data-admin-goal-id]").forEach((row) => {
+    const slider = row.querySelector('input[type="range"]');
+    const output = row.querySelector("output");
+    slider.addEventListener("input", () => output.value = `${slider.value}%`);
+    row.querySelector("button").addEventListener("click", () => {
+      const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.adminGoalId);
+      if (!goal) return;
+      goal.progress = Number(slider.value);
+      if (goal.progress >= 100) {
+        goal.status = "Završeno";
+        goal.completedDate = goal.completedDate || currentDateKey();
+      } else if (goal.status === "Završeno") {
+        goal.status = "U toku";
+        goal.completedDate = "";
+      }
+      saveState();
+      renderAll();
+      showToast("Progres sačuvan", `${employeeById(goal.employeeId)?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+    });
+  });
 
   const ratingTarget = document.getElementById("employeeRatingRows");
   if (!ratingTarget) return;
