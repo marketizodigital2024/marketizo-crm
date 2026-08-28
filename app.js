@@ -3143,6 +3143,24 @@ function renderEmployeePerformanceOverview() {
     });
   }
   target.querySelectorAll("[data-performance-employee]").forEach((row) => {
+    const nameCell = row.querySelector("td");
+    if (nameCell && !nameCell.querySelector(".employee-row-edit")) {
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "employee-row-edit";
+      editButton.setAttribute("aria-label", `Izmeni ${employeeById(row.dataset.performanceEmployee)?.name || "zaposlenog"}`);
+      editButton.title = "Izmeni zaposlenog";
+      editButton.innerHTML = "&#9998;";
+      editButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        selectedEmployeeId = row.dataset.performanceEmployee;
+        setSelectedEmployeeOnForms(selectedEmployeeId);
+        showEmployeeProfileForm(employeeById(selectedEmployeeId));
+      });
+      nameCell.classList.add("employee-name-cell");
+      nameCell.append(editButton);
+    }
     const openEmployee = () => {
       selectedEmployeeId = row.dataset.performanceEmployee;
       setSelectedEmployeeOnForms(selectedEmployeeId);
@@ -3451,6 +3469,172 @@ function buildStructuredSidebar() {
 }
 
 buildStructuredSidebar();
+
+function setupClientCostAnalysis() {
+  const sidebar = document.querySelector(".sidebar .main-nav, .sidebar nav");
+  const main = document.querySelector(".main");
+  if (!sidebar || !main || document.getElementById("clientCosts")) return;
+
+  const button = document.createElement("button");
+  button.className = "nav-item client-cost-nav";
+  button.type = "button";
+  button.textContent = "Trošak klijenata";
+  const financeButton = [...sidebar.querySelectorAll(".nav-item")].find((item) => /Finansije|Računi/.test(item.textContent));
+  sidebar.insertBefore(button, financeButton || null);
+
+  const view = document.createElement("section");
+  view.className = "view client-cost-view";
+  view.id = "clientCosts";
+  view.innerHTML = `
+    <div class="client-cost-header">
+      <div><p class="eyebrow">Profitabilnost</p><h1>Trošak klijenata</h1><p>Koliko vremena i novca tim ulaže u svakog klijenta.</p></div>
+    </div>
+    <section class="panel client-cost-filters">
+      <div class="panel-head"><div><p class="eyebrow">Filter</p><h2>Period i tim</h2></div><button class="secondary-button" id="clientCostReset" type="button">Reset</button></div>
+      <div class="client-cost-presets"><button type="button" data-cost-period="day">Danas</button><button type="button" data-cost-period="week">Ova nedelja</button><button type="button" data-cost-period="month" class="active">Ovaj mesec</button></div>
+      <div class="client-cost-filter-grid">
+        <label>Od datuma<input id="clientCostFrom" type="date" /></label>
+        <label>Do datuma<input id="clientCostTo" type="date" /></label>
+        <label>Klijent<select id="clientCostClient"><option value="">Svi klijenti</option></select></label>
+        <label>Zaposleni <small>moguće je izabrati više</small><select id="clientCostEmployees" multiple></select></label>
+      </div>
+    </section>
+    <section class="client-cost-kpis">
+      <article><span>Ukupno vreme</span><strong id="clientCostHours">0h</strong></article>
+      <article><span>Trošak rada</span><strong id="clientCostAmount">€ 0</strong></article>
+      <article><span>Aktivnosti</span><strong id="clientCostEntries">0</strong></article>
+      <article><span>Zaposlenih</span><strong id="clientCostPeople">0</strong></article>
+    </section>
+    <section class="panel client-cost-results"><div class="panel-head"><div><p class="eyebrow">Analiza</p><h2>Utrošak po klijentu i zaposlenom</h2></div><span id="clientCostRange"></span></div><div id="clientCostRows"></div></section>`;
+  main.append(view);
+
+  const from = view.querySelector("#clientCostFrom");
+  const to = view.querySelector("#clientCostTo");
+  const clientSelect = view.querySelector("#clientCostClient");
+  const employeeSelect = view.querySelector("#clientCostEmployees");
+  const localDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const setPeriod = (period) => {
+    const end = new Date();
+    const start = new Date(end);
+    if (period === "week") start.setDate(end.getDate() - ((end.getDay() + 6) % 7));
+    if (period === "month") start.setDate(1);
+    from.value = localDate(start);
+    to.value = localDate(end);
+    view.querySelectorAll("[data-cost-period]").forEach((item) => item.classList.toggle("active", item.dataset.costPeriod === period));
+  };
+  const employeeName = (id) => (state.employees || []).find((item) => item.id === id)?.name || "Nepoznat zaposleni";
+  const clientName = (log) => log.clientName || (state.clients || []).find((item) => item.id === log.clientId)?.name || "Bez klijenta";
+  const hourlyRate = (employee) => Number(employee?.salary || 0) / Math.max(1, Number(employee?.weeklyHours || 40) * 52 / 12);
+  const money = (amount) => `€ ${Math.round(amount).toLocaleString("de-DE")}`;
+  const hours = (minutes) => `${(minutes / 60).toLocaleString("sr-RS", { maximumFractionDigits: 2 })}h`;
+
+  const populate = () => {
+    clientSelect.innerHTML = `<option value="">Svi klijenti</option>${(state.clients || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("")}`;
+    employeeSelect.innerHTML = (state.employees || []).filter((item) => item.status !== "Neaktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+  };
+  const render = () => {
+    const selectedEmployees = new Set([...employeeSelect.selectedOptions].map((item) => item.value));
+    const selectedClient = clientSelect.value;
+    const logs = (state.employeeWorkLogs || state.employeeLogs || []).filter((log) => {
+      const date = String(log.date || "").slice(0, 10);
+      if (!date || date < from.value || date > to.value) return false;
+      if (selectedEmployees.size && !selectedEmployees.has(log.employeeId)) return false;
+      if (selectedClient && log.clientId !== selectedClient) return false;
+      return true;
+    });
+    const groups = new Map();
+    let totalMinutes = 0;
+    let totalCost = 0;
+    logs.forEach((log) => {
+      const minutes = Number(log.minutes || Math.round(Number(log.hours || 0) * 60) || 0);
+      const employee = (state.employees || []).find((item) => item.id === log.employeeId);
+      const cost = minutes / 60 * hourlyRate(employee);
+      const client = clientName(log);
+      const key = `${client}::${log.employeeId}`;
+      const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0 };
+      group.minutes += minutes; group.cost += cost; group.entries += 1; groups.set(key, group);
+      totalMinutes += minutes; totalCost += cost;
+    });
+    const rows = [...groups.values()].sort((a,b) => b.cost - a.cost);
+    view.querySelector("#clientCostHours").textContent = hours(totalMinutes);
+    view.querySelector("#clientCostAmount").textContent = money(totalCost);
+    view.querySelector("#clientCostEntries").textContent = logs.length;
+    view.querySelector("#clientCostPeople").textContent = new Set(logs.map((item) => item.employeeId)).size;
+    view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
+    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span>${row.entries}</span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
+  };
+  const show = () => {
+    document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.remove("active"));
+    view.classList.add("active"); button.classList.add("active");
+    history.replaceState(null, "", "#client-costs");
+    populate(); render();
+  };
+  button.addEventListener("click", show);
+  view.querySelectorAll("[data-cost-period]").forEach((item) => item.addEventListener("click", () => { setPeriod(item.dataset.costPeriod); render(); }));
+  [from, to, clientSelect, employeeSelect].forEach((item) => item.addEventListener("change", render));
+  view.querySelector("#clientCostReset").addEventListener("click", () => { clientSelect.value = ""; [...employeeSelect.options].forEach((item) => item.selected = false); setPeriod("month"); render(); });
+  setPeriod("month"); populate();
+  if (location.hash === "#client-costs") show();
+}
+
+setupClientCostAnalysis();
+
+function setupEmployeeActivityCategories() {
+  const form = document.getElementById("employeeActivityForm");
+  if (!form || form.dataset.categoriesReady) return;
+  form.dataset.categoriesReady = "true";
+  const submitArea = form.querySelector(".admin-submit") || form.lastElementChild;
+  const field = document.createElement("label");
+  field.className = "activity-category-field";
+  field.innerHTML = `Kategorija aktivnosti
+    <select id="employeeActivityCategory" required>
+      <option value="">Izaberi kategoriju</option>
+      <option>SMM</option><option>Scenario</option><option>Sastanci</option><option>Snimatelji</option><option>Sales tim</option><option>Editori</option><option>Media Buying</option>
+      <option value="__new__">+ Nova kategorija</option>
+    </select>
+    <input id="employeeActivityNewCategory" type="text" placeholder="Naziv nove kategorije" hidden />`;
+  form.insertBefore(field, submitArea);
+  const select = field.querySelector("select");
+  const newCategory = field.querySelector("input");
+  select.addEventListener("change", () => {
+    const creating = select.value === "__new__";
+    newCategory.hidden = !creating;
+    newCategory.required = creating;
+    if (creating) newCategory.focus();
+  });
+  form.addEventListener("submit", () => {
+    const nameInput = form.querySelector('input[name="name"], input[type="text"]');
+    const name = nameInput?.value.trim();
+    const category = select.value === "__new__" ? newCategory.value.trim() : select.value;
+    if (!name || !category) return;
+    state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
+    state.employeeActivityCategoryMap[name] = category;
+    if (!state.employeeActivityCategories?.includes(category)) {
+      state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+    }
+    saveState();
+  }, true);
+
+  const decorate = () => {
+    const list = document.getElementById("employeeActivityRows");
+    if (!list) return;
+    list.querySelectorAll(".setup-item").forEach((item) => {
+      if (item.querySelector(".activity-category-badge")) return;
+      const strong = item.querySelector("strong");
+      const category = state.employeeActivityCategoryMap?.[strong?.textContent.trim()];
+      if (!category || !strong) return;
+      const badge = document.createElement("span");
+      badge.className = "activity-category-badge";
+      badge.textContent = category;
+      strong.insertAdjacentElement("afterend", badge);
+    });
+  };
+  new MutationObserver(decorate).observe(document.getElementById("employeeActivityRows") || form.parentElement, { childList: true, subtree: true });
+  decorate();
+}
+
+setupEmployeeActivityCategories();
 
 function setupCompactClientFilters() {
   const root = document.getElementById("clients");
