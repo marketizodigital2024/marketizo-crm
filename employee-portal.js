@@ -87,6 +87,7 @@ function restoreEmployeeSession() {
   document.getElementById("employeeLoginScreen").hidden = true;
   document.getElementById("employeeApp").hidden = false;
   renderEmployeePortal();
+  setupDailyMinuteProgress();
   return true;
 }
 
@@ -576,6 +577,47 @@ function expectedMinutesForDate(employee, date) {
   if (weeklyHours >= 38) return day === 5 ? 390 : 510;
   if (weeklyHours <= 20) return 240;
   return Math.round((weeklyHours * 60) / 5);
+}
+
+function setupDailyMinuteProgress() {
+  const minutesInput = document.querySelector('#employeeHours input[name="minutes"]');
+  const form = minutesInput?.closest("form");
+  const dateInput = form?.querySelector('input[name="date"]');
+  if (!form || !dateInput || form.dataset.dailyProgressReady) return;
+  form.dataset.dailyProgressReady = "true";
+  const progress = document.createElement("section");
+  progress.className = "daily-minute-progress";
+  progress.innerHTML = `<div><span>Današnji učinak</span><strong id="dailyMinuteStatus">0 min</strong></div><div class="daily-minute-track"><span id="dailyMinuteBar"></span></div><p id="dailyMinuteMessage"></p>`;
+  form.insertAdjacentElement("afterbegin", progress);
+  const render = () => {
+    const date = dateInput.value || currentDateKey();
+    const logged = loggedMinutesForDate(date);
+    const expected = expectedMinutesForDate(activeEmployee, date);
+    const remaining = Math.max(0, expected - logged);
+    const status = progress.querySelector("#dailyMinuteStatus");
+    const bar = progress.querySelector("#dailyMinuteBar");
+    const message = progress.querySelector("#dailyMinuteMessage");
+    if (!expected) {
+      status.textContent = `${logged} min upisano`;
+      bar.style.width = logged ? "100%" : "0%";
+      progress.classList.toggle("complete", logged > 0);
+      message.textContent = String(activeEmployee?.position || "").toLowerCase().includes("snimatelj")
+        ? "Fleksibilan raspored: upiši sve aktivnosti koje si radio/la tog dana."
+        : absenceCoversDate(date) ? "Za ovaj datum je evidentirano odsustvo." : "Za ovaj datum nema obavezne kvote.";
+      return;
+    }
+    const percentage = Math.min(100, Math.round(logged / expected * 100));
+    status.textContent = `${logged} / ${expected} min`;
+    bar.style.width = `${percentage}%`;
+    progress.classList.toggle("complete", remaining === 0);
+    message.textContent = remaining
+      ? `Nedostaje još ${remaining} minuta za ovaj radni dan.`
+      : logged > expected ? `Dnevna obaveza je ispunjena. Upisano je ${logged - expected} minuta više.` : "Dnevna obaveza je ispunjena.";
+  };
+  dateInput.addEventListener("change", render);
+  form.addEventListener("submit", () => window.setTimeout(render, 150));
+  window.refreshDailyMinuteProgress = render;
+  render();
 }
 
 function absenceCoversDate(date) {
