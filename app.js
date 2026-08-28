@@ -4177,9 +4177,12 @@ document.getElementById("teamCalendarStatus")?.addEventListener("change", () => 
 });
 
 document.getElementById("newEmployeeBtn")?.addEventListener("click", () => {
+  window.location.hash = "employees/overview";
   setActiveView("employees");
-  showEmployeeProfileForm();
-  document.getElementById("employeeProfilePanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => {
+    showEmployeeProfileForm();
+    document.getElementById("employeeProfilePanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 0);
 });
 
 document.getElementById("editSelectedEmployeeBtn")?.addEventListener("click", () => {
