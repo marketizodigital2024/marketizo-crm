@@ -2506,7 +2506,7 @@ function generateSystemNotifications() {
 
   const yesterdayDate = new Date(`${today}T12:00:00`);
   yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterday = localDate(yesterdayDate);
+  const yesterday = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, "0")}-${String(yesterdayDate.getDate()).padStart(2, "0")}`;
   const dayOfWeek = yesterdayDate.getDay();
   if (dayOfWeek >= 1 && dayOfWeek <= 5) {
     (state.employees || [])
