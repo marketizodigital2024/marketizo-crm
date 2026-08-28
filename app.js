@@ -3421,6 +3421,7 @@ function setupEmployeeAdminSections() {
   });
   const employeeTitle = document.getElementById("pageTitle");
   if (employeeTitle) employeeTitle.textContent = "Tim";
+  const mainNav = document.querySelector('.sidebar .nav-item[data-view="employees"]');
 
   const sections = [
     ["overview", "Tim"],
