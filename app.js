@@ -949,6 +949,31 @@ function applyQa20260827Cleanup() {
   return true;
 }
 
+function applyQa20260828Cleanup() {
+  state.backup = state.backup || {};
+  if (state.backup.qa20260828CleanupV1) return false;
+  const marker = "qa-20260828";
+  const containsMarker = (value) => String(value || "").toLowerCase().includes(marker);
+  const qaEmployeeIds = new Set((state.employees || [])
+    .filter((item) => containsMarker(item.name) || containsMarker(item.email))
+    .map((item) => item.id));
+
+  state.employees = (state.employees || []).filter((item) => !qaEmployeeIds.has(item.id));
+  state.employeeLeaderAssignments = (state.employeeLeaderAssignments || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !qaEmployeeIds.has(item.leaderId));
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.note) && !containsMarker(item.activityName));
+  state.employeeAbsences = (state.employeeAbsences || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.note));
+  state.employeeLateRecords = (state.employeeLateRecords || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.reason));
+  state.employeeGoals = (state.employeeGoals || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.title) && !containsMarker(item.target));
+  state.employeeRatings = (state.employeeRatings || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.comment) && !containsMarker(item.reviewer));
+  state.employeeRecognitions = (state.employeeRecognitions || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.message) && !containsMarker(item.author));
+  state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.title) && !containsMarker(item.note));
+  state.employeeReports = (state.employeeReports || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.note) && !containsMarker(item.activityName));
+  state.employeeDocuments = (state.employeeDocuments || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.fileName));
+  state.notifications = (state.notifications || []).filter((item) => !qaEmployeeIds.has(item.targetId) && !containsMarker(item.key) && !containsMarker(item.title) && !containsMarker(item.message));
+  state.backup.qa20260828CleanupV1 = true;
+  return true;
+}
+
 function applyEmployeeActivityCatalogV1() {
   state.backup = state.backup || {};
   if (state.backup.employeeActivityCatalogV1) return false;
@@ -978,6 +1003,7 @@ applyMilica2026ActualsV1();
 applyAleksa2026ActualsV1();
 applyProductionDataCleanupV1();
 applyQa20260827Cleanup();
+applyQa20260828Cleanup();
 applyEmployeeActivityCatalogV1();
 saveState({ remote: false });
 let activeFilter = "all";
@@ -1428,8 +1454,9 @@ async function hydrateOnlineState() {
     const hazimCorrected = applyHazim2026ActualsV1();
     const productionDataCleaned = applyProductionDataCleanupV1();
     const qaDataCleaned = applyQa20260827Cleanup();
+    const qa20260828DataCleaned = applyQa20260828Cleanup();
     const activityCatalogAdded = applyEmployeeActivityCatalogV1();
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || hazimCorrected || productionDataCleaned || qaDataCleaned || activityCatalogAdded });
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || hazimCorrected || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || activityCatalogAdded });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
