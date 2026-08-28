@@ -46,6 +46,49 @@ let activeEmployee = null;
 let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
+const employeeSessionKey = "marketizoEmployeeSession";
+const employeeSessionDuration = 30 * 24 * 60 * 60 * 1000;
+
+function getEmployeeSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem(employeeSessionKey) || "null");
+    if (!session || Number(session.expiresAt || 0) < Date.now()) {
+      localStorage.removeItem(employeeSessionKey);
+      return null;
+    }
+    return session;
+  } catch {
+    localStorage.removeItem(employeeSessionKey);
+    return null;
+  }
+}
+
+function setEmployeeSession(employee) {
+  localStorage.setItem(
+    employeeSessionKey,
+    JSON.stringify({
+      employeeId: employee.id,
+      email: String(employee.email || "").toLowerCase(),
+      expiresAt: Date.now() + employeeSessionDuration,
+    })
+  );
+}
+
+function restoreEmployeeSession() {
+  const session = getEmployeeSession();
+  if (!session) return false;
+  activeEmployee = (state.employees || []).find(
+    (employee) => employee.id === session.employeeId || String(employee.email || "").toLowerCase() === session.email
+  );
+  if (!activeEmployee) {
+    localStorage.removeItem(employeeSessionKey);
+    return false;
+  }
+  document.getElementById("employeeLoginScreen").hidden = true;
+  document.getElementById("employeeApp").hidden = false;
+  renderEmployeePortal();
+  return true;
+}
 
 function loadState(sourceData = null) {
   const saved = sourceData ? "" : localStorage.getItem("agencyCrmData");
@@ -578,7 +621,7 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
 function renderLoginHint() {
   const hint = document.getElementById("employeeLoginHint");
   if (!hint) return;
-  hint.innerHTML = `<strong>Login dobijaš od admina.</strong><span>Ako si zaboravio/la lozinku, admin može da je promeni u delu Zaposleni.</span>`;
+  hint.replaceChildren();
 }
 
 async function hydrateOnlineState() {
@@ -1210,6 +1253,7 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
     return;
   }
   document.getElementById("employeeLoginError").hidden = true;
+  setEmployeeSession(activeEmployee);
   document.getElementById("employeeLoginScreen").hidden = true;
   document.getElementById("employeeApp").hidden = false;
   renderEmployeePortal();
@@ -1339,6 +1383,7 @@ document.getElementById("ackLateBtn")?.addEventListener("click", () => {
 });
 
 document.getElementById("logoutEmployee")?.addEventListener("click", () => {
+  localStorage.removeItem(employeeSessionKey);
   activeEmployee = null;
   document.getElementById("employeeApp").hidden = true;
   document.getElementById("employeeLoginScreen").hidden = false;
@@ -1422,6 +1467,7 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 setupPasswordToggles();
 renderLoginHint();
 onlineHydrationPromise = hydrateOnlineState().then(() => {
+  restoreEmployeeSession();
   window.MarketizoRemote?.startPolling((payload) => {
     const activeId = activeEmployee?.id;
     state = loadState(payload);

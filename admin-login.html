@@ -29,25 +29,20 @@
             <h1>Admin dashboard</h1>
           </div>
           <label>Email
-            <input name="email" type="email" required placeholder="admin@marketizo.local" />
+            <input name="email" type="email" required autocomplete="username" placeholder="office@marketizo.com" />
           </label>
           <label>Lozinka
             <span class="password-field">
-              <input name="password" type="password" required placeholder="Lozinka" />
+              <input name="password" type="password" required autocomplete="current-password" placeholder="Lozinka" />
               <button class="password-toggle" type="button" data-toggle-password aria-label="Prikaži lozinku">Prikaži</button>
             </span>
           </label>
           <button class="primary-button" type="submit">Uloguj se</button>
           <p class="login-error" id="adminLoginError" hidden>Login podaci nisu tačni.</p>
-          <div class="login-hint">
-            <strong>Demo admin login:</strong>
-            <span>miljan@marketizo.local</span>
-            <span>Lozinka: 123456</span>
-          </div>
         </form>
       </section>
     </main>
 
-    <script src="admin-auth.js?v=3"></script>
+    <script src="admin-auth.js?v=4"></script>
   </body>
 </html>

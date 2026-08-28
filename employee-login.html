@@ -31,17 +31,16 @@
             <h1>Marketizo Team Hub</h1>
           </div>
           <label>Email
-            <input name="email" type="email" required placeholder="ime@marketizo.local" />
+            <input name="email" type="email" required autocomplete="username" placeholder="ime@marketizo.local" />
           </label>
           <label>Lozinka
             <span class="password-field">
-              <input name="password" type="password" required placeholder="Lozinka" />
+              <input name="password" type="password" required autocomplete="current-password" placeholder="Lozinka" />
               <button class="password-toggle" type="button" data-toggle-password aria-label="Prikaži lozinku">Prikaži</button>
             </span>
           </label>
           <button class="primary-button" type="submit">Uloguj se</button>
           <p class="login-error" id="employeeLoginError" hidden>Login podaci nisu tačni. Ako je nalog dodat na drugom uređaju, treba nam zajednička baza da bi ga telefon video.</p>
-          <div class="login-hint" id="employeeLoginHint"></div>
         </form>
       </section>
     </main>
@@ -377,7 +376,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=16"></script>
+    <script src="employee-portal.js?v=17"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

@@ -1,9 +1,9 @@
 const adminUsers = [
-  { email: "miljan@marketizo.local", password: "123456", name: "Miljan" },
-  { email: "ivana@marketizo.local", password: "123456", name: "Ivana" },
+  { email: "office@marketizo.com", password: "Tastatura1.", name: "Marketizo" },
 ];
 
 const adminSessionKey = "marketizoAdminSession";
+const adminSessionDuration = 30 * 24 * 60 * 60 * 1000;
 
 function adminHomePath() {
   return window.location.protocol === "file:" ? "index.html" : "/";
@@ -28,7 +28,7 @@ function setAdminSession(user) {
     JSON.stringify({
       email: user.email,
       name: user.name,
-      expiresAt: Date.now() + 12 * 60 * 60 * 1000,
+      expiresAt: Date.now() + adminSessionDuration,
     })
   );
 }
