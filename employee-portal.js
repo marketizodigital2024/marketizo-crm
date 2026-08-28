@@ -43,51 +43,46 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 
 let state = loadState();
 let activeEmployee = null;
+const EMPLOYEE_SESSION_KEY = "marketizoEmployeeSession";
+const EMPLOYEE_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
-const employeeSessionKey = "marketizoEmployeeSession";
-const employeeSessionDuration = 30 * 24 * 60 * 60 * 1000;
 
-function getEmployeeSession() {
+function readEmployeeSession() {
   try {
-    const session = JSON.parse(localStorage.getItem(employeeSessionKey) || "null");
-    if (!session || Number(session.expiresAt || 0) < Date.now()) {
-      localStorage.removeItem(employeeSessionKey);
+    const session = JSON.parse(localStorage.getItem(EMPLOYEE_SESSION_KEY) || "null");
+    if (!session?.employeeId || Number(session.expiresAt || 0) <= Date.now()) {
+      localStorage.removeItem(EMPLOYEE_SESSION_KEY);
       return null;
     }
     return session;
   } catch {
-    localStorage.removeItem(employeeSessionKey);
+    localStorage.removeItem(EMPLOYEE_SESSION_KEY);
     return null;
   }
 }
 
-function setEmployeeSession(employee) {
-  localStorage.setItem(
-    employeeSessionKey,
-    JSON.stringify({
-      employeeId: employee.id,
-      email: String(employee.email || "").toLowerCase(),
-      expiresAt: Date.now() + employeeSessionDuration,
-    })
-  );
+function saveEmployeeSession(employee) {
+  localStorage.setItem(EMPLOYEE_SESSION_KEY, JSON.stringify({
+    employeeId: employee.id,
+    expiresAt: Date.now() + EMPLOYEE_SESSION_DURATION_MS,
+  }));
+}
+
+function showEmployeeAuth(employee) {
+  activeEmployee = employee || null;
+  document.getElementById("employeeLoginScreen").hidden = Boolean(activeEmployee);
+  document.getElementById("employeeApp").hidden = !activeEmployee;
+  if (activeEmployee) renderEmployeePortal();
 }
 
 function restoreEmployeeSession() {
-  const session = getEmployeeSession();
-  if (!session) return false;
-  activeEmployee = (state.employees || []).find(
-    (employee) => employee.id === session.employeeId || String(employee.email || "").toLowerCase() === session.email
-  );
-  if (!activeEmployee) {
-    localStorage.removeItem(employeeSessionKey);
-    return false;
-  }
-  document.getElementById("employeeLoginScreen").hidden = true;
-  document.getElementById("employeeApp").hidden = false;
-  renderEmployeePortal();
-  return true;
+  const session = readEmployeeSession();
+  const employee = session
+    ? (state.employees || []).find((item) => item.id === session.employeeId)
+    : null;
+  showEmployeeAuth(employee || null);
 }
 
 function loadState(sourceData = null) {
@@ -426,12 +421,7 @@ function unhideNotification(id) {
 
 function leaderTeam() {
   if (!activeEmployee?.isLeader) return [];
-  const activeName = String(activeEmployee.name || "").toLowerCase();
-  return (state.employees || []).filter((employee) => {
-    if (employee.leaderId === activeEmployee.id) return true;
-    const employeeName = String(employee.name || "").toLowerCase();
-    return activeName.includes("sladjan") && employeeName.includes("milica blagojevic");
-  });
+  return (state.employees || []).filter((employee) => employee.leaderId === activeEmployee.id);
 }
 
 function reportRecipientId() {
@@ -561,23 +551,6 @@ function hasWorkLogForDate(date) {
   return (state.employeeWorkLogs || []).some((log) => log.employeeId === activeEmployee.id && log.date === date);
 }
 
-function loggedMinutesForDate(date) {
-  return (state.employeeWorkLogs || [])
-    .filter((log) => log.employeeId === activeEmployee.id && log.date === date)
-    .reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
-}
-
-function expectedMinutesForDate(employee, date) {
-  if (!employee || !isAustrianWorkingDay(date)) return 0;
-  const position = String(employee.position || "").toLowerCase();
-  if (position.includes("snimatelj")) return 0;
-  const weeklyHours = Number(employee.weeklyHours || 0);
-  const day = parseDate(date).getDay();
-  if (weeklyHours >= 38) return day === 5 ? 390 : 510;
-  if (weeklyHours <= 20) return 240;
-  return Math.round((weeklyHours * 60) / 5);
-}
-
 function absenceCoversDate(date) {
   return employeeAbsences().some((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(date));
 }
@@ -621,7 +594,7 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
 function renderLoginHint() {
   const hint = document.getElementById("employeeLoginHint");
   if (!hint) return;
-  hint.replaceChildren();
+  hint.innerHTML = `<strong>Login dobijaš od admina.</strong><span>Ako si zaboravio/la lozinku, admin može da je promeni u delu Zaposleni.</span>`;
 }
 
 async function hydrateOnlineState() {
@@ -740,15 +713,12 @@ function renderMissingTimeAlert() {
   const alertBox = document.getElementById("employeeMissingTimeAlert");
   if (!alertBox || !activeEmployee) return;
   const previousDay = previousWorkingDay();
-  const expected = expectedMinutesForDate(activeEmployee, previousDay);
-  const logged = loggedMinutesForDate(previousDay);
-  const missingMinutes = Math.max(0, expected - logged);
-  const missing = expected > 0 && missingMinutes > 0 && !absenceCoversDate(previousDay);
+  const missing = !hasWorkLogForDate(previousDay) && !absenceCoversDate(previousDay);
   alertBox.hidden = !missing;
   if (!missing) return;
   alertBox.innerHTML = `
-    <strong>Nedostaju aktivnosti ili minuti</strong>
-    <span>Za ${formatDate(previousDay)} upisano je ${logged} od očekivanih ${expected} min. Nedostaje ${missingMinutes} min.</span>`;
+    <strong>Nedostaje unos vremena</strong>
+    <span>Nisi upisao/la vreme za prethodni radni dan: ${formatDate(previousDay)}.</span>`;
 }
 
 function renderPortalCalendar() {
@@ -1253,10 +1223,8 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
     return;
   }
   document.getElementById("employeeLoginError").hidden = true;
-  setEmployeeSession(activeEmployee);
-  document.getElementById("employeeLoginScreen").hidden = true;
-  document.getElementById("employeeApp").hidden = false;
-  renderEmployeePortal();
+  saveEmployeeSession(activeEmployee);
+  showEmployeeAuth(activeEmployee);
 });
 
 document.querySelectorAll("[data-employee-tab]").forEach((button) => {
@@ -1309,24 +1277,24 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   });
   const recipientId = reportRecipientId();
   state.employeeReports = state.employeeReports || [];
-  const dailyReport = state.employeeReports.find((report) => report.employeeId === activeEmployee.id && report.date === date);
-  if (dailyReport) {
-    dailyReport.minutes = Number(dailyReport.minutes || Number(dailyReport.hours || 0) * 60) + minutes;
-    dailyReport.hours = Math.round((dailyReport.minutes / 60) * 10000) / 10000;
-    dailyReport.activityName = "Dnevni zbir aktivnosti";
-    dailyReport.note = [dailyReport.note, formData.get("note")].filter(Boolean).join(" | ");
-    dailyReport.positive = [dailyReport.positive, formData.get("positive")].filter(Boolean).join(" | ");
-    dailyReport.negative = [dailyReport.negative, formData.get("negative")].filter(Boolean).join(" | ");
-    dailyReport.updatedAt = new Date().toISOString();
-  } else {
-    state.employeeReports.unshift({
-      id: crypto.randomUUID(), employeeId: activeEmployee.id, recipientId, date,
-      title: "Dnevni izveštaj", hours: Math.round((minutes / 60) * 10000) / 10000, minutes,
-      activityId: activity.id, activityName: activity.name, activityCategory: activity.category || "Ostalo",
-      clientId: client.id, clientName: client.name, positive: formData.get("positive"),
-      negative: formData.get("negative"), note: formData.get("note"), createdAt: new Date().toISOString(),
-    });
-  }
+  state.employeeReports.unshift({
+    id: crypto.randomUUID(),
+    employeeId: activeEmployee.id,
+    recipientId,
+    date,
+    title: "Dnevni izveštaj",
+    hours: Math.round((minutes / 60) * 10000) / 10000,
+    minutes,
+    activityId: activity.id,
+    activityName: activity.name,
+    activityCategory: activity.category || "Ostalo",
+    clientId: client.id,
+    clientName: client.name,
+    positive: formData.get("positive"),
+    negative: formData.get("negative"),
+    note: formData.get("note"),
+    createdAt: new Date().toISOString(),
+  });
   notifyOnce({
     key: `employee-report-${activeEmployee.id}-${date}`,
     scope: recipientId === "admin" ? "admin" : "employee",
@@ -1383,10 +1351,8 @@ document.getElementById("ackLateBtn")?.addEventListener("click", () => {
 });
 
 document.getElementById("logoutEmployee")?.addEventListener("click", () => {
-  localStorage.removeItem(employeeSessionKey);
-  activeEmployee = null;
-  document.getElementById("employeeApp").hidden = true;
-  document.getElementById("employeeLoginScreen").hidden = false;
+  localStorage.removeItem(EMPLOYEE_SESSION_KEY);
+  showEmployeeAuth(null);
   document.getElementById("employeeLoginForm").reset();
 });
 
@@ -1466,6 +1432,7 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 
 setupPasswordToggles();
 renderLoginHint();
+restoreEmployeeSession();
 onlineHydrationPromise = hydrateOnlineState().then(() => {
   restoreEmployeeSession();
   window.MarketizoRemote?.startPolling((payload) => {

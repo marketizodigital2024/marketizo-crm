@@ -870,6 +870,7 @@ function clientFinanceStartMonth(client) {
 
 function clientsForInvoiceMonth(clients, monthKey) {
   return clients.filter((client) => {
+    if (normalizeClientStatus(client.status) === "Arhiviran") return false;
     if (client.invoices && client.invoices[monthKey]) return true;
     const financeStartMonth = clientFinanceStartMonth(client);
     if (!financeStartMonth || monthKey < financeStartMonth || normalizeClientStatus(client.status) !== "Aktivan") return false;
