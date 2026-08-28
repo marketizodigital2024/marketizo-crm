@@ -3494,6 +3494,23 @@ body:not([data-active-view="employees"]) .employee-subnav .active {
 .employee-profile-filter { min-width: 280px; font-weight: 800; }
 .employee-profile-filter select { margin-top: 8px; width: 100%; }
 #employees .employee-workspace { display: none !important; }
+#employees.employee-settings-page .employee-workspace {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  align-items: start;
+}
+#employees.employee-settings-page .employee-detail-panel {
+  position: sticky;
+  top: 18px;
+}
+@media (max-width: 1180px) {
+  #employees.employee-settings-page .employee-workspace {
+    grid-template-columns: 1fr;
+  }
+  #employees.employee-settings-page .employee-detail-panel {
+    position: static;
+  }
+}
 #employees .employee-performance-overview { width: 100%; margin: 0; }
 #employees .employee-performance-overview .table-wrap { width: 100%; }
 .admin-layout.single-visible { grid-template-columns: minmax(0, 1fr) !important; }
