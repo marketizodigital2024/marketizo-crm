@@ -3907,7 +3907,8 @@ function renderEmployeeReportRows(monthKey) {
       </tr>`;
     });
   setText("employeeOpsCount", `${rows.length} izveštaja`);
-  document.getElementById("employeeReportRows").innerHTML = rows.join("") || `<tr><td colspan="6">Nema izveštaja za ovaj mesec.</td></tr>`;
+  const reportRows = document.getElementById("employeeReportRows");
+  if (reportRows) reportRows.innerHTML = rows.join("") || `<tr><td colspan="6">Nema izveštaja za ovaj mesec.</td></tr>`;
 }
 
 function approveAbsence(id) {
