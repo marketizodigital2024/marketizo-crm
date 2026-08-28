@@ -3557,6 +3557,11 @@ body.employee-editor-open {
 .admin-goal-progress output { color: #11864d; font-weight: 900; }
 .admin-goal-progress button { padding: 9px 12px; border: 1px solid #b9dcc8; border-radius: 10px; background: #edf9f2; color: #107c47; font-weight: 900; cursor: pointer; }
 @media (max-width: 600px) { .admin-goal-progress { grid-template-columns: 1fr 45px; } .admin-goal-progress button { grid-column: 1 / -1; } }
+.existing-goal-editor { margin-top: 18px; padding-top: 18px; border-top: 1px solid #e0e7e2; }
+.existing-goal-row { display: grid; gap: 12px; padding: 15px 0; border-top: 1px solid #e6ebe8; }
+.existing-goal-row:first-of-type { border-top: 0; }
+.existing-goal-row > div:first-child { display: grid; gap: 4px; }
+.existing-goal-row > div:first-child span { color: #6e7a73; }
 .client-cost-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
 .client-cost-kpis article { padding: 22px; border: 1px solid #d7e1da; border-radius: 20px; background: linear-gradient(145deg, #fff, #f4faf6); }
 .client-cost-kpis span { display: block; color: #748078; font-weight: 700; }

@@ -3674,6 +3674,43 @@ function setupEmployeeActivityCategories() {
 
 setupEmployeeActivityCategories();
 
+function setupExistingGoalProgressEditor() {
+  const form = document.getElementById("employeeGoalForm");
+  const employeeSelect = form?.elements?.employeeId;
+  if (!form || !employeeSelect || document.getElementById("existingGoalProgressEditor")) return;
+  const section = document.createElement("section");
+  section.id = "existingGoalProgressEditor";
+  section.className = "existing-goal-editor";
+  form.insertAdjacentElement("afterend", section);
+  const render = () => {
+    const employeeId = employeeSelect.value;
+    const employee = employeeById(employeeId);
+    const goals = (state.employeeGoals || []).filter((goal) => goal.employeeId === employeeId).sort((a,b) => String(b.endDate || "").localeCompare(String(a.endDate || "")));
+    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${employee?.name || "zaposleni"}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${goal.id}"><div><strong>${goal.title}</strong><span>${goal.target || "Bez opisa"} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${goal.title}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
+    section.querySelectorAll("[data-existing-goal-id]").forEach((row) => {
+      const slider = row.querySelector('input[type="range"]');
+      const output = row.querySelector("output");
+      slider.addEventListener("input", () => output.value = `${slider.value}%`);
+      row.querySelector("button").addEventListener("click", () => {
+        const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.existingGoalId);
+        if (!goal) return;
+        goal.progress = Number(slider.value);
+        if (goal.progress >= 100) { goal.status = "Završeno"; goal.completedDate = goal.completedDate || currentDateKey(); }
+        else if (goal.status === "Završeno") { goal.status = "U toku"; goal.completedDate = ""; }
+        saveState();
+        render();
+        showToast("Progres sačuvan", `${employee?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+      });
+    });
+  };
+  employeeSelect.addEventListener("change", () => window.setTimeout(render, 0));
+  new MutationObserver(render).observe(employeeSelect, { childList: true });
+  window.renderExistingGoalProgressEditor = render;
+  render();
+}
+
+setupExistingGoalProgressEditor();
+
 
 function setupCompactClientFilters() {
   const root = document.getElementById("clients");
