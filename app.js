@@ -3496,7 +3496,7 @@ function setupClientCostAnalysis() {
         <label>Od datuma<input id="clientCostFrom" type="date" /></label>
         <label>Do datuma<input id="clientCostTo" type="date" /></label>
         <label>Klijent<select id="clientCostClient"><option value="">Svi klijenti</option></select></label>
-        <label>Zaposleni <small>moguće je izabrati više</small><select id="clientCostEmployees" multiple></select></label>
+        <div class="client-cost-employee-picker"><label>Zaposleni <small>izaberi jednog ili više</small><input id="clientCostEmployeeSearch" type="search" placeholder="Pretraži zaposlene..." /></label><div class="client-cost-picker-actions"><button id="clientCostSelectAll" type="button">Izaberi sve</button><button id="clientCostClearEmployees" type="button">Poništi izbor</button></div><div class="client-cost-employee-list" id="clientCostEmployeeList"></div><select id="clientCostEmployees" multiple hidden></select></div>
       </div>
     </section>
     <section class="client-cost-kpis">
@@ -3512,6 +3512,8 @@ function setupClientCostAnalysis() {
   const to = view.querySelector("#clientCostTo");
   const clientSelect = view.querySelector("#clientCostClient");
   const employeeSelect = view.querySelector("#clientCostEmployees");
+  const employeeSearch = view.querySelector("#clientCostEmployeeSearch");
+  const employeeList = view.querySelector("#clientCostEmployeeList");
   const localDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   const setPeriod = (period) => {
     const end = new Date();
@@ -3531,6 +3533,12 @@ function setupClientCostAnalysis() {
   const populate = () => {
     clientSelect.innerHTML = `<option value="">Svi klijenti</option>${(state.clients || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("")}`;
     employeeSelect.innerHTML = (state.employees || []).filter((item) => item.status !== "Neaktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+    employeeList.innerHTML = [...employeeSelect.options].map((item) => `<label data-employee-name="${item.textContent.toLowerCase()}"><input type="checkbox" value="${item.value}" /><span>${item.textContent}</span></label>`).join("");
+    employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
+      const option = [...employeeSelect.options].find((item) => item.value === checkbox.value);
+      if (option) option.selected = checkbox.checked;
+      render();
+    }));
   };
   const render = () => {
     const selectedEmployees = new Set([...employeeSelect.selectedOptions].map((item) => item.value));
@@ -3574,7 +3582,10 @@ function setupClientCostAnalysis() {
   button.addEventListener("click", show);
   view.querySelectorAll("[data-cost-period]").forEach((item) => item.addEventListener("click", () => { setPeriod(item.dataset.costPeriod); render(); }));
   [from, to, clientSelect, employeeSelect].forEach((item) => item.addEventListener("change", render));
-  view.querySelector("#clientCostReset").addEventListener("click", () => { clientSelect.value = ""; [...employeeSelect.options].forEach((item) => item.selected = false); setPeriod("month"); render(); });
+  employeeSearch.addEventListener("input", () => { const query = employeeSearch.value.trim().toLowerCase(); employeeList.querySelectorAll("label").forEach((item) => item.hidden = Boolean(query) && !item.dataset.employeeName.includes(query)); });
+  view.querySelector("#clientCostSelectAll").addEventListener("click", () => { employeeList.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach((item) => item.checked = true); [...employeeSelect.options].forEach((item) => item.selected = true); render(); });
+  view.querySelector("#clientCostClearEmployees").addEventListener("click", () => { employeeList.querySelectorAll('input[type="checkbox"]').forEach((item) => item.checked = false); [...employeeSelect.options].forEach((item) => item.selected = false); render(); });
+  view.querySelector("#clientCostReset").addEventListener("click", () => { clientSelect.value = ""; employeeSearch.value = ""; employeeList.querySelectorAll("label").forEach((item) => { item.hidden = false; item.querySelector("input").checked = false; }); [...employeeSelect.options].forEach((item) => item.selected = false); setPeriod("month"); render(); });
   setPeriod("month"); populate();
   if (location.hash === "#client-costs") show();
 }
