@@ -862,8 +862,28 @@ function monthlyInvoice(client, monthKey = selectedMonthKey()) {
   };
 }
 
+function clientFinanceStartMonth(client) {
+  return client.financeStartMonth
+    || String(client.startDate || "").slice(0, 7)
+    || String(client.createdAt || "").slice(0, 7);
+}
+
 function clientsForInvoiceMonth(clients, monthKey) {
-  return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]));
+  return clients.filter((client) => {
+    if (client.invoices && client.invoices[monthKey]) return true;
+    const financeStartMonth = clientFinanceStartMonth(client);
+    if (!financeStartMonth || monthKey < financeStartMonth || normalizeClientStatus(client.status) !== "Aktivan") return false;
+    client.invoices = client.invoices || {};
+    client.invoices[monthKey] = {
+      invoiceStatus: "Nije poslat",
+      paymentStatus: "Nije plaćeno",
+      paymentMethod: client.paymentMethod || "Firma",
+      amount: Number(client.revenue || 0),
+      sentAt: "",
+      paidAt: "",
+    };
+    return true;
+  });
 }
 
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
@@ -2350,13 +2370,6 @@ function renderEmployeeOptions() {
   }
 }
 
-function syncRequestedEmployee() {
-  const employeeId = new URLSearchParams(location.search).get("employee");
-  if (employeeId && (state.employees || []).some((employee) => employee.id === employeeId)) {
-    selectedEmployeeId = employeeId;
-  }
-}
-
 const employeeSelectionIds = new Set(["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"]);
 document.addEventListener("change", (event) => {
   if (!employeeSelectionIds.has(event.target.id) || !event.target.value) return;
@@ -2366,7 +2379,6 @@ document.addEventListener("change", (event) => {
 
 function renderEmployees() {
   if (!document.getElementById("employees")) return;
-  syncRequestedEmployee();
   state.employees = state.employees || [];
   state.employeeAbsences = state.employeeAbsences || [];
   state.employeeWorkLogs = state.employeeWorkLogs || [];
@@ -2798,7 +2810,6 @@ function renderEmployeePerformanceOverview() {
           history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
         } else {
           employeeOverviewFilter = profileSelect.value;
-          if (employeeOverviewFilter !== "all") selectedEmployeeId = employeeOverviewFilter;
         }
         renderAll();
       });
@@ -3539,6 +3550,9 @@ function renderClients() {
           const endDate = contractEndDate(client);
           const daysLeft = endDate ? daysBetween(currentDateKey(), endDate) : null;
           const contractLabel = endDate ? `do ${formatDate(endDate)}` : "nije unet";
+          const contractDownload = client.contractFileData
+            ? `<a class="document-link" href="${client.contractFileData}" download="${client.contractFileName || "ugovor"}">Preuzmi ugovor</a>`
+            : `<span>Ugovor nije dodat</span>`;
           const leadStats = clientLeadStats(client);
           const leadClass = leadStats.late ? "danger" : leadStats.open ? "warn" : "ok";
           const archiveLabel = client.status === "Arhiviran" ? "Vrati" : "Arhiva";
@@ -3546,7 +3560,7 @@ function renderClients() {
           <tr>
             <td><strong>${client.name}</strong><br /><span>${client.niche} · ${client.country}</span></td>
             <td><strong>${displayPackage(client.package)}</strong><br /><span>${currency.format(client.revenue || 0)}/mes</span></td>
-            <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span></td>
+            <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
             <td><span class="status ${statusClass(client)}">${client.status || "Aktivan"}</span></td>
             <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
             <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "123456"}</span></td>
@@ -4388,6 +4402,8 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const invoiceStatus = "Nije poslat";
   const paymentStatus = "Nije plaćeno";
   const paymentMethod = "Firma";
+  const createdAt = new Date().toISOString();
+  const financeStartMonth = String(formData.get("startDate") || "").slice(0, 7) || currentMonthKey();
   state.clients.unshift({
     id: crypto.randomUUID(),
     name,
@@ -4409,11 +4425,14 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     paymentStatus,
     invoiceStatus,
     paymentMethod,
+    createdAt,
+    financeStartMonth,
     invoices: {
-      [selectedMonthKey()]: {
+      [financeStartMonth]: {
         invoiceStatus,
         paymentStatus,
         paymentMethod,
+        amount: values.revenue,
         sentAt: invoiceStatus === "Poslat" ? new Date().toISOString() : "",
         paidAt: paymentStatus === "Plaćeno" ? new Date().toISOString() : "",
       },
