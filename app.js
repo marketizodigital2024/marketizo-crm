@@ -3004,7 +3004,8 @@ function openWorkLogEditor(id) {
     const data = new FormData(form);
     const activity = (state.employeeActivities || []).find((item) => item.id === data.get("activityId"));
     const client = (state.clients || []).find((item) => item.id === data.get("clientId"));
-    const isAggregate = normalize(log.activityName).includes("migracija") || normalize(log.activityName).includes("prenos stvarnog");
+    const normalizedActivityName = String(log.activityName || "").trim().toLowerCase();
+    const isAggregate = normalizedActivityName.includes("migracija") || normalizedActivityName.includes("prenos stvarnog");
     if (!client && !isAggregate) {
       alert("Izaberi klijenta za ovu aktivnost.");
       openWorkLogEditor(id);
