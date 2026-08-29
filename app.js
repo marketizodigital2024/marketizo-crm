@@ -5459,8 +5459,9 @@ updateContextActions("admin");
       summary.className = "worklog-summary";
       total = document.createElement("strong");
       total.id = "employeeWorkHoursTotal";
+      const summaryParent = count.parentElement;
       summary.append(count, total);
-      count.parentElement?.append(summary);
+      summaryParent?.append(summary);
     }
     const sync = () => {
       const rows = [...body.querySelectorAll("tr")].filter((row) => getComputedStyle(row).display !== "none");
