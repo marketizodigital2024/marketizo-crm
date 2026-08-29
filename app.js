@@ -5414,3 +5414,120 @@ hydrateOnlineState().then(() => {
   });
 });
 updateContextActions("admin");
+
+// Compact filters and current-period defaults added for the admin workspace.
+(() => {
+  const currentLocalMonth = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const setHomeCurrentMonth = () => {
+    const home = document.getElementById("admin");
+    const month = document.getElementById("monthFilter");
+    if (!home?.classList.contains("active") || !month) return;
+    month.value = currentLocalMonth();
+    const from = document.getElementById("dateFromFilter");
+    const to = document.getElementById("dateToFilter");
+    if (from) from.value = "";
+    if (to) to.value = "";
+    month.dispatchEvent(new Event("input", { bubbles: true }));
+    month.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  const minutesFromText = (value) => {
+    const text = String(value || "").toLowerCase().replace(/\s+/g, " ");
+    let minutes = 0;
+    const hours = text.match(/([\d.,]+)\s*h/);
+    const mins = text.match(/([\d.,]+)\s*min/);
+    if (hours) minutes += Number(hours[1].replace(",", ".")) * 60;
+    if (mins) minutes += Number(mins[1].replace(",", "."));
+    if (!hours && !mins) {
+      const number = Number(text.replace(/[^\d,.-]/g, "").replace(",", "."));
+      if (Number.isFinite(number)) minutes = number;
+    }
+    return Number.isFinite(minutes) ? minutes : 0;
+  };
+
+  const enhanceWorkHours = () => {
+    const body = document.getElementById("employeeWorkRows");
+    const count = document.getElementById("employeeWorkRowsCount");
+    if (!body || !count) return;
+    let total = document.getElementById("employeeWorkHoursTotal");
+    if (!total) {
+      const summary = document.createElement("div");
+      summary.className = "worklog-summary";
+      total = document.createElement("strong");
+      total.id = "employeeWorkHoursTotal";
+      summary.append(count, total);
+      count.parentElement?.append(summary);
+    }
+    const sync = () => {
+      const rows = [...body.querySelectorAll("tr")].filter((row) => getComputedStyle(row).display !== "none");
+      const minutes = rows.reduce((sum, row) => sum + minutesFromText(row.children[2]?.textContent), 0);
+      const hours = minutes / 60;
+      total.textContent = `Ukupno ${new Intl.NumberFormat("sr-RS", { maximumFractionDigits: 2 }).format(hours)}h`;
+    };
+    if (!body.dataset.totalReady) {
+      body.dataset.totalReady = "true";
+      new MutationObserver(sync).observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+      [document.getElementById("employeeWorkPersonFilter"), document.getElementById("employeeWorkMonthFilter"), document.getElementById("resetEmployeeWorkFilters")]
+        .filter(Boolean)
+        .forEach((control) => control.addEventListener("change", () => setTimeout(sync, 0)));
+    }
+    sync();
+  };
+
+  const enhanceClientCostPicker = () => {
+    const picker = document.querySelector(".client-cost-employee-picker");
+    if (!picker || picker.dataset.compactReady) return;
+    picker.dataset.compactReady = "true";
+    const hiddenSelect = document.getElementById("clientCostEmployees");
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "client-cost-picker-trigger";
+    trigger.setAttribute("aria-expanded", "false");
+    const dropdown = document.createElement("div");
+    dropdown.className = "client-cost-picker-dropdown";
+    dropdown.hidden = true;
+    [...picker.children].filter((child) => child !== hiddenSelect).forEach((child) => dropdown.append(child));
+    picker.insertBefore(trigger, hiddenSelect || null);
+    picker.insertBefore(dropdown, hiddenSelect || null);
+
+    const update = () => {
+      const checked = [...picker.querySelectorAll('#clientCostEmployeeList input[type="checkbox"]:checked')];
+      const total = picker.querySelectorAll('#clientCostEmployeeList input[type="checkbox"]').length;
+      trigger.textContent = checked.length ? `${checked.length} zaposlenih izabrano` : `Svi zaposleni (${total})`;
+    };
+    trigger.addEventListener("click", () => {
+      dropdown.hidden = !dropdown.hidden;
+      trigger.setAttribute("aria-expanded", String(!dropdown.hidden));
+      if (!dropdown.hidden) document.getElementById("clientCostEmployeeSearch")?.focus();
+    });
+    picker.addEventListener("change", update);
+    picker.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => setTimeout(update, 0)));
+    document.addEventListener("click", (event) => {
+      if (!picker.contains(event.target)) {
+        dropdown.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+      }
+    });
+    update();
+  };
+
+  const enhance = () => {
+    enhanceWorkHours();
+    enhanceClientCostPicker();
+  };
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      setHomeCurrentMonth();
+      enhance();
+    }, 250);
+  });
+  window.addEventListener("hashchange", () => setTimeout(() => {
+    if (location.hash === "#admin" || location.hash === "" || location.hash === "#") setHomeCurrentMonth();
+    enhance();
+  }, 80));
+  new MutationObserver(enhance).observe(document.body, { childList: true, subtree: true });
+})();
