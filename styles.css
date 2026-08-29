@@ -3808,6 +3808,16 @@ body.employee-editor-open {
 #employees:not([data-employee-section="overview"]) #newEmployeeBtn {
   display: none !important;
 }
+
+#employees.employee-settings-page .employee-workspace {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#employees.employee-settings-page .employee-workspace > .panel:not(.employee-section-hidden) {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  max-width: none !important;
+}
 @media (max-width: 760px) {
   .sidebar-section-label { display: none; }
   .team-navigation {
