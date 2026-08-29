@@ -5467,7 +5467,8 @@ updateContextActions("admin");
       const rows = [...body.querySelectorAll("tr")].filter((row) => getComputedStyle(row).display !== "none");
       const minutes = rows.reduce((sum, row) => sum + minutesFromText(row.children[2]?.textContent), 0);
       const hours = minutes / 60;
-      total.textContent = `Ukupno ${new Intl.NumberFormat("sr-RS", { maximumFractionDigits: 2 }).format(hours)}h`;
+      const nextTotal = `Ukupno ${new Intl.NumberFormat("sr-RS", { maximumFractionDigits: 2 }).format(hours)}h`;
+      if (total.textContent !== nextTotal) total.textContent = nextTotal;
     };
     if (!body.dataset.totalReady) {
       body.dataset.totalReady = "true";
