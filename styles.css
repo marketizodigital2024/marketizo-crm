@@ -3896,3 +3896,83 @@ body.employee-editor-open {
   .employee-performance-overview .table-wrap { overflow-x: auto; }
   .employee-performance-table { min-width: 900px; }
 }
+
+/* Compact employee filtering and filtered work-hours summary. */
+.worklog-summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+#employeeWorkHoursTotal {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--mk-green-soft, #e9f7ef);
+  color: var(--mk-green-deep, #087342);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.client-cost-employee-picker {
+  position: relative;
+  align-self: end;
+}
+
+.client-cost-picker-trigger {
+  position: relative;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 48px 0 16px;
+  border: 1px solid var(--mk-line, #dce4de);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--mk-ink, #16231b);
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.client-cost-picker-trigger::after {
+  content: "⌄";
+  position: absolute;
+  right: 17px;
+  top: 50%;
+  transform: translateY(-55%);
+  color: var(--mk-muted, #6e7a72);
+  font-size: 22px;
+}
+
+.client-cost-picker-dropdown {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(430px, 90vw);
+  padding: 14px;
+  border: 1px solid var(--mk-line, #dce4de);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(28, 48, 35, .18);
+}
+
+.client-cost-picker-dropdown[hidden] { display: none !important; }
+.client-cost-picker-dropdown > label { display: grid; gap: 6px; }
+.client-cost-picker-dropdown #clientCostEmployeeSearch { width: 100%; min-height: 46px; }
+.client-cost-picker-dropdown .client-cost-picker-actions { display: flex; gap: 8px; margin: 10px 0; }
+.client-cost-picker-dropdown .client-cost-employee-list {
+  max-height: 250px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--mk-line, #dce4de);
+  border-radius: 12px;
+}
+
+@media (max-width: 780px) {
+  .client-cost-picker-dropdown { left: 0; right: auto; width: min(100%, 430px); }
+}
