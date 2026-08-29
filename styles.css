@@ -3752,6 +3752,62 @@ body.employee-editor-open {
 }
 .work-entry-subsection-hidden,
 .work-entry-grid-empty { display: none !important; }
+
+/* Team pages use the full workspace and keep navigation independently usable. */
+@media (min-width: 781px) {
+  .app-shell {
+    align-items: stretch;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    position: sticky !important;
+    top: 0;
+    height: 100vh !important;
+    max-height: 100vh;
+    min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .sidebar .side-panel {
+    flex: 0 0 auto;
+  }
+}
+
+.main {
+  width: 100% !important;
+  max-width: 1440px;
+  min-height: 100vh;
+}
+
+#employees,
+#employees .employee-admin-grid,
+#employees .employee-action-grid,
+#employees .admin-layout,
+#employees .employee-workspace {
+  width: 100%;
+  max-width: none;
+}
+
+#employees .employee-action-grid,
+#employees .admin-layout {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#employees .employee-action-grid > .panel:not(.employee-section-hidden):not(.work-entry-subsection-hidden),
+#employees .admin-layout > .panel:not(.employee-section-hidden):not(.work-entry-subsection-hidden),
+#employees .employee-work-panel:not(.employee-section-hidden):not(.work-entry-subsection-hidden) {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+#employees:not([data-employee-section="overview"]) #newEmployeeBtn {
+  display: none !important;
+}
 @media (max-width: 760px) {
   .sidebar-section-label { display: none; }
   .team-navigation {
