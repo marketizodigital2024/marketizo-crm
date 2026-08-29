@@ -3643,14 +3643,15 @@ function buildStructuredSidebar() {
 
   const syncActiveLink = () => {
     const current = location.hash || "#admin";
+    const isWorkEntriesPage = /\/employees-hours(?:\.html)?\/?$/.test(location.pathname);
     navigation.querySelectorAll("a").forEach((link) => {
       link.classList.toggle("active", current === link.getAttribute("href") ||
         (current === "#employees" && link.getAttribute("href") === "#employees/overview"));
     });
     const workSection = location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours";
-    workEntryNavigation.classList.toggle("active", location.pathname.endsWith("employees-hours.html") || current === "#employees/entries");
+    workEntryNavigation.classList.toggle("active", isWorkEntriesPage || current === "#employees/entries");
     workEntryNavigation.querySelectorAll("[data-work-entry-link]").forEach((link) => {
-      link.classList.toggle("active", location.pathname.endsWith("employees-hours.html") && link.dataset.workEntryLink === workSection);
+      link.classList.toggle("active", isWorkEntriesPage && link.dataset.workEntryLink === workSection);
     });
   };
   window.addEventListener("hashchange", syncActiveLink);
@@ -3660,7 +3661,7 @@ function buildStructuredSidebar() {
 buildStructuredSidebar();
 
 function setupWorkEntrySubsections() {
-  if (!location.pathname.endsWith("employees-hours.html")) return;
+  if (!/\/employees-hours(?:\.html)?\/?$/.test(location.pathname)) return;
   const root = document.getElementById("employees");
   if (!root || root.dataset.workEntrySectionsReady) return;
   root.dataset.workEntrySectionsReady = "true";
