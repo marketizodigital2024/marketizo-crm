@@ -1542,3 +1542,14 @@ onlineHydrationPromise = hydrateOnlineState().then(() => {
     if (activeEmployee) renderEmployeePortal();
   });
 }).catch(() => null);
+
+// Keep employee navigation functional after portal content is rendered or refreshed.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-employee-tab]");
+  if (!button) return;
+  const target = document.getElementById(button.dataset.employeeTab);
+  if (!target) return;
+  document.querySelectorAll("[data-employee-tab]").forEach((item) => item.classList.toggle("active", item === button));
+  document.querySelectorAll(".client-tab").forEach((item) => item.classList.toggle("active", item === target));
+  setText("employeePageTitle", button.textContent.trim());
+});
