@@ -3503,7 +3503,7 @@ function setupEmployeeAdminSections() {
     const heading = [...panel.querySelectorAll("h2, h3")].map((item) => item.textContent.trim().toLowerCase()).join(" ");
     const text = panel.textContent.toLowerCase();
     const result = new Set();
-    if (/dodaj sate|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("entries");
+    if (/dodaj sate|sati zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("entries");
     if (/dodaj kašnjenje/.test(heading)) result.add("entries");
     if (/dodaj odsustvo/.test(heading)) result.add("entries");
     if (/odmori za odobrenje|datumi, plan firme i odsustva tima|ko je na odmoru|odsustva po danima|lista odsustava/.test(heading)) result.add("leave");
