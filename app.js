@@ -3615,18 +3615,18 @@ function buildStructuredSidebar() {
   });
 
   const teamPages = [
-    ["Pregled tima", "#employees/overview"],
-    ["Odmori i kalendar", "#employees/leave"],
-    ["1:1 sastanci", "#employees/meetings"],
-    ["Učinak i ciljevi", "#employees/performance"],
-    ["Aktivnosti", "#employees/activities"],
-    ["Podešavanja", "#employees/settings"]
+    ["Pregled tima", "employees-overview.html", "overview"],
+    ["Odmori i kalendar", "employees-absences.html", "leave"],
+    ["1:1 sastanci", "employees-recognitions.html", "meetings"],
+    ["Učinak i ciljevi", "employees-ratings.html", "performance"],
+    ["Aktivnosti", "employees-goals.html", "activities"],
+    ["Podešavanja", "employees-settings.html", "settings"]
   ];
   const navigation = document.createElement("nav");
   navigation.className = "team-navigation";
   navigation.setAttribute("aria-label", "Sekcije tima");
   navigation.innerHTML = `<span class="sidebar-section-label">Upravljanje timom</span>${teamPages
-    .map(([label, href]) => `<a class="team-navigation-link" href="${href}">${label}</a>`)
+    .map(([label, href, section]) => `<a class="team-navigation-link" data-team-section="${section}" href="${href}">${label}</a>`)
     .join("")}`;
   teamButton.insertAdjacentElement("afterend", navigation);
 
@@ -3635,6 +3635,7 @@ function buildStructuredSidebar() {
   workEntryNavigation.setAttribute("aria-label", "Unosi rada");
   workEntryNavigation.innerHTML = `
     <span class="work-entry-navigation-title">Unosi rada</span>
+    <a class="work-entry-navigation-link" data-work-entry-link="history" href="employees-hours.html#work/history">Sati zaposlenih</a>
     <a class="work-entry-navigation-link" data-work-entry-link="absence" href="employees-hours.html#work/absence">Dodaj odsustvo</a>
     <a class="work-entry-navigation-link" data-work-entry-link="hours" href="employees-hours.html#work/hours">Dodaj sate</a>
     <a class="work-entry-navigation-link" data-work-entry-link="late" href="employees-hours.html#work/late">Dodaj kašnjenje</a>
@@ -3644,9 +3645,19 @@ function buildStructuredSidebar() {
   const syncActiveLink = () => {
     const current = location.hash || "#admin";
     const isWorkEntriesPage = /\/employees-hours(?:\.html)?\/?$/.test(location.pathname);
+    const currentFile = location.pathname.replace(/\/+$/, "").split("/").pop().replace(/\.html$/, "");
+    const fileSections = {
+      "employees-overview": "overview",
+      "employees-absences": "leave",
+      "employees-recognitions": "meetings",
+      "employees-ratings": "performance",
+      "employees-goals": "activities",
+      "employees-settings": "settings",
+    };
+    const currentTeamSection = fileSections[currentFile] || (current.startsWith("#employees/") ? current.split("/")[1] : "");
     navigation.querySelectorAll("a").forEach((link) => {
-      link.classList.toggle("active", current === link.getAttribute("href") ||
-        (current === "#employees" && link.getAttribute("href") === "#employees/overview"));
+      link.classList.toggle("active", link.dataset.teamSection === currentTeamSection ||
+        (current === "#employees" && link.dataset.teamSection === "overview"));
     });
     const workSection = location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours";
     workEntryNavigation.classList.toggle("active", isWorkEntriesPage || current === "#employees/entries");
@@ -3666,14 +3677,18 @@ function setupWorkEntrySubsections() {
   if (!root || root.dataset.workEntrySectionsReady) return;
   root.dataset.workEntrySectionsReady = "true";
   const sections = {
+    history: { elementId: "employeeWorkRows", label: "Sati zaposlenih" },
     absence: { formId: "employeeAbsenceForm", label: "Dodaj odsustvo" },
     hours: { formId: "employeeWorkForm", label: "Dodaj sate" },
     late: { formId: "employeeLateForm", label: "Dodaj kašnjenje" },
   };
 
   Object.entries(sections).forEach(([key, config]) => {
-    const panel = document.getElementById(config.formId)?.closest(".panel");
+    const panel = document.getElementById(config.formId || config.elementId)?.closest(".panel");
     if (panel) panel.dataset.workEntrySubsection = key;
+  });
+  root.querySelectorAll('.panel[data-employee-sections~="entries"]:not([data-work-entry-subsection])').forEach((panel) => {
+    panel.dataset.workEntrySubsection = "other";
   });
 
   const activate = (requestedSection) => {
