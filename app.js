@@ -5440,8 +5440,8 @@ updateContextActions("admin");
     let minutes = 0;
     const hours = text.match(/([\d.,]+)\s*h/);
     const mins = text.match(/([\d.,]+)\s*min/);
-    if (hours) minutes += Number(hours[1].replace(",", ".")) * 60;
-    if (mins) minutes += Number(mins[1].replace(",", "."));
+    if (mins) minutes = Number(mins[1].replace(",", "."));
+    else if (hours) minutes = Number(hours[1].replace(",", ".")) * 60;
     if (!hours && !mins) {
       const number = Number(text.replace(/[^\d,.-]/g, "").replace(",", "."));
       if (Number.isFinite(number)) minutes = number;
