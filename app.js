@@ -3692,6 +3692,15 @@ function setupWorkEntrySubsections() {
     if (!location.hash.startsWith("#work/")) history.replaceState(null, "", `#work/${section}`);
   };
 
+  const pageTitle = document.querySelector(".main .topbar h1");
+  if (pageTitle) {
+    new MutationObserver(() => {
+      const section = root.dataset.workEntrySubsection || "hours";
+      const expectedTitle = sections[section]?.label || sections.hours.label;
+      if (pageTitle.textContent.trim() !== expectedTitle) pageTitle.textContent = expectedTitle;
+    }).observe(pageTitle, { childList: true, characterData: true, subtree: true });
+  }
+
   activate(location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours");
   window.addEventListener("hashchange", () => {
     if (location.hash.startsWith("#work/")) activate(location.hash.split("/")[1]);
