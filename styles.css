@@ -3721,6 +3721,37 @@ body.employee-editor-open {
   background: #e8f7ef;
   box-shadow: inset 3px 0 0 #18aa68;
 }
+.work-entry-navigation {
+  display: grid;
+  gap: 3px;
+  margin: 0 10px 16px 24px;
+  padding: 2px 0 4px 12px;
+  border-left: 1px solid var(--line);
+}
+.work-entry-navigation-title {
+  padding: 7px 12px 5px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 850;
+}
+.work-entry-navigation-link {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background .18s ease, color .18s ease, transform .18s ease;
+}
+.work-entry-navigation-link:hover { color: var(--ink); background: rgba(24, 170, 104, .08); transform: translateX(2px); }
+.work-entry-navigation-link.active {
+  color: #087d49;
+  background: #e8f7ef;
+  box-shadow: inset 3px 0 0 #18aa68;
+}
+.work-entry-subsection-hidden,
+.work-entry-grid-empty { display: none !important; }
 @media (max-width: 760px) {
   .sidebar-section-label { display: none; }
   .team-navigation {
@@ -3734,6 +3765,18 @@ body.employee-editor-open {
   }
   .team-navigation::-webkit-scrollbar { display: none; }
   .team-navigation-link { flex: 0 0 auto; white-space: nowrap; background: #fff; border: 1px solid var(--line); }
+  .work-entry-navigation {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    margin: 8px 14px 12px;
+    padding: 0 0 4px;
+    border: 0;
+    scrollbar-width: none;
+  }
+  .work-entry-navigation::-webkit-scrollbar { display: none; }
+  .work-entry-navigation-title { display: none; }
+  .work-entry-navigation-link { flex: 0 0 auto; white-space: nowrap; background: #fff; border: 1px solid var(--line); }
 }
 .employee-complete-history { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 22px; }
 .employee-profile-hero { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px; border-radius: 20px; background: linear-gradient(135deg, #fff7ef, #edf9f2); border: 1px solid var(--line); }

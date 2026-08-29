@@ -3630,11 +3630,16 @@ function buildStructuredSidebar() {
     .join("")}`;
   teamButton.insertAdjacentElement("afterend", navigation);
 
-  const workEvidenceLink = document.createElement("a");
-  workEvidenceLink.className = "nav-item work-evidence-nav";
-  workEvidenceLink.href = "employees-hours.html";
-  workEvidenceLink.textContent = "Unosi rada";
-  navigation.insertAdjacentElement("afterend", workEvidenceLink);
+  const workEntryNavigation = document.createElement("nav");
+  workEntryNavigation.className = "work-entry-navigation";
+  workEntryNavigation.setAttribute("aria-label", "Unosi rada");
+  workEntryNavigation.innerHTML = `
+    <span class="work-entry-navigation-title">Unosi rada</span>
+    <a class="work-entry-navigation-link" data-work-entry-link="absence" href="employees-hours.html#work/absence">Dodaj odsustvo</a>
+    <a class="work-entry-navigation-link" data-work-entry-link="hours" href="employees-hours.html#work/hours">Dodaj sate</a>
+    <a class="work-entry-navigation-link" data-work-entry-link="late" href="employees-hours.html#work/late">Dodaj kašnjenje</a>
+  `;
+  navigation.insertAdjacentElement("afterend", workEntryNavigation);
 
   const syncActiveLink = () => {
     const current = location.hash || "#admin";
@@ -3642,13 +3647,57 @@ function buildStructuredSidebar() {
       link.classList.toggle("active", current === link.getAttribute("href") ||
         (current === "#employees" && link.getAttribute("href") === "#employees/overview"));
     });
-    workEvidenceLink.classList.toggle("active", location.pathname.endsWith("employees-hours.html") || current === "#employees/entries");
+    const workSection = location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours";
+    workEntryNavigation.classList.toggle("active", location.pathname.endsWith("employees-hours.html") || current === "#employees/entries");
+    workEntryNavigation.querySelectorAll("[data-work-entry-link]").forEach((link) => {
+      link.classList.toggle("active", location.pathname.endsWith("employees-hours.html") && link.dataset.workEntryLink === workSection);
+    });
   };
   window.addEventListener("hashchange", syncActiveLink);
   syncActiveLink();
 }
 
 buildStructuredSidebar();
+
+function setupWorkEntrySubsections() {
+  if (!location.pathname.endsWith("employees-hours.html")) return;
+  const root = document.getElementById("employees");
+  if (!root || root.dataset.workEntrySectionsReady) return;
+  root.dataset.workEntrySectionsReady = "true";
+  const sections = {
+    absence: { formId: "employeeAbsenceForm", label: "Dodaj odsustvo" },
+    hours: { formId: "employeeWorkForm", label: "Dodaj sate" },
+    late: { formId: "employeeLateForm", label: "Dodaj kašnjenje" },
+  };
+
+  Object.entries(sections).forEach(([key, config]) => {
+    const panel = document.getElementById(config.formId)?.closest(".panel");
+    if (panel) panel.dataset.workEntrySubsection = key;
+  });
+
+  const activate = (requestedSection) => {
+    const section = sections[requestedSection] ? requestedSection : "hours";
+    root.dataset.workEntrySubsection = section;
+    root.querySelectorAll("[data-work-entry-subsection]").forEach((panel) => {
+      panel.classList.toggle("work-entry-subsection-hidden", panel.dataset.workEntrySubsection !== section);
+    });
+    root.querySelectorAll(".employee-action-grid").forEach((grid) => {
+      const hasVisiblePanel = [...grid.querySelectorAll(":scope > .panel")].some((panel) =>
+        !panel.classList.contains("employee-section-hidden") && !panel.classList.contains("work-entry-subsection-hidden"));
+      grid.classList.toggle("work-entry-grid-empty", !hasVisiblePanel);
+    });
+    const pageTitle = document.querySelector(".main .topbar h1");
+    if (pageTitle) pageTitle.textContent = sections[section].label;
+    if (!location.hash.startsWith("#work/")) history.replaceState(null, "", `#work/${section}`);
+  };
+
+  activate(location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours");
+  window.addEventListener("hashchange", () => {
+    if (location.hash.startsWith("#work/")) activate(location.hash.split("/")[1]);
+  });
+}
+
+setupWorkEntrySubsections();
 
 function setupClientCostAnalysis() {
   const sidebar = document.querySelector(".sidebar .main-nav, .sidebar nav");
