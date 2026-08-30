@@ -566,7 +566,7 @@
 	                <p class="eyebrow">Sati</p>
 	                <h2>Dodaj sate</h2>
 	              </div>
-	              <span>jedan zaključan unos po danu</span>
+	              <span>više aktivnosti po danu</span>
 	            </div>
 	            <form id="employeeWorkForm" class="admin-form compact-action-form">
 	              <label>Zaposleni
@@ -574,6 +574,7 @@
 	              </label>
 	              <label>Datum<input name="date" type="date" required /></label>
 	              <label>Aktivnost<select id="workActivitySelect" name="activityId" required></select></label>
+	              <label>Klijent<select id="workClientSelect" name="clientId" required><option value="">Izaberi klijenta</option></select></label>
 	              <label>Minuta<input name="minutes" type="number" min="1" max="960" step="1" value="60" required /></label>
 	              <label class="span-2">Napomena<input name="note" placeholder="opciono: rezultat ili detalj aktivnosti" /></label>
               <button class="primary-button" type="submit">Dodaj sate</button>

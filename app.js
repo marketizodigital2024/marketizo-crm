@@ -2674,6 +2674,15 @@ function renderEmployeeOptions() {
       ? activities.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")
       : `<option value="">Admin prvo dodaje aktivnost</option>`;
   }
+  const workClientSelect = document.getElementById("workClientSelect");
+  if (workClientSelect) {
+    const selected = workClientSelect.value;
+    const clients = (state.clients || [])
+      .filter((client) => client.status === "Aktivan")
+      .sort((a, b) => a.name.localeCompare(b.name));
+    workClientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${client.id}">${client.name}</option>`).join("")}`;
+    if (clients.some((client) => client.id === selected)) workClientSelect.value = selected;
+  }
   const leaderSelect = document.getElementById("employeeLeaderSelect");
   if (leaderSelect) {
     const selected = leaderSelect.value;
@@ -2695,6 +2704,7 @@ document.addEventListener("change", (event) => {
   if (!employeeSelectionIds.has(event.target.id) || !event.target.value) return;
   selectedEmployeeId = event.target.value;
   setSelectedEmployeeOnForms(selectedEmployeeId);
+  window.setTimeout(() => window.renderExistingGoalProgressEditor?.(), 0);
 });
 
 function renderEmployees() {
@@ -4912,6 +4922,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   const employeeId = formData.get("employeeId");
   const date = formData.get("date");
   const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
+  const client = (state.clients || []).find((item) => item.id === formData.get("clientId") && item.status === "Aktivan");
   const minutes = Math.max(1, parseNumber(formData.get("minutes"), 0));
   if (!employeeId) {
     alert("Izaberi zaposlenog za ovaj unos.");
@@ -4919,6 +4930,10 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   }
   if (!activity) {
     alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
+    return;
+  }
+  if (!client) {
+    alert("Izaberi aktivnog klijenta za ovu aktivnost.");
     return;
   }
   state.employeeWorkLogs.unshift({
@@ -4929,6 +4944,8 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
     minutes,
     activityId: activity.id,
     activityName: activity.name,
+    clientId: client.id,
+    clientName: client.name,
     type: "Rad",
     note: formData.get("note"),
     locked: true,
