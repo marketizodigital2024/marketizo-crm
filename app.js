@@ -437,6 +437,7 @@ const importedClients = [
 ];
 
 let state = loadState();
+let onlineHydrationComplete = window.location.protocol === "file:";
 
 function applyAugust2026FinanceCorrections() {
   state.backup = state.backup || {};
@@ -1117,11 +1118,19 @@ function clientsForInvoiceMonth(clients, monthKey) {
   return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]));
 }
 
+function financeClientsForMonth(clients, monthKey) {
+  return clientsForInvoiceMonth(clients, monthKey).filter((client) => {
+    if (client.status !== "Arhiviran") return true;
+    return monthlyInvoice(client, monthKey).paymentStatus !== "Plaćeno";
+  });
+}
+
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
   const invoice = monthlyInvoice(client, monthKey);
+  const clientRevenue = Number(client.revenue || 0);
+  if (monthKey === currentDateKey().slice(0, 7) && clientRevenue > 0) return clientRevenue;
   const storedAmount = Number(invoice.amount || 0);
   if (storedAmount > 0) return storedAmount;
-  const clientRevenue = Number(client.revenue || 0);
   if (clientRevenue > 0) return clientRevenue;
   return Number(packageConfig[normalizePackage(client.package)]?.price || 0);
 }
@@ -1469,12 +1478,22 @@ function isClientLeadStatusContacted(status) {
 
 function saveState(options = {}) {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
-  if (options.remote !== false) window.MarketizoRemote?.save(state);
+  if (options.remote !== false && onlineHydrationComplete) window.MarketizoRemote?.save(state);
 }
 
 async function hydrateOnlineState() {
-  if (!window.MarketizoRemote || window.location.protocol === "file:") return;
-  const result = await window.MarketizoRemote.load();
+  if (!window.MarketizoRemote || window.location.protocol === "file:") {
+    onlineHydrationComplete = true;
+    return;
+  }
+  let result;
+  try {
+    result = await window.MarketizoRemote.load();
+  } catch (error) {
+    console.error("Online state load failed", error);
+    showToast("Online baza nije dostupna", "Podaci nisu poslati da se postojeća baza ne bi prepisala.", "warn");
+    return;
+  }
   if (result.payload) {
     state = loadState(result.payload);
     const financeCorrected = applyAugust2026FinanceCorrections();
@@ -1487,17 +1506,20 @@ async function hydrateOnlineState() {
     const qa20260828DataCleaned = applyQa20260828Cleanup();
     const qa20260828DataCleanedV2 = applyQa20260828CleanupV2();
     const activityCatalogAdded = applyEmployeeActivityCatalogV1();
+    onlineHydrationComplete = true;
     saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || hazimCorrected || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || qa20260828DataCleanedV2 || activityCatalogAdded });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
   }
   if (result.configured && result.empty) {
+    onlineHydrationComplete = true;
     saveState();
     showToast("Online baza", "Zajednička baza je inicijalizovana.", "ok");
     return;
   }
   if (!result.configured) {
+    onlineHydrationComplete = true;
     showToast("Online baza nije povezana", "Dodaj Supabase env varijable u Vercel da svi uređaji vide iste podatke.", "warn");
   }
 }
@@ -1654,7 +1676,7 @@ function clientLeadStats(client) {
 function renderAdminPanel() {
   const scopedClients = visibleClients();
   const monthKey = monthFilter || currentMonthKey();
-  const active = clientsForInvoiceMonth(scopedClients, monthKey);
+  const active = financeClientsForMonth(scopedClients, monthKey);
   const mrr = active.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
   const paidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus === "Plaćeno");
   const unpaidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus !== "Plaćeno");
@@ -4293,7 +4315,7 @@ function renderClients() {
 function renderReports() {
   const clients = visibleClients();
   const monthKey = selectedMonthKey();
-  const invoiceClients = clientsForInvoiceMonth(clients, monthKey);
+  const invoiceClients = financeClientsForMonth(clients, monthKey);
   const revenueByCountry = groupInvoiceSum(invoiceClients, "country", monthKey);
   const revenueByStatus = groupInvoiceSum(invoiceClients, "status", monthKey);
   renderBars("countryBars", revenueByCountry, "€");
@@ -4569,6 +4591,13 @@ function setActiveView(viewName, updateUrl = false) {
   button.classList.add("active");
   view.classList.add("active");
   document.body.dataset.activeView = viewName;
+  if (viewName === "admin") {
+    monthFilter = currentMonthKey();
+    const dashboardMonth = document.getElementById("monthFilter");
+    const invoiceMonth = document.getElementById("invoiceMonthFilter");
+    if (dashboardMonth) dashboardMonth.value = monthFilter;
+    if (invoiceMonth) invoiceMonth.value = monthFilter;
+  }
   setText("pageTitle", button.textContent);
   updateContextActions(viewName);
   if (updateUrl && !location.pathname.split("/").pop().startsWith("employees-")) {
@@ -5228,6 +5257,11 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     client.contractFileName = contractFile.name;
     client.contractFileData = contractFileData;
   }
+  client.invoices = client.invoices || {};
+  client.invoices[selectedMonthKey()] = {
+    ...monthlyInvoice(client, selectedMonthKey()),
+    amount: values.revenue,
+  };
   withLoginDefaults(client);
   saveState();
   editClientModal.close();
@@ -5538,5 +5572,9 @@ updateContextActions("admin");
     if (location.hash === "#admin" || location.hash === "" || location.hash === "#") setHomeCurrentMonth();
     enhance();
   }, 80));
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest('.nav-item[data-view="admin"], [data-go-view="admin"]')) return;
+    setTimeout(setHomeCurrentMonth, 80);
+  });
   new MutationObserver(enhance).observe(document.body, { childList: true, subtree: true });
 })();
