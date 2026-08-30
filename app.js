@@ -1047,6 +1047,7 @@ let employeeMonthFilter = currentMonthKey();
 let employeeStatusFilter = "all";
 let employeeWorkPersonFilter = "all";
 let employeeWorkMonthFilter = currentMonthKey();
+let employeeWorkClientFilter = "all";
 const requestedEmployeeId = new URLSearchParams(location.search).get("employee");
 let selectedEmployeeId = state.employees?.some((employee) => employee.id === requestedEmployeeId)
   ? requestedEmployeeId
@@ -1119,10 +1120,7 @@ function clientsForInvoiceMonth(clients, monthKey) {
 }
 
 function financeClientsForMonth(clients, monthKey) {
-  return clientsForInvoiceMonth(clients, monthKey).filter((client) => {
-    if (client.status !== "Arhiviran") return true;
-    return monthlyInvoice(client, monthKey).paymentStatus !== "Plaćeno";
-  });
+  return clientsForInvoiceMonth(clients, monthKey).filter((client) => client.status !== "Arhiviran");
 }
 
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
@@ -3028,12 +3026,29 @@ function renderEmployeeWorkRows(monthKey) {
     personFilter.value = state.employees.some((employee) => employee.id === selectedValue) ? selectedValue : "all";
     employeeWorkPersonFilter = personFilter.value;
   }
+  const clientFilter = document.getElementById("employeeWorkClientFilter");
+  if (clientFilter) {
+    const selectedValue = employeeWorkClientFilter;
+    clientFilter.innerHTML = `<option value="all">Svi klijenti</option>${state.clients
+      .filter((client) => client.status === "Aktivan")
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((client) => `<option value="${client.id}">${client.name}</option>`)
+      .join("")}`;
+    clientFilter.value = state.clients.some((client) => client.id === selectedValue && client.status === "Aktivan") ? selectedValue : "all";
+    employeeWorkClientFilter = clientFilter.value;
+  }
   const workMonth = employeeWorkMonthFilter || monthKey;
   const monthInput = document.getElementById("employeeWorkMonthFilter");
   if (monthInput) monthInput.value = workMonth;
   const rows = state.employeeWorkLogs
     .filter((log) => String(log.date || "").startsWith(workMonth))
     .filter((log) => employeeWorkPersonFilter === "all" || log.employeeId === employeeWorkPersonFilter)
+    .filter((log) => {
+      if (employeeWorkClientFilter === "all") return true;
+      const selectedClient = state.clients.find((client) => client.id === employeeWorkClientFilter);
+      return log.clientId === employeeWorkClientFilter || (selectedClient && log.clientName === selectedClient.name);
+    })
     .filter((log) => {
       const employee = employeeById(log.employeeId);
       return employee && bySearch({ ...log, employee: employee.name });
@@ -3833,12 +3848,13 @@ function setupClientCostAnalysis() {
   const render = () => {
     const selectedEmployees = new Set([...employeeSelect.selectedOptions].map((item) => item.value));
     const selectedClient = clientSelect.value;
+    const selectedClientName = (state.clients || []).find((item) => item.id === selectedClient)?.name || "";
     const logs = (state.employeeWorkLogs || state.employeeLogs || []).filter((log) => {
       const date = String(log.date || "").slice(0, 10);
       if (!date || date < from.value || date > to.value) return false;
       if (clientName(log) === "Bez klijenta") return false;
       if (selectedEmployees.size && !selectedEmployees.has(log.employeeId)) return false;
-      if (selectedClient && log.clientId !== selectedClient) return false;
+      if (selectedClient && log.clientId !== selectedClient && clientName(log) !== selectedClientName) return false;
       return true;
     });
     const groups = new Map();
@@ -4764,9 +4780,15 @@ document.getElementById("employeeWorkMonthFilter")?.addEventListener("input", (e
   renderEmployeeWorkRows(employeeMonthKey());
 });
 
+document.getElementById("employeeWorkClientFilter")?.addEventListener("change", (event) => {
+  employeeWorkClientFilter = event.target.value;
+  renderEmployeeWorkRows(employeeMonthKey());
+});
+
 document.getElementById("resetEmployeeWorkFilters")?.addEventListener("click", () => {
   employeeWorkPersonFilter = "all";
   employeeWorkMonthFilter = employeeMonthKey();
+  employeeWorkClientFilter = "all";
   renderEmployeeWorkRows(employeeMonthKey());
 });
 
@@ -5531,7 +5553,7 @@ updateContextActions("admin");
     if (!body.dataset.totalReady) {
       body.dataset.totalReady = "true";
       new MutationObserver(sync).observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
-      [document.getElementById("employeeWorkPersonFilter"), document.getElementById("employeeWorkMonthFilter"), document.getElementById("resetEmployeeWorkFilters")]
+      [document.getElementById("employeeWorkPersonFilter"), document.getElementById("employeeWorkMonthFilter"), document.getElementById("employeeWorkClientFilter"), document.getElementById("resetEmployeeWorkFilters")]
         .filter(Boolean)
         .forEach((control) => control.addEventListener("change", () => setTimeout(sync, 0)));
     }
