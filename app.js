@@ -88,7 +88,7 @@ const defaultEmployeeProfiles = [
     position: "Editor",
     startDate: "2026-03-01",
     salary: 0,
-    weeklyHours: 40,
+    weeklyHours: 38.5,
     vacationDays: 25,
     giftDays: 1,
     isLeader: false,
@@ -869,6 +869,103 @@ function applyAleksa2026ActualsV1() {
   return true;
 }
 
+function applyNikola2026BalanceV1() {
+  state.backup = state.backup || {};
+  if (state.backup.nikola2026BalanceV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "nikola marjanovic");
+  if (!employee) return false;
+
+  employee.weeklyHours = 38.5;
+  employee.weeklyHoursByMonth = {
+    ...(employee.weeklyHoursByMonth || {}),
+    "2026-01": 38.5,
+    "2026-02": 38.5,
+    "2026-03": 38.5,
+    "2026-04": 38.5,
+    "2026-05": 38.5,
+    "2026-06": 38.5,
+    "2026-07": 38.5,
+    "2026-08": 38.5,
+  };
+
+  state.employeeAbsences = state.employeeAbsences || [];
+  state.employeeAbsences = state.employeeAbsences.filter((absence) => !(
+    absence.employeeId === employee.id
+    && absence.type === "Godišnji odmor"
+    && String(absence.startDate || "").startsWith("2026-04")
+  ));
+  state.employeeAbsences.push({
+    id: "nikola-vacation-2026-04",
+    employeeId: employee.id,
+    type: "Godišnji odmor",
+    startDate: "2026-04-09",
+    endDate: "2026-04-16",
+    note: "Nikola - potvrđen godišnji odmor koji nije bio evidentiran u ClickUp-u",
+    status: "Odobreno",
+  });
+
+  state.backup.nikola2026BalanceV1 = true;
+  return true;
+}
+
+function applyConfirmedAbsencesV2() {
+  state.backup = state.backup || {};
+  if (state.backup.confirmedAbsencesV2) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employeeId = (name) => (state.employees || []).find((employee) => normalize(employee.name) === name)?.id;
+  const records = [
+    ["aleksandar bugarin", "Godišnji odmor", "2026-05-11", "2026-05-15"],
+    ["aleksandar bugarin", "Godišnji odmor", "2026-07-01", "2026-07-09"],
+    ["aleksandar bugarin", "Godišnji odmor", "2026-06-03", "2026-06-09"],
+    ["aleksandar bugarin", "Godišnji odmor", "2026-08-27", "2026-09-01"],
+    ["luka cvorovic", "Godišnji odmor", "2026-08-17", "2026-08-24"],
+    ["luka cvorovic", "Godišnji odmor", "2026-05-01", "2026-05-05"],
+    ["luka cvorovic", "Godišnji odmor", "2025-12-30", "2026-01-05"],
+    ["luka nikolic", "Godišnji odmor", "2026-06-29", "2026-07-03"],
+    ["luka nikolic", "Godišnji odmor", "2026-08-05", "2026-08-18"],
+    ["nikola marjanovic", "Godišnji odmor", "2026-04-09", "2026-04-16"],
+    ["nikola marjanovic", "Godišnji odmor", "2026-08-03", "2026-08-14"],
+    ["nikola marjanovic", "Godišnji odmor", "2025-12-04", "2025-12-09"],
+    ["hazim hadzic", "Godišnji odmor", "2026-04-27", "2026-04-30"],
+    ["hazim hadzic", "Godišnji odmor", "2026-06-23", "2026-06-23"],
+    ["hazim hadzic", "Godišnji odmor", "2026-08-10", "2026-08-14"],
+    ["hazim hadzic", "Godišnji odmor", "2026-07-13", "2026-07-17"],
+    ["sladjan simic", "Poklon dan", "2026-04-14", "2026-04-14"],
+    ["sladjan simic", "Godišnji odmor", "2026-08-10", "2026-08-21"],
+    ["dejan klement", "Godišnji odmor", "2026-06-22", "2026-07-03"],
+    ["dejan klement", "Godišnji odmor", "2025-12-09", "2025-12-18"],
+  ].map(([name, type, startDate, endDate], index) => ({
+    id: `confirmed-absence-${index + 1}`,
+    employeeId: employeeId(name),
+    type,
+    startDate,
+    endDate,
+    note: "Potvrđeno prema evidenciji odmora",
+    status: "Odobreno",
+  })).filter((record) => record.employeeId);
+
+  const affectedEmployeeIds = new Set(records.map((record) => record.employeeId));
+  state.employeeAbsences = (state.employeeAbsences || []).filter((absence) => !(
+    affectedEmployeeIds.has(absence.employeeId)
+    && ["Godišnji odmor", "Poklon dan"].includes(absence.type)
+    && ["2025", "2026"].includes(String(absence.startDate || "").slice(0, 4))
+  ));
+  state.employeeAbsences.push(...records);
+  ["aleksandar bugarin", "luka nikolic"].forEach((name) => {
+    const employee = (state.employees || []).find((item) => normalize(item.name) === name);
+    if (!employee) return;
+    employee.weeklyHours = 20;
+    employee.weeklyHoursByMonth = Object.fromEntries(
+      Object.keys(employee.weeklyHoursByMonth || {}).map((monthKey) => [monthKey, 20])
+    );
+  });
+  state.backup.confirmedAbsencesV2 = true;
+  return true;
+}
+
 function applyProductionDataCleanupV1() {
   state.backup = state.backup || {};
   if (state.backup.productionDataCleanupV1) return false;
@@ -1027,6 +1124,8 @@ applySladjan2026BalanceCorrections();
 applyHazim2026ActualsV1();
 applyMilica2026ActualsV1();
 applyAleksa2026ActualsV1();
+applyNikola2026BalanceV1();
+applyConfirmedAbsencesV2();
 applyProductionDataCleanupV1();
 applyQa20260827Cleanup();
 applyQa20260828Cleanup();
@@ -1499,13 +1598,15 @@ async function hydrateOnlineState() {
     const invoiceRostersCorrected = applyMonthlyInvoiceRostersV5();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
     const hazimCorrected = applyHazim2026ActualsV1();
+    const nikolaCorrected = applyNikola2026BalanceV1();
+    const confirmedAbsencesAdded = applyConfirmedAbsencesV2();
     const productionDataCleaned = applyProductionDataCleanupV1();
     const qaDataCleaned = applyQa20260827Cleanup();
     const qa20260828DataCleaned = applyQa20260828Cleanup();
     const qa20260828DataCleanedV2 = applyQa20260828CleanupV2();
     const activityCatalogAdded = applyEmployeeActivityCatalogV1();
     onlineHydrationComplete = true;
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || hazimCorrected || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || qa20260828DataCleanedV2 || activityCatalogAdded });
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || hazimCorrected || nikolaCorrected || confirmedAbsencesAdded || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || qa20260828DataCleanedV2 || activityCatalogAdded });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
