@@ -5799,3 +5799,38 @@ window.addEventListener("load", () => {
     if (typeof render === "function") render();
   }, 4000);
 });
+
+// Final Dejan opening balance correction for official tracking from 01.09.2026.
+function applyDejanSeptember2026OpeningBalanceV2() {
+  state.backup = state.backup || {};
+  if (state.backup.dejanSeptember2026OpeningBalanceV2) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "dejan klement");
+  if (!employee) return false;
+  employee.openingHourBalance = 0;
+  employee.openingBalanceMonth = "2025-11";
+  employee.monthlyBalanceOverrides = {
+    ...(employee.monthlyBalanceOverrides || {}),
+    "2025-12": 0,
+    "2026-01": 0,
+    "2026-02": 0,
+    "2026-03": 0,
+    "2026-04": 0,
+    "2026-05": 0,
+    "2026-06": 0,
+    "2026-07": 0,
+    "2026-08": 10 + (20 / 60),
+  };
+  state.backup.dejanSeptember2026OpeningBalanceV2 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyDejanSeptember2026OpeningBalanceV2()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 4500);
+});
