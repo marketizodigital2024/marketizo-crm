@@ -5759,3 +5759,43 @@ updateContextActions("admin");
   });
   new MutationObserver(enhance).observe(document.body, { childList: true, subtree: true });
 })();
+// Final opening balances for the official work-time tracking start on 01.09.2026.
+// Historical monthly totals remain visible, but must not be added again to these balances.
+function applySeptember2026OpeningBalancesV1() {
+  state.backup = state.backup || {};
+  if (state.backup.september2026OpeningBalancesV1) return false;
+
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const resetHistoryAndSetAugustBalance = (name, augustBalance) => {
+    const employee = (state.employees || []).find((item) => normalize(item.name) === normalize(name));
+    if (!employee) return;
+    employee.openingHourBalance = 0;
+    employee.openingBalanceMonth = "2025-12";
+    employee.monthlyBalanceOverrides = {
+      ...(employee.monthlyBalanceOverrides || {}),
+      "2026-01": 0,
+      "2026-02": 0,
+      "2026-03": 0,
+      "2026-04": 0,
+      "2026-05": 0,
+      "2026-06": 0,
+      "2026-07": 0,
+      "2026-08": augustBalance,
+    };
+  };
+
+  resetHistoryAndSetAugustBalance("Dejan Klement", 10 + (20 / 60));
+  resetHistoryAndSetAugustBalance("Nikola Marjanovic", -(21 + (35 / 60)));
+  state.backup.september2026OpeningBalancesV1 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applySeptember2026OpeningBalancesV1()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 4000);
+});
