@@ -1508,26 +1508,33 @@ window.addEventListener("appinstalled", () => {
 syncEmployeeInstallButton();
 
 document.getElementById("installEmployeeAppBtn")?.addEventListener("click", async () => {
-  if (!deferredInstallPrompt) {
-    const alertBox = document.getElementById("employeeMissingTimeAlert");
-    if (alertBox) {
-      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-      alertBox.innerHTML = isIOS
-        ? `<strong>Dodaj na početni ekran</strong><span>U Safariju pritisni Deli, pa izaberi "Dodaj na početni ekran".</span>`
-        : `<strong>Instalacija aplikacije</strong><span>Otvori meni browsera i izaberi "Instaliraj aplikaciju" ili "Dodaj na početni ekran".</span>`;
-      alertBox.hidden = false;
-      window.setTimeout(() => {
-        alertBox.hidden = true;
-      }, 9000);
-    }
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    syncEmployeeInstallButton();
     return;
   }
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
-  deferredInstallPrompt = null;
-  syncEmployeeInstallButton();
+  const dialog = document.getElementById("employeeInstallDialog");
+  const title = document.getElementById("employeeInstallDialogTitle");
+  const text = document.getElementById("employeeInstallDialogText");
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (title) title.textContent = "Dodaj Marketizo na početni ekran";
+  if (text) text.textContent = isIOS
+    ? "U Safariju pritisni Deli, zatim izaberi Dodaj na početni ekran."
+    : "Otvori meni browsera i izaberi Instaliraj aplikaciju ili Dodaj na početni ekran.";
+  dialog?.showModal();
 });
 
+document.getElementById("closeEmployeeInstallDialog")?.addEventListener("click", () => {
+  document.getElementById("employeeInstallDialog")?.close();
+});
+document.getElementById("confirmEmployeeInstallDialog")?.addEventListener("click", () => {
+  document.getElementById("employeeInstallDialog")?.close();
+});
+document.getElementById("employeeInstallDialog")?.addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) event.currentTarget.close();
+});
 document.querySelectorAll("[data-dashboard-section-button]").forEach((button) => {
   button.addEventListener("click", () => {
     const dashboard = document.getElementById("employeeDashboard");
