@@ -47,7 +47,7 @@ let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
 const employeeSessionKey = "marketizoEmployeeSession";
-const employeeSessionDuration = 30 * 24 * 60 * 60 * 1000;
+const employeeSessionDuration = 24 * 60 * 60 * 1000;
 
 function getEmployeeSession() {
   try {
