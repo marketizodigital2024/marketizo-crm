@@ -29,7 +29,7 @@ const defaultEmployeeProfiles = [
     startDate: "2023-07-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: true,
     leaderId: "",
@@ -44,7 +44,7 @@ const defaultEmployeeProfiles = [
     startDate: "2023-07-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: true,
     leaderId: "",
@@ -59,7 +59,7 @@ const defaultEmployeeProfiles = [
     startDate: "2026-01-15",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: false,
     leaderId: "emp-ivana",
@@ -74,7 +74,7 @@ const defaultEmployeeProfiles = [
     startDate: "2026-02-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: false,
     leaderId: "emp-ivana",
@@ -89,7 +89,7 @@ const defaultEmployeeProfiles = [
     startDate: "2026-03-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: false,
     leaderId: "emp-ivana",
@@ -1232,7 +1232,7 @@ function migrateState(data) {
     weeklyHours: 40,
     openingHourBalance: 0,
     openingBalanceMonth: "",
-    vacationDays: 26,
+    vacationDays: 25,
     openingVacationUsed: 0,
     giftDays: 1,
     isLeader: false,
@@ -1242,7 +1242,7 @@ function migrateState(data) {
     weeklyHours: parseNumber(employee.weeklyHours || 40, 40),
     openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
     openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
-    vacationDays: parseNumber(employee.vacationDays || 26, 26),
+    vacationDays: parseNumber(employee.vacationDays || 25, 26),
     openingVacationUsed: parseNumber(employee.openingVacationUsed || 0, 0),
     giftDays: parseNumber(employee.giftDays || 1, 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
@@ -2322,17 +2322,58 @@ function employeeYearAbsenceDays(employeeId, year, type) {
     }, 0);
 }
 
+function vacationUtcDate(dateKey) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function vacationAnniversary(startDate, years) {
+  const start = vacationUtcDate(startDate);
+  const result = new Date(start);
+  result.setUTCFullYear(result.getUTCFullYear() + years);
+  return result;
+}
+
+function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
+  const annualAllowance = parseNumber(employee?.vacationDays || 25, 25);
+  if (!employee?.startDate) return { earned: annualAllowance, used: 0, left: annualAllowance };
+  const start = vacationUtcDate(employee.startDate);
+  const reference = vacationUtcDate(referenceDate);
+  if (reference < start) return { earned: 0, used: 0, left: 0 };
+
+  let completedYears = 0;
+  while (vacationAnniversary(employee.startDate, completedYears + 1) <= reference) completedYears += 1;
+  let currentEntitlement = annualAllowance;
+  if (completedYears === 0) {
+    const sixMonths = new Date(start);
+    sixMonths.setUTCMonth(sixMonths.getUTCMonth() + 6);
+    if (reference < sixMonths) {
+      const yearEnd = vacationAnniversary(employee.startDate, 1);
+      const elapsedDays = Math.max((reference - start) / 86400000 + 1, 0);
+      const periodDays = Math.max((yearEnd - start) / 86400000, 1);
+      currentEntitlement = (annualAllowance * elapsedDays) / periodDays;
+    }
+  }
+
+  const earned = Math.round((completedYears * annualAllowance + currentEntitlement) * 100) / 100;
+  const firstYear = Number(String(employee.startDate).slice(0, 4));
+  const lastYear = reference.getUTCFullYear();
+  let used = 0;
+  for (let year = firstYear; year <= lastYear; year += 1) {
+    used += employeeYearAbsenceDays(employee.id, year, "Godišnji odmor");
+  }
+  used = Math.round(used * 100) / 100;
+  return { earned, used, left: Math.max(Math.round((earned - used) * 100) / 100, 0) };
+}
+
 function employeeVacationAllowance(employee, year) {
-  const fullAllowance = parseNumber(employee?.vacationDays || 26, 26);
-  if (!employee?.startDate) return fullAllowance;
-  const startYear = Number(String(employee.startDate).slice(0, 4));
-  if (startYear < year) return fullAllowance;
-  if (startYear > year) return 0;
-  const yearStart = `${year}-01-01`;
-  const yearEnd = `${year}-12-31`;
-  const totalWorkdays = workdayKeysBetween(yearStart, yearEnd).length || 1;
-  const employeeWorkdays = workdayKeysBetween(employee.startDate, yearEnd).length;
-  return Math.ceil((fullAllowance * employeeWorkdays) / totalWorkdays);
+  const currentYear = Number(currentDateKey().slice(0, 4));
+  const referenceDate = year === currentYear ? currentDateKey() : `${year}-12-31`;
+  return employeeVacationSnapshot(employee, referenceDate).earned;
+}
+
+function formatVacationDays(value) {
+  return Number(value || 0).toLocaleString("sr-RS", { maximumFractionDigits: 2 });
 }
 
 function employeeMonthAbsenceDays(employeeId, monthKey, type = "") {
@@ -2828,19 +2869,19 @@ function renderSelectedEmployeeDetail(employee, monthKey, year) {
 }
 
 function renderSelectedEmployeeAbsenceList(employeeId, year) {
-  const vacationUsed = employeeYearAbsenceDays(employeeId, year, "Godišnji odmor");
   const giftUsed = employeeYearAbsenceDays(employeeId, year, "Poklon dan");
   const sickDays = employeeYearAbsenceDays(employeeId, year, "Bolovanje");
   const employee = employeeById(employeeId);
-  const vacationAllowance = employeeVacationAllowance(employee, year);
+  const currentYear = Number(currentDateKey().slice(0, 4));
+  const vacation = employeeVacationSnapshot(employee, year === currentYear ? currentDateKey() : `${year}-12-31`);
   const recentAbsences = (state.employeeAbsences || [])
     .filter((absence) => absence.employeeId === employeeId)
     .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
     .slice(0, 4);
   document.getElementById("selectedEmployeeAbsenceList").innerHTML = `
     <div class="setup-item">
-      <strong>${vacationUsed}</strong>
-      <span>Godišnji iskorišćen · ${Math.max(vacationAllowance - vacationUsed, 0)} dana preostalo<br />Pravo za godinu: ${vacationAllowance}/${employee?.vacationDays || 26}</span>
+      <strong>${formatVacationDays(vacation.used)}</strong>
+      <span>Godišnji iskorišćen · ${formatVacationDays(vacation.left)} dana preostalo<br />Stečeno ukupno: ${formatVacationDays(vacation.earned)} dana</span>
     </div>
     <div class="setup-item">
       <strong>${giftUsed}</strong>
@@ -2951,7 +2992,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.openingBalanceMonth.value = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = Boolean(employee.isLeader);
     form.elements.leaderId.value = employee.leaderId || "";
-    form.elements.vacationDays.value = Number(employee.vacationDays || 26);
+    form.elements.vacationDays.value = Number(employee.vacationDays || 25);
     form.elements.openingVacationUsed.value = parseNumber(employee.openingVacationUsed || 0);
     form.elements.giftDays.value = Number(employee.giftDays || 1);
     form.elements.status.value = employee.status || "Aktivan";
@@ -2965,7 +3006,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = false;
     form.elements.leaderId.value = "";
-    form.elements.vacationDays.value = 26;
+    form.elements.vacationDays.value = 25;
     form.elements.openingVacationUsed.value = 0;
     form.elements.giftDays.value = 1;
     form.elements.status.value = "Aktivan";
@@ -4863,7 +4904,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
     openingBalanceMonth: formData.get("openingBalanceMonth") || shiftMonth(currentMonthKey(), -1),
     isLeader: Boolean(form.elements.isLeader?.checked),
     leaderId: formData.get("leaderId") || "",
-    vacationDays: parseNumber(formData.get("vacationDays"), 26),
+    vacationDays: parseNumber(formData.get("vacationDays"), 25),
     openingVacationUsed: parseNumber(formData.get("openingVacationUsed"), 0),
     giftDays: parseNumber(formData.get("giftDays"), 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(formData.get("status")) ? formData.get("status") : "Aktivan",
@@ -4893,7 +4934,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
   event.currentTarget.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
   event.currentTarget.elements.isLeader.checked = false;
   event.currentTarget.elements.leaderId.value = "";
-  event.currentTarget.elements.vacationDays.value = 26;
+  event.currentTarget.elements.vacationDays.value = 25;
   event.currentTarget.elements.openingVacationUsed.value = 0;
   event.currentTarget.elements.giftDays.value = 1;
   hideEmployeeProfileForm();

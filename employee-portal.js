@@ -8,7 +8,7 @@ const defaultEmployees = [
     startDate: "2023-07-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: true,
     leaderId: "",
@@ -23,7 +23,7 @@ const defaultEmployees = [
     startDate: "2023-07-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: true,
     leaderId: "",
@@ -111,7 +111,7 @@ function loadState(sourceData = null) {
     weeklyHours: 40,
     openingHourBalance: 0,
     openingBalanceMonth: "",
-    vacationDays: 26,
+    vacationDays: 25,
     openingVacationUsed: 0,
     giftDays: 1,
     isLeader: false,
@@ -121,7 +121,7 @@ function loadState(sourceData = null) {
     weeklyHours: parseNumber(employee.weeklyHours || 40, 40),
     openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
     openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
-    vacationDays: parseNumber(employee.vacationDays || 26, 26),
+    vacationDays: parseNumber(employee.vacationDays || 25, 26),
     openingVacationUsed: parseNumber(employee.openingVacationUsed || 0, 0),
     giftDays: parseNumber(employee.giftDays || 1, 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
@@ -452,16 +452,48 @@ function employeeYearAbsenceDays(type, year) {
   }, 0);
 }
 
-function employeeVacationAllowance(employee, year) {
-  const fullAllowance = parseNumber(employee?.vacationDays || 26, 26);
-  if (!employee?.startDate) return fullAllowance;
-  const startYear = Number(String(employee.startDate).slice(0, 4));
-  if (startYear < year) return fullAllowance;
-  if (startYear > year) return 0;
-  const yearEnd = `${year}-12-31`;
-  const totalWorkdays = workdayKeysBetween(`${year}-01-01`, yearEnd).length || 1;
-  const employeeWorkdays = workdayKeysBetween(employee.startDate, yearEnd).length;
-  return Math.ceil((fullAllowance * employeeWorkdays) / totalWorkdays);
+function vacationUtcDate(dateKey) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function vacationAnniversary(startDate, years) {
+  const start = vacationUtcDate(startDate);
+  const result = new Date(start);
+  result.setUTCFullYear(result.getUTCFullYear() + years);
+  return result;
+}
+
+function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
+  const annualAllowance = parseNumber(employee?.vacationDays || 25, 25);
+  if (!employee?.startDate) return { earned: annualAllowance, used: 0, left: annualAllowance };
+  const start = vacationUtcDate(employee.startDate);
+  const reference = vacationUtcDate(referenceDate);
+  if (reference < start) return { earned: 0, used: 0, left: 0 };
+  let completedYears = 0;
+  while (vacationAnniversary(employee.startDate, completedYears + 1) <= reference) completedYears += 1;
+  let currentEntitlement = annualAllowance;
+  if (completedYears === 0) {
+    const sixMonths = new Date(start);
+    sixMonths.setUTCMonth(sixMonths.getUTCMonth() + 6);
+    if (reference < sixMonths) {
+      const yearEnd = vacationAnniversary(employee.startDate, 1);
+      const elapsedDays = Math.max((reference - start) / 86400000 + 1, 0);
+      const periodDays = Math.max((yearEnd - start) / 86400000, 1);
+      currentEntitlement = (annualAllowance * elapsedDays) / periodDays;
+    }
+  }
+  const earned = Math.round((completedYears * annualAllowance + currentEntitlement) * 100) / 100;
+  const firstYear = Number(String(employee.startDate).slice(0, 4));
+  const lastYear = reference.getUTCFullYear();
+  let used = 0;
+  for (let year = firstYear; year <= lastYear; year += 1) used += employeeYearAbsenceDays("Godišnji odmor", year);
+  used = Math.round(used * 100) / 100;
+  return { earned, used, left: Math.max(Math.round((earned - used) * 100) / 100, 0) };
+}
+
+function formatVacationDays(value) {
+  return Number(value || 0).toLocaleString("sr-RS", { maximumFractionDigits: 2 });
 }
 
 function employeeMonthAbsenceDays(employeeId, monthKey) {
@@ -744,11 +776,10 @@ function renderEmployeePortal() {
   const workdays = workdaysInMonth(portalMonth).filter((day) => !activeEmployee.startDate || day >= activeEmployee.startDate);
   const expected = expectedHours(activeEmployee, portalMonth);
   const balance = hourBalance(activeEmployee, portalMonth);
-  const vacationUsed = employeeYearAbsenceDays("Godišnji odmor", year);
-  const vacationAllowance = employeeVacationAllowance(activeEmployee, year);
+  const currentYear = Number(currentDateKey().slice(0, 4));
+  const vacation = employeeVacationSnapshot(activeEmployee, year === currentYear ? currentDateKey() : `${year}-12-31`);
   const giftUsed = employeeYearAbsenceDays("Poklon dan", year);
   const sickDays = employeeYearAbsenceDays("Bolovanje", year);
-  const vacationLeft = Math.max(vacationAllowance - vacationUsed, 0);
   const giftLeft = Math.max(Number(activeEmployee.giftDays || 1) - giftUsed, 0);
 
   document.getElementById("employeePortalMonth").value = portalMonth;
@@ -758,8 +789,8 @@ function renderEmployeePortal() {
   setText("portalHours", `${formatHours(hours)}h`);
   setText("portalExpectedHours", `od ${formatHours(expected)}h · ${carryoverLabel(activeEmployee, portalMonth)}`);
   setText("portalHourBalance", formatHourBalance(balance));
-  setText("portalVacation", `${vacationUsed}/${vacationAllowance}`);
-  setText("portalVacationLeft", `${vacationLeft} preostalo`);
+  setText("portalVacation", `${formatVacationDays(vacation.used)}/${formatVacationDays(vacation.earned)}`);
+  setText("portalVacationLeft", `${formatVacationDays(vacation.left)} preostalo`);
   setText("portalGiftDay", `${giftUsed}/${activeEmployee.giftDays || 1}`);
   setText("portalGiftLeft", `${giftLeft} preostalo`);
   setText("portalSickDays", sickDays);
