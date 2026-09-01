@@ -35,6 +35,7 @@ function hidePasswords(payload) {
   if (!payload) return payload;
   const copy = JSON.parse(JSON.stringify(payload));
   if (Array.isArray(copy.employees)) copy.employees.forEach((employee) => delete employee.password);
+  if (Array.isArray(copy.clients)) copy.clients.forEach((client) => delete client.loginPassword);
   return copy;
 }
 
@@ -47,18 +48,25 @@ async function readStoredPayload(config) {
   return rows[0]?.payload || {};
 }
 
-function preserveEmployeePasswords(payload, current) {
-  if (!Array.isArray(payload?.employees)) return payload;
+function preserveCredentials(payload, current) {
   const previous = Array.isArray(current?.employees) ? current.employees : [];
+  const previousClients = Array.isArray(current?.clients) ? current.clients : [];
   return {
     ...payload,
-    employees: payload.employees.map((employee) => {
+    employees: Array.isArray(payload?.employees) ? payload.employees.map((employee) => {
       if (String(employee.password || "").trim()) return employee;
       const match = previous.find((item) => item.id === employee.id) || previous.find((item) =>
         String(item.email || "").trim().toLowerCase() === String(employee.email || "").trim().toLowerCase()
       );
       return match?.password ? { ...employee, password: match.password } : employee;
-    }),
+    }) : payload.employees,
+    clients: Array.isArray(payload?.clients) ? payload.clients.map((client) => {
+      if (String(client.loginPassword || "").trim()) return client;
+      const match = previousClients.find((item) => item.id === client.id) || previousClients.find((item) =>
+        String(item.loginEmail || "").trim().toLowerCase() === String(client.loginEmail || "").trim().toLowerCase()
+      );
+      return match?.loginPassword ? { ...client, loginPassword: match.loginPassword } : client;
+    }) : payload.clients,
   };
 }
 
@@ -106,7 +114,7 @@ module.exports = async function handler(req, res) {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
         return json(res, 400, { configured: true, error: "Nedostaje payload objekat." });
       }
-      payload = preserveEmployeePasswords(payload, await readStoredPayload(config));
+      payload = preserveCredentials(payload, await readStoredPayload(config));
       const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
         method: "POST",
         headers: {
