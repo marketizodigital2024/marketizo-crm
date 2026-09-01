@@ -586,7 +586,7 @@ function monthBalance(employee, monthKey) {
   let completedHours = employeeMonthHours(employee, monthKey);
   if (monthKey === currentMonthKey()) {
     const today = currentDateKey();
-    const todayHours = employeeWorkLogs
+    const todayHours = state.employeeWorkLogs
       .filter((log) => log.employeeId === employee.id && String(log.date || "") === today)
       .reduce((sum, log) => sum + Number(log.hours || 0), 0);
     completedHours -= todayHours;
