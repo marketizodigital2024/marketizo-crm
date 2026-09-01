@@ -799,7 +799,7 @@ async function waitForOnlineHydration() {
   try {
     await Promise.race([
       onlineHydrationPromise,
-      new Promise((resolve) => window.setTimeout(resolve, 5000)),
+      new Promise((resolve) => window.setTimeout(resolve, 20000)),
     ]);
   } catch {
     // Login must never stay blocked if online sync has a temporary issue.
