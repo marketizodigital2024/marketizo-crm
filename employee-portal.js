@@ -3,12 +3,11 @@ const defaultEmployees = [
     id: "emp-miljan",
     name: "Miljan Marinjes",
     email: "miljan@marketizo.local",
-    passwordHash: "pending",
     position: "Founder / Strategija",
     startDate: "2023-07-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: true,
     leaderId: "",
@@ -18,12 +17,11 @@ const defaultEmployees = [
     id: "emp-ivana",
     name: "Ivana Marinjes",
     email: "ivana@marketizo.local",
-    passwordHash: "pending",
     position: "Co-founder / Operativa",
     startDate: "2023-07-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: true,
     leaderId: "",
@@ -41,79 +39,83 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-const EMPLOYEE_PASSWORD_PEPPER = "marketizo-employee-password-v1";
-const EMPLOYEE_DEFAULT_PASSWORD = "123456";
-
-function hashEmployeePassword(password) {
-  const input = `${EMPLOYEE_PASSWORD_PEPPER}|${String(password || "").trim()}`;
-  let hashA = 2166136261;
-  let hashB = 16777619;
-  for (let i = 0; i < input.length; i += 1) {
-    const code = input.charCodeAt(i);
-    hashA ^= code;
-    hashA = Math.imul(hashA, 16777619);
-    hashB ^= code + 17;
-    hashB = Math.imul(hashB, 2166136261);
-  }
-  return `h1:${(hashA >>> 0).toString(16).padStart(8, "0")}-h2:${(hashB >>> 0).toString(16).padStart(8, "0")}`;
-}
-
-function resolveEmployeePasswordHash(employee = {}) {
-  const provided = String(employee.passwordHash || "").trim();
-  const legacy = String(employee.password || "").trim();
-  if (provided) return provided;
-  if (legacy) return hashEmployeePassword(legacy);
-  return hashEmployeePassword(EMPLOYEE_DEFAULT_PASSWORD);
-}
-
-const EMPLOYEE_DEFAULT_PASSWORD_HASH = hashEmployeePassword(EMPLOYEE_DEFAULT_PASSWORD);
-
-defaultEmployees.forEach((employee) => {
-  if (employee.passwordHash === "pending") employee.passwordHash = EMPLOYEE_DEFAULT_PASSWORD_HASH;
-});
-
 let state = loadState();
 let activeEmployee = null;
-const EMPLOYEE_SESSION_KEY = "marketizoEmployeeSession";
-const EMPLOYEE_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
+const employeeSessionKey = "marketizoEmployeeSession";
+const employeeSessionDuration = 24 * 60 * 60 * 1000;
 
-function readEmployeeSession() {
+function showCachedEmployeeSession(session) {
+  if (!session?.token) return false;
+  activeEmployee = (state.employees || []).find(
+    (employee) => employee.id === session.employeeId || String(employee.email || "").toLowerCase() === session.email
+  );
+  if (!activeEmployee) return false;
+  document.getElementById("employeeLoginScreen").hidden = true;
+  document.getElementById("employeeApp").hidden = false;
+  renderEmployeePortal();
+  return true;
+}
+
+function getEmployeeSession() {
   try {
-    const session = JSON.parse(localStorage.getItem(EMPLOYEE_SESSION_KEY) || "null");
-    if (!session?.employeeId || Number(session.expiresAt || 0) <= Date.now()) {
-      localStorage.removeItem(EMPLOYEE_SESSION_KEY);
+    const session = JSON.parse(localStorage.getItem(employeeSessionKey) || "null");
+    if (!session || Number(session.expiresAt || 0) < Date.now()) {
+      localStorage.removeItem(employeeSessionKey);
       return null;
     }
     return session;
   } catch {
-    localStorage.removeItem(EMPLOYEE_SESSION_KEY);
+    localStorage.removeItem(employeeSessionKey);
     return null;
   }
 }
 
-function saveEmployeeSession(employee) {
-  localStorage.setItem(EMPLOYEE_SESSION_KEY, JSON.stringify({
-    employeeId: employee.id,
-    expiresAt: Date.now() + EMPLOYEE_SESSION_DURATION_MS,
-  }));
+function setEmployeeSession(employee, token, expiresAt) {
+  localStorage.setItem(
+    employeeSessionKey,
+    JSON.stringify({
+      employeeId: employee.id,
+      email: String(employee.email || "").toLowerCase(),
+      token,
+      expiresAt: Number(expiresAt || (Date.now() + employeeSessionDuration)),
+    })
+  );
 }
 
-function showEmployeeAuth(employee) {
-  activeEmployee = employee || null;
-  document.getElementById("employeeLoginScreen").hidden = Boolean(activeEmployee);
-  document.getElementById("employeeApp").hidden = !activeEmployee;
-  if (activeEmployee) renderEmployeePortal();
-}
-
-function restoreEmployeeSession() {
-  const session = readEmployeeSession();
-  const employee = session
-    ? (state.employees || []).find((item) => item.id === session.employeeId)
-    : null;
-  showEmployeeAuth(employee || null);
+async function restoreEmployeeSession() {
+  const session = getEmployeeSession();
+  if (!session?.token) return false;
+  const validate = () => fetch("/api/employee-auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "validate", token: session.token }),
+    }).catch(() => null);
+  let response = await validate();
+  if (!response || response.status >= 500) {
+    await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    response = await validate();
+  }
+  if (!response || !response.ok) {
+    if (response?.status === 401) localStorage.removeItem(employeeSessionKey);
+    return false;
+  }
+  const verified = await response.json();
+  activeEmployee = (state.employees || []).find(
+    (employee) => employee.id === verified.employee?.id || String(employee.email || "").toLowerCase() === verified.employee?.email
+  );
+  if (!activeEmployee) {
+    localStorage.removeItem(employeeSessionKey);
+    return false;
+  }
+  document.getElementById("employeeLoginScreen").hidden = true;
+  document.getElementById("employeeApp").hidden = false;
+  renderEmployeePortal();
+  setupDailyMinuteProgress();
+  setupPauseActivityEntry();
+  return true;
 }
 
 function loadState(sourceData = null) {
@@ -128,14 +130,14 @@ function loadState(sourceData = null) {
     id: employee.id || crypto.randomUUID(),
     name: "",
     email: "",
-    passwordHash: resolveEmployeePasswordHash(employee),
+    password: "",
     position: "",
     startDate: "",
     salary: 0,
     weeklyHours: 40,
     openingHourBalance: 0,
     openingBalanceMonth: "",
-    vacationDays: 26,
+    vacationDays: 25,
     openingVacationUsed: 0,
     giftDays: 1,
     isLeader: false,
@@ -145,11 +147,10 @@ function loadState(sourceData = null) {
     weeklyHours: parseNumber(employee.weeklyHours || 40, 40),
     openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
     openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
-    vacationDays: parseNumber(employee.vacationDays || 26, 26),
+    vacationDays: parseNumber(employee.vacationDays || 25, 26),
     openingVacationUsed: parseNumber(employee.openingVacationUsed || 0, 0),
     giftDays: parseNumber(employee.giftDays || 1, 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
-    password: undefined,
   }));
   data.employeeAbsences = data.employeeAbsences || [];
   data.employeeWorkLogs = (data.employeeWorkLogs || []).map((log) => ({
@@ -176,6 +177,9 @@ function loadState(sourceData = null) {
     category: activity.category || "Ostalo",
     active: activity.active !== false,
   }));
+  if (!data.employeeActivities.some((activity) => String(activity.name || "").toLowerCase() === "pauza")) {
+    data.employeeActivities.push({ id: "activity-pause", name: "Pauza", category: "Interno", active: true });
+  }
   data.employeeDocuments = (data.employeeDocuments || []).map((documentItem) => ({
     id: documentItem.id || crypto.randomUUID(),
     employeeId: documentItem.employeeId || "",
@@ -453,7 +457,12 @@ function unhideNotification(id) {
 
 function leaderTeam() {
   if (!activeEmployee?.isLeader) return [];
-  return (state.employees || []).filter((employee) => employee.leaderId === activeEmployee.id);
+  const activeName = String(activeEmployee.name || "").toLowerCase();
+  return (state.employees || []).filter((employee) => {
+    if (employee.leaderId === activeEmployee.id) return true;
+    const employeeName = String(employee.name || "").toLowerCase();
+    return activeName.includes("sladjan") && employeeName.includes("milica blagojevic");
+  });
 }
 
 function reportRecipientId() {
@@ -469,16 +478,48 @@ function employeeYearAbsenceDays(type, year) {
   }, 0);
 }
 
-function employeeVacationAllowance(employee, year) {
-  const fullAllowance = parseNumber(employee?.vacationDays || 26, 26);
-  if (!employee?.startDate) return fullAllowance;
-  const startYear = Number(String(employee.startDate).slice(0, 4));
-  if (startYear < year) return fullAllowance;
-  if (startYear > year) return 0;
-  const yearEnd = `${year}-12-31`;
-  const totalWorkdays = workdayKeysBetween(`${year}-01-01`, yearEnd).length || 1;
-  const employeeWorkdays = workdayKeysBetween(employee.startDate, yearEnd).length;
-  return Math.ceil((fullAllowance * employeeWorkdays) / totalWorkdays);
+function vacationUtcDate(dateKey) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function vacationAnniversary(startDate, years) {
+  const start = vacationUtcDate(startDate);
+  const result = new Date(start);
+  result.setUTCFullYear(result.getUTCFullYear() + years);
+  return result;
+}
+
+function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
+  const annualAllowance = parseNumber(employee?.vacationDays || 25, 25);
+  if (!employee?.startDate) return { earned: annualAllowance, used: 0, left: annualAllowance };
+  const start = vacationUtcDate(employee.startDate);
+  const reference = vacationUtcDate(referenceDate);
+  if (reference < start) return { earned: 0, used: 0, left: 0 };
+  let completedYears = 0;
+  while (vacationAnniversary(employee.startDate, completedYears + 1) <= reference) completedYears += 1;
+  let currentEntitlement = annualAllowance;
+  if (completedYears === 0) {
+    const sixMonths = new Date(start);
+    sixMonths.setUTCMonth(sixMonths.getUTCMonth() + 6);
+    if (reference < sixMonths) {
+      const yearEnd = vacationAnniversary(employee.startDate, 1);
+      const elapsedDays = Math.max((reference - start) / 86400000 + 1, 0);
+      const periodDays = Math.max((yearEnd - start) / 86400000, 1);
+      currentEntitlement = (annualAllowance * elapsedDays) / periodDays;
+    }
+  }
+  const earned = Math.round((completedYears * annualAllowance + currentEntitlement) * 100) / 100;
+  const firstYear = Number(String(employee.startDate).slice(0, 4));
+  const lastYear = reference.getUTCFullYear();
+  let used = 0;
+  for (let year = firstYear; year <= lastYear; year += 1) used += employeeYearAbsenceDays("Godišnji odmor", year);
+  used = Math.round(used * 100) / 100;
+  return { earned, used, left: Math.max(Math.round((earned - used) * 100) / 100, 0) };
+}
+
+function formatVacationDays(value) {
+  return Number(value || 0).toLocaleString("sr-RS", { maximumFractionDigits: 2 });
 }
 
 function employeeMonthAbsenceDays(employeeId, monthKey) {
@@ -491,10 +532,52 @@ function employeeMonthAbsenceDays(employeeId, monthKey) {
 }
 
 function expectedHours(employee, monthKey) {
-  const dailyHours = parseNumber(employee.weeklyHours || 40, 40) / 5;
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !employee.startDate || day >= employee.startDate);
   const plannedDays = Math.max(eligibleWorkdays.length - employeeMonthAbsenceDays(employee.id, monthKey), 0);
   return Math.round(plannedDays * dailyHours * 100) / 100;
+}
+
+function elapsedWorkdaysToDate(employee, monthKey) {
+  const selectedMonth = monthIndex(monthKey);
+  const currentMonth = monthIndex(currentMonthKey());
+  if (selectedMonth < currentMonth) {
+    return workdaysInMonth(monthKey).filter((day) =>
+      (!employee.startDate || day >= employee.startDate) &&
+      !(state.employeeAbsences || []).some((absence) =>
+        absence.employeeId === employee.id &&
+        absence.status !== "Zatraženo" &&
+        day >= absence.startDate &&
+        day <= absence.endDate
+      )
+    );
+  }
+  if (selectedMonth > currentMonth) return [];
+
+  const today = currentDateKey();
+  return workdaysInMonth(monthKey).filter((day) =>
+    day < today &&
+    (!employee.startDate || day >= employee.startDate) &&
+    !(state.employeeAbsences || []).some((absence) =>
+      absence.employeeId === employee.id &&
+      absence.status !== "Zatraženo" &&
+      day >= absence.startDate &&
+      day <= absence.endDate
+    )
+  );
+}
+
+function expectedHoursToDate(employee, monthKey) {
+  const selectedMonth = monthIndex(monthKey);
+  const currentMonth = monthIndex(currentMonthKey());
+  if (selectedMonth < currentMonth) return expectedHours(employee, monthKey);
+  if (selectedMonth > currentMonth) return 0;
+
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
+  const elapsedWorkdays = elapsedWorkdaysToDate(employee, monthKey);
+  return Math.round(elapsedWorkdays.length * dailyHours * 100) / 100;
 }
 
 function employeeMonthLatePenaltyHours(employeeId, monthKey) {
@@ -536,7 +619,15 @@ function monthBalance(employee, monthKey) {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
     return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
   }
-  return Math.round((employeeMonthHours(employee, monthKey) - expectedHours(employee, monthKey)) * 100) / 100;
+  let completedHours = employeeMonthHours(employee, monthKey);
+  if (monthKey === currentMonthKey()) {
+    const today = currentDateKey();
+    const todayHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "") === today)
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    completedHours -= todayHours;
+  }
+  return Math.round((completedHours - expectedHoursToDate(employee, monthKey)) * 100) / 100;
 }
 
 function carryoverBalance(employee, monthKey) {
@@ -583,6 +674,92 @@ function hasWorkLogForDate(date) {
   return (state.employeeWorkLogs || []).some((log) => log.employeeId === activeEmployee.id && log.date === date);
 }
 
+function loggedMinutesForDate(date) {
+  return (state.employeeWorkLogs || [])
+    .filter((log) => log.employeeId === activeEmployee.id && log.date === date)
+    .reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+}
+
+function expectedMinutesForDate(employee, date) {
+  if (!employee || !isAustrianWorkingDay(date)) return 0;
+  const position = String(employee.position || "").toLowerCase();
+  if (position.includes("snimatelj")) return 0;
+  const weeklyHours = Number(employee.weeklyHours || 0);
+  const day = parseDate(date).getDay();
+  if (weeklyHours >= 38) return day === 5 ? 390 : 510;
+  if (weeklyHours <= 20) return 240;
+  return Math.round((weeklyHours * 60) / 5);
+}
+
+function setupDailyMinuteProgress() {
+  const minutesInput = document.querySelector('#employeeHours input[name="minutes"]');
+  const form = minutesInput?.closest("form");
+  const dateInput = form?.querySelector('input[name="date"]');
+  if (!form || !dateInput || form.dataset.dailyProgressReady) return;
+  form.dataset.dailyProgressReady = "true";
+  const progress = document.createElement("section");
+  progress.className = "daily-minute-progress";
+  progress.innerHTML = `<div><span>Današnji učinak</span><strong id="dailyMinuteStatus">0 min</strong></div><div class="daily-minute-track"><span id="dailyMinuteBar"></span></div><p id="dailyMinuteMessage"></p>`;
+  form.insertAdjacentElement("afterbegin", progress);
+  const render = () => {
+    const date = dateInput.value || currentDateKey();
+    const logged = loggedMinutesForDate(date);
+    const expected = expectedMinutesForDate(activeEmployee, date);
+    const remaining = Math.max(0, expected - logged);
+    const status = progress.querySelector("#dailyMinuteStatus");
+    const bar = progress.querySelector("#dailyMinuteBar");
+    const message = progress.querySelector("#dailyMinuteMessage");
+    if (!expected) {
+      status.textContent = `${logged} min upisano`;
+      bar.style.width = logged ? "100%" : "0%";
+      progress.classList.toggle("complete", logged > 0);
+      message.textContent = String(activeEmployee?.position || "").toLowerCase().includes("snimatelj")
+        ? "Fleksibilan raspored: upiši sve aktivnosti koje si radio/la tog dana."
+        : absenceCoversDate(date) ? "Za ovaj datum je evidentirano odsustvo." : "Za ovaj datum nema obavezne kvote.";
+      return;
+    }
+    const percentage = Math.min(100, Math.round(logged / expected * 100));
+    status.textContent = `${logged} / ${expected} min`;
+    bar.style.width = `${percentage}%`;
+    progress.classList.toggle("complete", remaining === 0);
+    message.textContent = remaining
+      ? `Nedostaje još ${remaining} minuta za ovaj radni dan.`
+      : logged > expected ? `Dnevna obaveza je ispunjena. Upisano je ${logged - expected} minuta više.` : "Dnevna obaveza je ispunjena.";
+  };
+  dateInput.addEventListener("change", render);
+  form.addEventListener("submit", () => window.setTimeout(render, 150));
+  window.refreshDailyMinuteProgress = render;
+  render();
+}
+
+function setupPauseActivityEntry() {
+  const activitySelect = document.querySelector('#employeeHours select[name="activityId"]');
+  const form = activitySelect?.closest("form");
+  const clientSelect = form?.querySelector('select[name="clientId"]');
+  const minutesInput = form?.querySelector('input[name="minutes"]');
+  if (!form || !activitySelect || !clientSelect || !minutesInput || form.dataset.pauseReady) return;
+  form.dataset.pauseReady = "true";
+  const note = document.createElement("p");
+  note.className = "pause-entry-note";
+  note.hidden = true;
+  note.textContent = "Pauza se evidentira u dnevnom prisustvu, ali se ne vezuje za klijenta niti ulazi u trošak klijenta.";
+  clientSelect.closest("label")?.insertAdjacentElement("afterend", note);
+  const sync = () => {
+    const selected = activitySelect.options[activitySelect.selectedIndex];
+    const isPause = String(selected?.textContent || "").trim().toLowerCase() === "pauza";
+    clientSelect.required = !isPause;
+    clientSelect.disabled = isPause;
+    note.hidden = !isPause;
+    if (isPause) {
+      clientSelect.value = "";
+      minutesInput.value = "30";
+    }
+  };
+  activitySelect.addEventListener("change", sync);
+  form.addEventListener("reset", () => window.setTimeout(sync, 0));
+  sync();
+}
+
 function absenceCoversDate(date) {
   return employeeAbsences().some((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(date));
 }
@@ -626,7 +803,7 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
 function renderLoginHint() {
   const hint = document.getElementById("employeeLoginHint");
   if (!hint) return;
-  hint.innerHTML = `<strong>Login dobijaš od admina.</strong><span>Ako si zaboravio/la lozinku, admin može da je promeni u delu Zaposleni.</span>`;
+  hint.replaceChildren();
 }
 
 async function hydrateOnlineState() {
@@ -658,7 +835,7 @@ async function waitForOnlineHydration() {
   try {
     await Promise.race([
       onlineHydrationPromise,
-      new Promise((resolve) => window.setTimeout(resolve, 5000)),
+      new Promise((resolve) => window.setTimeout(resolve, 20000)),
     ]);
   } catch {
     // Login must never stay blocked if online sync has a temporary issue.
@@ -672,14 +849,13 @@ function renderEmployeePortal() {
   const year = Number(portalMonth.slice(0, 4));
   const logs = employeeWorkLogs(portalMonth);
   const hours = employeeMonthHours(activeEmployee, portalMonth);
-  const workdays = workdaysInMonth(portalMonth).filter((day) => !activeEmployee.startDate || day >= activeEmployee.startDate);
-  const expected = expectedHours(activeEmployee, portalMonth);
+  const workdays = elapsedWorkdaysToDate(activeEmployee, portalMonth);
+  const expected = expectedHoursToDate(activeEmployee, portalMonth);
   const balance = hourBalance(activeEmployee, portalMonth);
-  const vacationUsed = employeeYearAbsenceDays("Godišnji odmor", year);
-  const vacationAllowance = employeeVacationAllowance(activeEmployee, year);
+  const currentYear = Number(currentDateKey().slice(0, 4));
+  const vacation = employeeVacationSnapshot(activeEmployee, year === currentYear ? currentDateKey() : `${year}-12-31`);
   const giftUsed = employeeYearAbsenceDays("Poklon dan", year);
   const sickDays = employeeYearAbsenceDays("Bolovanje", year);
-  const vacationLeft = Math.max(vacationAllowance - vacationUsed, 0);
   const giftLeft = Math.max(Number(activeEmployee.giftDays || 1) - giftUsed, 0);
 
   document.getElementById("employeePortalMonth").value = portalMonth;
@@ -689,8 +865,8 @@ function renderEmployeePortal() {
   setText("portalHours", `${formatHours(hours)}h`);
   setText("portalExpectedHours", `od ${formatHours(expected)}h · ${carryoverLabel(activeEmployee, portalMonth)}`);
   setText("portalHourBalance", formatHourBalance(balance));
-  setText("portalVacation", `${vacationUsed}/${vacationAllowance}`);
-  setText("portalVacationLeft", `${vacationLeft} preostalo`);
+  setText("portalVacation", `${formatVacationDays(vacation.used)}/${formatVacationDays(vacation.earned)}`);
+  setText("portalVacationLeft", `${formatVacationDays(vacation.left)} preostalo`);
   setText("portalGiftDay", `${giftUsed}/${activeEmployee.giftDays || 1}`);
   setText("portalGiftLeft", `${giftLeft} preostalo`);
   setText("portalSickDays", sickDays);
@@ -739,18 +915,26 @@ function renderEmployeePortal() {
   renderLeaderPanel();
   renderLateAcknowledgement();
   showEmployeeNotificationPopups();
+  window.refreshDailyMinuteProgress?.();
 }
 
 function renderMissingTimeAlert() {
   const alertBox = document.getElementById("employeeMissingTimeAlert");
   if (!alertBox || !activeEmployee) return;
   const previousDay = previousWorkingDay();
-  const missing = !hasWorkLogForDate(previousDay) && !absenceCoversDate(previousDay);
+  if (previousDay < "2026-09-01") {
+    alertBox.hidden = true;
+    return;
+  }
+  const expected = expectedMinutesForDate(activeEmployee, previousDay);
+  const logged = loggedMinutesForDate(previousDay);
+  const missingMinutes = Math.max(0, expected - logged);
+  const missing = expected > 0 && missingMinutes > 0 && !absenceCoversDate(previousDay);
   alertBox.hidden = !missing;
   if (!missing) return;
   alertBox.innerHTML = `
-    <strong>Nedostaje unos vremena</strong>
-    <span>Nisi upisao/la vreme za prethodni radni dan: ${formatDate(previousDay)}.</span>`;
+    <strong>Nedostaju aktivnosti ili minuti</strong>
+    <span>Za ${formatDate(previousDay)} upisano je ${logged} od očekivanih ${expected} min. Nedostaje ${missingMinutes} min.</span>`;
 }
 
 function renderPortalCalendar() {
@@ -958,7 +1142,7 @@ function showEmployeeNotificationPopups() {
   const shown = JSON.parse(sessionStorage.getItem(`shownEmployeeNotifications-${activeEmployee.id}`) || "[]");
   const nextShown = new Set(shown);
   employeeNotifications()
-    .filter((notification) => notification.title === "Odmor je odobren" && !nextShown.has(notification.id))
+    .filter((notification) => !isNotificationHidden(notification) && !nextShown.has(notification.id))
     .slice(0, 3)
     .forEach((notification) => {
       showToast(notification.title, notification.message, notification.type);
@@ -1249,27 +1433,27 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
   const formData = new FormData(form);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
-  let auth = null;
-  try {
-    const response = await fetch("/api/employee-auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    auth = response.ok ? await response.json() : null;
-  } catch {
-    auth = null;
-  }
-  activeEmployee = auth?.ok
-    ? state.employees.find((employee) => employee.id === auth.employeeId)
-    : null;
-  if (!activeEmployee) {
+  const response = await fetch("/api/employee-auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "login", email, password }),
+  });
+  const result = await response.json().catch(() => ({}));
+  activeEmployee = response.ok ? state.employees.find((employee) =>
+    employee.id === result.employee?.id || String(employee.email || "").toLowerCase() === result.employee?.email
+  ) : null;
+  if (!activeEmployee || !result.token) {
     document.getElementById("employeeLoginError").hidden = false;
     return;
   }
   document.getElementById("employeeLoginError").hidden = true;
-  saveEmployeeSession(activeEmployee);
-  showEmployeeAuth(activeEmployee);
+  setEmployeeSession(activeEmployee, result.token, result.expiresAt);
+  if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+  document.getElementById("employeeLoginScreen").hidden = true;
+  document.getElementById("employeeApp").hidden = false;
+  renderEmployeePortal();
+  setupDailyMinuteProgress();
+  setupPauseActivityEntry();
 });
 
 document.querySelectorAll("[data-employee-tab]").forEach((button) => {
@@ -1298,7 +1482,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
     return;
   }
-  if (!client) {
+  const isPause = String(activity.name || "").trim().toLowerCase() === "pauza";
+  if (!isPause && !client) {
     alert("Izaberi klijenta za kog si radio/la ovu aktivnost.");
     return;
   }
@@ -1311,8 +1496,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     activityId: activity.id,
     activityName: activity.name,
     activityCategory: activity.category || "Ostalo",
-    clientId: client.id,
-    clientName: client.name,
+    clientId: client?.id || "",
+    clientName: client?.name || "",
     type: "Rad",
     note: formData.get("note"),
     positive: formData.get("positive"),
@@ -1322,32 +1507,24 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   });
   const recipientId = reportRecipientId();
   state.employeeReports = state.employeeReports || [];
-  state.employeeReports.unshift({
-    id: crypto.randomUUID(),
-    employeeId: activeEmployee.id,
-    recipientId,
-    date,
-    title: "Dnevni izveštaj",
-    hours: Math.round((minutes / 60) * 10000) / 10000,
-    minutes,
-    activityId: activity.id,
-    activityName: activity.name,
-    activityCategory: activity.category || "Ostalo",
-    clientId: client.id,
-    clientName: client.name,
-    positive: formData.get("positive"),
-    negative: formData.get("negative"),
-    note: formData.get("note"),
-    createdAt: new Date().toISOString(),
-  });
-  notifyOnce({
-    key: `employee-report-${activeEmployee.id}-${date}`,
-    scope: recipientId === "admin" ? "admin" : "employee",
-    targetId: recipientId === "admin" ? "" : recipientId,
-    type: "info",
-    title: "Novi izveštaj zaposlenog",
-    message: `${activeEmployee.name} je upisao/la sate i dnevni izveštaj za ${formatDate(date)}.`,
-  });
+  const dailyReport = state.employeeReports.find((report) => report.employeeId === activeEmployee.id && report.date === date);
+  if (dailyReport) {
+    dailyReport.minutes = Number(dailyReport.minutes || Number(dailyReport.hours || 0) * 60) + minutes;
+    dailyReport.hours = Math.round((dailyReport.minutes / 60) * 10000) / 10000;
+    dailyReport.activityName = "Dnevni zbir aktivnosti";
+    dailyReport.note = [dailyReport.note, formData.get("note")].filter(Boolean).join(" | ");
+    dailyReport.positive = [dailyReport.positive, formData.get("positive")].filter(Boolean).join(" | ");
+    dailyReport.negative = [dailyReport.negative, formData.get("negative")].filter(Boolean).join(" | ");
+    dailyReport.updatedAt = new Date().toISOString();
+  } else {
+    state.employeeReports.unshift({
+      id: crypto.randomUUID(), employeeId: activeEmployee.id, recipientId, date,
+      title: "Dnevni izveštaj", hours: Math.round((minutes / 60) * 10000) / 10000, minutes,
+      activityId: activity.id, activityName: activity.name, activityCategory: activity.category || "Ostalo",
+      clientId: client?.id || "", clientName: client?.name || "", positive: formData.get("positive"),
+      negative: formData.get("negative"), note: formData.get("note"), createdAt: new Date().toISOString(),
+    });
+  }
   saveState();
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
@@ -1396,8 +1573,11 @@ document.getElementById("ackLateBtn")?.addEventListener("click", () => {
 });
 
 document.getElementById("logoutEmployee")?.addEventListener("click", () => {
-  localStorage.removeItem(EMPLOYEE_SESSION_KEY);
-  showEmployeeAuth(null);
+  localStorage.removeItem(employeeSessionKey);
+  document.documentElement.classList.remove("employee-session-cached");
+  activeEmployee = null;
+  document.getElementById("employeeApp").hidden = true;
+  document.getElementById("employeeLoginScreen").hidden = false;
   document.getElementById("employeeLoginForm").reset();
 });
 
@@ -1422,23 +1602,36 @@ syncEmployeeInstallButton();
 
 document.getElementById("installEmployeeAppBtn")?.addEventListener("click", async () => {
   if (!deferredInstallPrompt) {
-    const alertBox = document.getElementById("employeeMissingTimeAlert");
-    if (alertBox) {
-      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-      alertBox.innerHTML = isIOS
-        ? `<strong>Dodaj na početni ekran</strong><span>U Safariju pritisni Deli, pa izaberi "Dodaj na početni ekran".</span>`
-        : `<strong>Instalacija aplikacije</strong><span>Otvori meni browsera i izaberi "Instaliraj aplikaciju" ili "Dodaj na početni ekran".</span>`;
-      alertBox.hidden = false;
-      window.setTimeout(() => {
-        alertBox.hidden = true;
-      }, 9000);
-    }
+    const dialog = document.getElementById("employeeInstallDialog");
+    const title = document.getElementById("employeeInstallDialogTitle");
+    const steps = document.getElementById("employeeInstallDialogSteps");
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (!dialog || !title || !steps) return;
+    title.textContent = isIOS ? "Dodaj na početni ekran" : "Instaliraj Marketizo app";
+    steps.innerHTML = isIOS
+      ? `<div><strong>1</strong><span>Otvori ovu stranicu u <b>Safariju</b>.</span></div>
+         <div><strong>2</strong><span>Pritisni dugme <b>Deli</b> pri dnu ekrana.</span></div>
+         <div><strong>3</strong><span>Izaberi <b>Dodaj na početni ekran</b>, pa potvrdi sa <b>Dodaj</b>.</span></div>`
+      : `<div><strong>1</strong><span>Otvori meni browsera <b>⋮</b>.</span></div>
+         <div><strong>2</strong><span>Izaberi <b>Instaliraj aplikaciju</b> ili <b>Dodaj na početni ekran</b>.</span></div>
+         <div><strong>3</strong><span>Potvrdi instalaciju. Marketizo će se pojaviti među aplikacijama.</span></div>`;
+    dialog.showModal();
     return;
   }
   deferredInstallPrompt.prompt();
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
   syncEmployeeInstallButton();
+});
+
+function closeEmployeeInstallGuide() {
+  document.getElementById("employeeInstallDialog")?.close();
+}
+
+document.getElementById("closeEmployeeInstallDialog")?.addEventListener("click", closeEmployeeInstallGuide);
+document.getElementById("confirmEmployeeInstallGuide")?.addEventListener("click", closeEmployeeInstallGuide);
+document.getElementById("employeeInstallDialog")?.addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) closeEmployeeInstallGuide();
 });
 
 document.querySelectorAll("[data-dashboard-section-button]").forEach((button) => {
@@ -1476,14 +1669,45 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 });
 
 setupPasswordToggles();
+if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
 renderLoginHint();
-restoreEmployeeSession();
-onlineHydrationPromise = hydrateOnlineState().then(() => {
-  restoreEmployeeSession();
+const initialEmployeeSession = getEmployeeSession();
+showCachedEmployeeSession(initialEmployeeSession);
+onlineHydrationPromise = hydrateOnlineState();
+(async () => {
+  let restored = false;
+  if (initialEmployeeSession?.token) {
+    await Promise.race([
+      onlineHydrationPromise,
+      new Promise((resolve) => window.setTimeout(resolve, 500)),
+    ]).catch(() => null);
+    restored = await restoreEmployeeSession();
+  }
+  if (!restored) {
+    document.documentElement.classList.remove("employee-session-cached");
+    document.getElementById("employeeApp").hidden = true;
+    document.getElementById("employeeLoginScreen").hidden = false;
+  }
+  await onlineHydrationPromise.catch(() => null);
   window.MarketizoRemote?.startPolling((payload) => {
     const activeId = activeEmployee?.id;
     state = loadState(payload);
     activeEmployee = (state.employees || []).find((employee) => employee.id === activeId) || activeEmployee;
     if (activeEmployee) renderEmployeePortal();
   });
-}).catch(() => null);
+})().catch(() => {
+  document.documentElement.classList.remove("employee-session-cached");
+  document.getElementById("employeeApp").hidden = true;
+  document.getElementById("employeeLoginScreen").hidden = false;
+});
+
+// Keep employee navigation functional after portal content is rendered or refreshed.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-employee-tab]");
+  if (!button) return;
+  const target = document.getElementById(button.dataset.employeeTab);
+  if (!target) return;
+  document.querySelectorAll("[data-employee-tab]").forEach((item) => item.classList.toggle("active", item === button));
+  document.querySelectorAll(".client-tab").forEach((item) => item.classList.toggle("active", item === target));
+  setText("employeePageTitle", button.textContent.trim());
+});

@@ -18,45 +18,18 @@ const packageConfig = {
   Custom: { price: 0, months: 3 },
 };
 const starterClientNames = new Set(["Marketizo Digital", "Dental Studio Wien", "Auto Detailing Zagreb", "Physio Klinik München", "Beauty Laser Beograd"]);
-const EMPLOYEE_PASSWORD_PEPPER = "marketizo-employee-password-v1";
-const EMPLOYEE_DEFAULT_PASSWORD = "123456";
-const EMPLOYEE_PASSWORD_SENTINEL = "••••••••";
-
-function hashEmployeePassword(password) {
-  const input = `${EMPLOYEE_PASSWORD_PEPPER}|${String(password || "").trim()}`;
-  let hashA = 2166136261;
-  let hashB = 16777619;
-  for (let i = 0; i < input.length; i += 1) {
-    const code = input.charCodeAt(i);
-    hashA ^= code;
-    hashA = Math.imul(hashA, 16777619);
-    hashB ^= code + 17;
-    hashB = Math.imul(hashB, 2166136261);
-  }
-  return `h1:${(hashA >>> 0).toString(16).padStart(8, "0")}-h2:${(hashB >>> 0).toString(16).padStart(8, "0")}`;
-}
-
-function resolveEmployeePasswordHash(employee = {}) {
-  const provided = String(employee.passwordHash || "").trim();
-  const legacy = String(employee.password || "").trim();
-  if (provided) return provided;
-  if (legacy) return hashEmployeePassword(legacy);
-  return hashEmployeePassword(EMPLOYEE_DEFAULT_PASSWORD);
-}
-
-const EMPLOYEE_DEFAULT_PASSWORD_HASH = hashEmployeePassword(EMPLOYEE_DEFAULT_PASSWORD);
 
 const defaultEmployeeProfiles = [
   {
     id: "emp-miljan",
     name: "Miljan Marinjes",
     email: "miljan@marketizo.local",
-    passwordHash: EMPLOYEE_DEFAULT_PASSWORD_HASH,
+    password: "",
     position: "Founder / Strategija",
     startDate: "2023-07-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: true,
     leaderId: "",
@@ -66,12 +39,12 @@ const defaultEmployeeProfiles = [
     id: "emp-ivana",
     name: "Ivana Marinjes",
     email: "ivana@marketizo.local",
-    passwordHash: EMPLOYEE_DEFAULT_PASSWORD_HASH,
+    password: "",
     position: "Co-founder / Operativa",
     startDate: "2023-07-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: true,
     leaderId: "",
@@ -81,12 +54,12 @@ const defaultEmployeeProfiles = [
     id: "emp-aleksandar",
     name: "Aleksandar Bugarin",
     email: "aleksandar@marketizo.local",
-    passwordHash: EMPLOYEE_DEFAULT_PASSWORD_HASH,
+    password: "",
     position: "Scenarista",
     startDate: "2026-01-15",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: false,
     leaderId: "emp-ivana",
@@ -96,12 +69,12 @@ const defaultEmployeeProfiles = [
     id: "emp-luka",
     name: "Luka Cvorovic",
     email: "luka@marketizo.local",
-    passwordHash: EMPLOYEE_DEFAULT_PASSWORD_HASH,
+    password: "",
     position: "Editor",
     startDate: "2026-02-01",
     salary: 0,
     weeklyHours: 40,
-    vacationDays: 26,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: false,
     leaderId: "emp-ivana",
@@ -111,12 +84,12 @@ const defaultEmployeeProfiles = [
     id: "emp-nikola",
     name: "Nikola Marjanovic",
     email: "nikola@marketizo.local",
-    passwordHash: EMPLOYEE_DEFAULT_PASSWORD_HASH,
+    password: "",
     position: "Editor",
     startDate: "2026-03-01",
     salary: 0,
-    weeklyHours: 40,
-    vacationDays: 26,
+    weeklyHours: 38.5,
+    vacationDays: 25,
     giftDays: 1,
     isLeader: false,
     leaderId: "emp-ivana",
@@ -464,6 +437,7 @@ const importedClients = [
 ];
 
 let state = loadState();
+let onlineHydrationComplete = window.location.protocol === "file:";
 
 function applyAugust2026FinanceCorrections() {
   state.backup = state.backup || {};
@@ -699,6 +673,299 @@ function applySladjan2026BalanceCorrections() {
   return true;
 }
 
+function applyHazim2026ActualsV1() {
+  state.backup = state.backup || {};
+  if (state.backup.hazim2026ActualsV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "hazim hadzic");
+  if (!employee) return false;
+
+  employee.weeklyHours = 30;
+  employee.weeklyHoursByMonth = {
+    ...(employee.weeklyHoursByMonth || {}),
+    "2026-01": 20,
+    "2026-02": 20,
+    "2026-03": 20,
+    "2026-04": 20,
+    "2026-05": 20,
+    "2026-06": 20,
+    "2026-07": 30,
+    "2026-08": 30,
+  };
+  employee.monthlyAbsenceDays = {
+    ...(employee.monthlyAbsenceDays || {}),
+    "2026-04": { "Godišnji odmor": 4 },
+    "2026-05": { "Poklon dan": 1 },
+    "2026-06": { "Godišnji odmor": 1 },
+    "2026-07": { "Godišnji odmor": 5 },
+    "2026-08": { "Godišnji odmor": 5 },
+  };
+
+  const monthlyHours = {
+    "2026-01": 88,
+    "2026-02": 82,
+    "2026-03": 82,
+    "2026-04": 60,
+    "2026-05": 80,
+    "2026-06": 120,
+    "2026-07": 108,
+    "2026-08": 96,
+  };
+  state.employeeWorkLogs = state.employeeWorkLogs || [];
+  Object.entries(monthlyHours).forEach(([monthKey, targetHours]) => {
+    state.employeeWorkLogs = state.employeeWorkLogs.filter((log) => !(
+      log.employeeId === employee.id && String(log.date || "").startsWith(monthKey)
+      && (log.activityName === "Migracija iz ClickUp-a" || log.note === "Hazim - usklađen mesečni zbir")
+    ));
+    const existingHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
+    if (Math.abs(correctionHours) < 0.01) return;
+    const [year, month] = monthKey.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    state.employeeWorkLogs.push({
+      id: `hazim-actual-${monthKey}`,
+      employeeId: employee.id,
+      date: `${monthKey}-${String(lastDay).padStart(2, "0")}`,
+      hours: correctionHours,
+      minutes: Math.round(correctionHours * 60),
+      activityId: "",
+      activityName: "Prenos stvarnog mesečnog zbira",
+      activityCategory: "Evidencija",
+      clientId: "",
+      clientName: "",
+      type: "Rad",
+      note: "Hazim - usklađen mesečni zbir",
+      locked: true,
+      submittedAt: new Date().toISOString(),
+    });
+  });
+  state.backup.hazim2026ActualsV1 = true;
+  return true;
+}
+
+function applyMilica2026ActualsV1() {
+  state.backup = state.backup || {};
+  if (state.backup.milica2026ActualsV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "milica blagojevic");
+  if (!employee) return false;
+
+  employee.startDate = "2026-07-06";
+  employee.weeklyHours = 38.5;
+  employee.weeklyHoursByMonth = {
+    ...(employee.weeklyHoursByMonth || {}),
+    "2026-07": 38.5,
+    "2026-08": 38.5,
+  };
+  employee.monthlyAbsenceDays = {
+    ...(employee.monthlyAbsenceDays || {}),
+    "2026-08": { "Godišnji odmor": 7 },
+  };
+
+  state.employeeAbsences = state.employeeAbsences || [];
+  const augustVacation = state.employeeAbsences.find((absence) =>
+    absence.employeeId === employee.id
+    && absence.type === "Godišnji odmor"
+    && String(absence.startDate || "").startsWith("2026-08")
+  );
+  const vacationData = {
+    employeeId: employee.id,
+    type: "Godišnji odmor",
+    startDate: "2026-08-06",
+    endDate: "2026-08-14",
+    note: "Milica - potvrđen godišnji odmor",
+    status: "Odobreno",
+  };
+  if (augustVacation) Object.assign(augustVacation, vacationData);
+  else state.employeeAbsences.push({ id: "milica-vacation-2026-08", ...vacationData });
+
+  const monthlyHours = { "2026-07": 154, "2026-08": 94.5 };
+  state.employeeWorkLogs = state.employeeWorkLogs || [];
+  Object.entries(monthlyHours).forEach(([monthKey, targetHours]) => {
+    state.employeeWorkLogs = state.employeeWorkLogs.filter((log) => !(
+      log.employeeId === employee.id && String(log.date || "").startsWith(monthKey)
+      && (log.activityName === "Migracija iz ClickUp-a" || log.note === "Milica - usklađen mesečni zbir")
+    ));
+    const existingHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
+    if (Math.abs(correctionHours) < 0.01) return;
+    const [year, month] = monthKey.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    state.employeeWorkLogs.push({
+      id: `milica-actual-${monthKey}`,
+      employeeId: employee.id,
+      date: `${monthKey}-${String(lastDay).padStart(2, "0")}`,
+      hours: correctionHours,
+      minutes: Math.round(correctionHours * 60),
+      activityId: "",
+      activityName: "Prenos stvarnog mesečnog zbira",
+      activityCategory: "Evidencija",
+      clientId: "",
+      clientName: "",
+      type: "Rad",
+      note: "Milica - usklađen mesečni zbir",
+      locked: true,
+      submittedAt: new Date().toISOString(),
+    });
+  });
+  state.backup.milica2026ActualsV1 = true;
+  return true;
+}
+
+function applyAleksa2026ActualsV1() {
+  state.backup = state.backup || {};
+  if (state.backup.aleksa2026ActualsV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "aleksa damjanovic");
+  if (!employee) return false;
+
+  employee.weeklyHours = 38.5;
+  employee.weeklyHoursByMonth = {
+    ...(employee.weeklyHoursByMonth || {}),
+    "2026-06": 20,
+    "2026-07": 20,
+    "2026-08": 38.5,
+  };
+
+  const monthlyHours = { "2026-06": 39.5, "2026-07": 91, "2026-08": 155.5 };
+  state.employeeWorkLogs = state.employeeWorkLogs || [];
+  Object.entries(monthlyHours).forEach(([monthKey, targetHours]) => {
+    state.employeeWorkLogs = state.employeeWorkLogs.filter((log) => !(
+      log.employeeId === employee.id && String(log.date || "").startsWith(monthKey)
+      && (log.activityName === "Migracija iz ClickUp-a" || log.note === "Aleksa - usklađen mesečni zbir")
+    ));
+    const existingHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
+    if (Math.abs(correctionHours) < 0.01) return;
+    const [year, month] = monthKey.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    state.employeeWorkLogs.push({
+      id: `aleksa-actual-${monthKey}`,
+      employeeId: employee.id,
+      date: `${monthKey}-${String(lastDay).padStart(2, "0")}`,
+      hours: correctionHours,
+      minutes: Math.round(correctionHours * 60),
+      activityId: "",
+      activityName: "Prenos stvarnog mesečnog zbira",
+      activityCategory: "Evidencija",
+      clientId: "",
+      clientName: "",
+      type: "Rad",
+      note: "Aleksa - usklađen mesečni zbir",
+      locked: true,
+      submittedAt: new Date().toISOString(),
+    });
+  });
+  state.backup.aleksa2026ActualsV1 = true;
+  return true;
+}
+
+function applyNikola2026BalanceV1() {
+  state.backup = state.backup || {};
+  if (state.backup.nikola2026BalanceV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employee = (state.employees || []).find((item) => normalize(item.name) === "nikola marjanovic");
+  if (!employee) return false;
+
+  employee.weeklyHours = 38.5;
+  employee.weeklyHoursByMonth = {
+    ...(employee.weeklyHoursByMonth || {}),
+    "2026-01": 38.5,
+    "2026-02": 38.5,
+    "2026-03": 38.5,
+    "2026-04": 38.5,
+    "2026-05": 38.5,
+    "2026-06": 38.5,
+    "2026-07": 38.5,
+    "2026-08": 38.5,
+  };
+
+  state.employeeAbsences = state.employeeAbsences || [];
+  state.employeeAbsences = state.employeeAbsences.filter((absence) => !(
+    absence.employeeId === employee.id
+    && absence.type === "Godišnji odmor"
+    && String(absence.startDate || "").startsWith("2026-04")
+  ));
+  state.employeeAbsences.push({
+    id: "nikola-vacation-2026-04",
+    employeeId: employee.id,
+    type: "Godišnji odmor",
+    startDate: "2026-04-09",
+    endDate: "2026-04-16",
+    note: "Nikola - potvrđen godišnji odmor koji nije bio evidentiran u ClickUp-u",
+    status: "Odobreno",
+  });
+
+  state.backup.nikola2026BalanceV1 = true;
+  return true;
+}
+
+function applyConfirmedAbsencesV2() {
+  state.backup = state.backup || {};
+  if (state.backup.confirmedAbsencesV2) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const employeeId = (name) => (state.employees || []).find((employee) => normalize(employee.name) === name)?.id;
+  const records = [
+    ["aleksandar bugarin", "Godišnji odmor", "2026-05-11", "2026-05-15"],
+    ["aleksandar bugarin", "Godišnji odmor", "2026-07-01", "2026-07-09"],
+    ["aleksandar bugarin", "Godišnji odmor", "2026-06-03", "2026-06-09"],
+    ["aleksandar bugarin", "Godišnji odmor", "2026-08-27", "2026-09-01"],
+    ["luka cvorovic", "Godišnji odmor", "2026-08-17", "2026-08-24"],
+    ["luka cvorovic", "Godišnji odmor", "2026-05-01", "2026-05-05"],
+    ["luka cvorovic", "Godišnji odmor", "2025-12-30", "2026-01-05"],
+    ["luka nikolic", "Godišnji odmor", "2026-06-29", "2026-07-03"],
+    ["luka nikolic", "Godišnji odmor", "2026-08-05", "2026-08-18"],
+    ["nikola marjanovic", "Godišnji odmor", "2026-04-09", "2026-04-16"],
+    ["nikola marjanovic", "Godišnji odmor", "2026-08-03", "2026-08-14"],
+    ["nikola marjanovic", "Godišnji odmor", "2025-12-04", "2025-12-09"],
+    ["hazim hadzic", "Godišnji odmor", "2026-04-27", "2026-04-30"],
+    ["hazim hadzic", "Godišnji odmor", "2026-06-23", "2026-06-23"],
+    ["hazim hadzic", "Godišnji odmor", "2026-08-10", "2026-08-14"],
+    ["hazim hadzic", "Godišnji odmor", "2026-07-13", "2026-07-17"],
+    ["sladjan simic", "Poklon dan", "2026-04-14", "2026-04-14"],
+    ["sladjan simic", "Godišnji odmor", "2026-08-10", "2026-08-21"],
+    ["dejan klement", "Godišnji odmor", "2026-06-22", "2026-07-03"],
+    ["dejan klement", "Godišnji odmor", "2025-12-09", "2025-12-18"],
+  ].map(([name, type, startDate, endDate], index) => ({
+    id: `confirmed-absence-${index + 1}`,
+    employeeId: employeeId(name),
+    type,
+    startDate,
+    endDate,
+    note: "Potvrđeno prema evidenciji odmora",
+    status: "Odobreno",
+  })).filter((record) => record.employeeId);
+
+  const affectedEmployeeIds = new Set(records.map((record) => record.employeeId));
+  state.employeeAbsences = (state.employeeAbsences || []).filter((absence) => !(
+    affectedEmployeeIds.has(absence.employeeId)
+    && ["Godišnji odmor", "Poklon dan"].includes(absence.type)
+    && ["2025", "2026"].includes(String(absence.startDate || "").slice(0, 4))
+  ));
+  state.employeeAbsences.push(...records);
+  ["aleksandar bugarin", "luka nikolic"].forEach((name) => {
+    const employee = (state.employees || []).find((item) => normalize(item.name) === name);
+    if (!employee) return;
+    employee.weeklyHours = 20;
+    employee.weeklyHoursByMonth = Object.fromEntries(
+      Object.keys(employee.weeklyHoursByMonth || {}).map((monthKey) => [monthKey, 20])
+    );
+  });
+  state.backup.confirmedAbsencesV2 = true;
+  return true;
+}
+
 function applyProductionDataCleanupV1() {
   state.backup = state.backup || {};
   if (state.backup.productionDataCleanupV1) return false;
@@ -780,6 +1047,56 @@ function applyQa20260827Cleanup() {
   return true;
 }
 
+function applyQa20260828Cleanup() {
+  state.backup = state.backup || {};
+  if (state.backup.qa20260828CleanupV1) return false;
+  const marker = "qa-20260828";
+  const containsMarker = (value) => String(value || "").toLowerCase().includes(marker);
+  const qaEmployeeIds = new Set((state.employees || [])
+    .filter((item) => containsMarker(item.name) || containsMarker(item.email))
+    .map((item) => item.id));
+
+  state.employees = (state.employees || []).filter((item) => !qaEmployeeIds.has(item.id));
+  state.employeeLeaderAssignments = (state.employeeLeaderAssignments || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !qaEmployeeIds.has(item.leaderId));
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.note) && !containsMarker(item.activityName));
+  state.employeeAbsences = (state.employeeAbsences || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.note));
+  state.employeeLateRecords = (state.employeeLateRecords || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.reason));
+  state.employeeGoals = (state.employeeGoals || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.title) && !containsMarker(item.target));
+  state.employeeRatings = (state.employeeRatings || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.comment) && !containsMarker(item.reviewer));
+  state.employeeRecognitions = (state.employeeRecognitions || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.message) && !containsMarker(item.author));
+  state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.title) && !containsMarker(item.note));
+  state.employeeReports = (state.employeeReports || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.note) && !containsMarker(item.activityName));
+  state.employeeDocuments = (state.employeeDocuments || []).filter((item) => !qaEmployeeIds.has(item.employeeId) && !containsMarker(item.fileName));
+  state.notifications = (state.notifications || []).filter((item) => !qaEmployeeIds.has(item.targetId) && !containsMarker(item.key) && !containsMarker(item.title) && !containsMarker(item.message));
+  state.backup.qa20260828CleanupV1 = true;
+  return true;
+}
+
+function applyQa20260828CleanupV2() {
+  state.backup = state.backup || {};
+  if (state.backup.qa20260828CleanupV2) return false;
+  const qaEmployeeId = "1b8d4f92-b91b-4469-bf17-15a6a3d1b46c";
+  const containsQaMarker = (value) => {
+    const text = String(value || "").toLowerCase();
+    return text.includes("qa-20260828") || text.includes("qa test 20260828");
+  };
+
+  state.employees = (state.employees || []).filter((item) => item.id !== qaEmployeeId && !containsQaMarker(item.name) && !containsQaMarker(item.email));
+  state.employeeLeaderAssignments = (state.employeeLeaderAssignments || []).filter((item) => item.employeeId !== qaEmployeeId && item.leaderId !== qaEmployeeId);
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.note) && !containsQaMarker(item.activityName));
+  state.employeeAbsences = (state.employeeAbsences || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.note));
+  state.employeeLateRecords = (state.employeeLateRecords || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.reason));
+  state.employeeGoals = (state.employeeGoals || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.title) && !containsQaMarker(item.target));
+  state.employeeRatings = (state.employeeRatings || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.comment) && !containsQaMarker(item.reviewer));
+  state.employeeRecognitions = (state.employeeRecognitions || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.message) && !containsQaMarker(item.author));
+  state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.title) && !containsQaMarker(item.note));
+  state.employeeReports = (state.employeeReports || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.note) && !containsQaMarker(item.activityName));
+  state.employeeDocuments = (state.employeeDocuments || []).filter((item) => item.employeeId !== qaEmployeeId && !containsQaMarker(item.fileName));
+  state.notifications = (state.notifications || []).filter((item) => item.targetId !== qaEmployeeId && !containsQaMarker(item.key) && !containsQaMarker(item.title) && !containsQaMarker(item.message));
+  state.backup.qa20260828CleanupV2 = true;
+  return true;
+}
+
 function applyEmployeeActivityCatalogV1() {
   state.backup = state.backup || {};
   if (state.backup.employeeActivityCatalogV1) return false;
@@ -804,8 +1121,15 @@ applyAugust2026FinanceCorrections();
 applyAugust2026ClickUpInvoiceSyncV2();
 applyMonthlyInvoiceRostersV5();
 applySladjan2026BalanceCorrections();
+applyHazim2026ActualsV1();
+applyMilica2026ActualsV1();
+applyAleksa2026ActualsV1();
+applyNikola2026BalanceV1();
+applyConfirmedAbsencesV2();
 applyProductionDataCleanupV1();
 applyQa20260827Cleanup();
+applyQa20260828Cleanup();
+applyQa20260828CleanupV2();
 applyEmployeeActivityCatalogV1();
 saveState({ remote: false });
 let activeFilter = "all";
@@ -822,6 +1146,7 @@ let employeeMonthFilter = currentMonthKey();
 let employeeStatusFilter = "all";
 let employeeWorkPersonFilter = "all";
 let employeeWorkMonthFilter = currentMonthKey();
+let employeeWorkClientFilter = "all";
 const requestedEmployeeId = new URLSearchParams(location.search).get("employee");
 let selectedEmployeeId = state.employees?.some((employee) => employee.id === requestedEmployeeId)
   ? requestedEmployeeId
@@ -869,7 +1194,7 @@ function loginSlug(value) {
 
 function withLoginDefaults(client) {
   client.loginEmail = client.loginEmail || `${loginSlug(client.name)}@marketizo.local`;
-  client.loginPassword = client.loginPassword || "123456";
+  client.loginPassword = client.loginPassword || "";
   return client;
 }
 
@@ -889,34 +1214,42 @@ function monthlyInvoice(client, monthKey = selectedMonthKey()) {
   };
 }
 
-function clientFinanceStartMonth(client) {
-  return client.financeStartMonth
-    || String(client.startDate || "").slice(0, 7)
-    || String(client.createdAt || "").slice(0, 7);
+function invoicePaymentEntries(invoice) {
+  return Array.isArray(invoice.payments) ? invoice.payments : [];
+}
+
+function invoicePaidAmount(client, monthKey = selectedMonthKey()) {
+  const invoice = monthlyInvoice(client, monthKey);
+  const payments = invoicePaymentEntries(invoice);
+  if (payments.length) return payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  if (Number(invoice.paidAmount || 0) > 0) return Number(invoice.paidAmount);
+  return invoice.paymentStatus === "Plaćeno" ? invoiceAmount(client, monthKey) : 0;
+}
+
+function invoiceRemainingAmount(client, monthKey = selectedMonthKey()) {
+  return Math.max(0, invoiceAmount(client, monthKey) - invoicePaidAmount(client, monthKey));
+}
+
+function escapeInvoiceText(value) {
+  return String(value || "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 }
 
 function clientsForInvoiceMonth(clients, monthKey) {
-  return clients.filter((client) => {
-    if (normalizeClientStatus(client.status) === "Arhiviran") return false;
-    if (client.invoices && client.invoices[monthKey]) return true;
-    const financeStartMonth = clientFinanceStartMonth(client);
-    if (!financeStartMonth || monthKey < financeStartMonth || normalizeClientStatus(client.status) !== "Aktivan") return false;
-    client.invoices = client.invoices || {};
-    client.invoices[monthKey] = {
-      invoiceStatus: "Nije poslat",
-      paymentStatus: "Nije plaćeno",
-      paymentMethod: client.paymentMethod || "Firma",
-      amount: Number(client.revenue || 0),
-      sentAt: "",
-      paidAt: "",
-    };
-    return true;
-  });
+  return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]));
+}
+
+function financeClientsForMonth(clients, monthKey) {
+  return clientsForInvoiceMonth(clients, monthKey).filter((client) => client.status !== "Arhiviran");
 }
 
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
   const invoice = monthlyInvoice(client, monthKey);
-  return Number(invoice.amount ?? client.revenue ?? 0);
+  const clientRevenue = Number(client.revenue || 0);
+  if (monthKey === currentDateKey().slice(0, 7) && clientRevenue > 0) return clientRevenue;
+  const storedAmount = Number(invoice.amount || 0);
+  if (storedAmount > 0) return storedAmount;
+  if (clientRevenue > 0) return clientRevenue;
+  return Number(packageConfig[normalizePackage(client.package)]?.price || 0);
 }
 
 function groupInvoiceSum(clients, field, monthKey) {
@@ -1011,14 +1344,14 @@ function migrateState(data) {
     id: employee.id || crypto.randomUUID(),
     name: "",
     email: "",
-    passwordHash: resolveEmployeePasswordHash(employee),
+    password: "",
     position: "",
     startDate: "",
     salary: 0,
     weeklyHours: 40,
     openingHourBalance: 0,
     openingBalanceMonth: "",
-    vacationDays: 26,
+    vacationDays: 25,
     openingVacationUsed: 0,
     giftDays: 1,
     isLeader: false,
@@ -1028,11 +1361,10 @@ function migrateState(data) {
     weeklyHours: parseNumber(employee.weeklyHours || 40, 40),
     openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
     openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
-    vacationDays: parseNumber(employee.vacationDays || 26, 26),
+    vacationDays: parseNumber(employee.vacationDays || 25, 26),
     openingVacationUsed: parseNumber(employee.openingVacationUsed || 0, 0),
     giftDays: parseNumber(employee.giftDays || 1, 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
-    password: undefined,
   }));
   const employeeAbsences = (data.employeeAbsences || starterData.employeeAbsences || []).map((absence) => ({
     id: absence.id || crypto.randomUUID(),
@@ -1262,38 +1594,51 @@ function isClientLeadStatusContacted(status) {
 }
 
 function saveState(options = {}) {
-  const remoteState = structuredClone(state);
-  state.employees?.forEach((employee) => {
-    delete employee.password;
-    delete employee.passwordHash;
-  });
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
-  if (options.remote !== false) window.MarketizoRemote?.save(remoteState);
+  if (options.remote !== false && onlineHydrationComplete) window.MarketizoRemote?.save(state);
 }
 
 async function hydrateOnlineState() {
-  if (!window.MarketizoRemote || window.location.protocol === "file:") return;
-  const result = await window.MarketizoRemote.load();
+  if (!window.MarketizoRemote || window.location.protocol === "file:") {
+    onlineHydrationComplete = true;
+    return;
+  }
+  let result;
+  try {
+    result = await window.MarketizoRemote.load();
+  } catch (error) {
+    console.error("Online state load failed", error);
+    showToast("Online baza nije dostupna", "Podaci nisu poslati da se postojeća baza ne bi prepisala.", "warn");
+    return;
+  }
   if (result.payload) {
     state = loadState(result.payload);
     const financeCorrected = applyAugust2026FinanceCorrections();
     const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
     const invoiceRostersCorrected = applyMonthlyInvoiceRostersV5();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
+    const hazimCorrected = applyHazim2026ActualsV1();
+    const nikolaCorrected = applyNikola2026BalanceV1();
+    const confirmedAbsencesAdded = applyConfirmedAbsencesV2();
     const productionDataCleaned = applyProductionDataCleanupV1();
     const qaDataCleaned = applyQa20260827Cleanup();
+    const qa20260828DataCleaned = applyQa20260828Cleanup();
+    const qa20260828DataCleanedV2 = applyQa20260828CleanupV2();
     const activityCatalogAdded = applyEmployeeActivityCatalogV1();
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || productionDataCleaned || qaDataCleaned || activityCatalogAdded });
+    onlineHydrationComplete = true;
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || hazimCorrected || nikolaCorrected || confirmedAbsencesAdded || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || qa20260828DataCleanedV2 || activityCatalogAdded });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
   }
   if (result.configured && result.empty) {
+    onlineHydrationComplete = true;
     saveState();
     showToast("Online baza", "Zajednička baza je inicijalizovana.", "ok");
     return;
   }
   if (!result.configured) {
+    onlineHydrationComplete = true;
     showToast("Online baza nije povezana", "Dodaj Supabase env varijable u Vercel da svi uređaji vide iste podatke.", "warn");
   }
 }
@@ -1450,12 +1795,12 @@ function clientLeadStats(client) {
 function renderAdminPanel() {
   const scopedClients = visibleClients();
   const monthKey = monthFilter || currentMonthKey();
-  const active = clientsForInvoiceMonth(scopedClients, monthKey);
+  const active = financeClientsForMonth(scopedClients, monthKey);
   const mrr = active.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
   const paidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus === "Plaćeno");
   const unpaidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus !== "Plaćeno");
-  const paidTotal = paidClients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
-  const unpaidTotal = unpaidClients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
+  const paidTotal = active.reduce((sum, client) => sum + invoicePaidAmount(client, monthKey), 0);
+  const unpaidTotal = active.reduce((sum, client) => sum + invoiceRemainingAmount(client, monthKey), 0);
   const unsentClients = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
 
   setText("adminTotalClients", active.length);
@@ -1518,7 +1863,7 @@ function showAdminNotificationPopups(notifications) {
   const shown = JSON.parse(sessionStorage.getItem("shownAdminNotifications") || "[]");
   const nextShown = new Set(shown);
   notifications
-    .filter((notification) => notification.title === "Zahtev za odmor" && !nextShown.has(notification.key || notification.id))
+    .filter((notification) => !isNotificationHidden(notification) && !nextShown.has(notification.key || notification.id))
     .slice(0, 3)
     .forEach((notification) => {
       showToast(notification.title, notification.message, notification.type);
@@ -1709,6 +2054,9 @@ function renderMonthlyInvoices(clients, monthKey) {
   ];
   const renderClient = (client) => {
       const invoice = monthlyInvoice(client, monthKey);
+      const paidAmount = invoicePaidAmount(client, monthKey);
+      const remainingAmount = invoiceRemainingAmount(client, monthKey);
+      const payments = invoicePaymentEntries(invoice);
       return `<div class="invoice-compact-row">
         <div class="invoice-compact-client"><strong>${client.name}</strong><span>${client.country} · naplata ${client.billingDay || 1}.</span></div>
         <strong class="invoice-compact-amount">${currency.format(invoiceAmount(client, monthKey))}</strong>
@@ -1721,6 +2069,7 @@ function renderMonthlyInvoices(clients, monthKey) {
         <label>Plaćanje
           <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="paymentStatus">
             ${option("Nije plaćeno", invoice.paymentStatus)}
+            ${option("Delimično", invoice.paymentStatus)}
             ${option("Plaćeno", invoice.paymentStatus)}
             ${option("Kasni", invoice.paymentStatus)}
           </select>
@@ -1731,6 +2080,14 @@ function renderMonthlyInvoices(clients, monthKey) {
             ${option("Keš", invoice.paymentMethod)}
           </select>
         </label>
+        <div class="invoice-payment-balance"><strong>Uplaćeno ${currency.format(paidAmount)}</strong><span>Preostalo ${currency.format(remainingAmount)}</span></div>
+        <form class="invoice-payment-form" data-invoice-payment-form="${client.id}">
+          <label>Datum<input name="date" type="date" value="${currentDateKey()}" required /></label>
+          <label>Iznos<input name="amount" type="number" min="0.01" step="0.01" max="${remainingAmount || invoiceAmount(client, monthKey)}" required /></label>
+          <label>Komentar<input name="note" type="text" maxlength="160" placeholder="Npr. prva rata" /></label>
+          <button class="secondary-button" type="submit">Dodaj uplatu</button>
+        </form>
+        <div class="invoice-payment-history">${payments.length ? payments.map((payment) => `<div><span>${formatDate(payment.date)} · ${currency.format(Number(payment.amount || 0))}${payment.note ? ` · ${escapeInvoiceText(payment.note)}` : ""}</span><button type="button" data-delete-invoice-payment="${payment.id}" data-invoice-client="${client.id}">Obriši</button></div>`).join("") : `<small>Nema pojedinačnih uplata.</small>`}</div>
       </div>`;
   };
   const sorted = [...clients].sort((a, b) => invoiceAmount(b, monthKey) - invoiceAmount(a, monthKey));
@@ -1776,6 +2133,45 @@ function bindInvoiceControls() {
       saveState();
       renderAll();
       showToast("Sačuvano", `${client.name}: status računa je ažuriran.`, "ok");
+    });
+  });
+  document.querySelectorAll("[data-invoice-payment-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const client = state.clients.find((item) => item.id === form.dataset.invoicePaymentForm);
+      if (!client) return;
+      const invoice = monthlyInvoice(client);
+      const data = new FormData(form);
+      const amount = Number(data.get("amount") || 0);
+      const remaining = invoiceRemainingAmount(client);
+      if (amount <= 0 || amount > remaining + 0.001) {
+        showToast("Proveri iznos", `Možeš uneti najviše ${currency.format(remaining)}.`, "warn");
+        return;
+      }
+      invoice.payments = invoicePaymentEntries(invoice);
+      invoice.payments.push({ id: crypto.randomUUID(), date: data.get("date"), amount, note: String(data.get("note") || "").trim(), createdAt: new Date().toISOString() });
+      invoice.paidAmount = invoicePaidAmount(client);
+      invoice.paymentStatus = invoiceRemainingAmount(client) <= 0.001 ? "Plaćeno" : "Delimično";
+      invoice.paidAt = invoice.paymentStatus === "Plaćeno" ? new Date().toISOString() : "";
+      client.paymentStatus = invoice.paymentStatus;
+      saveState();
+      renderAll();
+      showToast("Uplata sačuvana", `${client.name}: evidentirano ${currency.format(amount)}.`, "ok");
+    });
+  });
+  document.querySelectorAll("[data-delete-invoice-payment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const client = state.clients.find((item) => item.id === button.dataset.invoiceClient);
+      if (!client || !confirm("Obrisati ovu uplatu?")) return;
+      const invoice = monthlyInvoice(client);
+      invoice.payments = invoicePaymentEntries(invoice).filter((payment) => payment.id !== button.dataset.deleteInvoicePayment);
+      invoice.paidAmount = invoice.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      invoice.paymentStatus = invoice.paidAmount >= invoiceAmount(client) ? "Plaćeno" : invoice.paidAmount > 0 ? "Delimično" : "Nije plaćeno";
+      invoice.paidAt = invoice.paymentStatus === "Plaćeno" ? new Date().toISOString() : "";
+      client.paymentStatus = invoice.paymentStatus;
+      saveState();
+      renderAll();
+      showToast("Uplata obrisana", `${client.name}: stanje računa je preračunato.`, "ok");
     });
   });
 }
@@ -2084,28 +2480,82 @@ function absenceWorkdays(absence) {
 function employeeYearAbsenceDays(employeeId, year, type) {
   const employee = employeeById(employeeId);
   const openingUsed = type === "Godišnji odmor" && year === Number(currentDateKey().slice(0, 4)) ? parseNumber(employee?.openingVacationUsed || 0) : 0;
-  return openingUsed + state.employeeAbsences
+  const overrides = employee?.monthlyAbsenceDays || {};
+  const overriddenMonths = new Set(Object.keys(overrides).filter((monthKey) => monthKey.startsWith(`${year}-`)));
+  const overriddenDays = [...overriddenMonths].reduce((sum, monthKey) => {
+    const monthValues = overrides[monthKey] || {};
+    return sum + (type ? parseNumber(monthValues[type] || 0) : Object.values(monthValues).reduce((monthSum, value) => monthSum + parseNumber(value || 0), 0));
+  }, 0);
+  return openingUsed + overriddenDays + state.employeeAbsences
     .filter((absence) => absence.employeeId === employeeId && absence.type === type && absence.status !== "Zatraženo")
     .reduce((sum, absence) => {
-      const days = absenceWorkdays(absence).filter((day) => day.startsWith(`${year}-`));
+      const days = absenceWorkdays(absence).filter((day) => day.startsWith(`${year}-`) && !overriddenMonths.has(day.slice(0, 7)));
       return sum + days.length;
     }, 0);
 }
 
+function vacationUtcDate(dateKey) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function vacationAnniversary(startDate, years) {
+  const start = vacationUtcDate(startDate);
+  const result = new Date(start);
+  result.setUTCFullYear(result.getUTCFullYear() + years);
+  return result;
+}
+
+function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
+  const annualAllowance = parseNumber(employee?.vacationDays || 25, 25);
+  if (!employee?.startDate) return { earned: annualAllowance, used: 0, left: annualAllowance };
+  const start = vacationUtcDate(employee.startDate);
+  const reference = vacationUtcDate(referenceDate);
+  if (reference < start) return { earned: 0, used: 0, left: 0 };
+
+  let completedYears = 0;
+  while (vacationAnniversary(employee.startDate, completedYears + 1) <= reference) completedYears += 1;
+  let currentEntitlement = annualAllowance;
+  if (completedYears === 0) {
+    const sixMonths = new Date(start);
+    sixMonths.setUTCMonth(sixMonths.getUTCMonth() + 6);
+    if (reference < sixMonths) {
+      const yearEnd = vacationAnniversary(employee.startDate, 1);
+      const elapsedDays = Math.max((reference - start) / 86400000 + 1, 0);
+      const periodDays = Math.max((yearEnd - start) / 86400000, 1);
+      currentEntitlement = (annualAllowance * elapsedDays) / periodDays;
+    }
+  }
+
+  const earned = Math.round((completedYears * annualAllowance + currentEntitlement) * 100) / 100;
+  const firstYear = Number(String(employee.startDate).slice(0, 4));
+  const lastYear = reference.getUTCFullYear();
+  let used = 0;
+  for (let year = firstYear; year <= lastYear; year += 1) {
+    used += employeeYearAbsenceDays(employee.id, year, "Godišnji odmor");
+  }
+  used = Math.round(used * 100) / 100;
+  return { earned, used, left: Math.max(Math.round((earned - used) * 100) / 100, 0) };
+}
+
 function employeeVacationAllowance(employee, year) {
-  const fullAllowance = parseNumber(employee?.vacationDays || 26, 26);
-  if (!employee?.startDate) return fullAllowance;
-  const startYear = Number(String(employee.startDate).slice(0, 4));
-  if (startYear < year) return fullAllowance;
-  if (startYear > year) return 0;
-  const yearStart = `${year}-01-01`;
-  const yearEnd = `${year}-12-31`;
-  const totalWorkdays = workdayKeysBetween(yearStart, yearEnd).length || 1;
-  const employeeWorkdays = workdayKeysBetween(employee.startDate, yearEnd).length;
-  return Math.ceil((fullAllowance * employeeWorkdays) / totalWorkdays);
+  const currentYear = Number(currentDateKey().slice(0, 4));
+  const referenceDate = year === currentYear ? currentDateKey() : `${year}-12-31`;
+  return employeeVacationSnapshot(employee, referenceDate).earned;
+}
+
+function formatVacationDays(value) {
+  return Number(value || 0).toLocaleString("sr-RS", { maximumFractionDigits: 2 });
 }
 
 function employeeMonthAbsenceDays(employeeId, monthKey, type = "") {
+  const employee = employeeById(employeeId);
+  const override = employee?.monthlyAbsenceDays?.[monthKey];
+  if (override) {
+    return type
+      ? parseNumber(override[type] || 0)
+      : Object.values(override).reduce((sum, value) => sum + parseNumber(value || 0), 0);
+  }
   return state.employeeAbsences
     .filter((absence) => absence.employeeId === employeeId && absence.status !== "Zatraženo" && (!type || absence.type === type))
     .reduce((sum, absence) => {
@@ -2146,11 +2596,34 @@ function employeeLateStatus(employeeId, monthKey) {
 }
 
 function employeeExpectedHours(employee, monthKey) {
-  const dailyHours = Number(employee.weeklyHours || 40) / 5;
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
   const absenceDays = employeeMonthAbsenceDays(employee.id, monthKey);
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !employee.startDate || day >= employee.startDate);
   const plannedDays = Math.max(eligibleWorkdays.length - absenceDays, 0);
   return Math.round(plannedDays * dailyHours * 100) / 100;
+}
+
+function employeeExpectedHoursToDate(employee, monthKey) {
+  const selectedMonth = monthIndex(monthKey);
+  const currentMonth = monthIndex(currentMonthKey());
+  if (selectedMonth < currentMonth) return employeeExpectedHours(employee, monthKey);
+  if (selectedMonth > currentMonth) return 0;
+
+  const today = currentDateKey();
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
+  const elapsedWorkdays = workdaysInMonth(monthKey).filter((day) =>
+    day < today &&
+    (!employee.startDate || day >= employee.startDate) &&
+    !(state.employeeAbsences || []).some((absence) =>
+      absence.employeeId === employee.id &&
+      absence.status !== "Zatraženo" &&
+      day >= absence.startDate &&
+      day <= absence.endDate
+    )
+  );
+  return Math.round(elapsedWorkdays.length * dailyHours * 100) / 100;
 }
 
 function employeeMonthlyHoursPreview(weeklyHours, monthKey, startDate = "") {
@@ -2188,7 +2661,15 @@ function employeeMonthBalance(employee, monthKey) {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
     return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
   }
-  return Math.round((employeeMonthHours(employee.id, monthKey) - employeeExpectedHours(employee, monthKey)) * 100) / 100;
+  let completedHours = employeeMonthHours(employee.id, monthKey);
+  if (monthKey === currentMonthKey()) {
+    const today = currentDateKey();
+    const todayHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "") === today)
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    completedHours -= todayHours;
+  }
+  return Math.round((completedHours - employeeExpectedHoursToDate(employee, monthKey)) * 100) / 100;
 }
 
 function employeeCarryoverBalance(employee, monthKey) {
@@ -2290,6 +2771,16 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
 function generateSystemNotifications() {
   const monthKey = selectedMonthKey();
   const today = currentDateKey();
+  const employeeTrackingStartDate = "2026-09-01";
+
+  // Dnevni izvestaji su evidencija rada, ne stavka koja trazi reakciju admina.
+  state.notifications = (state.notifications || []).filter((notification) => {
+    const key = String(notification.key || "");
+    if (key.startsWith("employee-report-")) return false;
+    if (!key.startsWith("employee-hours-shortage-")) return true;
+    const notificationDate = key.match(/(\d{4}-\d{2}-\d{2})$/)?.[1] || "";
+    return !notificationDate || notificationDate >= employeeTrackingStartDate;
+  });
 
   state.clients.forEach((client) => {
     const invoice = monthlyInvoice(client, monthKey);
@@ -2340,6 +2831,42 @@ function generateSystemNotifications() {
         message: `${employee?.name || "Zaposleni"} traži ${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)}.`,
       });
     });
+
+  const yesterdayDate = new Date(`${today}T12:00:00`);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, "0")}-${String(yesterdayDate.getDate()).padStart(2, "0")}`;
+  const dayOfWeek = yesterdayDate.getDay();
+  if (yesterday >= employeeTrackingStartDate && dayOfWeek >= 1 && dayOfWeek <= 5) {
+    (state.employees || [])
+      .filter((employee) => employee.status === "Aktivan")
+      .filter((employee) => !String(employee.position || "").trim().toLocaleLowerCase("sr-Latn").includes("snimatelj"))
+      .forEach((employee) => {
+        const hasApprovedAbsence = (state.employeeAbsences || []).some((absence) =>
+          absence.employeeId === employee.id
+          && absence.status === "Odobreno"
+          && absence.startDate <= yesterday
+          && absence.endDate >= yesterday
+        );
+        if (hasApprovedAbsence) return;
+        const weeklyHours = Number(employee.weeklyHours || 0);
+        const targetMinutes = weeklyHours === 20
+          ? 240
+          : weeklyHours >= 38
+            ? (dayOfWeek === 5 ? 390 : 510)
+            : Math.round((weeklyHours * 60) / 5);
+        if (targetMinutes <= 0) return;
+        const enteredMinutes = (state.employeeWorkLogs || [])
+          .filter((log) => log.employeeId === employee.id && log.date === yesterday)
+          .reduce((sum, log) => sum + Number(log.minutes || Math.round(Number(log.hours || 0) * 60)), 0);
+        if (enteredMinutes >= targetMinutes) return;
+        notifyOnce({
+          key: `employee-hours-shortage-${employee.id}-${yesterday}`,
+          type: "danger",
+          title: "Nedostaju sati",
+          message: `${employee.name}: za ${formatDate(yesterday)} upisano je ${enteredMinutes}/${targetMinutes} min. Nedostaje ${targetMinutes - enteredMinutes} min.`,
+        });
+      });
+  }
 
 }
 
@@ -2395,6 +2922,15 @@ function renderEmployeeOptions() {
       ? activities.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")
       : `<option value="">Admin prvo dodaje aktivnost</option>`;
   }
+  const workClientSelect = document.getElementById("workClientSelect");
+  if (workClientSelect) {
+    const selected = workClientSelect.value;
+    const clients = (state.clients || [])
+      .filter((client) => client.status === "Aktivan")
+      .sort((a, b) => a.name.localeCompare(b.name));
+    workClientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${client.id}">${client.name}</option>`).join("")}`;
+    if (clients.some((client) => client.id === selected)) workClientSelect.value = selected;
+  }
   const leaderSelect = document.getElementById("employeeLeaderSelect");
   if (leaderSelect) {
     const selected = leaderSelect.value;
@@ -2404,15 +2940,24 @@ function renderEmployeeOptions() {
   }
 }
 
+function syncRequestedEmployee() {
+  const employeeId = new URLSearchParams(location.search).get("employee");
+  if (employeeId && (state.employees || []).some((employee) => employee.id === employeeId)) {
+    selectedEmployeeId = employeeId;
+  }
+}
+
 const employeeSelectionIds = new Set(["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"]);
 document.addEventListener("change", (event) => {
   if (!employeeSelectionIds.has(event.target.id) || !event.target.value) return;
   selectedEmployeeId = event.target.value;
   setSelectedEmployeeOnForms(selectedEmployeeId);
+  window.setTimeout(() => window.renderExistingGoalProgressEditor?.(), 0);
 });
 
 function renderEmployees() {
   if (!document.getElementById("employees")) return;
+  syncRequestedEmployee();
   state.employees = state.employees || [];
   state.employeeAbsences = state.employeeAbsences || [];
   state.employeeWorkLogs = state.employeeWorkLogs || [];
@@ -2428,7 +2973,9 @@ function renderEmployees() {
   const monthKey = employeeMonthKey();
   const year = Number(monthKey.slice(0, 4));
   const employees = visibleEmployees();
-  const totalSalary = employees.reduce((sum, employee) => sum + Number(employee.salary || 0), 0);
+  const totalSalary = employees
+    .filter((employee) => employee.status === "Aktivan")
+    .reduce((sum, employee) => sum + Number(employee.salary || 0), 0);
   const totalHourBalance = employees.reduce((sum, employee) => sum + employeeHourBalance(employee, monthKey), 0);
   const vacationUsed = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Godišnji odmor"), 0);
   const sickDays = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Bolovanje"), 0);
@@ -2531,19 +3078,19 @@ function renderSelectedEmployeeDetail(employee, monthKey, year) {
 }
 
 function renderSelectedEmployeeAbsenceList(employeeId, year) {
-  const vacationUsed = employeeYearAbsenceDays(employeeId, year, "Godišnji odmor");
   const giftUsed = employeeYearAbsenceDays(employeeId, year, "Poklon dan");
   const sickDays = employeeYearAbsenceDays(employeeId, year, "Bolovanje");
   const employee = employeeById(employeeId);
-  const vacationAllowance = employeeVacationAllowance(employee, year);
+  const currentYear = Number(currentDateKey().slice(0, 4));
+  const vacation = employeeVacationSnapshot(employee, year === currentYear ? currentDateKey() : `${year}-12-31`);
   const recentAbsences = (state.employeeAbsences || [])
     .filter((absence) => absence.employeeId === employeeId)
     .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
     .slice(0, 4);
   document.getElementById("selectedEmployeeAbsenceList").innerHTML = `
     <div class="setup-item">
-      <strong>${vacationUsed}</strong>
-      <span>Godišnji iskorišćen · ${Math.max(vacationAllowance - vacationUsed, 0)} dana preostalo<br />Pravo za godinu: ${vacationAllowance}/${employee?.vacationDays || 26}</span>
+      <strong>${formatVacationDays(vacation.used)}</strong>
+      <span>Godišnji iskorišćen · ${formatVacationDays(vacation.left)} dana preostalo<br />Stečeno ukupno: ${formatVacationDays(vacation.earned)} dana</span>
     </div>
     <div class="setup-item">
       <strong>${giftUsed}</strong>
@@ -2629,7 +3176,16 @@ function showEmployeeProfileForm(employee = null) {
   const panel = document.getElementById("employeeProfilePanel");
   const form = document.getElementById("employeeForm");
   if (!panel || !form) return;
+  if (panel.parentElement !== document.body) document.body.appendChild(panel);
+  panel.classList.add("employee-editor-modal");
   panel.hidden = false;
+  document.body.classList.add("employee-editor-open");
+  const deleteButton = document.getElementById("deleteSelectedEmployeeBtn");
+  const modalHead = panel.querySelector(".compact-head");
+  if (deleteButton && modalHead) {
+    modalHead.appendChild(deleteButton);
+    deleteButton.hidden = !employee;
+  }
   renderEmployeeOptions();
   if (employee) {
     setText("employeeProfileMode", "Izmena");
@@ -2637,8 +3193,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.name.value = employee.name || "";
     form.elements.position.value = employee.position || "";
     form.elements.email.value = employee.email || "";
-    form.elements.password.value = EMPLOYEE_PASSWORD_SENTINEL;
-    form.elements.password.placeholder = "Za promenu unesi novu lozinku";
+    form.elements.password.value = employee.password || "";
     form.elements.startDate.value = employee.startDate || "";
     form.elements.salary.value = Number(employee.salary || 0);
     form.elements.weeklyHours.value = parseNumber(employee.weeklyHours || 40);
@@ -2646,7 +3201,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.openingBalanceMonth.value = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = Boolean(employee.isLeader);
     form.elements.leaderId.value = employee.leaderId || "";
-    form.elements.vacationDays.value = Number(employee.vacationDays || 26);
+    form.elements.vacationDays.value = Number(employee.vacationDays || 25);
     form.elements.openingVacationUsed.value = parseNumber(employee.openingVacationUsed || 0);
     form.elements.giftDays.value = Number(employee.giftDays || 1);
     form.elements.status.value = employee.status || "Aktivan";
@@ -2654,14 +3209,13 @@ function showEmployeeProfileForm(employee = null) {
     setText("employeeProfileMode", "Novi zaposleni");
     form.reset();
     form.elements.id.value = "";
-    form.elements.password.value = EMPLOYEE_DEFAULT_PASSWORD;
-    form.elements.password.placeholder = `Default: ${EMPLOYEE_DEFAULT_PASSWORD}`;
+    form.elements.password.value = "123456";
     form.elements.weeklyHours.value = 40;
     form.elements.openingHourBalance.value = 0;
     form.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = false;
     form.elements.leaderId.value = "";
-    form.elements.vacationDays.value = 26;
+    form.elements.vacationDays.value = 25;
     form.elements.openingVacationUsed.value = 0;
     form.elements.giftDays.value = 1;
     form.elements.status.value = "Aktivan";
@@ -2682,7 +3236,11 @@ function updateEmployeeMonthlyPreview() {
 
 function hideEmployeeProfileForm() {
   const panel = document.getElementById("employeeProfilePanel");
-  if (panel) panel.hidden = true;
+  if (panel) {
+    panel.hidden = true;
+    panel.classList.remove("employee-editor-modal");
+  }
+  document.body.classList.remove("employee-editor-open");
 }
 
 function deleteEmployee(id) {
@@ -2701,6 +3259,7 @@ function deleteEmployee(id) {
   state.employeeRecognitions = (state.employeeRecognitions || []).filter((item) => item.employeeId !== id);
   state.employeeOneOnOnes = (state.employeeOneOnOnes || []).filter((item) => item.employeeId !== id);
   state.employeeReports = (state.employeeReports || []).filter((item) => item.employeeId !== id && item.recipientId !== id);
+  state.notifications = (state.notifications || []).filter((item) => item.targetId !== id);
   selectedEmployeeId = state.employees[0]?.id || "";
   hideEmployeeProfileForm();
   saveState();
@@ -2717,12 +3276,29 @@ function renderEmployeeWorkRows(monthKey) {
     personFilter.value = state.employees.some((employee) => employee.id === selectedValue) ? selectedValue : "all";
     employeeWorkPersonFilter = personFilter.value;
   }
+  const clientFilter = document.getElementById("employeeWorkClientFilter");
+  if (clientFilter) {
+    const selectedValue = employeeWorkClientFilter;
+    clientFilter.innerHTML = `<option value="all">Svi klijenti</option>${state.clients
+      .filter((client) => client.status === "Aktivan")
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((client) => `<option value="${client.id}">${client.name}</option>`)
+      .join("")}`;
+    clientFilter.value = state.clients.some((client) => client.id === selectedValue && client.status === "Aktivan") ? selectedValue : "all";
+    employeeWorkClientFilter = clientFilter.value;
+  }
   const workMonth = employeeWorkMonthFilter || monthKey;
   const monthInput = document.getElementById("employeeWorkMonthFilter");
   if (monthInput) monthInput.value = workMonth;
   const rows = state.employeeWorkLogs
     .filter((log) => String(log.date || "").startsWith(workMonth))
     .filter((log) => employeeWorkPersonFilter === "all" || log.employeeId === employeeWorkPersonFilter)
+    .filter((log) => {
+      if (employeeWorkClientFilter === "all") return true;
+      const selectedClient = state.clients.find((client) => client.id === employeeWorkClientFilter);
+      return log.clientId === employeeWorkClientFilter || (selectedClient && log.clientName === selectedClient.name);
+    })
     .filter((log) => {
       const employee = employeeById(log.employeeId);
       return employee && bySearch({ ...log, employee: employee.name });
@@ -2736,12 +3312,14 @@ function renderEmployeeWorkRows(monthKey) {
         <td>${employee?.name || "Obrisan zaposleni"}</td>
         <td>${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))} min<br /><span>${formatHours(log.hours || 0)}h</span></td>
         <td><strong>${log.activityName || "Rad"}</strong>${log.note ? `<br /><span>${log.note}</span>` : ""}</td>
+        <td>${log.clientName || "Bez klijenta"}</td>
         <td><strong>+</strong> ${log.positive || "-"}<br /><strong>-</strong> ${log.negative || "-"}</td>
-        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button danger-action" data-delete-work-log="${log.id}" type="button">Obriši</button></td>
+        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button" data-edit-work-log="${log.id}" type="button">Izmeni</button> <button class="edit-button danger-action" data-delete-work-log="${log.id}" type="button">Obriši</button></td>
       </tr>`;
     });
   setText("employeeWorkRowsCount", `${rows.length} unosa`);
-  document.getElementById("employeeWorkRows").innerHTML = rows.join("") || `<tr><td colspan="6">Nema unetih sati za izabrani mesec i zaposlenog.</td></tr>`;
+  document.getElementById("employeeWorkRows").innerHTML = rows.join("") || `<tr><td colspan="7">Nema unetih sati za izabrani mesec i zaposlenog.</td></tr>`;
+  document.querySelectorAll("[data-edit-work-log]").forEach((button) => button.addEventListener("click", () => openWorkLogEditor(button.dataset.editWorkLog)));
   document.querySelectorAll("[data-delete-work-log]").forEach((button) => button.addEventListener("click", () => {
     const log = state.employeeWorkLogs.find((item) => item.id === button.dataset.deleteWorkLog);
     if (!log || !confirm(`Obrisati unos od ${formatDate(log.date)} (${log.activityName || "Rad"})?`)) return;
@@ -2750,6 +3328,60 @@ function renderEmployeeWorkRows(monthKey) {
     renderAll();
     showToast("Obrisano", "Pogrešan unos vremena je uklonjen.", "ok");
   }));
+}
+
+function openWorkLogEditor(id) {
+  const log = (state.employeeWorkLogs || []).find((item) => item.id === id);
+  if (!log) return;
+  let dialog = document.getElementById("workLogEditorDialog");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "workLogEditorDialog";
+    dialog.className = "work-log-editor-dialog";
+    document.body.append(dialog);
+  }
+  const activityOptions = (state.employeeActivities || []).filter((item) => item.active !== false)
+    .map((item) => `<option value="${item.id}" ${item.id === log.activityId ? "selected" : ""}>${item.category || "Ostalo"} · ${item.name}</option>`).join("");
+  const clientOptions = (state.clients || []).filter((item) => item.status === "Aktivan")
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((item) => `<option value="${item.id}" ${item.id === log.clientId ? "selected" : ""}>${item.name}</option>`).join("");
+  dialog.innerHTML = `<form method="dialog" class="work-log-editor-form">
+    <div class="panel-head"><div><p class="eyebrow">Evidencija rada</p><h2>Izmeni unos</h2></div><button class="icon-button" value="cancel" type="submit">×</button></div>
+    <label>Datum<input name="date" type="date" value="${log.date}" required /></label>
+    <label>Minuta<input name="minutes" type="number" min="1" value="${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))}" required /></label>
+    <label>Aktivnost<select name="activityId" required>${activityOptions}</select></label>
+    <label>Klijent<select name="clientId"><option value="">Bez klijenta</option>${clientOptions}</select></label>
+    <label class="wide">Napomena<textarea name="note" rows="3">${log.note || ""}</textarea></label>
+    <div class="dialog-actions wide"><button class="secondary-button" value="cancel" type="submit">Otkaži</button><button class="primary-button" value="save" type="submit">Sačuvaj izmenu</button></div>
+  </form>`;
+  dialog.addEventListener("close", () => {
+    if (dialog.returnValue !== "save") return;
+    const form = dialog.querySelector("form");
+    const data = new FormData(form);
+    const activity = (state.employeeActivities || []).find((item) => item.id === data.get("activityId"));
+    const client = (state.clients || []).find((item) => item.id === data.get("clientId"));
+    const normalizedActivityName = String(log.activityName || "").trim().toLowerCase();
+    const isAggregate = normalizedActivityName.includes("migracija") || normalizedActivityName.includes("prenos stvarnog");
+    if (!client && !isAggregate) {
+      alert("Izaberi klijenta za ovu aktivnost.");
+      openWorkLogEditor(id);
+      return;
+    }
+    const minutes = Math.max(1, parseNumber(data.get("minutes"), 1));
+    Object.assign(log, {
+      date: String(data.get("date") || log.date), minutes,
+      hours: Math.round((minutes / 60) * 10000) / 10000,
+      activityId: activity?.id || log.activityId,
+      activityName: activity?.name || log.activityName,
+      activityCategory: activity?.category || log.activityCategory || "Ostalo",
+      clientId: client?.id || "", clientName: client?.name || "",
+      note: String(data.get("note") || ""), updatedAt: new Date().toISOString(),
+    });
+    saveState();
+    renderAll();
+    showToast("Sačuvano", "Unos sati je izmenjen i odmah je vidljiv zaposlenom.", "ok");
+  }, { once: true });
+  dialog.showModal();
 }
 
 function renderEmployeeActivities() {
@@ -2846,6 +3478,7 @@ function renderEmployeePerformanceOverview() {
           history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
         } else {
           employeeOverviewFilter = profileSelect.value;
+          if (employeeOverviewFilter !== "all") selectedEmployeeId = employeeOverviewFilter;
         }
         renderAll();
       });
@@ -2963,6 +3596,24 @@ function renderEmployeePerformanceOverview() {
     });
   }
   target.querySelectorAll("[data-performance-employee]").forEach((row) => {
+    const nameCell = row.querySelector("td");
+    if (nameCell && !nameCell.querySelector(".employee-row-edit")) {
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "employee-row-edit";
+      editButton.setAttribute("aria-label", `Izmeni ${employeeById(row.dataset.performanceEmployee)?.name || "zaposlenog"}`);
+      editButton.title = "Izmeni zaposlenog";
+      editButton.innerHTML = "&#9998;";
+      editButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        selectedEmployeeId = row.dataset.performanceEmployee;
+        setSelectedEmployeeOnForms(selectedEmployeeId);
+        showEmployeeProfileForm(employeeById(selectedEmployeeId));
+      });
+      nameCell.classList.add("employee-name-cell");
+      nameCell.append(editButton);
+    }
     const openEmployee = () => {
       selectedEmployeeId = row.dataset.performanceEmployee;
       setSelectedEmployeeOnForms(selectedEmployeeId);
@@ -3007,13 +3658,35 @@ function renderEmployeeGoalRows() {
             ? `Završeno ${formatDate(goal.completedDate)}`
             : isLate ? `Kasni ${Math.abs(daysLeft)} dana` : isNear ? `Rok za ${daysLeft} dana` : `Rok ${formatDate(goal.endDate)}`;
           return `
-          <div class="setup-item alert-item ${status}">
+          <div class="setup-item alert-item ${status}" data-admin-goal-id="${goal.id}">
             <strong>${goal.progress || 0}%</strong>
             <span>${employee?.name || "Zaposleni"} · ${goal.category || "Razvoj"} · ${goal.title}<br />${goal.target || ""} · ${deadline}</span>
+            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${goal.title}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div>
           </div>`;
         })
         .join("")
     : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih ciljeva.` : "Nema ciljeva."}</div>`;
+
+  target.querySelectorAll("[data-admin-goal-id]").forEach((row) => {
+    const slider = row.querySelector('input[type="range"]');
+    const output = row.querySelector("output");
+    slider.addEventListener("input", () => output.value = `${slider.value}%`);
+    row.querySelector("button").addEventListener("click", () => {
+      const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.adminGoalId);
+      if (!goal) return;
+      goal.progress = Number(slider.value);
+      if (goal.progress >= 100) {
+        goal.status = "Završeno";
+        goal.completedDate = goal.completedDate || currentDateKey();
+      } else if (goal.status === "Završeno") {
+        goal.status = "U toku";
+        goal.completedDate = "";
+      }
+      saveState();
+      renderAll();
+      showToast("Progres sačuvan", `${employeeById(goal.employeeId)?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+    });
+  });
 
   const ratingTarget = document.getElementById("employeeRatingRows");
   if (!ratingTarget) return;
@@ -3077,7 +3750,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
   const data = Object.fromEntries(new FormData(form));
   selectedEmployeeId = data.employeeId;
   state.employeeRecognitions = state.employeeRecognitions || [];
-  state.employeeRecognitions.push({
+  const recognition = {
     id: crypto.randomUUID(),
     employeeId: data.employeeId,
     month: data.month,
@@ -3085,6 +3758,15 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
     author: data.author.trim() || "Admin",
     text: data.text.trim(),
     createdAt: new Date().toISOString(),
+  };
+  state.employeeRecognitions.push(recognition);
+  notifyOnce({
+    key: `recognition-created-${recognition.id}`,
+    scope: "employee",
+    targetId: recognition.employeeId,
+    type: recognition.type === "Pohvala" ? "ok" : "info",
+    title: recognition.type === "Pohvala" ? "Dobio/la si pohvalu" : "Novi razvojni fokus",
+    message: `${recognition.text} - ${recognition.author}`,
   });
   saveState();
   form.reset();
@@ -3105,23 +3787,24 @@ function setupEmployeeAdminSections() {
   });
   const employeeTitle = document.getElementById("pageTitle");
   if (employeeTitle) employeeTitle.textContent = "Tim";
+  const mainNav = document.querySelector('.sidebar .nav-item[data-view="employees"]');
 
   const sections = [
     ["overview", "Tim"],
-    ["hours", "Evidencija rada"],
-    ["absences", "Odsustva"],
-    ["ratings", "Ocene"],
-    ["recognitions", "Pohvale"],
-    ["goals", "Razvoj"],
+    ["entries", "Unosi rada"],
+    ["leave", "Odmori i kalendar"],
+    ["meetings", "1:1 sastanci"],
+    ["performance", "Učinak i ciljevi"],
+    ["activities", "Aktivnosti"],
     ["settings", "Podešavanja"],
   ];
   const sectionRoutes = {
     overview: "employees-overview.html",
-    hours: "employees-hours.html",
-    absences: "employees-absences.html",
-    ratings: "employees-ratings.html",
-    recognitions: "employees-recognitions.html",
-    goals: "employees-goals.html",
+    entries: "employees-hours.html",
+    leave: "employees-absences.html",
+    meetings: "employees-recognitions.html",
+    performance: "employees-ratings.html",
+    activities: "employees-goals.html",
     settings: "employees-settings.html",
   };
   const validSections = new Set(Object.keys(sectionRoutes));
@@ -3130,16 +3813,14 @@ function setupEmployeeAdminSections() {
     const heading = [...panel.querySelectorAll("h2, h3")].map((item) => item.textContent.trim().toLowerCase()).join(" ");
     const text = panel.textContent.toLowerCase();
     const result = new Set();
-    if (/dodaj sate|aktivnosti zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("hours");
-    if (/dodaj kašnjenje|kašnjenj/.test(heading)) result.add("hours");
-    if (/dodaj odsustvo|odmori za odobrenje|lista odsustava|odsustv/.test(heading)) result.add("absences");
-    if (/učinak zaposlenog|mesečna ocena/.test(heading)) result.add("ratings");
-    if (/pohvala ili fokus|motivacij/.test(heading)) result.add("recognitions");
-    if (/beleške sa sastanka|1:1/.test(heading)) result.add("recognitions");
-    if (/cilj zaposlenog|ciljevi razvoja|napredak/.test(heading)) result.add("goals");
-    if (/datumi i ciljevi za tim|plan firme/.test(heading)) result.add("goals");
+    if (/dodaj sate|sati zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("entries");
+    if (/dodaj kašnjenje/.test(heading)) result.add("entries");
+    if (/dodaj odsustvo/.test(heading)) result.add("entries");
+    if (/odmori za odobrenje|datumi, plan firme i odsustva tima|ko je na odmoru|odsustva po danima|lista odsustava/.test(heading)) result.add("leave");
+    if (/beleške sa sastanka|1:1/.test(heading)) result.add("meetings");
+    if (/učinak zaposlenog|mesečna ocena|pohvala ili fokus|motivacij|cilj zaposlenog|ciljevi razvoja|napredak|datumi i ciljevi za tim/.test(heading)) result.add("performance");
+    if (/aktivnosti zaposlenih/.test(heading) || /admin definiše ponuđene aktivnosti/.test(text)) result.add("activities");
     if (/dodaj zaposlenog|izmeni zaposlenog|dokumenti|pristup|podešavanj/.test(heading) || panel.classList.contains("employee-detail-panel")) result.add("settings");
-    if (/admin definiše ponuđene aktivnosti/.test(text)) result.add("settings");
     if (result.size > 1) result.delete("overview");
     if (panel.classList.contains("employee-detail-panel")) result.add("overview");
     if (!result.size) result.add("overview");
@@ -3164,7 +3845,7 @@ function setupEmployeeAdminSections() {
     });
     document.querySelectorAll("[data-employee-admin-section]").forEach((button) => button.classList.toggle("active", button.dataset.employeeAdminSection === section));
     root.querySelectorAll(".employee-action-grid").forEach((grid) => grid.classList.toggle("employee-grid-empty", !grid.querySelector(".panel:not(.employee-section-hidden)")));
-    root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", !["ratings", "recognitions", "goals"].includes(section)));
+    root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", section !== "performance"));
     const sectionLabel = sections.find(([key]) => key === section)?.[1] || "Pregled";
     const pageTitle = document.querySelector(".main .topbar h1");
     if (pageTitle) pageTitle.textContent = section === "overview" ? "Zaposleni" : sectionLabel;
@@ -3193,7 +3874,8 @@ function setupEmployeeAdminSections() {
     document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.toggle("active", item === mainNav));
   }
   const requestedSection = routedSection || (location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview");
-  const initialSection = requestedSection === "development" ? "goals" : requestedSection;
+  const legacySections = { hours: "entries", absences: "leave", ratings: "performance", recognitions: "meetings", goals: "activities", development: "performance" };
+  const initialSection = legacySections[requestedSection] || requestedSection;
   activate(sections.some(([key]) => key === initialSection) ? initialSection : "overview");
 
   window.addEventListener("hashchange", () => {
@@ -3243,27 +3925,54 @@ function buildStructuredSidebar() {
   });
 
   const teamPages = [
-    ["Pregled tima", "#employees/overview"],
-    ["Evidencija rada", "#employees/hours"],
-    ["Odsustva", "#employees/absences"],
-    ["Ocene", "#employees/ratings"],
-    ["Pohvale i fokus", "#employees/recognitions"],
-    ["Razvoj", "#employees/goals"],
-    ["Podešavanja", "#employees/settings"]
+    ["Pregled tima", "employees-overview.html", "overview"],
+    ["Odmori i kalendar", "employees-absences.html", "leave"],
+    ["1:1 sastanci", "employees-recognitions.html", "meetings"],
+    ["Učinak i ciljevi", "employees-ratings.html", "performance"],
+    ["Aktivnosti", "employees-goals.html", "activities"],
+    ["Podešavanja", "employees-settings.html", "settings"]
   ];
   const navigation = document.createElement("nav");
   navigation.className = "team-navigation";
   navigation.setAttribute("aria-label", "Sekcije tima");
   navigation.innerHTML = `<span class="sidebar-section-label">Upravljanje timom</span>${teamPages
-    .map(([label, href]) => `<a class="team-navigation-link" href="${href}">${label}</a>`)
+    .map(([label, href, section]) => `<a class="team-navigation-link" data-team-section="${section}" href="${href}">${label}</a>`)
     .join("")}`;
   teamButton.insertAdjacentElement("afterend", navigation);
 
+  const workEntryNavigation = document.createElement("nav");
+  workEntryNavigation.className = "work-entry-navigation";
+  workEntryNavigation.setAttribute("aria-label", "Unosi rada");
+  workEntryNavigation.innerHTML = `
+    <span class="work-entry-navigation-title">Unosi rada</span>
+    <a class="work-entry-navigation-link" data-work-entry-link="history" href="employees-hours.html#work/history">Sati zaposlenih</a>
+    <a class="work-entry-navigation-link" data-work-entry-link="absence" href="employees-hours.html#work/absence">Dodaj odsustvo</a>
+    <a class="work-entry-navigation-link" data-work-entry-link="hours" href="employees-hours.html#work/hours">Dodaj sate</a>
+    <a class="work-entry-navigation-link" data-work-entry-link="late" href="employees-hours.html#work/late">Dodaj kašnjenje</a>
+  `;
+  navigation.insertAdjacentElement("afterend", workEntryNavigation);
+
   const syncActiveLink = () => {
     const current = location.hash || "#admin";
+    const isWorkEntriesPage = /\/employees-hours(?:\.html)?\/?$/.test(location.pathname);
+    const currentFile = location.pathname.replace(/\/+$/, "").split("/").pop().replace(/\.html$/, "");
+    const fileSections = {
+      "employees-overview": "overview",
+      "employees-absences": "leave",
+      "employees-recognitions": "meetings",
+      "employees-ratings": "performance",
+      "employees-goals": "activities",
+      "employees-settings": "settings",
+    };
+    const currentTeamSection = fileSections[currentFile] || (current.startsWith("#employees/") ? current.split("/")[1] : "");
     navigation.querySelectorAll("a").forEach((link) => {
-      link.classList.toggle("active", current === link.getAttribute("href") ||
-        (current === "#employees" && link.getAttribute("href") === "#employees/overview"));
+      link.classList.toggle("active", link.dataset.teamSection === currentTeamSection ||
+        (current === "#employees" && link.dataset.teamSection === "overview"));
+    });
+    const workSection = location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours";
+    workEntryNavigation.classList.toggle("active", isWorkEntriesPage || current === "#employees/entries");
+    workEntryNavigation.querySelectorAll("[data-work-entry-link]").forEach((link) => {
+      link.classList.toggle("active", isWorkEntriesPage && link.dataset.workEntryLink === workSection);
     });
   };
   window.addEventListener("hashchange", syncActiveLink);
@@ -3271,6 +3980,283 @@ function buildStructuredSidebar() {
 }
 
 buildStructuredSidebar();
+
+function setupWorkEntrySubsections() {
+  if (!/\/employees-hours(?:\.html)?\/?$/.test(location.pathname)) return;
+  const root = document.getElementById("employees");
+  if (!root || root.dataset.workEntrySectionsReady) return;
+  root.dataset.workEntrySectionsReady = "true";
+  const sections = {
+    history: { elementId: "employeeWorkRows", label: "Sati zaposlenih" },
+    absence: { formId: "employeeAbsenceForm", label: "Dodaj odsustvo" },
+    hours: { formId: "employeeWorkForm", label: "Dodaj sate" },
+    late: { formId: "employeeLateForm", label: "Dodaj kašnjenje" },
+  };
+
+  Object.entries(sections).forEach(([key, config]) => {
+    const panel = document.getElementById(config.formId || config.elementId)?.closest(".panel");
+    if (panel) panel.dataset.workEntrySubsection = key;
+  });
+  root.querySelectorAll('.panel[data-employee-sections~="entries"]:not([data-work-entry-subsection])').forEach((panel) => {
+    panel.dataset.workEntrySubsection = "other";
+  });
+
+  const activate = (requestedSection) => {
+    const section = sections[requestedSection] ? requestedSection : "hours";
+    root.dataset.workEntrySubsection = section;
+    root.querySelectorAll("[data-work-entry-subsection]").forEach((panel) => {
+      panel.classList.toggle("work-entry-subsection-hidden", panel.dataset.workEntrySubsection !== section);
+    });
+    root.querySelectorAll(".employee-action-grid").forEach((grid) => {
+      const hasVisiblePanel = [...grid.querySelectorAll(":scope > .panel")].some((panel) =>
+        !panel.classList.contains("employee-section-hidden") && !panel.classList.contains("work-entry-subsection-hidden"));
+      grid.classList.toggle("work-entry-grid-empty", !hasVisiblePanel);
+    });
+    const pageTitle = document.querySelector(".main .topbar h1");
+    if (pageTitle) pageTitle.textContent = sections[section].label;
+    if (!location.hash.startsWith("#work/")) history.replaceState(null, "", `#work/${section}`);
+  };
+
+  const pageTitle = document.querySelector(".main .topbar h1");
+  if (pageTitle) {
+    new MutationObserver(() => {
+      const section = root.dataset.workEntrySubsection || "hours";
+      const expectedTitle = sections[section]?.label || sections.hours.label;
+      if (pageTitle.textContent.trim() !== expectedTitle) pageTitle.textContent = expectedTitle;
+    }).observe(pageTitle, { childList: true, characterData: true, subtree: true });
+  }
+
+  activate(location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours");
+  window.addEventListener("hashchange", () => {
+    if (location.hash.startsWith("#work/")) activate(location.hash.split("/")[1]);
+  });
+}
+
+setupWorkEntrySubsections();
+
+function setupClientCostAnalysis() {
+  const sidebar = document.querySelector(".sidebar .main-nav, .sidebar nav");
+  const main = document.querySelector(".main");
+  if (!sidebar || !main || document.getElementById("clientCosts")) return;
+
+  const button = document.createElement("button");
+  button.className = "nav-item client-cost-nav";
+  button.type = "button";
+  button.textContent = "Trošak klijenata";
+  const financeButton = [...sidebar.querySelectorAll(".nav-item")].find((item) => /Finansije|Računi/.test(item.textContent));
+  sidebar.insertBefore(button, financeButton || null);
+
+  const view = document.createElement("section");
+  view.className = "view client-cost-view";
+  view.id = "clientCosts";
+  view.innerHTML = `
+    <div class="client-cost-header">
+      <div><p class="eyebrow">Profitabilnost</p><h1>Trošak klijenata</h1><p>Koliko vremena i novca tim ulaže u svakog klijenta.</p></div>
+    </div>
+    <section class="panel client-cost-filters">
+      <div class="panel-head"><div><p class="eyebrow">Filter</p><h2>Period i tim</h2></div><button class="secondary-button" id="clientCostReset" type="button">Reset</button></div>
+      <div class="client-cost-presets"><button type="button" data-cost-period="day">Danas</button><button type="button" data-cost-period="week">Ova nedelja</button><button type="button" data-cost-period="month" class="active">Ovaj mesec</button></div>
+      <div class="client-cost-filter-grid">
+        <label>Od datuma<input id="clientCostFrom" type="date" /></label>
+        <label>Do datuma<input id="clientCostTo" type="date" /></label>
+        <label>Klijent<select id="clientCostClient"><option value="">Svi klijenti</option></select></label>
+        <div class="client-cost-employee-picker"><label>Zaposleni <small>izaberi jednog ili više</small><input id="clientCostEmployeeSearch" type="search" placeholder="Pretraži zaposlene..." /></label><div class="client-cost-picker-actions"><button id="clientCostSelectAll" type="button">Izaberi sve</button><button id="clientCostClearEmployees" type="button">Poništi izbor</button></div><div class="client-cost-employee-list" id="clientCostEmployeeList"></div><select id="clientCostEmployees" multiple hidden></select></div>
+      </div>
+    </section>
+    <section class="client-cost-kpis">
+      <article><span>Ukupno vreme</span><strong id="clientCostHours">0h</strong></article>
+      <article><span>Trošak rada</span><strong id="clientCostAmount">€ 0</strong></article>
+      <article><span>Aktivnosti</span><strong id="clientCostEntries">0</strong></article>
+      <article><span>Zaposlenih</span><strong id="clientCostPeople">0</strong></article>
+    </section>
+    <section class="panel client-cost-results"><div class="panel-head"><div><p class="eyebrow">Analiza</p><h2>Utrošak po klijentu i zaposlenom</h2></div><span id="clientCostRange"></span></div><div id="clientCostRows"></div></section>`;
+  main.append(view);
+
+  const from = view.querySelector("#clientCostFrom");
+  const to = view.querySelector("#clientCostTo");
+  const clientSelect = view.querySelector("#clientCostClient");
+  const employeeSelect = view.querySelector("#clientCostEmployees");
+  const employeeSearch = view.querySelector("#clientCostEmployeeSearch");
+  const employeeList = view.querySelector("#clientCostEmployeeList");
+  const localDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const setPeriod = (period) => {
+    const end = new Date();
+    const start = new Date(end);
+    if (period === "week") start.setDate(end.getDate() - ((end.getDay() + 6) % 7));
+    if (period === "month") start.setDate(1);
+    from.value = localDate(start);
+    to.value = localDate(end);
+    view.querySelectorAll("[data-cost-period]").forEach((item) => item.classList.toggle("active", item.dataset.costPeriod === period));
+  };
+  const employeeName = (id) => (state.employees || []).find((item) => item.id === id)?.name || "Nepoznat zaposleni";
+  const clientName = (log) => log.clientName || (state.clients || []).find((item) => item.id === log.clientId)?.name || "Bez klijenta";
+  const hourlyRate = (employee) => Number(employee?.salary || 0) / Math.max(1, Number(employee?.weeklyHours || 40) * 52 / 12);
+  const money = (amount) => `€ ${Math.round(amount).toLocaleString("de-DE")}`;
+  const hours = (minutes) => `${(minutes / 60).toLocaleString("sr-RS", { maximumFractionDigits: 2 })}h`;
+
+  const populate = () => {
+    clientSelect.innerHTML = `<option value="">Svi aktivni klijenti</option>${(state.clients || []).filter((item) => item.status === "Aktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("")}`;
+    employeeSelect.innerHTML = (state.employees || []).filter((item) => item.status !== "Neaktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+    employeeList.innerHTML = [...employeeSelect.options].map((item) => `<label data-employee-name="${item.textContent.toLowerCase()}"><input type="checkbox" value="${item.value}" /><span>${item.textContent}</span></label>`).join("");
+    employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
+      const option = [...employeeSelect.options].find((item) => item.value === checkbox.value);
+      if (option) option.selected = checkbox.checked;
+      render();
+    }));
+  };
+  const render = () => {
+    const selectedEmployees = new Set([...employeeSelect.selectedOptions].map((item) => item.value));
+    const selectedClient = clientSelect.value;
+    const selectedClientName = (state.clients || []).find((item) => item.id === selectedClient)?.name || "";
+    const logs = (state.employeeWorkLogs || state.employeeLogs || []).filter((log) => {
+      const date = String(log.date || "").slice(0, 10);
+      if (!date || date < from.value || date > to.value) return false;
+      if (clientName(log) === "Bez klijenta") return false;
+      if (selectedEmployees.size && !selectedEmployees.has(log.employeeId)) return false;
+      if (selectedClient && log.clientId !== selectedClient && clientName(log) !== selectedClientName) return false;
+      return true;
+    });
+    const groups = new Map();
+    let totalMinutes = 0;
+    let totalCost = 0;
+    logs.forEach((log) => {
+      const minutes = Number(log.minutes || Math.round(Number(log.hours || 0) * 60) || 0);
+      const employee = (state.employees || []).find((item) => item.id === log.employeeId);
+      const cost = minutes / 60 * hourlyRate(employee);
+      const client = clientName(log);
+      const key = `${client}::${log.employeeId}`;
+      const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0 };
+      group.minutes += minutes; group.cost += cost; group.entries += 1; groups.set(key, group);
+      totalMinutes += minutes; totalCost += cost;
+    });
+    const rows = [...groups.values()].sort((a,b) => b.cost - a.cost);
+    view.querySelector("#clientCostHours").textContent = hours(totalMinutes);
+    view.querySelector("#clientCostAmount").textContent = money(totalCost);
+    view.querySelector("#clientCostEntries").textContent = logs.length;
+    view.querySelector("#clientCostPeople").textContent = new Set(logs.map((item) => item.employeeId)).size;
+    view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
+    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span>${row.entries}</span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
+  };
+  const show = () => {
+    document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.remove("active"));
+    view.classList.add("active"); button.classList.add("active");
+    document.body.dataset.activeView = "clientCosts";
+    setText("pageTitle", "Trošak klijenata");
+    updateContextActions("clientCosts");
+    history.replaceState(null, "", "#client-costs");
+    populate(); render();
+  };
+  button.addEventListener("click", show);
+  view.querySelectorAll("[data-cost-period]").forEach((item) => item.addEventListener("click", () => { setPeriod(item.dataset.costPeriod); render(); }));
+  [from, to, clientSelect, employeeSelect].forEach((item) => item.addEventListener("change", render));
+  employeeSearch.addEventListener("input", () => { const query = employeeSearch.value.trim().toLowerCase(); employeeList.querySelectorAll("label").forEach((item) => item.hidden = Boolean(query) && !item.dataset.employeeName.includes(query)); });
+  view.querySelector("#clientCostSelectAll").addEventListener("click", () => { employeeList.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach((item) => item.checked = true); [...employeeSelect.options].forEach((item) => item.selected = true); render(); });
+  view.querySelector("#clientCostClearEmployees").addEventListener("click", () => { employeeList.querySelectorAll('input[type="checkbox"]').forEach((item) => item.checked = false); [...employeeSelect.options].forEach((item) => item.selected = false); render(); });
+  view.querySelector("#clientCostReset").addEventListener("click", () => { clientSelect.value = ""; employeeSearch.value = ""; employeeList.querySelectorAll("label").forEach((item) => { item.hidden = false; item.querySelector("input").checked = false; }); [...employeeSelect.options].forEach((item) => item.selected = false); setPeriod("month"); render(); });
+  setPeriod("month"); populate();
+  if (location.hash === "#client-costs") show();
+}
+
+setupClientCostAnalysis();
+
+function setupEmployeeActivityCategories() {
+  const form = document.getElementById("employeeActivityForm");
+  if (!form || form.dataset.categoriesReady) return;
+  form.dataset.categoriesReady = "true";
+  const submitArea = form.querySelector(".admin-submit") || form.lastElementChild;
+  const field = document.createElement("label");
+  field.className = "activity-category-field";
+  field.innerHTML = `Kategorija aktivnosti
+    <select id="employeeActivityCategory" required>
+      <option value="">Izaberi kategoriju</option>
+      <option>SMM</option><option>Scenario</option><option>Sastanci</option><option>Snimatelji</option><option>Sales tim</option><option>Editori</option><option>Media Buying</option>
+      <option value="__new__">+ Nova kategorija</option>
+    </select>
+    <input id="employeeActivityNewCategory" type="text" placeholder="Naziv nove kategorije" hidden />`;
+  form.insertBefore(field, submitArea);
+  const select = field.querySelector("select");
+  const newCategory = field.querySelector("input");
+  (state.employeeActivityCategories || []).forEach((category) => {
+    if ([...select.options].some((option) => option.value === category)) return;
+    select.querySelector('option[value="__new__"]').insertAdjacentHTML("beforebegin", `<option>${category}</option>`);
+  });
+  select.addEventListener("change", () => {
+    const creating = select.value === "__new__";
+    newCategory.hidden = !creating;
+    newCategory.required = creating;
+    if (creating) newCategory.focus();
+  });
+  form.addEventListener("submit", () => {
+    const nameInput = form.querySelector('input[name="name"], input[type="text"]');
+    const name = nameInput?.value.trim();
+    const category = select.value === "__new__" ? newCategory.value.trim() : select.value;
+    if (!name || !category) return;
+    state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
+    state.employeeActivityCategoryMap[name] = category;
+    if (!state.employeeActivityCategories?.includes(category)) {
+      state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+    }
+    saveState();
+  }, true);
+
+  const decorate = () => {
+    const list = document.getElementById("employeeActivityRows");
+    if (!list) return;
+    list.querySelectorAll(".setup-item").forEach((item) => {
+      if (item.querySelector(".activity-category-badge")) return;
+      const strong = item.querySelector("strong");
+      const category = state.employeeActivityCategoryMap?.[strong?.textContent.trim()];
+      if (!category || !strong) return;
+      const badge = document.createElement("span");
+      badge.className = "activity-category-badge";
+      badge.textContent = category;
+      strong.insertAdjacentElement("afterend", badge);
+    });
+  };
+  new MutationObserver(decorate).observe(document.getElementById("employeeActivityRows") || form.parentElement, { childList: true, subtree: true });
+  decorate();
+}
+
+setupEmployeeActivityCategories();
+
+function setupExistingGoalProgressEditor() {
+  const form = document.getElementById("employeeGoalForm");
+  const employeeSelect = form?.elements?.employeeId;
+  if (!form || !employeeSelect || document.getElementById("existingGoalProgressEditor")) return;
+  const section = document.createElement("section");
+  section.id = "existingGoalProgressEditor";
+  section.className = "existing-goal-editor";
+  form.insertAdjacentElement("afterend", section);
+  const render = () => {
+    const employeeId = employeeSelect.value;
+    const employee = employeeById(employeeId);
+    const goals = (state.employeeGoals || []).filter((goal) => goal.employeeId === employeeId).sort((a,b) => String(b.endDate || "").localeCompare(String(a.endDate || "")));
+    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${employee?.name || "zaposleni"}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${goal.id}"><div><strong>${goal.title}</strong><span>${goal.target || "Bez opisa"} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${goal.title}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
+    section.querySelectorAll("[data-existing-goal-id]").forEach((row) => {
+      const slider = row.querySelector('input[type="range"]');
+      const output = row.querySelector("output");
+      slider.addEventListener("input", () => output.value = `${slider.value}%`);
+      row.querySelector("button").addEventListener("click", () => {
+        const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.existingGoalId);
+        if (!goal) return;
+        goal.progress = Number(slider.value);
+        if (goal.progress >= 100) { goal.status = "Završeno"; goal.completedDate = goal.completedDate || currentDateKey(); }
+        else if (goal.status === "Završeno") { goal.status = "U toku"; goal.completedDate = ""; }
+        saveState();
+        render();
+        showToast("Progres sačuvan", `${employee?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+      });
+    });
+  };
+  employeeSelect.addEventListener("change", () => window.setTimeout(render, 0));
+  new MutationObserver(render).observe(employeeSelect, { childList: true });
+  window.renderExistingGoalProgressEditor = render;
+  render();
+}
+
+setupExistingGoalProgressEditor();
+
 
 function setupCompactClientFilters() {
   const root = document.getElementById("clients");
@@ -3365,7 +4351,8 @@ function renderEmployeeReportRows(monthKey) {
       </tr>`;
     });
   setText("employeeOpsCount", `${rows.length} izveštaja`);
-  document.getElementById("employeeReportRows").innerHTML = rows.join("") || `<tr><td colspan="6">Nema izveštaja za ovaj mesec.</td></tr>`;
+  const reportRows = document.getElementById("employeeReportRows");
+  if (reportRows) reportRows.innerHTML = rows.join("") || `<tr><td colspan="6">Nema izveštaja za ovaj mesec.</td></tr>`;
 }
 
 function approveAbsence(id) {
@@ -3450,9 +4437,8 @@ function renderEmployeeCalendar(monthKey, employees, targetId = "employeeCalenda
   const offset = firstDay === 0 ? 6 : firstDay - 1;
   const blanks = Array.from({ length: offset }, () => `<div class="calendar-day empty"></div>`).join("");
   const monthAbsences = calendarAbsences(monthKey, includeRequests);
-  const monthLogs = state.employeeWorkLogs.filter((log) => String(log.date || "").startsWith(monthKey));
   const monthPlans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(monthKey));
-  setText(summaryId, `${monthLabel(monthKey)} · ${monthAbsences.length} odsustava`);
+  setText(summaryId, `${monthLabel(monthKey)} · ${monthAbsences.length} odsustava · ${monthPlans.length} bitnih datuma`);
   target.innerHTML = `
     <div class="calendar-weekdays">
       <span>Pon</span><span>Uto</span><span>Sre</span><span>Čet</span><span>Pet</span><span>Sub</span><span>Ned</span>
@@ -3464,38 +4450,37 @@ function renderEmployeeCalendar(monthKey, employees, targetId = "employeeCalenda
           const holiday = publicHolidayName(day);
           const companyDay = companySpecialDayName(day);
           const absences = monthAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(day));
-          const logs = monthLogs.filter((log) => log.date === day);
           const plans = monthPlans.filter((plan) => plan.date === day);
           const classes = ["calendar-day"];
           if (isWeekend(day)) classes.push("weekend");
           if (holiday) classes.push("holiday");
           if (absences.length) classes.push("has-absence");
-          if (logs.length) classes.push("has-hours");
+          const absentNames = absences.map((absence) => (employees.find((item) => item.id === absence.employeeId) || employeeById(absence.employeeId))?.name || "Zaposleni");
           return `
-          <div class="${classes.join(" ")}">
+          <div class="${classes.join(" ")}" data-calendar-date="${day}" role="button" tabindex="0">
             <strong>${Number(day.slice(-2))}</strong>
             ${holiday ? `<span class="calendar-note holiday-note">${holiday}</span>` : ""}
             ${companyDay ? `<span class="calendar-note company-note">${companyDay}</span>` : ""}
-            ${plans.map((plan) => `<span class="calendar-note plan-note">${plan.type}: ${plan.title}</span>`).join("")}
-            ${
-              absences
-                .slice(0, 3)
-                .map((absence) => {
-                  const employee = employees.find((item) => item.id === absence.employeeId) || employeeById(absence.employeeId);
-                  const requestLabel = absence.status === "Zatraženo" ? " · zahtev" : "";
-                  return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${employee?.name || "Zaposleni"} · ${absence.type}${requestLabel}</span>`;
-                })
-                .join("")
-            }
-            ${
-              logs.length
-                ? `<span class="calendar-note hours-note">${logs.reduce((sum, log) => sum + Number(log.hours || 0), 0)}h uneto</span>`
-                : ""
-            }
+            ${plans.length ? `<span class="calendar-note plan-note">${plans[0].title}${plans.length > 1 ? ` +${plans.length - 1}` : ""}</span>` : ""}
+            ${absentNames.length ? `<span class="calendar-note vacation-note">${absentNames.slice(0, 2).join(", ")}${absentNames.length > 2 ? ` +${absentNames.length - 2}` : ""}</span>` : ""}
           </div>`;
         })
         .join("")}
     </div>`;
+  target.querySelectorAll("[data-calendar-date]").forEach((cell) => {
+    const showDetails = () => {
+      const day = cell.dataset.calendarDate;
+      const absences = monthAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(day));
+      const plans = monthPlans.filter((plan) => plan.date === day);
+      if (!absences.length && !plans.length) return;
+      const lines = [formatDate(day)];
+      plans.forEach((plan) => lines.push(`Bitni datum: ${plan.title}${plan.note ? ` - ${plan.note}` : ""}`));
+      absences.forEach((absence) => lines.push(`${employeeById(absence.employeeId)?.name || "Zaposleni"}: ${absence.type}${absence.status === "Zatraženo" ? " (zahtev)" : ""}`));
+      alert(lines.join("\n"));
+    };
+    cell.addEventListener("click", showDetails);
+    cell.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") showDetails(); });
+  });
 }
 
 function renderAdminTeamCalendar() {
@@ -3587,8 +4572,8 @@ function renderClients() {
           const daysLeft = endDate ? daysBetween(currentDateKey(), endDate) : null;
           const contractLabel = endDate ? `do ${formatDate(endDate)}` : "nije unet";
           const contractDownload = client.contractFileData
-            ? `<a class="document-link" href="${client.contractFileData}" download="${client.contractFileName || "ugovor"}">Preuzmi ugovor</a>`
-            : `<span>Ugovor nije dodat</span>`;
+            ? `<a class="document-link client-contract-download" href="${client.contractFileData}" download="${client.contractFileName || "ugovor"}">Preuzmi ugovor</a>`
+            : `<span class="muted">Ugovor nije dodat</span>`;
           const leadStats = clientLeadStats(client);
           const leadClass = leadStats.late ? "danger" : leadStats.open ? "warn" : "ok";
           const archiveLabel = client.status === "Arhiviran" ? "Vrati" : "Arhiva";
@@ -3599,7 +4584,7 @@ function renderClients() {
             <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
             <td><span class="status ${statusClass(client)}">${client.status || "Aktivan"}</span></td>
             <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
-            <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "123456"}</span></td>
+            <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "Nije uneta"}</span></td>
             <td>${client.contactName || "Nije unet"}<br /><span>${client.contactPhone || client.whatsapp || "Telefon nije unet"}</span></td>
             <td>
               <div class="row-actions">
@@ -3618,7 +4603,7 @@ function renderClients() {
 function renderReports() {
   const clients = visibleClients();
   const monthKey = selectedMonthKey();
-  const invoiceClients = clientsForInvoiceMonth(clients, monthKey);
+  const invoiceClients = financeClientsForMonth(clients, monthKey);
   const revenueByCountry = groupInvoiceSum(invoiceClients, "country", monthKey);
   const revenueByStatus = groupInvoiceSum(invoiceClients, "status", monthKey);
   renderBars("countryBars", revenueByCountry, "€");
@@ -3894,6 +4879,13 @@ function setActiveView(viewName, updateUrl = false) {
   button.classList.add("active");
   view.classList.add("active");
   document.body.dataset.activeView = viewName;
+  if (viewName === "admin") {
+    monthFilter = currentMonthKey();
+    const dashboardMonth = document.getElementById("monthFilter");
+    const invoiceMonth = document.getElementById("invoiceMonthFilter");
+    if (dashboardMonth) dashboardMonth.value = monthFilter;
+    if (invoiceMonth) invoiceMonth.value = monthFilter;
+  }
   setText("pageTitle", button.textContent);
   updateContextActions(viewName);
   if (updateUrl && !location.pathname.split("/").pop().startsWith("employees-")) {
@@ -4050,9 +5042,15 @@ document.getElementById("employeeWorkMonthFilter")?.addEventListener("input", (e
   renderEmployeeWorkRows(employeeMonthKey());
 });
 
+document.getElementById("employeeWorkClientFilter")?.addEventListener("change", (event) => {
+  employeeWorkClientFilter = event.target.value;
+  renderEmployeeWorkRows(employeeMonthKey());
+});
+
 document.getElementById("resetEmployeeWorkFilters")?.addEventListener("click", () => {
   employeeWorkPersonFilter = "all";
   employeeWorkMonthFilter = employeeMonthKey();
+  employeeWorkClientFilter = "all";
   renderEmployeeWorkRows(employeeMonthKey());
 });
 
@@ -4065,9 +5063,20 @@ document.getElementById("teamCalendarStatus")?.addEventListener("change", () => 
 });
 
 document.getElementById("newEmployeeBtn")?.addEventListener("click", () => {
+  window.location.hash = "employees/overview";
   setActiveView("employees");
-  showEmployeeProfileForm();
-  document.getElementById("employeeProfilePanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => {
+    showEmployeeProfileForm();
+  }, 0);
+});
+
+document.getElementById("manageSelectedEmployeeBtn")?.addEventListener("click", () => {
+  const employee = selectedEmployee();
+  if (!employee) {
+    alert("Prvo izaberi zaposlenog iz pregleda.");
+    return;
+  }
+  showEmployeeProfileForm(employee);
 });
 
 document.getElementById("editSelectedEmployeeBtn")?.addEventListener("click", () => {
@@ -4104,12 +5113,10 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
   const formData = new FormData(form);
   const name = String(formData.get("name") || "").trim();
   const id = String(formData.get("id") || "");
-  const passwordInput = String(formData.get("password") || "").trim();
-  const existingEmployee = id ? state.employees.find((item) => item.id === id) : null;
   const payload = {
     name,
     email: String(formData.get("email") || `${loginSlug(name)}@marketizo.local`).trim().toLowerCase(),
-    ...(passwordInput && passwordInput !== EMPLOYEE_PASSWORD_SENTINEL ? { password: passwordInput } : {}),
+    password: String(formData.get("password") || "").trim(),
     position: formData.get("position"),
     startDate: formData.get("startDate"),
     salary: parseNumber(formData.get("salary"), 0),
@@ -4118,14 +5125,14 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
     openingBalanceMonth: formData.get("openingBalanceMonth") || shiftMonth(currentMonthKey(), -1),
     isLeader: Boolean(form.elements.isLeader?.checked),
     leaderId: formData.get("leaderId") || "",
-    vacationDays: parseNumber(formData.get("vacationDays"), 26),
+    vacationDays: parseNumber(formData.get("vacationDays"), 25),
     openingVacationUsed: parseNumber(formData.get("openingVacationUsed"), 0),
     giftDays: parseNumber(formData.get("giftDays"), 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(formData.get("status")) ? formData.get("status") : "Aktivan",
   };
   if (payload.leaderId === id) payload.leaderId = "";
   if (id) {
-    const employee = existingEmployee;
+    const employee = state.employees.find((item) => item.id === id);
     if (!employee) return;
     Object.assign(employee, payload);
     if (!employee.isLeader) {
@@ -4142,13 +5149,13 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
   saveState();
   event.currentTarget.reset();
   event.currentTarget.elements.id.value = "";
-  event.currentTarget.elements.password.value = "";
+  event.currentTarget.elements.password.value = "123456";
   event.currentTarget.elements.weeklyHours.value = 40;
   event.currentTarget.elements.openingHourBalance.value = 0;
   event.currentTarget.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
   event.currentTarget.elements.isLeader.checked = false;
   event.currentTarget.elements.leaderId.value = "";
-  event.currentTarget.elements.vacationDays.value = 26;
+  event.currentTarget.elements.vacationDays.value = 25;
   event.currentTarget.elements.openingVacationUsed.value = 0;
   event.currentTarget.elements.giftDays.value = 1;
   hideEmployeeProfileForm();
@@ -4199,6 +5206,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   const employeeId = formData.get("employeeId");
   const date = formData.get("date");
   const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
+  const client = (state.clients || []).find((item) => item.id === formData.get("clientId") && item.status === "Aktivan");
   const minutes = Math.max(1, parseNumber(formData.get("minutes"), 0));
   if (!employeeId) {
     alert("Izaberi zaposlenog za ovaj unos.");
@@ -4206,6 +5214,10 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
   }
   if (!activity) {
     alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
+    return;
+  }
+  if (!client) {
+    alert("Izaberi aktivnog klijenta za ovu aktivnost.");
     return;
   }
   state.employeeWorkLogs.unshift({
@@ -4216,6 +5228,8 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
     minutes,
     activityId: activity.id,
     activityName: activity.name,
+    clientId: client.id,
+    clientName: client.name,
     type: "Rad",
     note: formData.get("note"),
     locked: true,
@@ -4440,8 +5454,6 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const invoiceStatus = "Nije poslat";
   const paymentStatus = "Nije plaćeno";
   const paymentMethod = "Firma";
-  const createdAt = new Date().toISOString();
-  const financeStartMonth = String(formData.get("startDate") || "").slice(0, 7) || currentMonthKey();
   state.clients.unshift({
     id: crypto.randomUUID(),
     name,
@@ -4463,14 +5475,11 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     paymentStatus,
     invoiceStatus,
     paymentMethod,
-    createdAt,
-    financeStartMonth,
     invoices: {
-      [financeStartMonth]: {
+      [selectedMonthKey()]: {
         invoiceStatus,
         paymentStatus,
         paymentMethod,
-        amount: values.revenue,
         sentAt: invoiceStatus === "Poslat" ? new Date().toISOString() : "",
         paidAt: paymentStatus === "Plaćeno" ? new Date().toISOString() : "",
       },
@@ -4549,6 +5558,11 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     client.contractFileName = contractFile.name;
     client.contractFileData = contractFileData;
   }
+  client.invoices = client.invoices || {};
+  client.invoices[selectedMonthKey()] = {
+    ...monthlyInvoice(client, selectedMonthKey()),
+    amount: values.revenue,
+  };
   withLoginDefaults(client);
   saveState();
   editClientModal.close();
@@ -4742,3 +5756,334 @@ hydrateOnlineState().then(() => {
   });
 });
 updateContextActions("admin");
+
+// Compact filters and current-period defaults added for the admin workspace.
+(() => {
+  const currentLocalMonth = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const setHomeCurrentMonth = () => {
+    const home = document.getElementById("admin");
+    const month = document.getElementById("monthFilter");
+    if (!home?.classList.contains("active") || !month) return;
+    month.value = currentLocalMonth();
+    const from = document.getElementById("dateFromFilter");
+    const to = document.getElementById("dateToFilter");
+    if (from) from.value = "";
+    if (to) to.value = "";
+    month.dispatchEvent(new Event("input", { bubbles: true }));
+    month.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  const minutesFromText = (value) => {
+    const text = String(value || "").toLowerCase().replace(/\s+/g, " ");
+    let minutes = 0;
+    const hours = text.match(/([\d.,]+)\s*h/);
+    const mins = text.match(/([\d.,]+)\s*min/);
+    if (mins) minutes = Number(mins[1].replace(",", "."));
+    else if (hours) minutes = Number(hours[1].replace(",", ".")) * 60;
+    if (!hours && !mins) {
+      const number = Number(text.replace(/[^\d,.-]/g, "").replace(",", "."));
+      if (Number.isFinite(number)) minutes = number;
+    }
+    return Number.isFinite(minutes) ? minutes : 0;
+  };
+
+  const enhanceWorkHours = () => {
+    const body = document.getElementById("employeeWorkRows");
+    const count = document.getElementById("employeeWorkRowsCount");
+    if (!body || !count) return;
+    let total = document.getElementById("employeeWorkHoursTotal");
+    if (!total) {
+      const summary = document.createElement("div");
+      summary.className = "worklog-summary";
+      total = document.createElement("strong");
+      total.id = "employeeWorkHoursTotal";
+      const summaryParent = count.parentElement;
+      summary.append(count, total);
+      summaryParent?.append(summary);
+    }
+    const sync = () => {
+      const rows = [...body.querySelectorAll("tr")].filter((row) => getComputedStyle(row).display !== "none");
+      const minutes = rows.reduce((sum, row) => sum + minutesFromText(row.children[2]?.textContent), 0);
+      const hours = minutes / 60;
+      const nextTotal = `Ukupno ${new Intl.NumberFormat("sr-RS", { maximumFractionDigits: 2 }).format(hours)}h`;
+      if (total.textContent !== nextTotal) total.textContent = nextTotal;
+    };
+    if (!body.dataset.totalReady) {
+      body.dataset.totalReady = "true";
+      new MutationObserver(sync).observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+      [document.getElementById("employeeWorkPersonFilter"), document.getElementById("employeeWorkMonthFilter"), document.getElementById("employeeWorkClientFilter"), document.getElementById("resetEmployeeWorkFilters")]
+        .filter(Boolean)
+        .forEach((control) => control.addEventListener("change", () => setTimeout(sync, 0)));
+    }
+    sync();
+  };
+
+  const enhanceClientCostPicker = () => {
+    const picker = document.querySelector(".client-cost-employee-picker");
+    if (!picker || picker.dataset.compactReady) return;
+    picker.dataset.compactReady = "true";
+    const hiddenSelect = document.getElementById("clientCostEmployees");
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "client-cost-picker-trigger";
+    trigger.setAttribute("aria-expanded", "false");
+    const dropdown = document.createElement("div");
+    dropdown.className = "client-cost-picker-dropdown";
+    dropdown.hidden = true;
+    [...picker.children].filter((child) => child !== hiddenSelect).forEach((child) => dropdown.append(child));
+    picker.insertBefore(trigger, hiddenSelect || null);
+    picker.insertBefore(dropdown, hiddenSelect || null);
+
+    const update = () => {
+      const checked = [...picker.querySelectorAll('#clientCostEmployeeList input[type="checkbox"]:checked')];
+      const total = picker.querySelectorAll('#clientCostEmployeeList input[type="checkbox"]').length;
+      trigger.textContent = checked.length ? `${checked.length} zaposlenih izabrano` : `Svi zaposleni (${total})`;
+    };
+    trigger.addEventListener("click", () => {
+      dropdown.hidden = !dropdown.hidden;
+      trigger.setAttribute("aria-expanded", String(!dropdown.hidden));
+      if (!dropdown.hidden) document.getElementById("clientCostEmployeeSearch")?.focus();
+    });
+    picker.addEventListener("change", update);
+    picker.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => setTimeout(update, 0)));
+    document.addEventListener("click", (event) => {
+      if (!picker.contains(event.target)) {
+        dropdown.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+      }
+    });
+    update();
+  };
+
+  const enhance = () => {
+    enhanceWorkHours();
+    enhanceClientCostPicker();
+  };
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      setHomeCurrentMonth();
+      enhance();
+    }, 250);
+  });
+  window.addEventListener("hashchange", () => setTimeout(() => {
+    if (location.hash === "#admin" || location.hash === "" || location.hash === "#") setHomeCurrentMonth();
+    enhance();
+  }, 80));
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest('.nav-item[data-view="admin"], [data-go-view="admin"]')) return;
+    setTimeout(setHomeCurrentMonth, 80);
+  });
+  new MutationObserver(enhance).observe(document.body, { childList: true, subtree: true });
+})();
+// Final opening balances for the official work-time tracking start on 01.09.2026.
+// Historical monthly totals remain visible, but must not be added again to these balances.
+function applySeptember2026OpeningBalancesV1() {
+  state.backup = state.backup || {};
+  if (state.backup.september2026OpeningBalancesV1) return false;
+
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const resetHistoryAndSetAugustBalance = (name, augustBalance) => {
+    const employee = (state.employees || []).find((item) => normalize(item.name) === normalize(name));
+    if (!employee) return;
+    employee.openingHourBalance = 0;
+    employee.openingBalanceMonth = "2025-12";
+    employee.monthlyBalanceOverrides = {
+      ...(employee.monthlyBalanceOverrides || {}),
+      "2026-01": 0,
+      "2026-02": 0,
+      "2026-03": 0,
+      "2026-04": 0,
+      "2026-05": 0,
+      "2026-06": 0,
+      "2026-07": 0,
+      "2026-08": augustBalance,
+    };
+  };
+
+  resetHistoryAndSetAugustBalance("Dejan Klement", 10 + (20 / 60));
+  resetHistoryAndSetAugustBalance("Nikola Marjanovic", -(21 + (35 / 60)));
+  state.backup.september2026OpeningBalancesV1 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applySeptember2026OpeningBalancesV1()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 4000);
+});
+
+function applyDejanSeptember2026OpeningBalanceV2() {
+  state.backup = state.backup || {};
+  if (state.backup.dejanSeptember2026OpeningBalanceV2) return false;
+  const employee = (state.employees || []).find((item) => String(item.name || "").trim() === "Dejan Klement");
+  if (!employee) return false;
+  employee.openingHourBalance = 0;
+  employee.openingBalanceMonth = "2025-11";
+  employee.monthlyBalanceOverrides = {
+    ...(employee.monthlyBalanceOverrides || {}),
+    "2025-12": 0,
+    "2026-01": 0,
+    "2026-02": 0,
+    "2026-03": 0,
+    "2026-04": 0,
+    "2026-05": 0,
+    "2026-06": 0,
+    "2026-07": 0,
+    "2026-08": 10 + (20 / 60),
+  };
+  state.backup.dejanSeptember2026OpeningBalanceV2 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyDejanSeptember2026OpeningBalanceV2()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 4500);
+});
+// Confirmed opening balances for official tracking from 01.09.2026.
+function applySeptember2026ConfirmedBalancesV2() {
+  state.backup = state.backup || {};
+  if (state.backup.september2026ConfirmedBalancesV2) return false;
+
+  const normalizeConfirmedBalanceName = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const setConfirmedOpeningBalance = (name, balance) => {
+    const employee = (state.employees || []).find((item) =>
+      normalizeConfirmedBalanceName(item.name) === normalizeConfirmedBalanceName(name)
+    );
+    if (!employee) return;
+    employee.openingHourBalance = 0;
+    employee.openingBalanceMonth = "2025-12";
+    employee.monthlyBalanceOverrides = {
+      ...(employee.monthlyBalanceOverrides || {}),
+      "2026-01": 0,
+      "2026-02": 0,
+      "2026-03": 0,
+      "2026-04": 0,
+      "2026-05": 0,
+      "2026-06": 0,
+      "2026-07": 0,
+      "2026-08": balance,
+    };
+  };
+
+  const hazim = (state.employees || []).find((item) =>
+    normalizeConfirmedBalanceName(item.name) === "hazim hadzic"
+  );
+  if (hazim) {
+    hazim.weeklyHours = 30;
+    hazim.weeklyHoursByMonth = {
+      ...(hazim.weeklyHoursByMonth || {}),
+      "2026-06": 30,
+      "2026-07": 30,
+      "2026-08": 30,
+    };
+  }
+  setConfirmedOpeningBalance("Hazim Hadzic", 8);
+  setConfirmedOpeningBalance("Milica Blagojevic", 2);
+  setConfirmedOpeningBalance("Luka Cvorovic", 0);
+  setConfirmedOpeningBalance("Aleksa Damjanovic", 12);
+  setConfirmedOpeningBalance("Vukasin Vojnovic", 5);
+  setConfirmedOpeningBalance("Luka Nikolic", 0);
+  setConfirmedOpeningBalance("Aleksandar Bugarin", 0);
+
+  const vukasin = (state.employees || []).find((item) =>
+    normalizeConfirmedBalanceName(item.name) === "vukasin cvetkovic"
+  );
+  if (vukasin) {
+    vukasin.weeklyHours = 20;
+    vukasin.weeklyHoursByMonth = {
+      ...(vukasin.weeklyHoursByMonth || {}),
+      "2026-08": 20,
+      "2026-09": 20,
+    };
+  }
+  setConfirmedOpeningBalance("Vukasin Cvetkovic", -24.5);
+
+  state.backup.september2026ConfirmedBalancesV2 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applySeptember2026ConfirmedBalancesV2()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 4500);
+});
+
+function applyLukaNikolicAndBugarinAbsencesV3() {
+  state.backup = state.backup || {};
+  if (state.backup.lukaNikolicAndBugarinAbsencesV3) return false;
+  const normalizeAbsenceName = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const confirmed = [
+    ["Luka Nikolic", "2026-06-29", "2026-07-03", 5],
+    ["Luka Nikolic", "2026-07-30", "2026-07-31", 2],
+    ["Luka Nikolic", "2026-08-05", "2026-08-18", 10],
+    ["Aleksandar Bugarin", "2026-05-11", "2026-05-15", 5],
+    ["Aleksandar Bugarin", "2026-06-03", "2026-06-09", 5],
+    ["Aleksandar Bugarin", "2026-07-01", "2026-07-09", 7],
+    ["Aleksandar Bugarin", "2026-08-27", "2026-09-01", 4],
+  ];
+  state.employeeAbsences = state.employeeAbsences || [];
+  const lukaNikolic = (state.employees || []).find((item) =>
+    normalizeAbsenceName(item.name) === "luka nikolic"
+  );
+  if (lukaNikolic) {
+    lukaNikolic.startDate = "2026-03-09";
+    lukaNikolic.weeklyHours = 20;
+  }
+  const aleksandarBugarin = (state.employees || []).find((item) =>
+    normalizeAbsenceName(item.name) === "aleksandar bugarin"
+  );
+  if (aleksandarBugarin) {
+    aleksandarBugarin.startDate = "2026-04-01";
+    aleksandarBugarin.weeklyHours = 20;
+  }
+  confirmed.forEach(([name, startDate, endDate, days]) => {
+    const employee = (state.employees || []).find((item) =>
+      normalizeAbsenceName(item.name) === normalizeAbsenceName(name)
+    );
+    if (!employee) return;
+    state.employeeAbsences = state.employeeAbsences.filter((absence) => !(
+      absence.employeeId === employee.id
+      && absence.type === "Godišnji odmor"
+      && absence.startDate === startDate
+      && absence.endDate === endDate
+    ));
+    state.employeeAbsences.push({
+      id: `confirmed-vacation-${employee.id}-${startDate}`,
+      employeeId: employee.id,
+      type: "Godišnji odmor",
+      startDate,
+      endDate,
+      days,
+      note: "Potvrđen istorijski godišnji odmor",
+      status: "Odobreno",
+    });
+  });
+  state.backup.lukaNikolicAndBugarinAbsencesV3 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyLukaNikolicAndBugarinAbsencesV3()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 5000);
+});
