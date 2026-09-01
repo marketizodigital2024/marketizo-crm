@@ -1675,21 +1675,31 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 setupPasswordToggles();
 if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
 renderLoginHint();
-if (getEmployeeSession()?.token) setEmployeeSessionRestoring(true);
-onlineHydrationPromise = hydrateOnlineState().then(async () => {
-  const restored = await restoreEmployeeSession();
-  setEmployeeSessionRestoring(false);
+const initialEmployeeSession = getEmployeeSession();
+if (initialEmployeeSession?.token) setEmployeeSessionRestoring(true);
+onlineHydrationPromise = hydrateOnlineState();
+(async () => {
+  let restored = false;
+  if (initialEmployeeSession?.token) {
+    await Promise.race([
+      onlineHydrationPromise,
+      new Promise((resolve) => window.setTimeout(resolve, 500)),
+    ]).catch(() => null);
+    restored = await restoreEmployeeSession();
+    setEmployeeSessionRestoring(false);
+  }
   if (!restored) {
     document.getElementById("employeeApp").hidden = true;
     document.getElementById("employeeLoginScreen").hidden = false;
   }
+  await onlineHydrationPromise.catch(() => null);
   window.MarketizoRemote?.startPolling((payload) => {
     const activeId = activeEmployee?.id;
     state = loadState(payload);
     activeEmployee = (state.employees || []).find((employee) => employee.id === activeId) || activeEmployee;
     if (activeEmployee) renderEmployeePortal();
   });
-}).catch(() => {
+})().catch(() => {
   setEmployeeSessionRestoring(false);
   document.getElementById("employeeLoginScreen").hidden = false;
 });
