@@ -3976,3 +3976,22 @@ body.employee-editor-open {
 @media (max-width: 780px) {
   .client-cost-picker-dropdown { left: 0; right: auto; width: min(100%, 430px); }
 }
+
+.employee-install-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  max-width: min(92vw, 480px);
+  width: 100%;
+}
+.employee-install-dialog::backdrop { background: rgba(12, 27, 20, 0.55); backdrop-filter: blur(4px); }
+.employee-install-dialog-card { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 24px; padding: 32px; box-shadow: 0 24px 70px rgba(8, 31, 20, 0.24); }
+.employee-install-dialog-card h2 { margin: 8px 0 12px; }
+.employee-install-dialog-card p { color: var(--muted); line-height: 1.55; }
+.employee-install-dialog-card .primary-button { width: 100%; margin-top: 16px; }
+.employee-install-dialog-close { position: absolute; top: 14px; right: 14px; border: 0; background: #eef7f1; width: 38px; height: 38px; border-radius: 50%; font-size: 24px; cursor: pointer; }
+@media (max-width: 640px) {
+  .employee-install-dialog { max-width: none; width: calc(100% - 20px); margin: auto 10px 10px; }
+  .employee-install-dialog[open] { align-self: end; }
+  .employee-install-dialog-card { border-radius: 24px 24px 18px 18px; padding: 28px 22px 22px; }
+}
