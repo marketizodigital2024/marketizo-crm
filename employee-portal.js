@@ -1443,7 +1443,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
     return;
   }
-  if (!client) {
+  const isPause = String(activity.name || "").trim().toLowerCase() === "pauza";
+  if (!isPause && !client) {
     alert("Izaberi klijenta za kog si radio/la ovu aktivnost.");
     return;
   }
@@ -1456,8 +1457,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
     activityId: activity.id,
     activityName: activity.name,
     activityCategory: activity.category || "Ostalo",
-    clientId: client.id,
-    clientName: client.name,
+    clientId: client?.id || "",
+    clientName: client?.name || "",
     type: "Rad",
     note: formData.get("note"),
     positive: formData.get("positive"),
@@ -1481,7 +1482,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
       id: crypto.randomUUID(), employeeId: activeEmployee.id, recipientId, date,
       title: "Dnevni izveštaj", hours: Math.round((minutes / 60) * 10000) / 10000, minutes,
       activityId: activity.id, activityName: activity.name, activityCategory: activity.category || "Ostalo",
-      clientId: client.id, clientName: client.name, positive: formData.get("positive"),
+      clientId: client?.id || "", clientName: client?.name || "", positive: formData.get("positive"),
       negative: formData.get("negative"), note: formData.get("note"), createdAt: new Date().toISOString(),
     });
   }
