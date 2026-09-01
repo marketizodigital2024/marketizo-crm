@@ -5834,3 +5834,57 @@ window.addEventListener("load", () => {
     if (typeof render === "function") render();
   }, 4500);
 });
+
+// Official work-time tracking starts on 01.09.2026. Preserve the agreed carryovers, absences and HR data.
+function applyOfficialSeptember2026WorkResetV1() {
+  state.backup = state.backup || {};
+  if (state.backup.officialSeptember2026WorkResetV1) return false;
+
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const fixedCarryovers = {
+    "vukasin vojnovic": 5,
+    "milica blagojevic": 2,
+    "aleksa damjanovic": 12,
+    "nikola marjanovic": -(21 + (35 / 60)),
+    "sladjan simic": 6.5,
+    "luka cvorovic": 0,
+    "dejan klement": 10 + (20 / 60),
+  };
+  const neutralMonths = [
+    "2025-10", "2025-11", "2025-12",
+    "2026-01", "2026-02", "2026-03", "2026-04", "2026-05",
+    "2026-06", "2026-07", "2026-08",
+  ];
+
+  (state.employees || []).forEach((employee) => {
+    const key = normalize(employee.name);
+    const calculatedCarryover = employeeCarryoverBalance(employee, "2026-09");
+    employee.openingHourBalance = Object.prototype.hasOwnProperty.call(fixedCarryovers, key)
+      ? fixedCarryovers[key]
+      : calculatedCarryover;
+    employee.openingBalanceMonth = "2026-08";
+    employee.monthlyBalanceOverrides = {
+      ...(employee.monthlyBalanceOverrides || {}),
+      ...Object.fromEntries(neutralMonths.map((month) => [month, 0])),
+    };
+  });
+
+  const oldLogs = (state.employeeWorkLogs || []).filter((log) => String(log.date || "") < "2026-09-01");
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => String(log.date || "") >= "2026-09-01");
+  state.backup.officialSeptember2026WorkResetV1 = {
+    appliedAt: new Date().toISOString(),
+    removedWorkLogs: oldLogs.length,
+    preservedAbsences: (state.employeeAbsences || []).length,
+  };
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyOfficialSeptember2026WorkResetV1()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 6500);
+});
