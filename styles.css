@@ -3995,3 +3995,12 @@ body.employee-editor-open {
   .employee-install-dialog[open] { align-self: end; }
   .employee-install-dialog-card { border-radius: 24px 24px 18px 18px; padding: 28px 22px 22px; }
 }
+.invoice-payment-balance { display: flex; flex-direction: column; gap: 3px; min-width: 155px; }
+.invoice-payment-balance span { color: var(--muted); font-size: 12px; }
+.invoice-payment-form { display: grid; grid-template-columns: 132px 110px minmax(170px, 1fr) auto; gap: 8px; align-items: end; grid-column: 1 / -1; }
+.invoice-payment-form label { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.invoice-payment-form input { width: 100%; }
+.invoice-payment-history { display: grid; gap: 5px; grid-column: 1 / -1; }
+.invoice-payment-history div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 8px; background: rgba(20, 53, 85, 0.06); font-size: 12px; }
+.invoice-payment-history button { border: 0; background: transparent; color: var(--danger); cursor: pointer; }
+@media (max-width: 900px) { .invoice-payment-form { grid-template-columns: 1fr 1fr; } .invoice-payment-form label:last-of-type { grid-column: 1 / -1; } }

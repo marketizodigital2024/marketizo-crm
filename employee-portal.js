@@ -76,13 +76,18 @@ function setEmployeeSession(employee, token, expiresAt) {
 async function restoreEmployeeSession() {
   const session = getEmployeeSession();
   if (!session?.token) return false;
-  const response = await fetch("/api/employee-auth", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "validate", token: session.token }),
-  });
-  if (!response.ok) {
-    localStorage.removeItem(employeeSessionKey);
+  const validate = () => fetch("/api/employee-auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "validate", token: session.token }),
+    }).catch(() => null);
+  let response = await validate();
+  if (!response || response.status >= 500) {
+    await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    response = await validate();
+  }
+  if (!response || !response.ok) {
+    if (response?.status === 401) localStorage.removeItem(employeeSessionKey);
     return false;
   }
   const verified = await response.json();
@@ -1125,7 +1130,7 @@ function showEmployeeNotificationPopups() {
   const shown = JSON.parse(sessionStorage.getItem(`shownEmployeeNotifications-${activeEmployee.id}`) || "[]");
   const nextShown = new Set(shown);
   employeeNotifications()
-    .filter((notification) => notification.title === "Odmor je odobren" && !nextShown.has(notification.id))
+    .filter((notification) => !isNotificationHidden(notification) && !nextShown.has(notification.id))
     .slice(0, 3)
     .forEach((notification) => {
       showToast(notification.title, notification.message, notification.type);
@@ -1431,6 +1436,7 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
   }
   document.getElementById("employeeLoginError").hidden = true;
   setEmployeeSession(activeEmployee, result.token, result.expiresAt);
+  if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
   document.getElementById("employeeLoginScreen").hidden = true;
   document.getElementById("employeeApp").hidden = false;
   renderEmployeePortal();
@@ -1650,6 +1656,7 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 });
 
 setupPasswordToggles();
+if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
 renderLoginHint();
 onlineHydrationPromise = hydrateOnlineState().then(async () => {
   await restoreEmployeeSession();

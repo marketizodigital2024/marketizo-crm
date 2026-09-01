@@ -1214,6 +1214,26 @@ function monthlyInvoice(client, monthKey = selectedMonthKey()) {
   };
 }
 
+function invoicePaymentEntries(invoice) {
+  return Array.isArray(invoice.payments) ? invoice.payments : [];
+}
+
+function invoicePaidAmount(client, monthKey = selectedMonthKey()) {
+  const invoice = monthlyInvoice(client, monthKey);
+  const payments = invoicePaymentEntries(invoice);
+  if (payments.length) return payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  if (Number(invoice.paidAmount || 0) > 0) return Number(invoice.paidAmount);
+  return invoice.paymentStatus === "Plaćeno" ? invoiceAmount(client, monthKey) : 0;
+}
+
+function invoiceRemainingAmount(client, monthKey = selectedMonthKey()) {
+  return Math.max(0, invoiceAmount(client, monthKey) - invoicePaidAmount(client, monthKey));
+}
+
+function escapeInvoiceText(value) {
+  return String(value || "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+}
+
 function clientsForInvoiceMonth(clients, monthKey) {
   return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]));
 }
@@ -1779,8 +1799,8 @@ function renderAdminPanel() {
   const mrr = active.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
   const paidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus === "Plaćeno");
   const unpaidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus !== "Plaćeno");
-  const paidTotal = paidClients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
-  const unpaidTotal = unpaidClients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
+  const paidTotal = active.reduce((sum, client) => sum + invoicePaidAmount(client, monthKey), 0);
+  const unpaidTotal = active.reduce((sum, client) => sum + invoiceRemainingAmount(client, monthKey), 0);
   const unsentClients = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
 
   setText("adminTotalClients", active.length);
@@ -1843,7 +1863,7 @@ function showAdminNotificationPopups(notifications) {
   const shown = JSON.parse(sessionStorage.getItem("shownAdminNotifications") || "[]");
   const nextShown = new Set(shown);
   notifications
-    .filter((notification) => notification.title === "Zahtev za odmor" && !nextShown.has(notification.key || notification.id))
+    .filter((notification) => !isNotificationHidden(notification) && !nextShown.has(notification.key || notification.id))
     .slice(0, 3)
     .forEach((notification) => {
       showToast(notification.title, notification.message, notification.type);
@@ -2034,6 +2054,9 @@ function renderMonthlyInvoices(clients, monthKey) {
   ];
   const renderClient = (client) => {
       const invoice = monthlyInvoice(client, monthKey);
+      const paidAmount = invoicePaidAmount(client, monthKey);
+      const remainingAmount = invoiceRemainingAmount(client, monthKey);
+      const payments = invoicePaymentEntries(invoice);
       return `<div class="invoice-compact-row">
         <div class="invoice-compact-client"><strong>${client.name}</strong><span>${client.country} · naplata ${client.billingDay || 1}.</span></div>
         <strong class="invoice-compact-amount">${currency.format(invoiceAmount(client, monthKey))}</strong>
@@ -2046,6 +2069,7 @@ function renderMonthlyInvoices(clients, monthKey) {
         <label>Plaćanje
           <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="paymentStatus">
             ${option("Nije plaćeno", invoice.paymentStatus)}
+            ${option("Delimično", invoice.paymentStatus)}
             ${option("Plaćeno", invoice.paymentStatus)}
             ${option("Kasni", invoice.paymentStatus)}
           </select>
@@ -2056,6 +2080,14 @@ function renderMonthlyInvoices(clients, monthKey) {
             ${option("Keš", invoice.paymentMethod)}
           </select>
         </label>
+        <div class="invoice-payment-balance"><strong>Uplaćeno ${currency.format(paidAmount)}</strong><span>Preostalo ${currency.format(remainingAmount)}</span></div>
+        <form class="invoice-payment-form" data-invoice-payment-form="${client.id}">
+          <label>Datum<input name="date" type="date" value="${currentDateKey()}" required /></label>
+          <label>Iznos<input name="amount" type="number" min="0.01" step="0.01" max="${remainingAmount || invoiceAmount(client, monthKey)}" required /></label>
+          <label>Komentar<input name="note" type="text" maxlength="160" placeholder="Npr. prva rata" /></label>
+          <button class="secondary-button" type="submit">Dodaj uplatu</button>
+        </form>
+        <div class="invoice-payment-history">${payments.length ? payments.map((payment) => `<div><span>${formatDate(payment.date)} · ${currency.format(Number(payment.amount || 0))}${payment.note ? ` · ${escapeInvoiceText(payment.note)}` : ""}</span><button type="button" data-delete-invoice-payment="${payment.id}" data-invoice-client="${client.id}">Obriši</button></div>`).join("") : `<small>Nema pojedinačnih uplata.</small>`}</div>
       </div>`;
   };
   const sorted = [...clients].sort((a, b) => invoiceAmount(b, monthKey) - invoiceAmount(a, monthKey));
@@ -2101,6 +2133,45 @@ function bindInvoiceControls() {
       saveState();
       renderAll();
       showToast("Sačuvano", `${client.name}: status računa je ažuriran.`, "ok");
+    });
+  });
+  document.querySelectorAll("[data-invoice-payment-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const client = state.clients.find((item) => item.id === form.dataset.invoicePaymentForm);
+      if (!client) return;
+      const invoice = monthlyInvoice(client);
+      const data = new FormData(form);
+      const amount = Number(data.get("amount") || 0);
+      const remaining = invoiceRemainingAmount(client);
+      if (amount <= 0 || amount > remaining + 0.001) {
+        showToast("Proveri iznos", `Možeš uneti najviše ${currency.format(remaining)}.`, "warn");
+        return;
+      }
+      invoice.payments = invoicePaymentEntries(invoice);
+      invoice.payments.push({ id: crypto.randomUUID(), date: data.get("date"), amount, note: String(data.get("note") || "").trim(), createdAt: new Date().toISOString() });
+      invoice.paidAmount = invoicePaidAmount(client);
+      invoice.paymentStatus = invoiceRemainingAmount(client) <= 0.001 ? "Plaćeno" : "Delimično";
+      invoice.paidAt = invoice.paymentStatus === "Plaćeno" ? new Date().toISOString() : "";
+      client.paymentStatus = invoice.paymentStatus;
+      saveState();
+      renderAll();
+      showToast("Uplata sačuvana", `${client.name}: evidentirano ${currency.format(amount)}.`, "ok");
+    });
+  });
+  document.querySelectorAll("[data-delete-invoice-payment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const client = state.clients.find((item) => item.id === button.dataset.invoiceClient);
+      if (!client || !confirm("Obrisati ovu uplatu?")) return;
+      const invoice = monthlyInvoice(client);
+      invoice.payments = invoicePaymentEntries(invoice).filter((payment) => payment.id !== button.dataset.deleteInvoicePayment);
+      invoice.paidAmount = invoice.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      invoice.paymentStatus = invoice.paidAmount >= invoiceAmount(client) ? "Plaćeno" : invoice.paidAmount > 0 ? "Delimično" : "Nije plaćeno";
+      invoice.paidAt = invoice.paymentStatus === "Plaćeno" ? new Date().toISOString() : "";
+      client.paymentStatus = invoice.paymentStatus;
+      saveState();
+      renderAll();
+      showToast("Uplata obrisana", `${client.name}: stanje računa je preračunato.`, "ok");
     });
   });
 }
@@ -3679,7 +3750,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
   const data = Object.fromEntries(new FormData(form));
   selectedEmployeeId = data.employeeId;
   state.employeeRecognitions = state.employeeRecognitions || [];
-  state.employeeRecognitions.push({
+  const recognition = {
     id: crypto.randomUUID(),
     employeeId: data.employeeId,
     month: data.month,
@@ -3687,6 +3758,15 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
     author: data.author.trim() || "Admin",
     text: data.text.trim(),
     createdAt: new Date().toISOString(),
+  };
+  state.employeeRecognitions.push(recognition);
+  notifyOnce({
+    key: `recognition-created-${recognition.id}`,
+    scope: "employee",
+    targetId: recognition.employeeId,
+    type: recognition.type === "Pohvala" ? "ok" : "info",
+    title: recognition.type === "Pohvala" ? "Dobio/la si pohvalu" : "Novi razvojni fokus",
+    message: `${recognition.text} - ${recognition.author}`,
   });
   saveState();
   form.reset();

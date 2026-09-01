@@ -8,5 +8,8 @@
     { "source": "/clients", "destination": "/index.html#clients" },
     { "source": "/reports", "destination": "/index.html#reports" },
     { "source": "/calendar", "destination": "/index.html#calendar" }
+  ],
+  "crons": [
+    { "path": "/api/backup", "schedule": "15 1 * * *" }
   ]
 }
