@@ -2700,9 +2700,16 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
 function generateSystemNotifications() {
   const monthKey = selectedMonthKey();
   const today = currentDateKey();
+  const employeeTrackingStartDate = "2026-09-01";
 
   // Dnevni izvestaji su evidencija rada, ne stavka koja trazi reakciju admina.
-  state.notifications = (state.notifications || []).filter((notification) => !String(notification.key || "").startsWith("employee-report-"));
+  state.notifications = (state.notifications || []).filter((notification) => {
+    const key = String(notification.key || "");
+    if (key.startsWith("employee-report-")) return false;
+    if (!key.startsWith("employee-hours-shortage-")) return true;
+    const notificationDate = key.match(/(\d{4}-\d{2}-\d{2})$/)?.[1] || "";
+    return !notificationDate || notificationDate >= employeeTrackingStartDate;
+  });
 
   state.clients.forEach((client) => {
     const invoice = monthlyInvoice(client, monthKey);
@@ -2758,7 +2765,7 @@ function generateSystemNotifications() {
   yesterdayDate.setDate(yesterdayDate.getDate() - 1);
   const yesterday = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, "0")}-${String(yesterdayDate.getDate()).padStart(2, "0")}`;
   const dayOfWeek = yesterdayDate.getDay();
-  if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+  if (yesterday >= employeeTrackingStartDate && dayOfWeek >= 1 && dayOfWeek <= 5) {
     (state.employees || [])
       .filter((employee) => employee.status === "Aktivan")
       .filter((employee) => !String(employee.position || "").trim().toLocaleLowerCase("sr-Latn").includes("snimatelj"))

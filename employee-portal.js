@@ -522,16 +522,24 @@ function expectedHours(employee, monthKey) {
   return Math.round(plannedDays * dailyHours * 100) / 100;
 }
 
-function expectedHoursToDate(employee, monthKey) {
+function elapsedWorkdaysToDate(employee, monthKey) {
   const selectedMonth = monthIndex(monthKey);
   const currentMonth = monthIndex(currentMonthKey());
-  if (selectedMonth < currentMonth) return expectedHours(employee, monthKey);
-  if (selectedMonth > currentMonth) return 0;
+  if (selectedMonth < currentMonth) {
+    return workdaysInMonth(monthKey).filter((day) =>
+      (!employee.startDate || day >= employee.startDate) &&
+      !(state.employeeAbsences || []).some((absence) =>
+        absence.employeeId === employee.id &&
+        absence.status !== "Zatraženo" &&
+        day >= absence.startDate &&
+        day <= absence.endDate
+      )
+    );
+  }
+  if (selectedMonth > currentMonth) return [];
 
   const today = currentDateKey();
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
-  const dailyHours = weeklyHours / 5;
-  const elapsedWorkdays = workdaysInMonth(monthKey).filter((day) =>
+  return workdaysInMonth(monthKey).filter((day) =>
     day < today &&
     (!employee.startDate || day >= employee.startDate) &&
     !(state.employeeAbsences || []).some((absence) =>
@@ -541,6 +549,17 @@ function expectedHoursToDate(employee, monthKey) {
       day <= absence.endDate
     )
   );
+}
+
+function expectedHoursToDate(employee, monthKey) {
+  const selectedMonth = monthIndex(monthKey);
+  const currentMonth = monthIndex(currentMonthKey());
+  if (selectedMonth < currentMonth) return expectedHours(employee, monthKey);
+  if (selectedMonth > currentMonth) return 0;
+
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
+  const elapsedWorkdays = elapsedWorkdaysToDate(employee, monthKey);
   return Math.round(elapsedWorkdays.length * dailyHours * 100) / 100;
 }
 
@@ -813,8 +832,8 @@ function renderEmployeePortal() {
   const year = Number(portalMonth.slice(0, 4));
   const logs = employeeWorkLogs(portalMonth);
   const hours = employeeMonthHours(activeEmployee, portalMonth);
-  const workdays = workdaysInMonth(portalMonth).filter((day) => !activeEmployee.startDate || day >= activeEmployee.startDate);
-  const expected = expectedHours(activeEmployee, portalMonth);
+  const workdays = elapsedWorkdaysToDate(activeEmployee, portalMonth);
+  const expected = expectedHoursToDate(activeEmployee, portalMonth);
   const balance = hourBalance(activeEmployee, portalMonth);
   const currentYear = Number(currentDateKey().slice(0, 4));
   const vacation = employeeVacationSnapshot(activeEmployee, year === currentYear ? currentDateKey() : `${year}-12-31`);
@@ -1415,6 +1434,8 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
   document.getElementById("employeeLoginScreen").hidden = true;
   document.getElementById("employeeApp").hidden = false;
   renderEmployeePortal();
+  setupDailyMinuteProgress();
+  setupPauseActivityEntry();
 });
 
 document.querySelectorAll("[data-employee-tab]").forEach((button) => {
