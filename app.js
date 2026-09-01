@@ -2539,7 +2539,7 @@ function employeeExpectedHoursToDate(employee, monthKey) {
   if (selectedMonth < currentMonth) return employeeExpectedHours(employee, monthKey);
   if (selectedMonth > currentMonth) return 0;
 
-  const today = localDate();
+  const today = currentDateKey();
   const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
   const dailyHours = weeklyHours / 5;
   const elapsedWorkdays = workdaysInMonth(monthKey).filter((day) =>
