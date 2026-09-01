@@ -24,7 +24,7 @@ const defaultEmployeeProfiles = [
     id: "emp-miljan",
     name: "Miljan Marinjes",
     email: "miljan@marketizo.local",
-    password: "123456",
+    password: "",
     position: "Founder / Strategija",
     startDate: "2023-07-01",
     salary: 0,
@@ -39,7 +39,7 @@ const defaultEmployeeProfiles = [
     id: "emp-ivana",
     name: "Ivana Marinjes",
     email: "ivana@marketizo.local",
-    password: "123456",
+    password: "",
     position: "Co-founder / Operativa",
     startDate: "2023-07-01",
     salary: 0,
@@ -54,7 +54,7 @@ const defaultEmployeeProfiles = [
     id: "emp-aleksandar",
     name: "Aleksandar Bugarin",
     email: "aleksandar@marketizo.local",
-    password: "123456",
+    password: "",
     position: "Scenarista",
     startDate: "2026-01-15",
     salary: 0,
@@ -69,7 +69,7 @@ const defaultEmployeeProfiles = [
     id: "emp-luka",
     name: "Luka Cvorovic",
     email: "luka@marketizo.local",
-    password: "123456",
+    password: "",
     position: "Editor",
     startDate: "2026-02-01",
     salary: 0,
@@ -84,7 +84,7 @@ const defaultEmployeeProfiles = [
     id: "emp-nikola",
     name: "Nikola Marjanovic",
     email: "nikola@marketizo.local",
-    password: "123456",
+    password: "",
     position: "Editor",
     startDate: "2026-03-01",
     salary: 0,
@@ -1194,7 +1194,7 @@ function loginSlug(value) {
 
 function withLoginDefaults(client) {
   client.loginEmail = client.loginEmail || `${loginSlug(client.name)}@marketizo.local`;
-  client.loginPassword = client.loginPassword || "123456";
+  client.loginPassword = client.loginPassword || "";
   return client;
 }
 
@@ -1324,7 +1324,7 @@ function migrateState(data) {
     id: employee.id || crypto.randomUUID(),
     name: "",
     email: "",
-    password: "123456",
+    password: "",
     position: "",
     startDate: "",
     salary: 0,
@@ -2533,6 +2533,28 @@ function employeeExpectedHours(employee, monthKey) {
   return Math.round(plannedDays * dailyHours * 100) / 100;
 }
 
+function employeeExpectedHoursToDate(employee, monthKey) {
+  const selectedMonth = monthIndex(monthKey);
+  const currentMonth = monthIndex(currentMonthKey());
+  if (selectedMonth < currentMonth) return employeeExpectedHours(employee, monthKey);
+  if (selectedMonth > currentMonth) return 0;
+
+  const today = localDate();
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
+  const elapsedWorkdays = workdaysInMonth(monthKey).filter((day) =>
+    day <= today &&
+    (!employee.startDate || day >= employee.startDate) &&
+    !(state.employeeAbsences || []).some((absence) =>
+      absence.employeeId === employee.id &&
+      absence.status !== "Zatraženo" &&
+      day >= absence.startDate &&
+      day <= absence.endDate
+    )
+  );
+  return Math.round(elapsedWorkdays.length * dailyHours * 100) / 100;
+}
+
 function employeeMonthlyHoursPreview(weeklyHours, monthKey, startDate = "") {
   const dailyHours = parseNumber(weeklyHours || 0, 0) / 5;
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !startDate || day >= startDate);
@@ -2568,7 +2590,7 @@ function employeeMonthBalance(employee, monthKey) {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
     return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
   }
-  return Math.round((employeeMonthHours(employee.id, monthKey) - employeeExpectedHours(employee, monthKey)) * 100) / 100;
+  return Math.round((employeeMonthHours(employee.id, monthKey) - employeeExpectedHoursToDate(employee, monthKey)) * 100) / 100;
 }
 
 function employeeCarryoverBalance(employee, monthKey) {
@@ -3085,7 +3107,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.name.value = employee.name || "";
     form.elements.position.value = employee.position || "";
     form.elements.email.value = employee.email || "";
-    form.elements.password.value = employee.password || "123456";
+    form.elements.password.value = employee.password || "";
     form.elements.startDate.value = employee.startDate || "";
     form.elements.salary.value = Number(employee.salary || 0);
     form.elements.weeklyHours.value = parseNumber(employee.weeklyHours || 40);
@@ -4464,7 +4486,7 @@ function renderClients() {
             <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
             <td><span class="status ${statusClass(client)}">${client.status || "Aktivan"}</span></td>
             <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
-            <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "123456"}</span></td>
+            <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "Nije uneta"}</span></td>
             <td>${client.contactName || "Nije unet"}<br /><span>${client.contactPhone || client.whatsapp || "Telefon nije unet"}</span></td>
             <td>
               <div class="row-actions">
@@ -4996,7 +5018,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
   const payload = {
     name,
     email: String(formData.get("email") || `${loginSlug(name)}@marketizo.local`).trim().toLowerCase(),
-    password: String(formData.get("password") || "123456").trim(),
+    password: String(formData.get("password") || "").trim(),
     position: formData.get("position"),
     startDate: formData.get("startDate"),
     salary: parseNumber(formData.get("salary"), 0),

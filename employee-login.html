@@ -81,10 +81,11 @@
         <dialog class="employee-install-dialog" id="employeeInstallDialog">
           <div class="employee-install-dialog-card">
             <button class="employee-install-dialog-close" id="closeEmployeeInstallDialog" type="button" aria-label="Zatvori">×</button>
-            <p class="eyebrow">Marketizo Employee</p>
-            <h2 id="employeeInstallDialogTitle">Dodaj aplikaciju na početni ekran</h2>
-            <p id="employeeInstallDialogText">Otvori meni browsera i izaberi „Dodaj na početni ekran“.</p>
-            <button class="primary-button" id="confirmEmployeeInstallDialog" type="button">Razumem</button>
+            <span class="employee-install-dialog-icon">↗</span>
+            <p class="eyebrow">Marketizo na telefonu</p>
+            <h2 id="employeeInstallDialogTitle">Dodaj na početni ekran</h2>
+            <div class="employee-install-dialog-steps" id="employeeInstallDialogSteps"></div>
+            <button class="primary-button" id="confirmEmployeeInstallGuide" type="button">Razumem</button>
           </div>
         </dialog>
 
@@ -385,7 +386,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=54"></script>
+    <script src="employee-portal.js?v=55"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

@@ -3,7 +3,6 @@ const defaultEmployees = [
     id: "emp-miljan",
     name: "Miljan Marinjes",
     email: "miljan@marketizo.local",
-    password: "123456",
     position: "Founder / Strategija",
     startDate: "2023-07-01",
     salary: 0,
@@ -18,7 +17,6 @@ const defaultEmployees = [
     id: "emp-ivana",
     name: "Ivana Marinjes",
     email: "ivana@marketizo.local",
-    password: "123456",
     position: "Co-founder / Operativa",
     startDate: "2023-07-01",
     salary: 0,
@@ -63,22 +61,33 @@ function getEmployeeSession() {
   }
 }
 
-function setEmployeeSession(employee) {
+function setEmployeeSession(employee, token, expiresAt) {
   localStorage.setItem(
     employeeSessionKey,
     JSON.stringify({
       employeeId: employee.id,
       email: String(employee.email || "").toLowerCase(),
-      expiresAt: Date.now() + employeeSessionDuration,
+      token,
+      expiresAt: Number(expiresAt || (Date.now() + employeeSessionDuration)),
     })
   );
 }
 
-function restoreEmployeeSession() {
+async function restoreEmployeeSession() {
   const session = getEmployeeSession();
-  if (!session) return false;
+  if (!session?.token) return false;
+  const response = await fetch("/api/employee-auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "validate", token: session.token }),
+  });
+  if (!response.ok) {
+    localStorage.removeItem(employeeSessionKey);
+    return false;
+  }
+  const verified = await response.json();
   activeEmployee = (state.employees || []).find(
-    (employee) => employee.id === session.employeeId || String(employee.email || "").toLowerCase() === session.email
+    (employee) => employee.id === verified.employee?.id || String(employee.email || "").toLowerCase() === verified.employee?.email
   );
   if (!activeEmployee) {
     localStorage.removeItem(employeeSessionKey);
@@ -104,7 +113,7 @@ function loadState(sourceData = null) {
     id: employee.id || crypto.randomUUID(),
     name: "",
     email: "",
-    password: "123456",
+    password: "",
     position: "",
     startDate: "",
     salary: 0,
@@ -506,10 +515,33 @@ function employeeMonthAbsenceDays(employeeId, monthKey) {
 }
 
 function expectedHours(employee, monthKey) {
-  const dailyHours = parseNumber(employee.weeklyHours || 40, 40) / 5;
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !employee.startDate || day >= employee.startDate);
   const plannedDays = Math.max(eligibleWorkdays.length - employeeMonthAbsenceDays(employee.id, monthKey), 0);
   return Math.round(plannedDays * dailyHours * 100) / 100;
+}
+
+function expectedHoursToDate(employee, monthKey) {
+  const selectedMonth = monthIndex(monthKey);
+  const currentMonth = monthIndex(currentMonthKey());
+  if (selectedMonth < currentMonth) return expectedHours(employee, monthKey);
+  if (selectedMonth > currentMonth) return 0;
+
+  const today = currentDateKey();
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const dailyHours = weeklyHours / 5;
+  const elapsedWorkdays = workdaysInMonth(monthKey).filter((day) =>
+    day <= today &&
+    (!employee.startDate || day >= employee.startDate) &&
+    !(state.employeeAbsences || []).some((absence) =>
+      absence.employeeId === employee.id &&
+      absence.status !== "Zatraženo" &&
+      day >= absence.startDate &&
+      day <= absence.endDate
+    )
+  );
+  return Math.round(elapsedWorkdays.length * dailyHours * 100) / 100;
 }
 
 function employeeMonthLatePenaltyHours(employeeId, monthKey) {
@@ -551,7 +583,7 @@ function monthBalance(employee, monthKey) {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
     return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
   }
-  return Math.round((employeeMonthHours(employee, monthKey) - expectedHours(employee, monthKey)) * 100) / 100;
+  return Math.round((employeeMonthHours(employee, monthKey) - expectedHoursToDate(employee, monthKey)) * 100) / 100;
 }
 
 function carryoverBalance(employee, monthKey) {
@@ -846,6 +878,10 @@ function renderMissingTimeAlert() {
   const alertBox = document.getElementById("employeeMissingTimeAlert");
   if (!alertBox || !activeEmployee) return;
   const previousDay = previousWorkingDay();
+  if (previousDay < "2026-09-01") {
+    alertBox.hidden = true;
+    return;
+  }
   const expected = expectedMinutesForDate(activeEmployee, previousDay);
   const logged = loggedMinutesForDate(previousDay);
   const missingMinutes = Math.max(0, expected - logged);
@@ -1353,13 +1389,21 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
   const formData = new FormData(form);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
-  activeEmployee = state.employees.find((employee) => String(employee.email || "").toLowerCase() === email && String(employee.password || "") === password);
-  if (!activeEmployee) {
+  const response = await fetch("/api/employee-auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "login", email, password }),
+  });
+  const result = await response.json().catch(() => ({}));
+  activeEmployee = response.ok ? state.employees.find((employee) =>
+    employee.id === result.employee?.id || String(employee.email || "").toLowerCase() === result.employee?.email
+  ) : null;
+  if (!activeEmployee || !result.token) {
     document.getElementById("employeeLoginError").hidden = false;
     return;
   }
   document.getElementById("employeeLoginError").hidden = true;
-  setEmployeeSession(activeEmployee);
+  setEmployeeSession(activeEmployee, result.token, result.expiresAt);
   document.getElementById("employeeLoginScreen").hidden = true;
   document.getElementById("employeeApp").hidden = false;
   renderEmployeePortal();
@@ -1508,33 +1552,39 @@ window.addEventListener("appinstalled", () => {
 syncEmployeeInstallButton();
 
 document.getElementById("installEmployeeAppBtn")?.addEventListener("click", async () => {
-  if (deferredInstallPrompt) {
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    syncEmployeeInstallButton();
+  if (!deferredInstallPrompt) {
+    const dialog = document.getElementById("employeeInstallDialog");
+    const title = document.getElementById("employeeInstallDialogTitle");
+    const steps = document.getElementById("employeeInstallDialogSteps");
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (!dialog || !title || !steps) return;
+    title.textContent = isIOS ? "Dodaj na početni ekran" : "Instaliraj Marketizo app";
+    steps.innerHTML = isIOS
+      ? `<div><strong>1</strong><span>Otvori ovu stranicu u <b>Safariju</b>.</span></div>
+         <div><strong>2</strong><span>Pritisni dugme <b>Deli</b> pri dnu ekrana.</span></div>
+         <div><strong>3</strong><span>Izaberi <b>Dodaj na početni ekran</b>, pa potvrdi sa <b>Dodaj</b>.</span></div>`
+      : `<div><strong>1</strong><span>Otvori meni browsera <b>⋮</b>.</span></div>
+         <div><strong>2</strong><span>Izaberi <b>Instaliraj aplikaciju</b> ili <b>Dodaj na početni ekran</b>.</span></div>
+         <div><strong>3</strong><span>Potvrdi instalaciju. Marketizo će se pojaviti među aplikacijama.</span></div>`;
+    dialog.showModal();
     return;
   }
-  const dialog = document.getElementById("employeeInstallDialog");
-  const title = document.getElementById("employeeInstallDialogTitle");
-  const text = document.getElementById("employeeInstallDialogText");
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  if (title) title.textContent = "Dodaj Marketizo na početni ekran";
-  if (text) text.textContent = isIOS
-    ? "U Safariju pritisni Deli, zatim izaberi Dodaj na početni ekran."
-    : "Otvori meni browsera i izaberi Instaliraj aplikaciju ili Dodaj na početni ekran.";
-  dialog?.showModal();
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  syncEmployeeInstallButton();
 });
 
-document.getElementById("closeEmployeeInstallDialog")?.addEventListener("click", () => {
+function closeEmployeeInstallGuide() {
   document.getElementById("employeeInstallDialog")?.close();
-});
-document.getElementById("confirmEmployeeInstallDialog")?.addEventListener("click", () => {
-  document.getElementById("employeeInstallDialog")?.close();
-});
+}
+
+document.getElementById("closeEmployeeInstallDialog")?.addEventListener("click", closeEmployeeInstallGuide);
+document.getElementById("confirmEmployeeInstallGuide")?.addEventListener("click", closeEmployeeInstallGuide);
 document.getElementById("employeeInstallDialog")?.addEventListener("click", (event) => {
-  if (event.target === event.currentTarget) event.currentTarget.close();
+  if (event.target === event.currentTarget) closeEmployeeInstallGuide();
 });
+
 document.querySelectorAll("[data-dashboard-section-button]").forEach((button) => {
   button.addEventListener("click", () => {
     const dashboard = document.getElementById("employeeDashboard");
@@ -1571,8 +1621,8 @@ document.querySelectorAll('input[type="date"], input[type="month"]').forEach((in
 
 setupPasswordToggles();
 renderLoginHint();
-onlineHydrationPromise = hydrateOnlineState().then(() => {
-  restoreEmployeeSession();
+onlineHydrationPromise = hydrateOnlineState().then(async () => {
+  await restoreEmployeeSession();
   window.MarketizoRemote?.startPolling((payload) => {
     const activeId = activeEmployee?.id;
     state = loadState(payload);
