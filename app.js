@@ -5800,13 +5800,10 @@ window.addEventListener("load", () => {
   }, 4000);
 });
 
-// Final Dejan opening balance correction for official tracking from 01.09.2026.
 function applyDejanSeptember2026OpeningBalanceV2() {
   state.backup = state.backup || {};
   if (state.backup.dejanSeptember2026OpeningBalanceV2) return false;
-  const normalize = (value) => String(value || "").trim().toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
-  const employee = (state.employees || []).find((item) => normalize(item.name) === "dejan klement");
+  const employee = (state.employees || []).find((item) => String(item.name || "").trim() === "Dejan Klement");
   if (!employee) return false;
   employee.openingHourBalance = 0;
   employee.openingBalanceMonth = "2025-11";
@@ -5834,57 +5831,139 @@ window.addEventListener("load", () => {
     if (typeof render === "function") render();
   }, 4500);
 });
-
-// Official work-time tracking starts on 01.09.2026. Preserve the agreed carryovers, absences and HR data.
-function applyOfficialSeptember2026WorkResetV1() {
+// Confirmed opening balances for official tracking from 01.09.2026.
+function applySeptember2026ConfirmedBalancesV2() {
   state.backup = state.backup || {};
-  if (state.backup.officialSeptember2026WorkResetV1) return false;
+  if (state.backup.september2026ConfirmedBalancesV2) return false;
 
-  const normalize = (value) => String(value || "").trim().toLowerCase()
+  const normalizeConfirmedBalanceName = (value) => String(value || "").trim().toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
-  const fixedCarryovers = {
-    "vukasin vojnovic": 5,
-    "milica blagojevic": 2,
-    "aleksa damjanovic": 12,
-    "nikola marjanovic": -(21 + (35 / 60)),
-    "sladjan simic": 6.5,
-    "luka cvorovic": 0,
-    "dejan klement": 10 + (20 / 60),
-  };
-  const neutralMonths = [
-    "2025-10", "2025-11", "2025-12",
-    "2026-01", "2026-02", "2026-03", "2026-04", "2026-05",
-    "2026-06", "2026-07", "2026-08",
-  ];
-
-  (state.employees || []).forEach((employee) => {
-    const key = normalize(employee.name);
-    const calculatedCarryover = employeeCarryoverBalance(employee, "2026-09");
-    employee.openingHourBalance = Object.prototype.hasOwnProperty.call(fixedCarryovers, key)
-      ? fixedCarryovers[key]
-      : calculatedCarryover;
-    employee.openingBalanceMonth = "2026-08";
+  const setConfirmedOpeningBalance = (name, balance) => {
+    const employee = (state.employees || []).find((item) =>
+      normalizeConfirmedBalanceName(item.name) === normalizeConfirmedBalanceName(name)
+    );
+    if (!employee) return;
+    employee.openingHourBalance = 0;
+    employee.openingBalanceMonth = "2025-12";
     employee.monthlyBalanceOverrides = {
       ...(employee.monthlyBalanceOverrides || {}),
-      ...Object.fromEntries(neutralMonths.map((month) => [month, 0])),
+      "2026-01": 0,
+      "2026-02": 0,
+      "2026-03": 0,
+      "2026-04": 0,
+      "2026-05": 0,
+      "2026-06": 0,
+      "2026-07": 0,
+      "2026-08": balance,
     };
-  });
-
-  const oldLogs = (state.employeeWorkLogs || []).filter((log) => String(log.date || "") < "2026-09-01");
-  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => String(log.date || "") >= "2026-09-01");
-  state.backup.officialSeptember2026WorkResetV1 = {
-    appliedAt: new Date().toISOString(),
-    removedWorkLogs: oldLogs.length,
-    preservedAbsences: (state.employeeAbsences || []).length,
   };
+
+  const hazim = (state.employees || []).find((item) =>
+    normalizeConfirmedBalanceName(item.name) === "hazim hadzic"
+  );
+  if (hazim) {
+    hazim.weeklyHours = 30;
+    hazim.weeklyHoursByMonth = {
+      ...(hazim.weeklyHoursByMonth || {}),
+      "2026-06": 30,
+      "2026-07": 30,
+      "2026-08": 30,
+    };
+  }
+  setConfirmedOpeningBalance("Hazim Hadzic", 8);
+  setConfirmedOpeningBalance("Milica Blagojevic", 2);
+  setConfirmedOpeningBalance("Luka Cvorovic", 0);
+  setConfirmedOpeningBalance("Aleksa Damjanovic", 12);
+  setConfirmedOpeningBalance("Vukasin Vojnovic", 5);
+  setConfirmedOpeningBalance("Luka Nikolic", 0);
+  setConfirmedOpeningBalance("Aleksandar Bugarin", 0);
+
+  const vukasin = (state.employees || []).find((item) =>
+    normalizeConfirmedBalanceName(item.name) === "vukasin cvetkovic"
+  );
+  if (vukasin) {
+    vukasin.weeklyHours = 20;
+    vukasin.weeklyHoursByMonth = {
+      ...(vukasin.weeklyHoursByMonth || {}),
+      "2026-08": 20,
+      "2026-09": 20,
+    };
+  }
+  setConfirmedOpeningBalance("Vukasin Cvetkovic", -24.5);
+
+  state.backup.september2026ConfirmedBalancesV2 = true;
   return true;
 }
 
 window.addEventListener("load", () => {
   window.setTimeout(() => {
-    if (!applyOfficialSeptember2026WorkResetV1()) return;
+    if (!applySeptember2026ConfirmedBalancesV2()) return;
     saveState();
     if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
     if (typeof render === "function") render();
-  }, 6500);
+  }, 4500);
+});
+
+function applyLukaNikolicAndBugarinAbsencesV3() {
+  state.backup = state.backup || {};
+  if (state.backup.lukaNikolicAndBugarinAbsencesV3) return false;
+  const normalizeAbsenceName = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const confirmed = [
+    ["Luka Nikolic", "2026-06-29", "2026-07-03", 5],
+    ["Luka Nikolic", "2026-07-30", "2026-07-31", 2],
+    ["Luka Nikolic", "2026-08-05", "2026-08-18", 10],
+    ["Aleksandar Bugarin", "2026-05-11", "2026-05-15", 5],
+    ["Aleksandar Bugarin", "2026-06-03", "2026-06-09", 5],
+    ["Aleksandar Bugarin", "2026-07-01", "2026-07-09", 7],
+    ["Aleksandar Bugarin", "2026-08-27", "2026-09-01", 4],
+  ];
+  state.employeeAbsences = state.employeeAbsences || [];
+  const lukaNikolic = (state.employees || []).find((item) =>
+    normalizeAbsenceName(item.name) === "luka nikolic"
+  );
+  if (lukaNikolic) {
+    lukaNikolic.startDate = "2026-03-09";
+    lukaNikolic.weeklyHours = 20;
+  }
+  const aleksandarBugarin = (state.employees || []).find((item) =>
+    normalizeAbsenceName(item.name) === "aleksandar bugarin"
+  );
+  if (aleksandarBugarin) {
+    aleksandarBugarin.startDate = "2026-04-01";
+    aleksandarBugarin.weeklyHours = 20;
+  }
+  confirmed.forEach(([name, startDate, endDate, days]) => {
+    const employee = (state.employees || []).find((item) =>
+      normalizeAbsenceName(item.name) === normalizeAbsenceName(name)
+    );
+    if (!employee) return;
+    state.employeeAbsences = state.employeeAbsences.filter((absence) => !(
+      absence.employeeId === employee.id
+      && absence.type === "Godišnji odmor"
+      && absence.startDate === startDate
+      && absence.endDate === endDate
+    ));
+    state.employeeAbsences.push({
+      id: `confirmed-vacation-${employee.id}-${startDate}`,
+      employeeId: employee.id,
+      type: "Godišnji odmor",
+      startDate,
+      endDate,
+      days,
+      note: "Potvrđen istorijski godišnji odmor",
+      status: "Odobreno",
+    });
+  });
+  state.backup.lukaNikolicAndBugarinAbsencesV3 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyLukaNikolicAndBugarinAbsencesV3()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 5000);
 });
