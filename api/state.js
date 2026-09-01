@@ -1,45 +1,5 @@
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
-const crypto = require("crypto");
-const EMPLOYEE_PASSWORD_PEPPER = process.env.EMPLOYEE_PASSWORD_PEPPER || "marketizo-employee-password-v1";
-
-function hashEmployeePassword(password) {
-  const input = `${EMPLOYEE_PASSWORD_PEPPER}|${String(password || "").trim()}`;
-  let hashA = 2166136261;
-  let hashB = 16777619;
-  for (let i = 0; i < input.length; i += 1) {
-    const code = input.charCodeAt(i);
-    hashA ^= code;
-    hashA = Math.imul(hashA, 16777619);
-    hashB ^= code + 17;
-    hashB = Math.imul(hashB, 2166136261);
-  }
-  return `h1:${(hashA >>> 0).toString(16).padStart(8, "0")}-h2:${(hashB >>> 0).toString(16).padStart(8, "0")}`;
-}
-
-function secureEmployeePassword(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(`${String(password || "").trim()}|${EMPLOYEE_PASSWORD_PEPPER}`, salt, 64).toString("hex");
-  return `scrypt:${salt}:${hash}`;
-}
-
-function sanitizeEmployeeAuth(payload = {}) {
-  const copy = JSON.parse(JSON.stringify(payload));
-  if (Array.isArray(copy.employees)) {
-    copy.employees = copy.employees.map((employee) => {
-      const normalized = { ...employee };
-      delete normalized.password;
-      delete normalized.passwordHash;
-      return normalized;
-    });
-  }
-  if (Array.isArray(copy.clients)) {
-    copy.clients.forEach((client) => {
-      delete client.loginPassword;
-    });
-  }
-  return copy;
-}
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -71,6 +31,14 @@ async function readBody(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
+function hidePasswords(payload) {
+  if (!payload) return payload;
+  const copy = JSON.parse(JSON.stringify(payload));
+  if (Array.isArray(copy.employees)) copy.employees.forEach((employee) => delete employee.password);
+  if (Array.isArray(copy.clients)) copy.clients.forEach((client) => delete client.loginPassword);
+  return copy;
+}
+
 async function readStoredPayload(config) {
   const response = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload`, {
     headers: supabaseHeaders(config.key),
@@ -80,29 +48,25 @@ async function readStoredPayload(config) {
   return rows[0]?.payload || {};
 }
 
-function preserveEmployeePasswords(payload, current) {
-  if (!Array.isArray(payload?.employees)) return payload;
+function preserveCredentials(payload, current) {
   const previous = Array.isArray(current?.employees) ? current.employees : [];
+  const previousClients = Array.isArray(current?.clients) ? current.clients : [];
   return {
     ...payload,
-    employees: payload.employees.map((employee) => {
-      const currentEmployee = {
-        ...employee,
-        passwordHash: "",
-      };
-      if (String(employee.password || "").trim()) {
-        currentEmployee.passwordHash = secureEmployeePassword(employee.password);
-      }
+    employees: Array.isArray(payload?.employees) ? payload.employees.map((employee) => {
+      if (String(employee.password || "").trim()) return employee;
       const match = previous.find((item) => item.id === employee.id) || previous.find((item) =>
         String(item.email || "").trim().toLowerCase() === String(employee.email || "").trim().toLowerCase()
       );
-      if (!currentEmployee.passwordHash) {
-        if (match?.passwordHash) currentEmployee.passwordHash = match.passwordHash;
-        if (match?.password && !currentEmployee.passwordHash) currentEmployee.passwordHash = hashEmployeePassword(match.password);
-      }
-      delete currentEmployee.password;
-      return currentEmployee;
-    }),
+      return match?.password ? { ...employee, password: match.password } : employee;
+    }) : payload.employees,
+    clients: Array.isArray(payload?.clients) ? payload.clients.map((client) => {
+      if (String(client.loginPassword || "").trim()) return client;
+      const match = previousClients.find((item) => item.id === client.id) || previousClients.find((item) =>
+        String(item.loginEmail || "").trim().toLowerCase() === String(client.loginEmail || "").trim().toLowerCase()
+      );
+      return match?.loginPassword ? { ...client, loginPassword: match.loginPassword } : client;
+    }) : payload.clients,
   };
 }
 
@@ -139,7 +103,7 @@ module.exports = async function handler(req, res) {
       return json(res, 200, {
         configured: true,
         empty: !row,
-        payload: sanitizeEmployeeAuth(row?.payload || null),
+        payload: hidePasswords(row?.payload || null),
         updatedAt: row?.updated_at || "",
       });
     }
@@ -150,7 +114,7 @@ module.exports = async function handler(req, res) {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
         return json(res, 400, { configured: true, error: "Nedostaje payload objekat." });
       }
-      payload = preserveEmployeePasswords(payload, await readStoredPayload(config));
+      payload = preserveCredentials(payload, await readStoredPayload(config));
       const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
         method: "POST",
         headers: {
