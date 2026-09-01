@@ -1574,6 +1574,7 @@ document.getElementById("ackLateBtn")?.addEventListener("click", () => {
 
 document.getElementById("logoutEmployee")?.addEventListener("click", () => {
   localStorage.removeItem(employeeSessionKey);
+  document.documentElement.classList.remove("employee-session-cached");
   activeEmployee = null;
   document.getElementById("employeeApp").hidden = true;
   document.getElementById("employeeLoginScreen").hidden = false;
@@ -1683,6 +1684,7 @@ onlineHydrationPromise = hydrateOnlineState();
     restored = await restoreEmployeeSession();
   }
   if (!restored) {
+    document.documentElement.classList.remove("employee-session-cached");
     document.getElementById("employeeApp").hidden = true;
     document.getElementById("employeeLoginScreen").hidden = false;
   }
@@ -1694,6 +1696,7 @@ onlineHydrationPromise = hydrateOnlineState();
     if (activeEmployee) renderEmployeePortal();
   });
 })().catch(() => {
+  document.documentElement.classList.remove("employee-session-cached");
   document.getElementById("employeeApp").hidden = true;
   document.getElementById("employeeLoginScreen").hidden = false;
 });

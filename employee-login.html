@@ -14,6 +14,15 @@
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
     <link rel="stylesheet" href="styles.css?v=33" />
+    <style>html.employee-session-cached #employeeLoginScreen { display: none !important; }</style>
+    <script>
+      try {
+        const cachedSession = JSON.parse(localStorage.getItem("marketizoEmployeeSession") || "null");
+        if (cachedSession?.token && Number(cachedSession.expiresAt || 0) > Date.now()) {
+          document.documentElement.classList.add("employee-session-cached");
+        }
+      } catch {}
+    </script>
   </head>
   <body class="client-login-body">
     <main class="client-auth" id="employeeLoginScreen">
@@ -386,7 +395,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=65"></script>
+    <script src="employee-portal.js?v=66"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>
