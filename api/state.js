@@ -31,6 +31,37 @@ async function readBody(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
+function hidePasswords(payload) {
+  if (!payload) return payload;
+  const copy = JSON.parse(JSON.stringify(payload));
+  if (Array.isArray(copy.employees)) copy.employees.forEach((employee) => delete employee.password);
+  return copy;
+}
+
+async function readStoredPayload(config) {
+  const response = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload`, {
+    headers: supabaseHeaders(config.key),
+  });
+  if (!response.ok) throw new Error(`Čitanje postojećih naloga nije uspelo (${response.status}).`);
+  const rows = await response.json();
+  return rows[0]?.payload || {};
+}
+
+function preserveEmployeePasswords(payload, current) {
+  if (!Array.isArray(payload?.employees)) return payload;
+  const previous = Array.isArray(current?.employees) ? current.employees : [];
+  return {
+    ...payload,
+    employees: payload.employees.map((employee) => {
+      if (String(employee.password || "").trim()) return employee;
+      const match = previous.find((item) => item.id === employee.id) || previous.find((item) =>
+        String(item.email || "").trim().toLowerCase() === String(employee.email || "").trim().toLowerCase()
+      );
+      return match?.password ? { ...employee, password: match.password } : employee;
+    }),
+  };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,PUT,POST,OPTIONS");
@@ -64,17 +95,18 @@ module.exports = async function handler(req, res) {
       return json(res, 200, {
         configured: true,
         empty: !row,
-        payload: row?.payload || null,
+        payload: hidePasswords(row?.payload || null),
         updatedAt: row?.updated_at || "",
       });
     }
 
     if (req.method === "PUT" || req.method === "POST") {
       const body = await readBody(req);
-      const payload = body.payload;
+      let payload = body.payload;
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
         return json(res, 400, { configured: true, error: "Nedostaje payload objekat." });
       }
+      payload = preserveEmployeePasswords(payload, await readStoredPayload(config));
       const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
         method: "POST",
         headers: {
