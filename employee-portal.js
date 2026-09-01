@@ -47,21 +47,16 @@ let onlineHydrationPromise = null;
 const employeeSessionKey = "marketizoEmployeeSession";
 const employeeSessionDuration = 24 * 60 * 60 * 1000;
 
-function setEmployeeSessionRestoring(restoring) {
-  let loader = document.getElementById("employeeSessionLoader");
-  if (!loader) {
-    loader = document.createElement("main");
-    loader.id = "employeeSessionLoader";
-    loader.hidden = true;
-    loader.className = "login-screen";
-    loader.innerHTML = `<section class="login-card"><img src="logo.png" alt="Marketizo Digital" /><p class="eyebrow">Marketizo Team Hub</p><h1>Učitavanje sesije</h1><p>Proveravamo prijavu i učitavamo tvoje podatke...</p></section>`;
-    document.body.append(loader);
-  }
-  loader.hidden = !restoring;
-  if (restoring) {
-    document.getElementById("employeeLoginScreen").hidden = true;
-    document.getElementById("employeeApp").hidden = true;
-  }
+function showCachedEmployeeSession(session) {
+  if (!session?.token) return false;
+  activeEmployee = (state.employees || []).find(
+    (employee) => employee.id === session.employeeId || String(employee.email || "").toLowerCase() === session.email
+  );
+  if (!activeEmployee) return false;
+  document.getElementById("employeeLoginScreen").hidden = true;
+  document.getElementById("employeeApp").hidden = false;
+  renderEmployeePortal();
+  return true;
 }
 
 function getEmployeeSession() {
@@ -1676,7 +1671,7 @@ setupPasswordToggles();
 if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
 renderLoginHint();
 const initialEmployeeSession = getEmployeeSession();
-if (initialEmployeeSession?.token) setEmployeeSessionRestoring(true);
+showCachedEmployeeSession(initialEmployeeSession);
 onlineHydrationPromise = hydrateOnlineState();
 (async () => {
   let restored = false;
@@ -1686,7 +1681,6 @@ onlineHydrationPromise = hydrateOnlineState();
       new Promise((resolve) => window.setTimeout(resolve, 500)),
     ]).catch(() => null);
     restored = await restoreEmployeeSession();
-    setEmployeeSessionRestoring(false);
   }
   if (!restored) {
     document.getElementById("employeeApp").hidden = true;
@@ -1700,7 +1694,7 @@ onlineHydrationPromise = hydrateOnlineState();
     if (activeEmployee) renderEmployeePortal();
   });
 })().catch(() => {
-  setEmployeeSessionRestoring(false);
+  document.getElementById("employeeApp").hidden = true;
   document.getElementById("employeeLoginScreen").hidden = false;
 });
 
