@@ -2,7 +2,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/admin/login", "destination": "/admin-login.html" },
+    { "source": "/admin/login", "destination": "/admin-login" },
     { "source": "/admin", "destination": "/" },
     { "source": "/admin/", "destination": "/" },
     { "source": "/clients", "destination": "/index.html#clients" },
