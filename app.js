@@ -2590,7 +2590,15 @@ function employeeMonthBalance(employee, monthKey) {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
     return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
   }
-  return Math.round((employeeMonthHours(employee.id, monthKey) - employeeExpectedHoursToDate(employee, monthKey)) * 100) / 100;
+  let completedHours = employeeMonthHours(employee.id, monthKey);
+  if (monthKey === currentMonthKey()) {
+    const today = currentDateKey();
+    const todayHours = state.employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "") === today)
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    completedHours -= todayHours;
+  }
+  return Math.round((completedHours - employeeExpectedHoursToDate(employee, monthKey)) * 100) / 100;
 }
 
 function employeeCarryoverBalance(employee, monthKey) {

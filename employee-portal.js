@@ -583,7 +583,15 @@ function monthBalance(employee, monthKey) {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
     return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
   }
-  return Math.round((employeeMonthHours(employee, monthKey) - expectedHoursToDate(employee, monthKey)) * 100) / 100;
+  let completedHours = employeeMonthHours(employee, monthKey);
+  if (monthKey === currentMonthKey()) {
+    const today = currentDateKey();
+    const todayHours = employeeWorkLogs
+      .filter((log) => log.employeeId === employee.id && String(log.date || "") === today)
+      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    completedHours -= todayHours;
+  }
+  return Math.round((completedHours - expectedHoursToDate(employee, monthKey)) * 100) / 100;
 }
 
 function carryoverBalance(employee, monthKey) {
