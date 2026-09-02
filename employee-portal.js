@@ -235,7 +235,11 @@ function loadState(sourceData = null) {
 
 function saveState(options = {}) {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
-  if (options.remote !== false) window.MarketizoRemote?.save(state);
+  if (options.remote === false) return Promise.resolve({ ok: true, localOnly: true });
+  if (!window.MarketizoRemote?.save) {
+    return Promise.resolve({ ok: false, error: "Online baza nije dostupna. Pokušaj ponovo." });
+  }
+  return window.MarketizoRemote.save(state);
 }
 
 function parseNumber(value, fallback = 0) {
@@ -1471,7 +1475,7 @@ document.getElementById("employeePortalMonth")?.addEventListener("input", (event
   renderEmployeePortal();
 });
 
-document.getElementById("portalHoursForm")?.addEventListener("submit", (event) => {
+document.getElementById("portalHoursForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   const date = String(formData.get("date") || "");
@@ -1486,6 +1490,13 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
   if (!isPause && !client) {
     alert("Izaberi klijenta za kog si radio/la ovu aktivnost.");
     return;
+  }
+  const previousState = structuredClone(state);
+  const employeeId = activeEmployee.id;
+  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Čuvanje...";
   }
   state.employeeWorkLogs.unshift({
     id: crypto.randomUUID(),
@@ -1525,7 +1536,19 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", (event) =
       negative: formData.get("negative"), note: formData.get("note"), createdAt: new Date().toISOString(),
     });
   }
-  saveState();
+  const saveResult = await saveState();
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Sačuvaj sate";
+  }
+  if (!saveResult?.ok) {
+    state = previousState;
+    activeEmployee = (state.employees || []).find((employee) => employee.id === employeeId) || activeEmployee;
+    saveState({ remote: false });
+    renderEmployeePortal();
+    showToast("Nije sačuvano", saveResult?.error || "Online baza nije potvrdila upis. Pokušaj ponovo.", "danger");
+    return;
+  }
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.minutes.value = 60;

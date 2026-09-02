@@ -6,6 +6,7 @@
   let saveTimer = null;
   let saveInFlight = false;
   let pendingPayload = null;
+  let pendingWaiters = [];
   let lastUpdatedAt = "";
   let pollTimer = null;
 
@@ -48,11 +49,14 @@
   }
 
   async function flush() {
-    if (!pendingPayload || isLocalFile()) return;
+    if (!pendingPayload || isLocalFile()) return { ok: true, localOnly: isLocalFile() };
     if (saveInFlight) return;
     saveInFlight = true;
     const payload = pendingPayload;
+    const waiters = pendingWaiters;
     pendingPayload = null;
+    pendingWaiters = [];
+    let result = { ok: false, error: "Online čuvanje nije uspelo." };
     try {
       const response = await fetch("/api/state", {
         method: "PUT",
@@ -63,20 +67,27 @@
       configured = Boolean(data.configured);
       online = configured && response.ok && !data.error;
       lastError = data.error || "";
+      result = { ok: online, error: lastError || (response.ok ? "" : `Online čuvanje nije uspelo (${response.status}).`) };
     } catch (error) {
       online = false;
       lastError = error?.message || "Online čuvanje nije uspelo.";
+      result = { ok: false, error: lastError };
     } finally {
+      waiters.forEach((resolve) => resolve(result));
       saveInFlight = false;
       if (pendingPayload) flush();
     }
+    return result;
   }
 
   function save(payload) {
     setLocal(payload);
+    if (isLocalFile()) return Promise.resolve({ ok: true, localOnly: true });
     pendingPayload = clone(payload);
     window.clearTimeout(saveTimer);
+    const result = new Promise((resolve) => pendingWaiters.push(resolve));
     saveTimer = window.setTimeout(flush, 350);
+    return result;
   }
 
   function startPolling(onPayload, interval = 5000) {
