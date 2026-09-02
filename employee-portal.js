@@ -1498,7 +1498,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     submitButton.disabled = true;
     submitButton.textContent = "Čuvanje...";
   }
-  state.employeeWorkLogs.unshift({
+  const workLog = {
     id: crypto.randomUUID(),
     employeeId: activeEmployee.id,
     date,
@@ -1515,7 +1515,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     negative: formData.get("negative"),
     locked: true,
     submittedAt: new Date().toISOString(),
-  });
+  };
+  state.employeeWorkLogs.unshift(workLog);
   const recipientId = reportRecipientId();
   state.employeeReports = state.employeeReports || [];
   const dailyReport = state.employeeReports.find((report) => report.employeeId === activeEmployee.id && report.date === date);
@@ -1536,7 +1537,18 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
       negative: formData.get("negative"), note: formData.get("note"), createdAt: new Date().toISOString(),
     });
   }
-  const saveResult = await saveState();
+  let saveResult = { ok: false, error: "Online čuvanje nije uspelo." };
+  try {
+    const response = await fetch("/api/employee-activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workLog, recipientId, updateReport: true }),
+    });
+    const data = await response.json().catch(() => ({}));
+    saveResult = { ok: response.ok && data.ok, error: data.error || "" };
+  } catch (error) {
+    saveResult = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
+  }
   if (submitButton) {
     submitButton.disabled = false;
     submitButton.textContent = "Sačuvaj sate";
@@ -1549,6 +1561,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     showToast("Nije sačuvano", saveResult?.error || "Online baza nije potvrdila upis. Pokušaj ponovo.", "danger");
     return;
   }
+  saveState({ remote: false });
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.minutes.value = 60;

@@ -5200,7 +5200,7 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", (even
   showToast("Sačuvano", "Odsustvo je upisano i zaposlenom je poslato obaveštenje.", "ok");
 });
 
-document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeWorkForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   const employeeId = formData.get("employeeId");
@@ -5220,7 +5220,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
     alert("Izaberi aktivnog klijenta za ovu aktivnost.");
     return;
   }
-  state.employeeWorkLogs.unshift({
+  const workLog = {
     id: crypto.randomUUID(),
     employeeId,
     date,
@@ -5234,9 +5234,35 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", (event) 
     note: formData.get("note"),
     locked: true,
     submittedAt: new Date().toISOString(),
-  });
+  };
+  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Čuvanje...";
+  }
+  let saveResult = { ok: false, error: "Online čuvanje nije uspelo." };
+  try {
+    const response = await fetch("/api/employee-activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workLog, updateReport: false }),
+    });
+    const data = await response.json().catch(() => ({}));
+    saveResult = { ok: response.ok && data.ok, error: data.error || "" };
+  } catch (error) {
+    saveResult = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
+  }
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Dodaj sate";
+  }
+  if (!saveResult.ok) {
+    alert(saveResult.error || "Aktivnost nije sačuvana. Pokušaj ponovo.");
+    return;
+  }
+  state.employeeWorkLogs.unshift(workLog);
   selectedEmployeeId = employeeId;
-  saveState();
+  saveState({ remote: false });
   const employee = state.employees.find((item) => item.id === employeeId);
   const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
   const fullTimeTarget = dayOfWeek >= 1 && dayOfWeek <= 4 ? 480 : dayOfWeek === 5 ? 390 : 0;
