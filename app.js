@@ -2917,10 +2917,12 @@ function renderEmployeeOptions() {
   });
   const activitySelect = document.getElementById("workActivitySelect");
   if (activitySelect) {
+    const selected = activitySelect.value;
     const activities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
     activitySelect.innerHTML = activities.length
       ? activities.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")
       : `<option value="">Admin prvo dodaje aktivnost</option>`;
+    if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
   }
   const workClientSelect = document.getElementById("workClientSelect");
   if (workClientSelect) {
