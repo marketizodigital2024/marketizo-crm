@@ -18,6 +18,11 @@ function headers(key, prefer = "") {
   };
 }
 
+function viennaTime(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Vienna", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "GET") return send(res, 405, { error: "Method not allowed" });
 
@@ -25,6 +30,11 @@ module.exports = async function handler(req, res) {
   const authorization = String(req.headers.authorization || "");
   if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
     return send(res, 401, { error: "Unauthorized" });
+  }
+
+  const local = viennaTime();
+  if (["Sat", "Sun"].includes(local.weekday) || local.hour !== "17" || local.minute !== "30") {
+    return send(res, 200, { ok: true, skipped: true, reason: "Outside 17:30 Europe/Vienna workday window" });
   }
 
   const url = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
