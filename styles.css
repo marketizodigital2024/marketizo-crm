@@ -3298,7 +3298,7 @@ textarea {
 
 #employeeActivityList .setup-item {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(190px, 260px) auto;
   align-items: center;
   gap: 14px;
   padding: 12px 14px;
@@ -3308,6 +3308,41 @@ textarea {
 #employeeActivityList .setup-item strong {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+#employeeActivityList .activity-category-control {
+  display: grid;
+  grid-template-columns: auto minmax(125px, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 6px 7px 6px 11px;
+  border: 1px solid #d9e6dd;
+  border-radius: 12px;
+  background: #f7faf8;
+}
+
+#employeeActivityList .activity-category-control span {
+  color: #738078;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+#employeeActivityList .activity-category-control select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 34px 0 11px;
+  border: 1px solid #bcd8c6;
+  border-radius: 9px;
+  background-color: #fff;
+  color: #126f43;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
 }
 
 .employee-table td:last-child {
@@ -3334,6 +3369,10 @@ textarea {
 
   #employeeActivityList .setup-item {
     grid-template-columns: 1fr;
+  }
+
+  #employeeActivityList .activity-category-control {
+    width: 100%;
   }
 
   #employeeActivityList .setup-item button {
