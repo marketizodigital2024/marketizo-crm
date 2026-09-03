@@ -16,6 +16,7 @@ for (const name of required) {
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const alertTo = process.env.ALERT_TO;
+const whatsappPhoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || "").replace(/\D/g, "");
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
     .split(",")
@@ -35,7 +36,22 @@ const client = new Client({
   }
 });
 
-client.on("qr", (code) => {
+let pairingCodeRequested = false;
+
+client.on("qr", async (code) => {
+  if (whatsappPhoneNumber && !pairingCodeRequested) {
+    pairingCodeRequested = true;
+    try {
+      const pairingCode = await client.requestPairingCode(whatsappPhoneNumber);
+      console.log(`PAIRING CODE: ${pairingCode}`);
+      console.log("On your phone choose Link with phone number instead, then enter this code.");
+      return;
+    } catch (error) {
+      pairingCodeRequested = false;
+      console.error("Pairing code request failed:", error);
+    }
+  }
+
   console.log("Scan this QR in WhatsApp Business > Linked Devices:");
   qrcode.generate(code, { small: true }, (output) => console.log(output));
 });
@@ -45,10 +61,12 @@ client.on("ready", () => {
 });
 
 client.on("auth_failure", (message) => {
+  pairingCodeRequested = false;
   console.error("WhatsApp authentication failed:", message);
 });
 
 client.on("disconnected", (reason) => {
+  pairingCodeRequested = false;
   console.error("WhatsApp disconnected:", reason);
 });
 
