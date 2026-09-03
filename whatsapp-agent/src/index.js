@@ -4,7 +4,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import whatsapp from "whatsapp-web.js";
 import { analyzeMessage } from "./analyze.js";
 
@@ -32,9 +32,12 @@ const stateDirectory = process.env.WWEBJS_AUTH_PATH
   : process.cwd();
 const responseStatePath = process.env.RESPONSE_WATCH_STATE_PATH
   || path.join(stateDirectory, "marketizo-response-watch.json");
+const dailyStatePath = process.env.DAILY_REPORT_STATE_PATH
+  || path.join(stateDirectory, "marketizo-daily-report.json");
 const teamMemberIds = new Set();
 const pendingByGroup = new Map();
 const responseTimers = new Map();
+let dailyState = { lastReportDate: "", events: [] };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
     .split(",")
@@ -56,6 +59,7 @@ const client = new Client({
 
 let pairingCodeRequested = false;
 let pairingRetryTimer = null;
+let dailySchedulerStarted = false;
 
 const workTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: responseTimezone,
@@ -69,15 +73,120 @@ function serializedId(id) {
   return id?._serialized || id?.$1 || (id?.user ? `${id.user}@${id.server || "c.us"}` : "");
 }
 
-function isWorkingMinute(date) {
-  const parts = Object.fromEntries(
+function viennaParts(date = new Date()) {
+  return Object.fromEntries(
     workTimeFormatter.formatToParts(date)
       .filter((part) => part.type !== "literal")
       .map((part) => [part.type, part.value])
   );
+}
+
+function viennaDateKey(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: responseTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  return formatter.format(date);
+}
+
+function isWorkingMinute(date) {
+  const parts = viennaParts(date);
   if (parts.weekday === "Sat" || parts.weekday === "Sun") return false;
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   return minutes >= 9 * 60 && minutes < 17 * 60 + 30;
+}
+
+function saveDailyState() {
+  try {
+    fs.mkdirSync(path.dirname(dailyStatePath), { recursive: true });
+    const tempPath = `${dailyStatePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(dailyState, null, 2));
+    fs.renameSync(tempPath, dailyStatePath);
+  } catch (error) {
+    console.error("Daily report state save failed:", error);
+  }
+}
+
+function loadDailyState() {
+  try {
+    if (fs.existsSync(dailyStatePath)) {
+      dailyState = JSON.parse(fs.readFileSync(dailyStatePath, "utf8"));
+    }
+  } catch (error) {
+    console.error("Daily report state restore failed:", error);
+    dailyState = { lastReportDate: "", events: [] };
+  }
+}
+
+function recordDailyEvent(event) {
+  const today = viennaDateKey();
+  dailyState.events = dailyState.events
+    .filter((item) => item.date === today)
+    .concat({ ...event, date: today, at: new Date().toISOString() })
+    .slice(-200);
+  saveDailyState();
+}
+
+async function sendDailyReport() {
+  const today = viennaDateKey();
+  const events = dailyState.events.filter((event) => event.date === today);
+  const counts = { GREEN: 0, YELLOW: 0, RED: 0, URGENT: 0, SLA: 0, OWNER: 0 };
+  for (const event of events) counts[event.type] = (counts[event.type] || 0) + 1;
+  const highlights = events
+    .filter((event) => ["YELLOW", "RED", "URGENT", "SLA", "OWNER"].includes(event.type))
+    .slice(-8)
+    .map((event) => `• ${event.group}: ${event.summary}`);
+  const report = [
+    `📊 MARKETIZO DNEVNI PREGLED — ${today}`,
+    `🟢 Pohvale: ${counts.GREEN}`,
+    `🟡 Potencijalni problemi: ${counts.YELLOW}`,
+    `🔴 Ozbiljni problemi: ${counts.RED}`,
+    `🚨 Hitno: ${counts.URGENT}`,
+    `⏰ Prekoračen odgovor: ${counts.SLA}`,
+    `👤 Pominjanje Miljana/vlasnika: ${counts.OWNER}`,
+    `Grupe koje trenutno čekaju odgovor: ${pendingByGroup.size}`,
+    highlights.length ? "\nNajvažnije:\n" + highlights.join("\n") : "\nNema otvorenih važnih događaja."
+  ].join("\n");
+  await client.sendMessage(alertTo, report);
+  dailyState.lastReportDate = today;
+  saveDailyState();
+  console.log(`[DAILY_REPORT] ${today}: private report sent`);
+}
+
+function startDailyReportScheduler() {
+  if (dailySchedulerStarted) return;
+  dailySchedulerStarted = true;
+  loadDailyState();
+  const check = () => {
+    const parts = viennaParts();
+    const today = viennaDateKey();
+    const weekday = parts.weekday !== "Sat" && parts.weekday !== "Sun";
+    const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+    if (weekday && minutes >= 17 * 60 + 30 && minutes < 18 * 60 && dailyState.lastReportDate !== today) {
+      void sendDailyReport().catch((error) => console.error("Daily report failed:", error));
+    }
+  };
+  check();
+  setInterval(check, 60000);
+}
+
+async function transcribeVoiceMessage(message) {
+  if (!message.hasMedia || !["ptt", "audio"].includes(message.type)) return "";
+  const media = await message.downloadMedia();
+  if (!media?.data) return "";
+  const extension = media.mimetype?.includes("ogg") ? "ogg"
+    : media.mimetype?.includes("mpeg") ? "mp3"
+      : media.mimetype?.includes("mp4") ? "m4a" : "ogg";
+  const transcription = await openai.audio.transcriptions.create({
+    file: await toFile(Buffer.from(media.data, "base64"), `whatsapp-voice.${extension}`, {
+      type: media.mimetype || "application/octet-stream"
+    }),
+    model: process.env.OPENAI_TRANSCRIPTION_MODEL || "whisper-1"
+  });
+  console.log(`[VOICE_TRANSCRIBED] ${message.from}`);
+  return String(transcription.text || "").trim();
 }
 
 function addWorkingMinutes(start, amount) {
@@ -113,6 +222,7 @@ async function sendOverdueAlert(record) {
     "Akcija: Neko iz Marketizo tima treba odmah da odgovori."
   ].join("\n");
   await client.sendMessage(alertTo, alert);
+  recordDailyEvent({ type: "SLA", group: record.groupName, summary: "Klijent nije dobio odgovor u roku od 2 radna sata." });
   pendingByGroup.delete(record.groupId);
   responseTimers.delete(record.groupId);
   saveResponseState();
@@ -162,14 +272,14 @@ async function refreshTeamMembers() {
   console.log(`Team roster loaded from ${teamGroupName}: ${teamMemberIds.size} member(s).`);
 }
 
-function beginResponseWatch(message, chat, contact) {
+function beginResponseWatch(message, chat, contact, messageText) {
   if (pendingByGroup.has(message.from)) return;
   const receivedAt = new Date(message.timestamp * 1000);
   const record = {
     groupId: message.from,
     groupName: chat.name,
     senderName: contact.pushname || contact.name || contact.number || "Nepoznato",
-    message: String(message.body || "Poruka bez teksta").slice(0, 300),
+    message: String(messageText || "Poruka bez teksta").slice(0, 300),
     receivedAt: receivedAt.toISOString(),
     deadline: addWorkingMinutes(receivedAt, responseSlaMinutes).toISOString()
   };
@@ -238,6 +348,7 @@ client.on("ready", async () => {
   try {
     await refreshTeamMembers();
     loadResponseState();
+    startDailyReportScheduler();
   } catch (error) {
     console.error("Team roster setup failed:", error);
   }
@@ -273,20 +384,31 @@ client.on("message_create", async (message) => {
       return;
     }
 
-    if (teamMemberIds.size) beginResponseWatch(message, chat, contact);
+    const voiceTranscript = await transcribeVoiceMessage(message);
+    const messageText = voiceTranscript || String(message.body || "").trim();
+    if (!messageText) return;
+
+    if (teamMemberIds.size) beginResponseWatch(message, chat, contact, messageText);
     else console.error("Response SLA watch skipped because the team roster is empty.");
 
     const result = await analyzeMessage(openai, model, {
       group: chat.name,
       sender: contact.pushname || contact.name || contact.number || "Nepoznato",
-      message: message.body,
+      message: messageText,
       timestamp: new Date(message.timestamp * 1000).toISOString()
     });
-    const normalizedBody = String(message.body || "").toLocaleLowerCase("sr-Latn");
+    const normalizedBody = messageText.toLocaleLowerCase("sr-Latn");
     const ownerMention = ["miljan", "vlasnik", "gazda", "direktor", "owner", "šef", "sef"]
       .some((keyword) => normalizedBody.includes(keyword));
 
     console.log(`[${result.level}] ${chat.name}: ${result.summary}`);
+
+    if (result.level !== "GREEN" || result.isPraise) {
+      recordDailyEvent({ type: result.level, group: chat.name, summary: result.summary });
+    }
+    if (ownerMention) {
+      recordDailyEvent({ type: "OWNER", group: chat.name, summary: result.summary });
+    }
 
     if (result.level === "GREEN" && !result.isPraise && !ownerMention) return;
 
