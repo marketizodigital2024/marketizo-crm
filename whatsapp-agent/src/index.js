@@ -24,9 +24,13 @@ const monitoredGroups = new Set(
 );
 
 const client = new Client({
-  authStrategy: new LocalAuth({ clientId: "marketizo-client-care" }),
+  authStrategy: new LocalAuth({
+    clientId: "marketizo-client-care",
+    dataPath: process.env.WWEBJS_AUTH_PATH || undefined
+  }),
   puppeteer: {
     headless: true,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   }
 });
