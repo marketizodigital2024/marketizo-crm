@@ -3403,7 +3403,7 @@ function renderEmployeeActivities() {
     ...activities.map((activity) => activity.category),
   ].filter(Boolean))];
   target.innerHTML = activities.length
-    ? activities.map((activity) => `<div class="setup-item"><strong>${activity.name}</strong><label>Kategorija<select data-activity-category="${activity.id}">${categoryChoices.map((category) => `<option value="${category}" ${category === (activity.category || "Ostalo") ? "selected" : ""}>${category}</option>`).join("")}</select></label><button class="edit-button danger-action" data-delete-activity="${activity.id}" type="button">Obriši</button></div>`).join("")
+    ? activities.map((activity) => `<div class="setup-item activity-category-row"><strong>${activity.name}</strong><label class="activity-category-control"><span>Kategorija</span><select data-activity-category="${activity.id}" aria-label="Kategorija za ${activity.name}">${categoryChoices.map((category) => `<option value="${category}" ${category === (activity.category || "Ostalo") ? "selected" : ""}>${category}</option>`).join("")}</select></label><button class="edit-button danger-action" data-delete-activity="${activity.id}" type="button">Obriši</button></div>`).join("")
     : `<div class="empty-state">Dodaj prvu aktivnost koju zaposleni mogu da izaberu.</div>`;
   target.querySelectorAll("[data-activity-category]").forEach((select) => select.addEventListener("change", () => {
     const activity = activities.find((item) => item.id === select.dataset.activityCategory);
