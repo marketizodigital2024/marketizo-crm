@@ -177,6 +177,14 @@ function loadState(sourceData = null) {
     category: activity.category || "Ostalo",
     active: activity.active !== false,
   }));
+  data.employeeHourAdjustments = (data.employeeHourAdjustments || []).map((adjustment) => ({
+    id: adjustment.id || crypto.randomUUID(),
+    employeeId: adjustment.employeeId || "",
+    date: adjustment.date || currentDateKey(),
+    minutes: Math.max(1, Math.round(Number(adjustment.minutes || 0))),
+    reason: adjustment.reason || "Korekcija salda",
+    createdAt: adjustment.createdAt || new Date().toISOString(),
+  }));
   if (!data.employeeActivities.some((activity) => String(activity.name || "").toLowerCase() === "pauza")) {
     data.employeeActivities.push({ id: "activity-pause", name: "Pauza", category: "Interno", active: true });
   }
@@ -594,7 +602,10 @@ function employeeMonthHours(employee, monthKey) {
   const logged = (state.employeeWorkLogs || [])
     .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
     .reduce((sum, log) => sum + Number(log.hours || 0), 0);
-  return Math.round((logged - employeeMonthLatePenaltyHours(employee.id, monthKey)) * 100) / 100;
+  const adjustmentHours = (state.employeeHourAdjustments || [])
+    .filter((adjustment) => adjustment.employeeId === employee.id && String(adjustment.date || "").startsWith(monthKey))
+    .reduce((sum, adjustment) => sum + Math.max(0, Number(adjustment.minutes || 0)), 0) / 60;
+  return Math.round((logged - employeeMonthLatePenaltyHours(employee.id, monthKey) - adjustmentHours) * 100) / 100;
 }
 
 function shiftMonth(monthKey, offset) {
@@ -614,6 +625,7 @@ function employeeMonthHasActivity(employeeId, monthKey) {
   return (
     Object.prototype.hasOwnProperty.call(employee?.monthlyBalanceOverrides || {}, monthKey) ||
     (state.employeeWorkLogs || []).some((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey)) ||
+    (state.employeeHourAdjustments || []).some((adjustment) => adjustment.employeeId === employeeId && String(adjustment.date || "").startsWith(monthKey)) ||
     (state.employeeLateRecords || []).some((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey)) ||
     (state.employeeAbsences || []).some((absence) => absence.employeeId === employeeId && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
   );
