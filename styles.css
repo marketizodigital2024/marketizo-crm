@@ -3630,6 +3630,17 @@ body.employee-editor-open {
 .activity-category-field select, .activity-category-field input { width: 100%; min-height: 50px; padding: 10px 13px; border: 1px solid #d3ddd6; border-radius: 13px; background: #fff; color: #18251d; font: inherit; }
 .activity-category-badge { display: inline-flex; width: max-content; margin: 4px 8px 4px 0; padding: 5px 9px; border-radius: 999px; background: #e7f7ee; color: #11864d; font-size: 11px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
 
+.hour-deduction-panel { border-color: #f0d6b9; background: linear-gradient(180deg, #fffdf9, #fffaf3); }
+.hour-deduction-panel .deduction-button { background: #9a4f18; }
+.hour-deduction-list { margin-top: 18px; }
+.hour-deduction-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+.hour-deduction-row strong { width: auto; min-width: 86px; color: #a24716; background: #fff0e4; }
+.hour-deduction-row button { margin-left: auto; }
+@media (max-width: 760px) {
+  .hour-deduction-row { grid-template-columns: 1fr; }
+  .hour-deduction-row button { width: 100%; margin-left: 0; }
+}
+
 .daily-minute-progress { grid-column: 1 / -1; margin-bottom: 16px; padding: 16px 18px; border: 1px solid #ffd0b1; border-radius: 16px; background: #fff7f1; }
 .daily-minute-progress > div:first-child { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
 .daily-minute-progress span { color: #68756e; font-weight: 800; }
