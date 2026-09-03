@@ -42,3 +42,42 @@ export async function analyzeMessage(openai, model, input) {
     ownerReason: String(parsed.ownerReason || "")
   };
 }
+
+export async function analyzeFollowup(openai, model, input) {
+  const response = await openai.chat.completions.create({
+    model,
+    response_format: { type: "json_object" },
+    temperature: 0,
+    messages: [
+      {
+        role: "system",
+        content: [
+          "You track unresolved client issues and explicit delivery commitments in Marketizo WhatsApp groups.",
+          "Use the recent conversation, the currently open issue, and the latest message.",
+          "issueAction must be NONE, OPEN, KEEP_OPEN, or RESOLVE.",
+          "OPEN only when a client reports a concrete problem or dissatisfaction that needs action.",
+          "RESOLVE only when the conversation provides real evidence that the problem was fixed or the client accepted the solution. A team reply or promise alone is not resolution.",
+          "KEEP_OPEN when the issue continues, is merely acknowledged, or is awaiting work/client confirmation.",
+          "For a new explicit promise with a clear date or time, set commitment=true and return commitmentSummary, commitmentOwner, and commitmentDueAt as an ISO 8601 timestamp with timezone.",
+          "Do not create a commitment from vague wording such as soon, later, or we will check. Set commitment=false when there is no clear deadline.",
+          "Set commitmentCompleted=true only when the latest message clearly confirms delivery/completion of the current commitment.",
+          "Return JSON only: issueAction, issueSummary, resolutionEvidence, commitment, commitmentSummary, commitmentOwner, commitmentDueAt, commitmentCompleted.",
+          "Write summaries and evidence in Serbian."
+        ].join(" ")
+      },
+      { role: "user", content: JSON.stringify(input) }
+    ]
+  });
+  const parsed = JSON.parse(response.choices[0]?.message?.content || "{}");
+  const action = String(parsed.issueAction || "NONE").toUpperCase();
+  return {
+    issueAction: ["NONE", "OPEN", "KEEP_OPEN", "RESOLVE"].includes(action) ? action : "NONE",
+    issueSummary: String(parsed.issueSummary || ""),
+    resolutionEvidence: String(parsed.resolutionEvidence || ""),
+    commitment: parsed.commitment === true,
+    commitmentSummary: String(parsed.commitmentSummary || ""),
+    commitmentOwner: String(parsed.commitmentOwner || ""),
+    commitmentDueAt: String(parsed.commitmentDueAt || ""),
+    commitmentCompleted: parsed.commitmentCompleted === true
+  };
+}
