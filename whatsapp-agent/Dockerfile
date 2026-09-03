@@ -15,4 +15,4 @@ RUN npm install --omit=dev
 
 COPY . .
 
-CMD ["sh", "-c", "rm -f \"$WWEBJS_AUTH_PATH/session/SingletonLock\" \"$WWEBJS_AUTH_PATH/session/SingletonSocket\" \"$WWEBJS_AUTH_PATH/session/SingletonCookie\" && exec npm start"]
+CMD ["sh", "-c", "if [ -d \"$WWEBJS_AUTH_PATH\" ]; then find \"$WWEBJS_AUTH_PATH\" -maxdepth 4 -name 'Singleton*' -delete; fi && exec npm start"]
