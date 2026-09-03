@@ -37,19 +37,29 @@ const client = new Client({
 });
 
 let pairingCodeRequested = false;
+let pairingRetryTimer = null;
 
-client.on("qr", async (code) => {
-  if (whatsappPhoneNumber && !pairingCodeRequested) {
-    pairingCodeRequested = true;
-    try {
-      const pairingCode = await client.requestPairingCode(whatsappPhoneNumber, false, 180000);
-      console.log(`PAIRING CODE: ${pairingCode}`);
-      console.log("On your phone choose Link with phone number instead, then enter this code.");
-      return;
-    } catch (error) {
-      pairingCodeRequested = false;
-      console.error("Pairing code request failed:", error);
+async function requestPhonePairingCode() {
+  try {
+    const pairingCode = await client.requestPairingCode(whatsappPhoneNumber, false, 180000);
+    console.log("========================================");
+    console.log(`WHATSAPP PAIRING CODE: ${pairingCode}`);
+    console.log("Phone: Linked devices > Link a device > Link with phone number instead");
+    console.log("========================================");
+  } catch (error) {
+    console.error("Pairing code request failed; retrying in 3 minutes:", error);
+    clearTimeout(pairingRetryTimer);
+    pairingRetryTimer = setTimeout(requestPhonePairingCode, 180000);
+  }
+}
+
+client.on("qr", (code) => {
+  if (whatsappPhoneNumber) {
+    if (!pairingCodeRequested) {
+      pairingCodeRequested = true;
+      void requestPhonePairingCode();
     }
+    return;
   }
 
   console.log("Scan this QR in WhatsApp Business > Linked Devices:");
@@ -57,15 +67,21 @@ client.on("qr", async (code) => {
 });
 
 client.on("ready", () => {
+  clearTimeout(pairingRetryTimer);
+  pairingRetryTimer = null;
   console.log("Marketizo WhatsApp agent is connected.");
 });
 
 client.on("auth_failure", (message) => {
+  clearTimeout(pairingRetryTimer);
+  pairingRetryTimer = null;
   pairingCodeRequested = false;
   console.error("WhatsApp authentication failed:", message);
 });
 
 client.on("disconnected", (reason) => {
+  clearTimeout(pairingRetryTimer);
+  pairingRetryTimer = null;
   pairingCodeRequested = false;
   console.error("WhatsApp disconnected:", reason);
 });
