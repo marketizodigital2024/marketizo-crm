@@ -217,13 +217,14 @@ async function answerOwnerQuestion(message) {
         role: "system",
         content: [
           "Ti si Miljanov privatni, nezavisni poslovni savetnik koji sa strane čita razgovore u Marketizo WhatsApp grupama.",
-          "Odgovaraj prirodno, direktno i konkretno, kao sposobna osoba koju je Miljan pitao za iskreno mišljenje — nikada kao generički bot ili formalni automatski izveštaj.",
+          "Odgovaraj prirodno, direktno i konkretno, kao sposobna osoba koja je pročitala razgovor i napisala Miljanu kratak lični izveštaj — nikada kao generički bot ili automatski šablon.",
           "Koristi isključivo dati kontekst iz WhatsApp grupa koje agent prati.",
           "Prepoznaj naziv grupe i kada je korisnik napisao samo deo naziva ili napravio malu slovnu grešku.",
           "Ako odgovor nije u kontekstu, reci da nema dovoljno informacija.",
           "Ne obećavaj rokove, rezultate, povrat novca niti bilo kakvu obavezu u ime Marketiza.",
           "Ne izmišljaj činjenice. Navedi konkretno šta je ko napisao i kada, ako je to dostupno i važno.",
-          "Odgovor strukturiraj kratko kao: Šta se dešava, Moja procena, Šta bih uradio. Izostavi deo koji nema sadržaj i ne ponavljaj isto različitim rečima.",
+          "Ne počinji uvek istim naslovom ili frazom i ne koristi obavezne rubrike. Organizuj odgovor u kratke prirodne pasuse ili nekoliko smislenih stavki samo kada to zaista pomaže čitanju.",
+          "Najpre prenesi suštinu konkretnog slučaja, zatim prirodno dodaj svoju procenu i preporuku kada su potrebne.",
           "Ako nema stvarnog problema, reci to jasno. Ako vidiš rizik koji tim možda previđa, reci Miljanu otvoreno koliko je ozbiljan i zašto."
         ].join(" ")
       },
@@ -271,23 +272,34 @@ function recordDailyEvent(event) {
 async function sendDailyReport() {
   const today = viennaDateKey();
   const events = dailyState.events.filter((event) => event.date === today);
-  const counts = { GREEN: 0, YELLOW: 0, RED: 0, URGENT: 0, SLA: 0, OWNER: 0 };
-  for (const event of events) counts[event.type] = (counts[event.type] || 0) + 1;
-  const highlights = events
-    .filter((event) => ["YELLOW", "RED", "URGENT", "SLA", "OWNER"].includes(event.type))
-    .slice(-8)
-    .map((event) => `• ${event.group}: ${event.summary}`);
-  const report = [
-    `📊 MARKETIZO DNEVNI PREGLED — ${today}`,
-    `🟢 Pohvale: ${counts.GREEN}`,
-    `🟡 Potencijalni problemi: ${counts.YELLOW}`,
-    `🔴 Ozbiljni problemi: ${counts.RED}`,
-    `🚨 Hitno: ${counts.URGENT}`,
-    `⏰ Prekoračen odgovor: ${counts.SLA}`,
-    `👤 Pominjanje Miljana/vlasnika: ${counts.OWNER}`,
-    `Grupe koje trenutno čekaju odgovor: ${pendingByGroup.size}`,
-    highlights.length ? "\nNajvažnije:\n" + highlights.join("\n") : "\nNema otvorenih važnih događaja."
-  ].join("\n");
+  const pending = [...pendingByGroup.values()].map((record) => ({
+    group: record.groupName,
+    client: record.senderName,
+    message: record.message,
+    deadline: record.deadline
+  }));
+  const completion = await openai.chat.completions.create({
+    model,
+    temperature: 0,
+    messages: [
+      {
+        role: "system",
+        content: [
+          "Napiši Miljanu kratak dnevni izveštaj na srpskom kao osoba koja je tokom dana pratila Marketizo klijentske grupe.",
+          "Piši prirodno, konkretno i poslovno, bez botovskog uvoda, emodžija, generičkih fraza i fiksnog šablona.",
+          "Počni odmah najvažnijim zaključkom dana. Prioritet daj ozbiljnim problemima, rizicima i grupama koje još čekaju odgovor.",
+          "Pohvale i manje probleme navedi sažeto samo ako Miljanu daju koristan kontekst.",
+          "Razdvoji smislenim kratkim pasusima ili stavkama kada ima više nepovezanih tema.",
+          "Ne izmišljaj činjenice i ne ponavljaj istu informaciju. Ako nema važnih događaja, reci to jednom prirodnom rečenicom."
+        ].join(" ")
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ date: today, events, groupsWaitingForReply: pending })
+      }
+    ]
+  });
+  const report = String(completion.choices[0]?.message?.content || "Danas nije bilo važnih događaja koji zahtevaju tvoju pažnju.").trim();
   await client.sendMessage(alertTo, report);
   dailyState.lastReportDate = today;
   saveDailyState();
