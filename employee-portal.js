@@ -256,6 +256,33 @@ function parseNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function normalizedActivitySearch(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("sr");
+}
+
+function renderPortalActivityOptions() {
+  const activitySelect = document.getElementById("portalActivitySelect");
+  if (!activitySelect) return;
+  const selected = activitySelect.value;
+  const query = normalizedActivitySearch(document.getElementById("portalActivitySearch")?.value);
+  const activeActivities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
+  const activities = query
+    ? activeActivities.filter((activity) => normalizedActivitySearch(`${activity.name} ${activity.category || "Ostalo"}`).includes(query))
+    : activeActivities;
+  const groups = activities.reduce((result, activity) => {
+    (result[activity.category || "Ostalo"] ||= []).push(activity);
+    return result;
+  }, {});
+  activitySelect.innerHTML = activities.length
+    ? `<option value="">Izaberi aktivnost</option>${Object.entries(groups).map(([category, items]) => `<optgroup label="${category}">${items.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")}</optgroup>`).join("")}`
+    : `<option value="">${activeActivities.length ? "Nema rezultata za ovu pretragu" : "Admin još nije dodao aktivnosti"}</option>`;
+  if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
+}
+
 function formatHours(value) {
   const number = Math.round(parseNumber(value) * 100) / 100;
   return Number.isInteger(number) ? String(number) : String(number).replace(".", ",");
@@ -895,19 +922,7 @@ function renderEmployeePortal() {
   const absenceStart = document.querySelector('#portalAbsenceForm input[name="startDate"]');
   const absenceEnd = document.querySelector('#portalAbsenceForm input[name="endDate"]');
   if (hourDate && !hourDate.value) hourDate.value = currentDateKey();
-  const activitySelect = document.getElementById("portalActivitySelect");
-  if (activitySelect) {
-    const selected = activitySelect.value;
-    const activities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
-    const groups = activities.reduce((result, activity) => {
-      (result[activity.category || "Ostalo"] ||= []).push(activity);
-      return result;
-    }, {});
-    activitySelect.innerHTML = activities.length
-      ? `<option value="">Izaberi aktivnost</option>${Object.entries(groups).map(([category, items]) => `<optgroup label="${category}">${items.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")}</optgroup>`).join("")}`
-      : `<option value="">Admin još nije dodao aktivnosti</option>`;
-    if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
-  }
+  renderPortalActivityOptions();
   const clientSelect = document.getElementById("portalClientSelect");
   if (clientSelect) {
     const selected = clientSelect.value;
@@ -1487,6 +1502,8 @@ document.getElementById("employeePortalMonth")?.addEventListener("input", (event
   renderEmployeePortal();
 });
 
+document.getElementById("portalActivitySearch")?.addEventListener("input", renderPortalActivityOptions);
+
 document.getElementById("portalHoursForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
@@ -1577,6 +1594,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.minutes.value = 60;
+  const activitySearch = document.getElementById("portalActivitySearch");
+  if (activitySearch) activitySearch.value = "";
   renderEmployeePortal();
   showToast("Sačuvano", "Sati i dnevni izveštaj su sačuvani.", "ok");
 });
