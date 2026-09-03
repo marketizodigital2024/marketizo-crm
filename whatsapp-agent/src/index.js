@@ -166,7 +166,7 @@ async function answerOwnerQuestion(message) {
   const history = [...groupHistory.values()]
     .flat()
     .sort((a, b) => String(a.at).localeCompare(String(b.at)))
-    .slice(-100);
+    .slice(-300);
   const waitingForReply = [...pendingByGroup.values()].map((record) => ({
     group: record.groupName,
     client: record.senderName,
@@ -197,6 +197,27 @@ async function answerOwnerQuestion(message) {
   const answer = String(response.choices[0]?.message?.content || "Nemam dovoljno informacija.").trim();
   await message.reply(answer);
   console.log("[PRIVATE_AI_REPLY] answered Miljan's question");
+}
+
+async function isOwnerPrivateMessage(message) {
+  if (message.from === alertTo) return true;
+  const privateContact = await message.getContact();
+  const candidates = [privateContact.number, serializedId(privateContact.id)];
+  try {
+    candidates.push(await privateContact.getFormattedNumber());
+  } catch {
+    // Some WhatsApp LID contacts do not expose a formatted phone number.
+  }
+  if (candidates.some((value) => String(value || "").replace(/\D/g, "") === alertNumber)) {
+    return true;
+  }
+
+  // WhatsApp can deliver the same private chat under an internal LID instead of
+  // the phone-number ID. The owner chat is also the only private chat that has
+  // previously received our branded alerts, so use that history as a safe match.
+  const privateChat = await message.getChat();
+  const recent = await privateChat.fetchMessages({ limit: 30 });
+  return recent.some((item) => item.fromMe && /MARKETIZO (CLIENT UPDATE|DNEVNI PREGLED|— KLIJENT ČEKA ODGOVOR)/i.test(String(item.body || "")));
 }
 
 function recordDailyEvent(event) {
@@ -452,11 +473,10 @@ client.on("message_create", async (message) => {
   try {
     if (!message.from.endsWith("@g.us")) {
       if (!message.fromMe) {
-        const privateContact = await message.getContact();
-        const privateSenderNumber = String(privateContact.number || serializedId(privateContact.id))
-          .replace(/\D/g, "");
-        if (message.from === alertTo || privateSenderNumber === alertNumber) {
+        if (await isOwnerPrivateMessage(message)) {
           await answerOwnerQuestion(message);
+        } else {
+          console.log("[PRIVATE_AI_IGNORED] private sender is not the configured owner");
         }
       }
       return;
@@ -505,7 +525,9 @@ client.on("message_create", async (message) => {
       recordDailyEvent({ type: "OWNER", group: chat.name, summary: result.summary });
     }
 
-    if (result.level === "GREEN" && !result.isPraise && !ownerMention) return;
+    const importantPraise = result.isPraise && result.notifyOwner;
+    const notifyOwner = ownerMention || result.level === "RED" || result.level === "URGENT" || result.notifyOwner;
+    if (!notifyOwner) return;
 
     const icons = {
       GREEN: "🟢",
@@ -520,6 +542,8 @@ client.on("message_create", async (message) => {
       `Grupa: ${chat.name}`,
       `Pošiljalac: ${contact.pushname || contact.name || contact.number || "Nepoznato"}`,
       ownerMention ? "Razlog obaveštenja: Pomenut je Miljan/vlasnik." : "",
+      !ownerMention && result.ownerReason ? `Razlog obaveštenja: ${result.ownerReason}` : "",
+      importantPraise ? "Vrsta: Posebno važna pohvala/rezultat." : "",
       `Sažetak: ${result.summary}`,
       result.reason ? `Zašto: ${result.reason}` : "",
       result.recommendedAction ? `Preporuka: ${result.recommendedAction}` : ""
