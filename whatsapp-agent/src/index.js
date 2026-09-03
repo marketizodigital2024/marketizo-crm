@@ -20,6 +20,7 @@ for (const name of required) {
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const alertTo = process.env.ALERT_TO;
+const alertNumber = alertTo.split("@")[0].replace(/\D/g, "");
 const whatsappPhoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || "").replace(/\D/g, "");
 const port = Number(process.env.PORT || 3000);
 const pairingToken = crypto.randomBytes(24).toString("hex");
@@ -450,8 +451,13 @@ client.on("disconnected", (reason) => {
 client.on("message_create", async (message) => {
   try {
     if (!message.from.endsWith("@g.us")) {
-      if (!message.fromMe && message.from === alertTo) {
-        await answerOwnerQuestion(message);
+      if (!message.fromMe) {
+        const privateContact = await message.getContact();
+        const privateSenderNumber = String(privateContact.number || serializedId(privateContact.id))
+          .replace(/\D/g, "");
+        if (message.from === alertTo || privateSenderNumber === alertNumber) {
+          await answerOwnerQuestion(message);
+        }
       }
       return;
     }
