@@ -1281,6 +1281,16 @@ th {
   justify-content: flex-end;
 }
 
+.activity-picker {
+  display: grid;
+  gap: 7px;
+}
+
+.activity-picker input[type="search"] {
+  min-height: 40px;
+  background: var(--surface-2);
+}
+
 .setup-list {
   display: grid;
   gap: 10px;
