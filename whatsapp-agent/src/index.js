@@ -1,5 +1,7 @@
 import "dotenv/config";
-import qrcode from "qrcode-terminal";
+import QRCode from "qrcode";
+import http from "node:http";
+import crypto from "node:crypto";
 import OpenAI from "openai";
 import whatsapp from "whatsapp-web.js";
 import { analyzeMessage } from "./analyze.js";
@@ -17,6 +19,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const alertTo = process.env.ALERT_TO;
 const whatsappPhoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || "").replace(/\D/g, "");
+const port = Number(process.env.PORT || 3000);
+const pairingToken = crypto.randomBytes(24).toString("hex");
+let qrDataUrl = null;
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
     .split(",")
@@ -39,6 +44,24 @@ const client = new Client({
 let pairingCodeRequested = false;
 let pairingRetryTimer = null;
 
+http.createServer((req, res) => {
+  if (req.url !== `/pair/${pairingToken}`) {
+    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    return res.end("Not found");
+  }
+
+  res.writeHead(200, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store"
+  });
+  if (!qrDataUrl) {
+    return res.end("<h2>Marketizo WhatsApp agent</h2><p>QR se priprema ili je WhatsApp već povezan. Osvežite stranicu za nekoliko sekundi.</p>");
+  }
+  res.end(`<main style="font-family:Arial;text-align:center;padding:30px"><h2>Marketizo WhatsApp povezivanje</h2><p>WhatsApp Business → Povezani uređaji → Poveži uređaj</p><img src="${qrDataUrl}" width="420" height="420" alt="WhatsApp QR"><p>QR se automatski menja. Ako ne radi, osvežite stranicu.</p></main>`);
+}).listen(port, "0.0.0.0", () => {
+  console.log(`PAIRING_PAGE_PATH: /pair/${pairingToken}`);
+});
+
 async function requestPhonePairingCode() {
   try {
     const pairingCode = await client.requestPairingCode(whatsappPhoneNumber, false, 180000);
@@ -53,20 +76,18 @@ async function requestPhonePairingCode() {
   }
 }
 
-client.on("qr", (code) => {
-  if (whatsappPhoneNumber) {
-    if (!pairingCodeRequested) {
-      pairingCodeRequested = true;
-      void requestPhonePairingCode();
-    }
-    return;
-  }
+client.on("qr", async (code) => {
+  qrDataUrl = await QRCode.toDataURL(code, { width: 700, margin: 4 });
+  console.log("WhatsApp QR is ready on the private pairing page.");
 
-  console.log("Scan this QR in WhatsApp Business > Linked Devices:");
-  qrcode.generate(code, { small: true }, (output) => console.log(output));
+  if (whatsappPhoneNumber && !pairingCodeRequested) {
+    pairingCodeRequested = true;
+    void requestPhonePairingCode();
+  }
 });
 
 client.on("ready", () => {
+  qrDataUrl = null;
   clearTimeout(pairingRetryTimer);
   pairingRetryTimer = null;
   console.log("Marketizo WhatsApp agent is connected.");
