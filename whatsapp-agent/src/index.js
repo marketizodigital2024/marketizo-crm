@@ -36,20 +36,24 @@ const client = new Client({
   }
 });
 
-let pairingCodeRequested = false;
+let lastPairingCodeAt = 0;
 
 client.on("qr", async (code) => {
-  if (whatsappPhoneNumber && !pairingCodeRequested) {
-    pairingCodeRequested = true;
-    try {
-      const pairingCode = await client.requestPairingCode(whatsappPhoneNumber);
-      console.log(`PAIRING CODE: ${pairingCode}`);
-      console.log("On your phone choose Link with phone number instead, then enter this code.");
-      return;
-    } catch (error) {
-      pairingCodeRequested = false;
-      console.error("Pairing code request failed:", error);
+  if (whatsappPhoneNumber) {
+    const now = Date.now();
+    if (now - lastPairingCodeAt >= 30000) {
+      lastPairingCodeAt = now;
+      try {
+        const pairingCode = await client.requestPairingCode(whatsappPhoneNumber);
+        console.log("========================================");
+        console.log(`WHATSAPP PAIRING CODE: ${pairingCode}`);
+        console.log("Phone: Linked devices > Link a device > Link with phone number instead");
+        console.log("========================================");
+      } catch (error) {
+        console.error("Pairing code request failed:", error);
+      }
     }
+    return;
   }
 
   console.log("Scan this QR in WhatsApp Business > Linked Devices:");
@@ -61,12 +65,12 @@ client.on("ready", () => {
 });
 
 client.on("auth_failure", (message) => {
-  pairingCodeRequested = false;
+  lastPairingCodeAt = 0;
   console.error("WhatsApp authentication failed:", message);
 });
 
 client.on("disconnected", (reason) => {
-  pairingCodeRequested = false;
+  lastPairingCodeAt = 0;
   console.error("WhatsApp disconnected:", reason);
 });
 
