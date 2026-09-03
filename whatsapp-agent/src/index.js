@@ -47,9 +47,9 @@ async function requestPhonePairingCode() {
     console.log("Phone: Linked devices > Link a device > Link with phone number instead");
     console.log("========================================");
   } catch (error) {
-    console.error("Pairing code request failed; retrying in 3 minutes:", error);
+    console.error("Pairing code request failed; retrying in 30 minutes:", error);
     clearTimeout(pairingRetryTimer);
-    pairingRetryTimer = setTimeout(requestPhonePairingCode, 180000);
+    pairingRetryTimer = setTimeout(requestPhonePairingCode, 1800000);
   }
 }
 
