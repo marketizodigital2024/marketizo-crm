@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import OpenAI, { toFile } from "openai";
 import whatsapp from "whatsapp-web.js";
-import { analyzeMessage } from "./analyze.js";
+import { analyzeFollowup, analyzeMessage } from "./analyze.js";
 
 const { Client, LocalAuth } = whatsapp;
 const required = ["OPENAI_API_KEY", "ALERT_TO"];
@@ -37,10 +37,15 @@ const dailyStatePath = process.env.DAILY_REPORT_STATE_PATH
   || path.join(stateDirectory, "marketizo-daily-report.json");
 const conversationStatePath = process.env.CONVERSATION_STATE_PATH
   || path.join(stateDirectory, "marketizo-group-context.json");
+const followupStatePath = process.env.FOLLOWUP_STATE_PATH
+  || path.join(stateDirectory, "marketizo-followups.json");
 const teamMemberIds = new Set();
 const pendingByGroup = new Map();
 const responseTimers = new Map();
 const groupHistory = new Map();
+const openIssues = new Map();
+const commitments = new Map();
+const commitmentTimers = new Map();
 let dailyState = { lastReportDate: "", events: [] };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
@@ -162,6 +167,111 @@ function rememberGroupMessage(groupId, groupName, sender, source, text) {
   saveGroupHistory();
 }
 
+function saveFollowupState() {
+  try {
+    fs.mkdirSync(path.dirname(followupStatePath), { recursive: true });
+    const tempPath = `${followupStatePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify({
+      issues: [...openIssues.values()],
+      commitments: [...commitments.values()]
+    }, null, 2));
+    fs.renameSync(tempPath, followupStatePath);
+  } catch (error) {
+    console.error("Follow-up state save failed:", error);
+  }
+}
+
+async function sendCommitmentOverdueAlert(record) {
+  await client.sendMessage(alertTo, [
+    `U grupi ${record.groupName} istekao je dogovoreni rok.`,
+    record.summary,
+    record.owner ? `Dogovor je preuzeo/la: ${record.owner}.` : "",
+    "Nisam pronašao jasnu potvrdu da je obaveza završena."
+  ].filter(Boolean).join("\n"));
+  record.alerted = true;
+  commitments.set(record.groupId, record);
+  recordDailyEvent({ type: "COMMITMENT", group: record.groupName, summary: `Probijen rok: ${record.summary}` });
+  saveFollowupState();
+}
+
+function scheduleCommitment(record) {
+  clearTimeout(commitmentTimers.get(record.groupId));
+  if (record.completed || record.alerted) return;
+  const due = new Date(record.dueAt).getTime();
+  if (!Number.isFinite(due)) return;
+  const timer = setTimeout(() => {
+    void sendCommitmentOverdueAlert(record).catch((error) => console.error("Commitment alert failed:", error));
+  }, Math.min(Math.max(0, due - Date.now()), 2147483647));
+  commitmentTimers.set(record.groupId, timer);
+}
+
+function loadFollowupState() {
+  try {
+    if (!fs.existsSync(followupStatePath)) return;
+    const stored = JSON.parse(fs.readFileSync(followupStatePath, "utf8"));
+    for (const issue of stored.issues || []) openIssues.set(issue.groupId, issue);
+    for (const record of stored.commitments || []) {
+      commitments.set(record.groupId, record);
+      scheduleCommitment(record);
+    }
+    console.log(`Follow-up state restored: ${openIssues.size} issue(s), ${commitments.size} commitment(s).`);
+  } catch (error) {
+    console.error("Follow-up state restore failed:", error);
+  }
+}
+
+async function updateFollowups(message, chat, senderName, source, messageText) {
+  const groupId = message.from;
+  const existingIssue = openIssues.get(groupId) || null;
+  const existingCommitment = commitments.get(groupId) || null;
+  const recentConversation = (groupHistory.get(groupId) || []).slice(-12);
+  const result = await analyzeFollowup(openai, model, {
+    now: new Date().toISOString(),
+    timezone: responseTimezone,
+    group: chat.name,
+    latestMessage: { sender: senderName, source, text: messageText },
+    recentConversation,
+    openIssue: existingIssue,
+    currentCommitment: existingCommitment
+  });
+
+  if (result.issueAction === "OPEN" || result.issueAction === "KEEP_OPEN") {
+    openIssues.set(groupId, {
+      groupId,
+      groupName: chat.name,
+      summary: result.issueSummary || existingIssue?.summary || messageText.slice(0, 300),
+      openedAt: existingIssue?.openedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  } else if (result.issueAction === "RESOLVE" && existingIssue) {
+    openIssues.delete(groupId);
+    recordDailyEvent({ type: "RESOLVED", group: chat.name, summary: result.resolutionEvidence || existingIssue.summary });
+  }
+
+  if (result.commitmentCompleted && existingCommitment) {
+    clearTimeout(commitmentTimers.get(groupId));
+    commitmentTimers.delete(groupId);
+    commitments.delete(groupId);
+    recordDailyEvent({ type: "COMPLETED", group: chat.name, summary: existingCommitment.summary });
+  } else if (result.commitment && result.commitmentDueAt) {
+    const due = new Date(result.commitmentDueAt);
+    if (Number.isFinite(due.getTime()) && due.getTime() > Date.now()) {
+      const record = {
+        groupId,
+        groupName: chat.name,
+        summary: result.commitmentSummary || messageText.slice(0, 300),
+        owner: result.commitmentOwner || senderName,
+        dueAt: due.toISOString(),
+        alerted: false,
+        completed: false
+      };
+      commitments.set(groupId, record);
+      scheduleCommitment(record);
+    }
+  }
+  saveFollowupState();
+}
+
 async function answerOwnerQuestion(message) {
   const question = String(message.body || "").trim() || "Daj mi pregled najvažnijih stvari.";
   const storedHistory = [...groupHistory.values()]
@@ -209,6 +319,8 @@ async function answerOwnerQuestion(message) {
     message: record.message,
     deadline: record.deadline
   }));
+  const unresolvedIssues = [...openIssues.values()];
+  const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
   const response = await openai.chat.completions.create({
     model,
     temperature: 0,
@@ -230,7 +342,7 @@ async function answerOwnerQuestion(message) {
       },
       {
         role: "user",
-        content: JSON.stringify({ recentGroupMessages: history, groupsWaitingForReply: waitingForReply, question })
+        content: JSON.stringify({ recentGroupMessages: history, groupsWaitingForReply: waitingForReply, unresolvedIssues, activeCommitments, question })
       }
     ]
   });
@@ -278,6 +390,8 @@ async function sendDailyReport() {
     message: record.message,
     deadline: record.deadline
   }));
+  const unresolvedIssues = [...openIssues.values()];
+  const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
   const completion = await openai.chat.completions.create({
     model,
     temperature: 0,
@@ -295,7 +409,7 @@ async function sendDailyReport() {
       },
       {
         role: "user",
-        content: JSON.stringify({ date: today, events, groupsWaitingForReply: pending })
+        content: JSON.stringify({ date: today, events, groupsWaitingForReply: pending, unresolvedIssues, activeCommitments })
       }
     ]
   });
@@ -499,8 +613,9 @@ client.on("ready", async () => {
   try {
     await refreshTeamMembers();
     loadResponseState();
-    startDailyReportScheduler();
     loadGroupHistory();
+    loadFollowupState();
+    startDailyReportScheduler();
   } catch (error) {
     console.error("Team roster setup failed:", error);
   }
@@ -543,7 +658,12 @@ client.on("message_create", async (message) => {
     if (message.fromMe) return;
     if (teamMemberIds.has(senderId)) {
       clearResponseWatch(message.from, chat.name);
-      rememberGroupMessage(message.from, chat.name, senderName, "team", message.body);
+      const teamText = String(message.body || "").trim();
+      rememberGroupMessage(message.from, chat.name, senderName, "team", teamText);
+      const looksLikeCommitment = /\b(danas|sutra|rok|gotovo|završ|zavrs|šaljem|saljem|biće|bice|do\s+\d|ponedeljak|utorak|sred|četvrt|cetvrt|petak)\b/i.test(teamText);
+      if (teamText && (openIssues.has(message.from) || commitments.has(message.from) || looksLikeCommitment)) {
+        await updateFollowups(message, chat, senderName, "team", teamText);
+      }
       return;
     }
 
@@ -563,6 +683,7 @@ client.on("message_create", async (message) => {
       message: messageText,
       timestamp: new Date(message.timestamp * 1000).toISOString()
     });
+    await updateFollowups(message, chat, senderName, "client", messageText);
     const normalizedBody = messageText.toLocaleLowerCase("sr-Latn");
     const ownerMention = ["miljan", "vlasnik", "gazda", "direktor", "owner", "šef", "sef"]
       .some((keyword) => normalizedBody.includes(keyword));
