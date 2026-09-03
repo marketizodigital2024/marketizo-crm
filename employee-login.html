@@ -312,8 +312,11 @@
                 <div class="form-grid">
                   <label>Datum<input name="date" type="date" required /></label>
                   <label class="activity-picker">Aktivnost
-                    <input id="portalActivitySearch" type="search" placeholder="Pretraži naziv ili kategoriju..." autocomplete="off" />
-                    <select id="portalActivitySelect" name="activityId" required></select>
+                    <span class="activity-combobox">
+                      <input id="portalActivitySearch" type="search" placeholder="Izaberi ili pretraži aktivnost..." autocomplete="off" role="combobox" aria-expanded="false" aria-controls="portalActivityOptions" />
+                      <input id="portalActivityId" name="activityId" type="hidden" />
+                      <span id="portalActivityOptions" class="activity-options" role="listbox" hidden></span>
+                    </span>
                   </label>
                   <label>Klijent<select id="portalClientSelect" name="clientId" required><option value="">Izaberi klijenta</option></select></label>
                   <label>Minuta<input name="minutes" type="number" min="1" max="960" step="1" value="60" required /></label>
