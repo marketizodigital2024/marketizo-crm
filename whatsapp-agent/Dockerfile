@@ -15,4 +15,4 @@ RUN npm install --omit=dev
 
 COPY . .
 
-CMD ["npm", "start"]
+CMD ["sh", "-c", "rm -f \"$WWEBJS_AUTH_PATH/session/SingletonLock\" \"$WWEBJS_AUTH_PATH/session/SingletonSocket\" \"$WWEBJS_AUTH_PATH/session/SingletonCookie\" && exec npm start"]
