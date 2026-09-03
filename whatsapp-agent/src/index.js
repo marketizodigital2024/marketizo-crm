@@ -34,9 +34,12 @@ const responseStatePath = process.env.RESPONSE_WATCH_STATE_PATH
   || path.join(stateDirectory, "marketizo-response-watch.json");
 const dailyStatePath = process.env.DAILY_REPORT_STATE_PATH
   || path.join(stateDirectory, "marketizo-daily-report.json");
+const conversationStatePath = process.env.CONVERSATION_STATE_PATH
+  || path.join(stateDirectory, "marketizo-group-context.json");
 const teamMemberIds = new Set();
 const pendingByGroup = new Map();
 const responseTimers = new Map();
+const groupHistory = new Map();
 let dailyState = { lastReportDate: "", events: [] };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
@@ -118,6 +121,81 @@ function loadDailyState() {
     console.error("Daily report state restore failed:", error);
     dailyState = { lastReportDate: "", events: [] };
   }
+}
+
+function saveGroupHistory() {
+  try {
+    fs.mkdirSync(path.dirname(conversationStatePath), { recursive: true });
+    const tempPath = `${conversationStatePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(Object.fromEntries(groupHistory), null, 2));
+    fs.renameSync(tempPath, conversationStatePath);
+  } catch (error) {
+    console.error("Group context save failed:", error);
+  }
+}
+
+function loadGroupHistory() {
+  try {
+    if (!fs.existsSync(conversationStatePath)) return;
+    const stored = JSON.parse(fs.readFileSync(conversationStatePath, "utf8"));
+    for (const [groupId, messages] of Object.entries(stored)) {
+      groupHistory.set(groupId, Array.isArray(messages) ? messages.slice(-60) : []);
+    }
+    console.log(`Group context restored: ${groupHistory.size} group(s).`);
+  } catch (error) {
+    console.error("Group context restore failed:", error);
+  }
+}
+
+function rememberGroupMessage(groupId, groupName, sender, source, text) {
+  if (!text) return;
+  const messages = groupHistory.get(groupId) || [];
+  messages.push({
+    groupName,
+    sender,
+    source,
+    text: String(text).slice(0, 1500),
+    at: new Date().toISOString()
+  });
+  groupHistory.set(groupId, messages.slice(-60));
+  saveGroupHistory();
+}
+
+async function answerOwnerQuestion(message) {
+  const history = [...groupHistory.values()]
+    .flat()
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)))
+    .slice(-100);
+  const waitingForReply = [...pendingByGroup.values()].map((record) => ({
+    group: record.groupName,
+    client: record.senderName,
+    message: record.message,
+    deadline: record.deadline
+  }));
+  const question = String(message.body || "").trim() || "Daj mi pregled najvažnijih stvari.";
+  const response = await openai.chat.completions.create({
+    model,
+    temperature: 0,
+    messages: [
+      {
+        role: "system",
+        content: [
+          "Ti si privatni Marketizo Tim Asistent vlasnika Miljana.",
+          "Odgovori kratko i jasno na srpskom jeziku koristeći isključivo dati kontekst iz WhatsApp grupa koje agent prati.",
+          "Ako odgovor nije u kontekstu, reci da nema dovoljno informacija.",
+          "Ne obećavaj rokove, rezultate, povrat novca niti bilo kakvu obavezu u ime Marketiza.",
+          "Ne izmišljaj činjenice. Jasno odvoji činjenice, otvorena pitanja i preporučeni sledeći korak."
+        ].join(" ")
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ recentGroupMessages: history, groupsWaitingForReply: waitingForReply, question })
+      }
+    ]
+  });
+  const answer = String(response.choices[0]?.message?.content || "Nemam dovoljno informacija.").trim();
+  await message.reply(answer);
+  console.log("[PRIVATE_AI_REPLY] answered Miljan's question");
 }
 
 function recordDailyEvent(event) {
@@ -349,6 +427,7 @@ client.on("ready", async () => {
     await refreshTeamMembers();
     loadResponseState();
     startDailyReportScheduler();
+    loadGroupHistory();
   } catch (error) {
     console.error("Team roster setup failed:", error);
   }
@@ -370,23 +449,33 @@ client.on("disconnected", (reason) => {
 
 client.on("message_create", async (message) => {
   try {
-    if (!message.from.endsWith("@g.us")) return;
+    if (!message.from.endsWith("@g.us")) {
+      if (!message.fromMe && message.from === alertTo) {
+        await answerOwnerQuestion(message);
+      }
+      return;
+    }
 
     const chat = await message.getChat();
     if (!chat.isGroup) return;
-    if (chat.name === teamGroupName) return;
-    if (monitoredGroups.size && !monitoredGroups.has(chat.name)) return;
+    if (chat.name !== teamGroupName && monitoredGroups.size && !monitoredGroups.has(chat.name)) return;
 
     const contact = await message.getContact();
     const senderId = serializedId(message.author || contact.id);
-    if (message.fromMe || teamMemberIds.has(senderId)) {
+    const senderName = contact.pushname || contact.name || contact.number || "Nepoznato";
+    if (message.fromMe) return;
+    if (teamMemberIds.has(senderId)) {
       clearResponseWatch(message.from, chat.name);
+      rememberGroupMessage(message.from, chat.name, senderName, "team", message.body);
       return;
     }
+
+    if (chat.name === teamGroupName) return;
 
     const voiceTranscript = await transcribeVoiceMessage(message);
     const messageText = voiceTranscript || String(message.body || "").trim();
     if (!messageText) return;
+    rememberGroupMessage(message.from, chat.name, senderName, "client", messageText);
 
     if (teamMemberIds.size) beginResponseWatch(message, chat, contact, messageText);
     else console.error("Response SLA watch skipped because the team roster is empty.");
