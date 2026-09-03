@@ -125,6 +125,8 @@ client.on("message_create", async (message) => {
 
     console.log(`[${result.level}] ${chat.name}: ${result.summary}`);
 
+    if (result.level === "GREEN" && !result.isPraise) return;
+
     const icons = {
       GREEN: "🟢",
       YELLOW: "🟡",
