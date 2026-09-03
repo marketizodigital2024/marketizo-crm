@@ -484,7 +484,7 @@ function reportRecipientId() {
 
 function employeeYearAbsenceDays(type, year) {
   const openingUsed = type === "Godišnji odmor" && year === Number(currentDateKey().slice(0, 4)) ? parseNumber(activeEmployee?.openingVacationUsed || 0) : 0;
-  return openingUsed + employeeAbsences(type).filter((absence) => absence.status !== "Zatraženo").reduce((sum, absence) => {
+  return openingUsed + employeeAbsences(type).filter((absence) => absence.status === "Odobreno").reduce((sum, absence) => {
     const days = workdayKeysBetween(absence.startDate, absence.endDate).filter((day) => day.startsWith(`${year}-`));
     return sum + days.length;
   }, 0);
@@ -536,7 +536,7 @@ function formatVacationDays(value) {
 
 function employeeMonthAbsenceDays(employeeId, monthKey) {
   return (state.employeeAbsences || [])
-    .filter((absence) => absence.employeeId === employeeId && absence.status !== "Zatraženo")
+    .filter((absence) => absence.employeeId === employeeId && absence.status === "Odobreno")
     .reduce((sum, absence) => {
       const days = workdayKeysBetween(absence.startDate, absence.endDate).filter((day) => day.startsWith(monthKey));
       return sum + days.length;
@@ -559,7 +559,7 @@ function elapsedWorkdaysToDate(employee, monthKey) {
       (!employee.startDate || day >= employee.startDate) &&
       !(state.employeeAbsences || []).some((absence) =>
         absence.employeeId === employee.id &&
-        absence.status !== "Zatraženo" &&
+        absence.status === "Odobreno" &&
         day >= absence.startDate &&
         day <= absence.endDate
       )
@@ -573,7 +573,7 @@ function elapsedWorkdaysToDate(employee, monthKey) {
     (!employee.startDate || day >= employee.startDate) &&
     !(state.employeeAbsences || []).some((absence) =>
       absence.employeeId === employee.id &&
-      absence.status !== "Zatraženo" &&
+      absence.status === "Odobreno" &&
       day >= absence.startDate &&
       day <= absence.endDate
     )
@@ -960,7 +960,7 @@ function renderPortalCalendar() {
   const firstDay = parseDate(days[0]).getDay();
   const offset = firstDay === 0 ? 6 : firstDay - 1;
   const blanks = Array.from({ length: offset }, () => `<div class="calendar-day empty"></div>`).join("");
-  const absences = (state.employeeAbsences || []).filter((absence) => absence.status !== "Zatraženo" && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)));
+  const absences = (state.employeeAbsences || []).filter((absence) => absence.status === "Odobreno" && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)));
   const logs = employeeWorkLogs(portalMonth);
   const plans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(portalMonth));
   setText("portalCalendarSummary", `${monthLabel(portalMonth)} · ${absences.length} odsustava`);
@@ -1032,7 +1032,7 @@ function renderPortalTeamTimeline() {
       className: "ok",
     }));
   const absences = (state.employeeAbsences || [])
-    .filter((absence) => absence.status !== "Zatraženo")
+    .filter((absence) => absence.status === "Odobreno")
     .filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)))
     .map((absence) => {
       const employee = (state.employees || []).find((item) => item.id === absence.employeeId);
