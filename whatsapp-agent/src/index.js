@@ -37,7 +37,7 @@ const client = new Client({
 
 client.on("qr", (code) => {
   console.log("Scan this QR in WhatsApp Business > Linked Devices:");
-  qrcode.generate(code, { small: true });
+  qrcode.generate(code, { small: true }, (output) => console.log(output));
 });
 
 client.on("ready", () => {
