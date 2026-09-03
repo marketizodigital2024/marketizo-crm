@@ -125,11 +125,15 @@ client.on("message_create", async (message) => {
 
     console.log(`[${result.level}] ${chat.name}: ${result.summary}`);
 
-    if (result.level !== "RED" && result.level !== "URGENT") return;
-
-    const icon = result.level === "URGENT" ? "🚨" : "🔴";
+    const icons = {
+      GREEN: "🟢",
+      YELLOW: "🟡",
+      RED: "🔴",
+      URGENT: "🚨"
+    };
+    const icon = icons[result.level] || "ℹ️";
     const alert = [
-      `${icon} MARKETIZO CLIENT ALERT`,
+      `${icon} MARKETIZO CLIENT UPDATE`,
       `Nivo: ${result.level}`,
       `Grupa: ${chat.name}`,
       `Pošiljalac: ${contact.pushname || contact.name || contact.number || "Nepoznato"}`,
