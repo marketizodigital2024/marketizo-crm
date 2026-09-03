@@ -265,10 +265,12 @@ function normalizedActivitySearch(value) {
 }
 
 function renderPortalActivityOptions() {
-  const activitySelect = document.getElementById("portalActivitySelect");
-  if (!activitySelect) return;
-  const selected = activitySelect.value;
-  const query = normalizedActivitySearch(document.getElementById("portalActivitySearch")?.value);
+  const activityInput = document.getElementById("portalActivitySearch");
+  const activityIdInput = document.getElementById("portalActivityId");
+  const activityOptions = document.getElementById("portalActivityOptions");
+  if (!activityInput || !activityIdInput || !activityOptions) return;
+  const selectedActivity = (state.employeeActivities || []).find((activity) => activity.id === activityIdInput.value);
+  const query = normalizedActivitySearch(selectedActivity && activityInput.value === selectedActivity.name ? "" : activityInput.value);
   const activeActivities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
   const activities = query
     ? activeActivities.filter((activity) => normalizedActivitySearch(`${activity.name} ${activity.category || "Ostalo"}`).includes(query))
@@ -277,10 +279,17 @@ function renderPortalActivityOptions() {
     (result[activity.category || "Ostalo"] ||= []).push(activity);
     return result;
   }, {});
-  activitySelect.innerHTML = activities.length
-    ? `<option value="">Izaberi aktivnost</option>${Object.entries(groups).map(([category, items]) => `<optgroup label="${category}">${items.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")}</optgroup>`).join("")}`
-    : `<option value="">${activeActivities.length ? "Nema rezultata za ovu pretragu" : "Admin još nije dodao aktivnosti"}</option>`;
-  if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
+  activityOptions.innerHTML = activities.length
+    ? Object.entries(groups).map(([category, items]) => `<span class="activity-option-group">${category}</span>${items.map((activity) => `<button type="button" class="activity-option" role="option" data-activity-id="${activity.id}">${activity.name}</button>`).join("")}`).join("")
+    : `<span class="activity-option-empty">${activeActivities.length ? "Nema rezultata za ovu pretragu" : "Admin još nije dodao aktivnosti"}</span>`;
+}
+
+function setPortalActivityOptionsOpen(open) {
+  const input = document.getElementById("portalActivitySearch");
+  const options = document.getElementById("portalActivityOptions");
+  if (!input || !options) return;
+  options.hidden = !open;
+  input.setAttribute("aria-expanded", String(open));
 }
 
 function formatHours(value) {
@@ -776,11 +785,11 @@ function setupDailyMinuteProgress() {
 }
 
 function setupPauseActivityEntry() {
-  const activitySelect = document.querySelector('#employeeHours select[name="activityId"]');
-  const form = activitySelect?.closest("form");
+  const activityIdInput = document.querySelector('#employeeHours input[name="activityId"]');
+  const form = activityIdInput?.closest("form");
   const clientSelect = form?.querySelector('select[name="clientId"]');
   const minutesInput = form?.querySelector('input[name="minutes"]');
-  if (!form || !activitySelect || !clientSelect || !minutesInput || form.dataset.pauseReady) return;
+  if (!form || !activityIdInput || !clientSelect || !minutesInput || form.dataset.pauseReady) return;
   form.dataset.pauseReady = "true";
   const note = document.createElement("p");
   note.className = "pause-entry-note";
@@ -788,8 +797,8 @@ function setupPauseActivityEntry() {
   note.textContent = "Pauza se evidentira u dnevnom prisustvu, ali se ne vezuje za klijenta niti ulazi u trošak klijenta.";
   clientSelect.closest("label")?.insertAdjacentElement("afterend", note);
   const sync = () => {
-    const selected = activitySelect.options[activitySelect.selectedIndex];
-    const isPause = String(selected?.textContent || "").trim().toLowerCase() === "pauza";
+    const selected = (state.employeeActivities || []).find((activity) => activity.id === activityIdInput.value);
+    const isPause = String(selected?.name || "").trim().toLowerCase() === "pauza";
     clientSelect.required = !isPause;
     clientSelect.disabled = isPause;
     note.hidden = !isPause;
@@ -798,7 +807,7 @@ function setupPauseActivityEntry() {
       minutesInput.value = "30";
     }
   };
-  activitySelect.addEventListener("change", sync);
+  activityIdInput.addEventListener("change", sync);
   form.addEventListener("reset", () => window.setTimeout(sync, 0));
   sync();
 }
@@ -1502,7 +1511,34 @@ document.getElementById("employeePortalMonth")?.addEventListener("input", (event
   renderEmployeePortal();
 });
 
-document.getElementById("portalActivitySearch")?.addEventListener("input", renderPortalActivityOptions);
+document.getElementById("portalActivitySearch")?.addEventListener("focus", () => {
+  renderPortalActivityOptions();
+  setPortalActivityOptionsOpen(true);
+});
+
+document.getElementById("portalActivitySearch")?.addEventListener("input", () => {
+  const activityIdInput = document.getElementById("portalActivityId");
+  if (activityIdInput) activityIdInput.value = "";
+  renderPortalActivityOptions();
+  setPortalActivityOptionsOpen(true);
+});
+
+document.getElementById("portalActivityOptions")?.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-activity-id]");
+  if (!option) return;
+  const activity = (state.employeeActivities || []).find((item) => item.id === option.dataset.activityId);
+  if (!activity) return;
+  const activityInput = document.getElementById("portalActivitySearch");
+  const activityIdInput = document.getElementById("portalActivityId");
+  activityInput.value = activity.name;
+  activityIdInput.value = activity.id;
+  activityIdInput.dispatchEvent(new Event("change", { bubbles: true }));
+  setPortalActivityOptionsOpen(false);
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".activity-combobox")) setPortalActivityOptionsOpen(false);
+});
 
 document.getElementById("portalHoursForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1596,6 +1632,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   event.currentTarget.elements.minutes.value = 60;
   const activitySearch = document.getElementById("portalActivitySearch");
   if (activitySearch) activitySearch.value = "";
+  const activityIdInput = document.getElementById("portalActivityId");
+  if (activityIdInput) activityIdInput.value = "";
   renderEmployeePortal();
   showToast("Sačuvano", "Sati i dnevni izveštaj su sačuvani.", "ok");
 });
