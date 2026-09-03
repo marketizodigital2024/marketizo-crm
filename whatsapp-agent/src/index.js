@@ -42,7 +42,7 @@ client.on("qr", async (code) => {
   if (whatsappPhoneNumber && !pairingCodeRequested) {
     pairingCodeRequested = true;
     try {
-      const pairingCode = await client.requestPairingCode(whatsappPhoneNumber);
+      const pairingCode = await client.requestPairingCode(whatsappPhoneNumber, false, 180000);
       console.log(`PAIRING CODE: ${pairingCode}`);
       console.log("On your phone choose Link with phone number instead, then enter this code.");
       return;
