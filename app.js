@@ -1403,6 +1403,14 @@ function migrateState(data) {
     category: activity.category || "Ostalo",
     active: activity.active !== false,
   }));
+  const employeeHourAdjustments = (data.employeeHourAdjustments || []).map((adjustment) => ({
+    id: adjustment.id || crypto.randomUUID(),
+    employeeId: adjustment.employeeId || "",
+    date: adjustment.date || currentDateKey(),
+    minutes: Math.max(1, Math.round(Number(adjustment.minutes || 0))),
+    reason: adjustment.reason || "Korekcija salda",
+    createdAt: adjustment.createdAt || new Date().toISOString(),
+  }));
   employeeWorkLogs.forEach((log) => {
     const activity = employeeActivities.find((item) => item.id === log.activityId)
       || employeeActivities.find((item) => item.name === log.activityName);
@@ -1532,6 +1540,7 @@ function migrateState(data) {
     employeeAbsences,
     employeeWorkLogs,
     employeeActivities,
+    employeeHourAdjustments,
     employeeDocuments,
     employeeLateRecords,
     employeeGoals,
@@ -2576,7 +2585,14 @@ function employeeMonthHours(employeeId, monthKey) {
     .filter((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey))
     .reduce((sum, log) => sum + Number(log.hours || 0), 0);
   const penaltyHours = employeeMonthLatePenaltyHours(employeeId, monthKey);
-  return Math.round((loggedHours - penaltyHours) * 100) / 100;
+  const adjustmentHours = employeeMonthHourDeductionMinutes(employeeId, monthKey) / 60;
+  return Math.round((loggedHours - penaltyHours - adjustmentHours) * 100) / 100;
+}
+
+function employeeMonthHourDeductionMinutes(employeeId, monthKey) {
+  return (state.employeeHourAdjustments || [])
+    .filter((adjustment) => adjustment.employeeId === employeeId && String(adjustment.date || "").startsWith(monthKey))
+    .reduce((sum, adjustment) => sum + Math.max(0, Number(adjustment.minutes || 0)), 0);
 }
 
 function employeeMonthRawHours(employeeId, monthKey) {
@@ -2659,6 +2675,7 @@ function employeeMonthHasActivity(employeeId, monthKey) {
   return (
     Object.prototype.hasOwnProperty.call(employee?.monthlyBalanceOverrides || {}, monthKey) ||
     state.employeeWorkLogs.some((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey)) ||
+    (state.employeeHourAdjustments || []).some((adjustment) => adjustment.employeeId === employeeId && String(adjustment.date || "").startsWith(monthKey)) ||
     (state.employeeLateRecords || []).some((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey)) ||
     (state.employeeAbsences || []).some((absence) => absence.employeeId === employeeId && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
   );
@@ -2904,7 +2921,7 @@ function teamUnderLeader(leaderId) {
 }
 
 function setSelectedEmployeeOnForms(employeeId) {
-  ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
+  ["absenceEmployeeSelect", "workEmployeeSelect", "hourDeductionEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
     select.value = [...select.options].some((option) => option.value === employeeId) ? employeeId : "";
@@ -2913,7 +2930,7 @@ function setSelectedEmployeeOnForms(employeeId) {
 
 function renderEmployeeOptions() {
   const employees = state.employees || [];
-  ["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
+  ["absenceEmployeeSelect", "workEmployeeSelect", "hourDeductionEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
     const selected = select.value || selectedEmployeeId;
@@ -2956,7 +2973,7 @@ function syncRequestedEmployee() {
   }
 }
 
-const employeeSelectionIds = new Set(["absenceEmployeeSelect", "workEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"]);
+const employeeSelectionIds = new Set(["absenceEmployeeSelect", "workEmployeeSelect", "hourDeductionEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"]);
 document.addEventListener("change", (event) => {
   if (!employeeSelectionIds.has(event.target.id) || !event.target.value) return;
   selectedEmployeeId = event.target.value;
@@ -2970,6 +2987,7 @@ function renderEmployees() {
   state.employees = state.employees || [];
   state.employeeAbsences = state.employeeAbsences || [];
   state.employeeWorkLogs = state.employeeWorkLogs || [];
+  state.employeeHourAdjustments = state.employeeHourAdjustments || [];
   state.employeeActivities = state.employeeActivities || [];
   state.employeeDocuments = state.employeeDocuments || [];
   state.employeeLateRecords = state.employeeLateRecords || [];
@@ -3015,6 +3033,7 @@ function renderEmployees() {
   renderEmployeeCalendar(monthKey, employees);
   renderEmployeeWorkRows(monthKey);
   renderEmployeeActivities();
+  renderEmployeeHourAdjustments();
   renderEmployeeOps(monthKey);
   renderEmployeeTeamTimeline(monthKey);
   updateEmployeeMonthlyPreview();
@@ -4242,6 +4261,72 @@ function setupEmployeeActivityCategories() {
 }
 
 setupEmployeeActivityCategories();
+
+function setupEmployeeHourDeduction() {
+  const workPanel = document.getElementById("employeeWorkForm")?.closest(".employee-work-panel");
+  if (!workPanel || document.getElementById("employeeHourDeductionForm")) return;
+  const panel = document.createElement("section");
+  panel.className = "panel employee-work-panel hour-deduction-panel";
+  panel.innerHTML = `
+    <div class="panel-head">
+      <div><p class="eyebrow">Korekcija salda</p><h2>Oduzmi minute</h2></div>
+      <span>ne menja postojeće aktivnosti</span>
+    </div>
+    <form id="employeeHourDeductionForm" class="admin-form compact-action-form">
+      <label>Zaposleni<select id="hourDeductionEmployeeSelect" name="employeeId" required></select></label>
+      <label>Datum<input name="date" type="date" required /></label>
+      <label>Minuta za oduzimanje<input name="minutes" type="number" min="1" max="10000" step="1" value="30" required /></label>
+      <label class="span-2">Razlog<input name="reason" required placeholder="npr. korekcija prethodnog salda" /></label>
+      <button class="primary-button deduction-button" type="submit">Oduzmi minute</button>
+    </form>
+    <div class="setup-list hour-deduction-list" id="employeeHourDeductionList"></div>`;
+  workPanel.insertAdjacentElement("afterend", panel);
+  const dateInput = panel.querySelector('input[name="date"]');
+  dateInput.value = currentDateKey();
+  panel.querySelector("form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const employee = (state.employees || []).find((item) => item.id === formData.get("employeeId"));
+    const minutes = Math.max(1, Math.round(parseNumber(formData.get("minutes"), 0)));
+    const reason = String(formData.get("reason") || "").trim();
+    const date = String(formData.get("date") || currentDateKey());
+    if (!employee || !reason || !minutes) return;
+    if (!confirm(`Oduzeti ${minutes} minuta od salda zaposlenog ${employee.name}?\n\nRazlog: ${reason}`)) return;
+    state.employeeHourAdjustments = state.employeeHourAdjustments || [];
+    state.employeeHourAdjustments.unshift({
+      id: crypto.randomUUID(), employeeId: employee.id, date, minutes, reason, createdAt: new Date().toISOString(),
+    });
+    selectedEmployeeId = employee.id;
+    saveState();
+    event.currentTarget.reset();
+    event.currentTarget.elements.date.value = currentDateKey();
+    event.currentTarget.elements.minutes.value = 30;
+    renderAll();
+    showToast("Saldo je korigovan", `${employee.name}: oduzeto ${minutes} minuta.`, "ok");
+  });
+}
+
+function renderEmployeeHourAdjustments() {
+  const target = document.getElementById("employeeHourDeductionList");
+  if (!target) return;
+  const adjustments = (state.employeeHourAdjustments || []).slice().sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date)));
+  target.innerHTML = adjustments.length
+    ? adjustments.slice(0, 20).map((adjustment) => {
+      const employee = (state.employees || []).find((item) => item.id === adjustment.employeeId);
+      return `<div class="setup-item hour-deduction-row"><strong>−${adjustment.minutes} min</strong><span>${employee?.name || "Zaposleni"} · ${formatDate(adjustment.date)}<br />${adjustment.reason}</span><button class="edit-button" data-undo-hour-deduction="${adjustment.id}" type="button">Poništi korekciju</button></div>`;
+    }).join("")
+    : `<div class="empty-state">Još nema korekcija salda.</div>`;
+  target.querySelectorAll("[data-undo-hour-deduction]").forEach((button) => button.addEventListener("click", () => {
+    const adjustment = (state.employeeHourAdjustments || []).find((item) => item.id === button.dataset.undoHourDeduction);
+    if (!adjustment || !confirm(`Poništiti korekciju od ${adjustment.minutes} minuta?`)) return;
+    state.employeeHourAdjustments = state.employeeHourAdjustments.filter((item) => item.id !== adjustment.id);
+    saveState();
+    renderAll();
+    showToast("Korekcija je poništena", "Saldo je vraćen za izabrani broj minuta.", "ok");
+  }));
+}
+
+setupEmployeeHourDeduction();
 
 function setupExistingGoalProgressEditor() {
   const form = document.getElementById("employeeGoalForm");
