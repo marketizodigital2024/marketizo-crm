@@ -163,8 +163,44 @@ function rememberGroupMessage(groupId, groupName, sender, source, text) {
 }
 
 async function answerOwnerQuestion(message) {
-  const history = [...groupHistory.values()]
+  const question = String(message.body || "").trim() || "Daj mi pregled najvažnijih stvari.";
+  const storedHistory = [...groupHistory.values()]
     .flat()
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)))
+    .slice(-300);
+  const chats = await client.getChats();
+  const clientGroups = chats.filter((chat) => chat.isGroup
+    && chat.name !== teamGroupName
+    && (!monitoredGroups.size || monitoredGroups.has(chat.name)));
+  const queryTokens = question.toLocaleLowerCase("sr-Latn")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((token) => token.length >= 2 && !["sta", "šta", "kod", "grupi", "grupa", "cemu", "čemu", "radi", "ima"].includes(token));
+  const matchingGroups = clientGroups.filter((chat) => {
+    const name = chat.name.toLocaleLowerCase("sr-Latn");
+    return queryTokens.some((token) => name.includes(token));
+  });
+  const groupsToRead = matchingGroups.length ? matchingGroups : clientGroups;
+  const liveHistory = (await Promise.all(groupsToRead.map(async (chat) => {
+    try {
+      const messages = await chat.fetchMessages({ limit: 50 });
+      return messages
+        .filter((item) => !item.fromMe && String(item.body || "").trim())
+        .map((item) => ({
+          groupName: chat.name,
+          sender: serializedId(item.author || item.from),
+          source: teamMemberIds.has(serializedId(item.author || item.from)) ? "team" : "client",
+          text: String(item.body).slice(0, 1500),
+          at: new Date(item.timestamp * 1000).toISOString()
+        }));
+    } catch (error) {
+      console.error(`[PRIVATE_CONTEXT] Could not read ${chat.name}:`, error);
+      return [];
+    }
+  }))).flat();
+  const relevantStoredHistory = matchingGroups.length
+    ? storedHistory.filter((item) => matchingGroups.some((chat) => chat.name === item.groupName))
+    : storedHistory;
+  const history = [...relevantStoredHistory, ...liveHistory]
     .sort((a, b) => String(a.at).localeCompare(String(b.at)))
     .slice(-300);
   const waitingForReply = [...pendingByGroup.values()].map((record) => ({
@@ -173,7 +209,6 @@ async function answerOwnerQuestion(message) {
     message: record.message,
     deadline: record.deadline
   }));
-  const question = String(message.body || "").trim() || "Daj mi pregled najvažnijih stvari.";
   const response = await openai.chat.completions.create({
     model,
     temperature: 0,
@@ -183,6 +218,7 @@ async function answerOwnerQuestion(message) {
         content: [
           "Ti si privatni Marketizo Tim Asistent vlasnika Miljana.",
           "Odgovori kratko i jasno na srpskom jeziku koristeći isključivo dati kontekst iz WhatsApp grupa koje agent prati.",
+          "Prepoznaj naziv grupe i kada je korisnik napisao samo deo naziva ili napravio malu slovnu grešku.",
           "Ako odgovor nije u kontekstu, reci da nema dovoljno informacija.",
           "Ne obećavaj rokove, rezultate, povrat novca niti bilo kakvu obavezu u ime Marketiza.",
           "Ne izmišljaj činjenice. Jasno odvoji činjenice, otvorena pitanja i preporučeni sledeći korak."
