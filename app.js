@@ -1377,6 +1377,9 @@ function migrateState(data) {
     requestedAt: absence.requestedAt || "",
     approvedAt: absence.approvedAt || "",
     approvedBy: absence.approvedBy || "",
+    rejectedAt: absence.rejectedAt || "",
+    rejectedBy: absence.rejectedBy || "",
+    rejectionReason: absence.rejectionReason || "",
     hidden: Boolean(absence.hidden),
   }));
   const employeeWorkLogs = (data.employeeWorkLogs || starterData.employeeWorkLogs || []).map((log) => ({
@@ -1903,8 +1906,9 @@ function renderAdminNotifications() {
             <strong>!</strong>
             <span>${notification.title}<br />${notification.message}</span>
             <div class="notification-actions">
-              <button class="mini-action" data-hide-notification="${notification.id}" type="button">Sakrij 7 dana</button>
-              <button class="mini-action danger-action" data-delete-notification="${notification.id}" type="button">Obriši</button>
+              ${String(notification.key || "").startsWith("absence-request-")
+                ? `<button class="mini-action approve-absence" data-absence-id="${String(notification.key).slice("absence-request-".length)}" type="button">Prihvati</button><button class="mini-action danger-action reject-absence" data-absence-id="${String(notification.key).slice("absence-request-".length)}" type="button">Odbij</button>`
+                : `<button class="mini-action" data-hide-notification="${notification.id}" type="button">Sakrij 7 dana</button><button class="mini-action danger-action" data-delete-notification="${notification.id}" type="button">Obriši</button>`}
             </div>
           </div>`
         )
@@ -1954,6 +1958,12 @@ function renderAdminNotifications() {
   });
   target.querySelectorAll("[data-delete-notification]").forEach((button) => {
     button.addEventListener("click", () => deleteNotification(button.dataset.deleteNotification));
+  });
+  target.querySelectorAll(".approve-absence").forEach((button) => {
+    button.addEventListener("click", () => approveAbsence(button.dataset.absenceId));
+  });
+  target.querySelectorAll(".reject-absence").forEach((button) => {
+    button.addEventListener("click", () => rejectAbsence(button.dataset.absenceId));
   });
 }
 
@@ -2009,10 +2019,40 @@ function renderAdminEmployeeRisk(monthKey) {
           <div class="setup-item alert-item clickable-item employee-hours-row ${status}" data-go-view="employees" data-select-shortcut-employee="${employee.id}">
             <strong>${formatHourBalance(balance)}</strong>
             <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours || 40)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
+            <button class="mini-action" data-view-employee-activities="${employee.id}" type="button">Vidi aktivnosti</button>
           </div>`;
         })
         .join("")
     : `<div class="empty-state">Nema zaposlenih za prikaz.</div>`;
+  target.querySelectorAll("[data-view-employee-activities]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEmployeeActivitiesDialog(button.dataset.viewEmployeeActivities, monthKey);
+    });
+  });
+}
+
+function openEmployeeActivitiesDialog(employeeId, monthKey = currentMonthKey()) {
+  const employee = employeeById(employeeId);
+  if (!employee) return;
+  const logs = (state.employeeWorkLogs || [])
+    .filter((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey))
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  let dialog = document.getElementById("employeeActivitiesDialog");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "employeeActivitiesDialog";
+    dialog.className = "employee-activities-dialog";
+    document.body.append(dialog);
+  }
+  const totalMinutes = logs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+  dialog.innerHTML = `<div class="employee-activities-dialog-card">
+    <div class="panel-head"><div><p class="eyebrow">${monthLabel(monthKey)}</p><h2>${employee.name} · aktivnosti</h2></div><button class="icon-button" data-close-employee-activities type="button">×</button></div>
+    <div class="employee-activities-summary"><strong>${logs.length}</strong><span>aktivnosti</span><strong>${totalMinutes} min</strong><span>ukupno</span></div>
+    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${log.activityName || "Rad"}</strong><span>${log.activityCategory || "Ostalo"} · ${formatDate(log.date)}</span></div><b>${Number(log.minutes || Number(log.hours || 0) * 60)} min</b><p>${log.clientName || "Bez klijenta"}${log.note ? ` · ${log.note}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
+  </div>`;
+  dialog.querySelector("[data-close-employee-activities]").addEventListener("click", () => dialog.close());
+  dialog.showModal();
 }
 
 function renderBackupStatus() {
@@ -2503,7 +2543,7 @@ function employeeYearAbsenceDays(employeeId, year, type) {
     return sum + (type ? parseNumber(monthValues[type] || 0) : Object.values(monthValues).reduce((monthSum, value) => monthSum + parseNumber(value || 0), 0));
   }, 0);
   return openingUsed + overriddenDays + state.employeeAbsences
-    .filter((absence) => absence.employeeId === employeeId && absence.type === type && absence.status !== "Zatraženo")
+    .filter((absence) => absence.employeeId === employeeId && absence.type === type && absence.status === "Odobreno")
     .reduce((sum, absence) => {
       const days = absenceWorkdays(absence).filter((day) => day.startsWith(`${year}-`) && !overriddenMonths.has(day.slice(0, 7)));
       return sum + days.length;
@@ -2573,7 +2613,7 @@ function employeeMonthAbsenceDays(employeeId, monthKey, type = "") {
       : Object.values(override).reduce((sum, value) => sum + parseNumber(value || 0), 0);
   }
   return state.employeeAbsences
-    .filter((absence) => absence.employeeId === employeeId && absence.status !== "Zatraženo" && (!type || absence.type === type))
+    .filter((absence) => absence.employeeId === employeeId && absence.status === "Odobreno" && (!type || absence.type === type))
     .reduce((sum, absence) => {
       const days = absenceWorkdays(absence).filter((day) => day.startsWith(monthKey));
       return sum + days.length;
@@ -2641,7 +2681,7 @@ function employeeExpectedHoursToDate(employee, monthKey) {
     (!employee.startDate || day >= employee.startDate) &&
     !(state.employeeAbsences || []).some((absence) =>
       absence.employeeId === employee.id &&
-      absence.status !== "Zatraženo" &&
+      absence.status === "Odobreno" &&
       day >= absence.startDate &&
       day <= absence.endDate
     )
@@ -3469,13 +3509,16 @@ function renderEmployeeAbsenceRequests() {
             <td>${absence.type}</td>
             <td>${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}</td>
             <td>${absence.note || ""}</td>
-            <td><button class="secondary-button approve-absence" data-absence-id="${absence.id}" type="button">Odobri</button></td>
+            <td><div class="absence-request-actions"><button class="secondary-button approve-absence" data-absence-id="${absence.id}" type="button">Prihvati</button><button class="secondary-button danger-action reject-absence" data-absence-id="${absence.id}" type="button">Odbij</button></div></td>
           </tr>`;
         })
         .join("")
     : `<tr><td colspan="5">Nema zahteva za odmor.</td></tr>`;
   document.querySelectorAll(".approve-absence").forEach((button) => {
     button.addEventListener("click", () => approveAbsence(button.dataset.absenceId));
+  });
+  document.querySelectorAll(".reject-absence").forEach((button) => {
+    button.addEventListener("click", () => rejectAbsence(button.dataset.absenceId));
   });
 }
 
@@ -4465,12 +4508,13 @@ function renderEmployeeReportRows(monthKey) {
 
 function approveAbsence(id) {
   const absence = state.employeeAbsences.find((item) => item.id === id);
-  if (!absence) return;
+  if (!absence || absence.status !== "Zatraženo") return;
+  const employee = employeeById(absence.employeeId);
+  if (!confirm(`Prihvatiti zahtev za ${absence.type} zaposlenog ${employee?.name || "Zaposleni"}?`)) return;
   absence.status = "Odobreno";
   absence.approvedAt = new Date().toISOString();
   absence.approvedBy = "Admin";
   state.notifications = (state.notifications || []).filter((item) => item.key !== `absence-request-${absence.id}`);
-  const employee = employeeById(absence.employeeId);
   notifyOnce({
     key: `absence-approved-${absence.id}`,
     scope: "employee",
@@ -4490,6 +4534,33 @@ function approveAbsence(id) {
   renderAll();
 }
 
+function rejectAbsence(id) {
+  const absence = state.employeeAbsences.find((item) => item.id === id);
+  if (!absence || absence.status !== "Zatraženo") return;
+  const employee = employeeById(absence.employeeId);
+  const reason = String(prompt(`Zašto se odbija zahtev zaposlenog ${employee?.name || "Zaposleni"}?`) || "").trim();
+  if (!reason) {
+    alert("Razlog odbijanja je obavezan. Zahtev nije promenjen.");
+    return;
+  }
+  absence.status = "Odbijeno";
+  absence.rejectedAt = new Date().toISOString();
+  absence.rejectedBy = "Admin";
+  absence.rejectionReason = reason;
+  state.notifications = (state.notifications || []).filter((item) => item.key !== `absence-request-${absence.id}`);
+  notifyOnce({
+    key: `absence-rejected-${absence.id}`,
+    scope: "employee",
+    targetId: absence.employeeId,
+    type: "danger",
+    title: "Zahtev za odmor je odbijen",
+    message: `${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)} nije odobren. Razlog: ${reason}`,
+  });
+  saveState();
+  renderAll();
+  showToast("Zahtev je odbijen", `${employee?.name || "Zaposleni"} će videti razlog odbijanja.`, "warn");
+}
+
 function renderEmployeeTeamTimeline(monthKey) {
   const target = document.getElementById("employeeTeamTimeline");
   if (!target) return;
@@ -4503,7 +4574,7 @@ function renderEmployeeTeamTimeline(monthKey) {
       className: "ok",
     }));
   const absences = (state.employeeAbsences || [])
-    .filter((absence) => absence.status !== "Zatraženo")
+    .filter((absence) => absence.status === "Odobreno")
     .filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
     .map((absence) => {
       const employee = employeeById(absence.employeeId);
@@ -4602,7 +4673,7 @@ function renderAdminTeamCalendar() {
   const absences = calendarAbsences(monthKey, includeRequests).sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
   const hiddenAbsences = (state.employeeAbsences || [])
     .filter((absence) => absence.hidden)
-    .filter((absence) => includeRequests || absence.status !== "Zatraženo")
+    .filter((absence) => absence.status === "Odobreno" || (includeRequests && absence.status === "Zatraženo"))
     .filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
     .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
   setText("adminTeamAbsenceCount", `${absences.length} unosa`);
