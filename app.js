@@ -1403,6 +1403,13 @@ function migrateState(data) {
     category: activity.category || "Ostalo",
     active: activity.active !== false,
   }));
+  employeeWorkLogs.forEach((log) => {
+    const activity = employeeActivities.find((item) => item.id === log.activityId)
+      || employeeActivities.find((item) => item.name === log.activityName);
+    if ((!log.activityCategory || log.activityCategory === "Ostalo") && activity?.category) {
+      log.activityCategory = activity.category;
+    }
+  });
   const employeeDocuments = (data.employeeDocuments || starterData.employeeDocuments || []).map((documentItem) => ({
     id: documentItem.id || crypto.randomUUID(),
     employeeId: documentItem.employeeId || employees[0]?.id || "",
@@ -2920,7 +2927,7 @@ function renderEmployeeOptions() {
     const selected = activitySelect.value;
     const activities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
     activitySelect.innerHTML = activities.length
-      ? activities.map((activity) => `<option value="${activity.id}">${activity.name}</option>`).join("")
+      ? activities.map((activity) => `<option value="${activity.id}">${activity.category || "Ostalo"} · ${activity.name}</option>`).join("")
       : `<option value="">Admin prvo dodaje aktivnost</option>`;
     if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
   }
@@ -3390,9 +3397,34 @@ function renderEmployeeActivities() {
   const target = document.getElementById("employeeActivityList");
   if (!target) return;
   const activities = state.employeeActivities || [];
+  const categoryChoices = [...new Set([
+    "SMM", "Scenario", "Sastanci", "Snimatelji", "Sales tim", "Editori", "Media Buying", "Interno", "Ostalo",
+    ...(state.employeeActivityCategories || []),
+    ...activities.map((activity) => activity.category),
+  ].filter(Boolean))];
   target.innerHTML = activities.length
-    ? activities.map((activity) => `<div class="setup-item"><strong>${activity.name}</strong><button class="edit-button danger-action" data-delete-activity="${activity.id}" type="button">Obriši</button></div>`).join("")
+    ? activities.map((activity) => `<div class="setup-item"><strong>${activity.name}</strong><label>Kategorija<select data-activity-category="${activity.id}">${categoryChoices.map((category) => `<option value="${category}" ${category === (activity.category || "Ostalo") ? "selected" : ""}>${category}</option>`).join("")}</select></label><button class="edit-button danger-action" data-delete-activity="${activity.id}" type="button">Obriši</button></div>`).join("")
     : `<div class="empty-state">Dodaj prvu aktivnost koju zaposleni mogu da izaberu.</div>`;
+  target.querySelectorAll("[data-activity-category]").forEach((select) => select.addEventListener("change", () => {
+    const activity = activities.find((item) => item.id === select.dataset.activityCategory);
+    const category = String(select.value || "").trim();
+    if (!activity || !category || activity.category === category) return;
+    activity.category = category;
+    state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
+    state.employeeActivityCategoryMap[activity.name] = category;
+    if (!state.employeeActivityCategories?.includes(category)) {
+      state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+    }
+    (state.employeeWorkLogs || []).forEach((log) => {
+      if (log.activityId === activity.id) log.activityCategory = category;
+    });
+    (state.employeeReports || []).forEach((report) => {
+      if (report.activityId === activity.id) report.activityCategory = category;
+    });
+    saveState();
+    renderAll();
+    showToast("Sačuvano", `${activity.name} je premeštena u kategoriju ${category}.`, "ok");
+  }));
   target.querySelectorAll("[data-delete-activity]").forEach((button) => button.addEventListener("click", () => {
     if (!confirm("Obrisati aktivnost iz ponuđene liste? Stari unosi ostaju sačuvani.")) return;
     state.employeeActivities = state.employeeActivities.filter((item) => item.id !== button.dataset.deleteActivity);
@@ -4170,16 +4202,21 @@ function setupEmployeeActivityCategories() {
   const field = document.createElement("label");
   field.className = "activity-category-field";
   field.innerHTML = `Kategorija aktivnosti
-    <select id="employeeActivityCategory" required>
+    <select id="employeeActivityCategory" name="category" required>
       <option value="">Izaberi kategoriju</option>
       <option>SMM</option><option>Scenario</option><option>Sastanci</option><option>Snimatelji</option><option>Sales tim</option><option>Editori</option><option>Media Buying</option>
       <option value="__new__">+ Nova kategorija</option>
     </select>
-    <input id="employeeActivityNewCategory" type="text" placeholder="Naziv nove kategorije" hidden />`;
+    <input id="employeeActivityNewCategory" name="newCategory" type="text" placeholder="Naziv nove kategorije" hidden />`;
   form.insertBefore(field, submitArea);
   const select = field.querySelector("select");
   const newCategory = field.querySelector("input");
-  (state.employeeActivityCategories || []).forEach((category) => {
+  const knownCategories = new Set([
+    ...(state.employeeActivities || []).map((activity) => activity.category),
+    ...(state.employeeActivityCategories || []),
+  ]);
+  knownCategories.forEach((category) => {
+    if (!category) return;
     if ([...select.options].some((option) => option.value === category)) return;
     select.querySelector('option[value="__new__"]').insertAdjacentHTML("beforebegin", `<option>${category}</option>`);
   });
@@ -4202,22 +4239,6 @@ function setupEmployeeActivityCategories() {
     saveState();
   }, true);
 
-  const decorate = () => {
-    const list = document.getElementById("employeeActivityRows");
-    if (!list) return;
-    list.querySelectorAll(".setup-item").forEach((item) => {
-      if (item.querySelector(".activity-category-badge")) return;
-      const strong = item.querySelector("strong");
-      const category = state.employeeActivityCategoryMap?.[strong?.textContent.trim()];
-      if (!category || !strong) return;
-      const badge = document.createElement("span");
-      badge.className = "activity-category-badge";
-      badge.textContent = category;
-      strong.insertAdjacentElement("afterend", badge);
-    });
-  };
-  new MutationObserver(decorate).observe(document.getElementById("employeeActivityRows") || form.parentElement, { childList: true, subtree: true });
-  decorate();
 }
 
 setupEmployeeActivityCategories();
@@ -5230,6 +5251,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
     minutes,
     activityId: activity.id,
     activityName: activity.name,
+    activityCategory: activity.category || "Ostalo",
     clientId: client.id,
     clientName: client.name,
     type: "Rad",
@@ -5295,14 +5317,24 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
 
 document.getElementById("employeeActivityForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
-  const name = String(new FormData(event.currentTarget).get("activityName") || "").trim();
-  if (!name) return;
+  const formData = new FormData(event.currentTarget);
+  const name = String(formData.get("activityName") || "").trim();
+  const selectedCategory = String(formData.get("category") || "").trim();
+  const category = selectedCategory === "__new__"
+    ? String(formData.get("newCategory") || "").trim()
+    : selectedCategory;
+  if (!name || !category) return;
   state.employeeActivities = state.employeeActivities || [];
   if (state.employeeActivities.some((activity) => activity.name.toLowerCase() === name.toLowerCase())) {
     alert("Aktivnost sa tim nazivom već postoji.");
     return;
   }
-  state.employeeActivities.push({ id: crypto.randomUUID(), name, category: "Ostalo", active: true });
+  state.employeeActivities.push({ id: crypto.randomUUID(), name, category, active: true });
+  state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
+  state.employeeActivityCategoryMap[name] = category;
+  if (!state.employeeActivityCategories?.includes(category)) {
+    state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+  }
   saveState();
   event.currentTarget.reset();
   renderAll();
