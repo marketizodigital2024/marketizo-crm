@@ -46,7 +46,7 @@ const groupHistory = new Map();
 const openIssues = new Map();
 const commitments = new Map();
 const commitmentTimers = new Map();
-let dailyState = { lastReportDate: "", events: [] };
+let dailyState = { lastReportDate: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
     .split(",")
@@ -69,6 +69,8 @@ const client = new Client({
 let pairingCodeRequested = false;
 let pairingRetryTimer = null;
 let dailySchedulerStarted = false;
+let morningReportInFlight = false;
+let closingReportInFlight = false;
 
 const workTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: responseTimezone,
@@ -125,7 +127,7 @@ function loadDailyState() {
     }
   } catch (error) {
     console.error("Daily report state restore failed:", error);
-    dailyState = { lastReportDate: "", events: [] };
+    dailyState = { lastReportDate: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
   }
 }
 
@@ -374,10 +376,60 @@ async function isOwnerPrivateMessage(message) {
 
 function recordDailyEvent(event) {
   const today = viennaDateKey();
+  const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
   dailyState.events = dailyState.events
-    .filter((item) => item.date === today)
+    .filter((item) => new Date(item.at || 0).getTime() >= cutoff)
     .concat({ ...event, date: today, at: new Date().toISOString() })
-    .slice(-200);
+    .slice(-1000);
+  saveDailyState();
+}
+
+function ownerActionSnapshot() {
+  const pending = [...pendingByGroup.values()];
+  const issues = [...openIssues.values()];
+  const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
+  return { pending, issues, activeCommitments };
+}
+
+async function sendMorningReport() {
+  const today = viennaDateKey();
+  const snapshot = ownerActionSnapshot();
+  const relevantCommitments = snapshot.activeCommitments.filter((record) => viennaDateKey(new Date(record.dueAt)) <= today);
+  if (!snapshot.pending.length && !snapshot.issues.length && !relevantCommitments.length) {
+    dailyState.lastMorningDate = today;
+    saveDailyState();
+    console.log(`[MORNING_REPORT] ${today}: skipped, nothing actionable`);
+    return;
+  }
+  const completion = await openai.chat.completions.create({
+    model,
+    temperature: 0,
+    messages: [
+      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja pred početak dana izdvaja samo ono na šta treba obratiti pažnju. Počni odmah suštinom, bez pozdrava, emodžija, generičkog uvoda i fiksnog šablona. Navedi otvorene probleme, klijente koji čekaju odgovor i rokove koji ističu ili su probijeni. Jasno reci gde Miljan lično treba da reaguje; ako ne treba, reci ko iz tima treba da preuzme. Ne izmišljaj činjenice." },
+      { role: "user", content: JSON.stringify({ date: today, pendingReplies: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments }) }
+    ]
+  });
+  await client.sendMessage(alertTo, String(completion.choices[0]?.message?.content || "").trim());
+  dailyState.lastMorningDate = today;
+  saveDailyState();
+}
+
+async function sendWeeklyReport() {
+  const today = viennaDateKey();
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const weeklyEvents = dailyState.events.filter((event) => new Date(event.at || 0).getTime() >= cutoff);
+  const snapshot = ownerActionSnapshot();
+  const completion = await openai.chat.completions.create({
+    model,
+    temperature: 0,
+    messages: [
+      { role: "system", content: "Napiši Miljanu nedeljni vlasnički izveštaj na srpskom kao iskusan rukovodilac koji je pratio klijentske grupe. Piši prirodno i konkretno, bez botovskog uvoda, emodžija i praznih fraza. Izdvoji ponovljene probleme, ozbiljne rizike, probijene rokove, brzinu reakcije tima, važne pohvale ili rezultate i tri prioriteta za sledeću nedelju. Nemoj prepričavati rutinsku komunikaciju niti izmišljati činjenice." },
+      { role: "user", content: JSON.stringify({ endingDate: today, events: weeklyEvents, unresolvedIssues: snapshot.issues, pendingReplies: snapshot.pending, activeCommitments: snapshot.activeCommitments }) }
+    ]
+  });
+  await client.sendMessage(alertTo, String(completion.choices[0]?.message?.content || "Ove nedelje nije bilo događaja koji zahtevaju vlasničku pažnju.").trim());
+  dailyState.lastWeeklyDate = today;
+  dailyState.lastReportDate = today;
   saveDailyState();
 }
 
@@ -429,8 +481,23 @@ function startDailyReportScheduler() {
     const today = viennaDateKey();
     const weekday = parts.weekday !== "Sat" && parts.weekday !== "Sun";
     const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-    if (weekday && minutes >= 17 * 60 + 30 && minutes < 18 * 60 && dailyState.lastReportDate !== today) {
-      void sendDailyReport().catch((error) => console.error("Daily report failed:", error));
+    if (weekday && minutes >= 9 * 60 && minutes < 9 * 60 + 30 && dailyState.lastMorningDate !== today && !morningReportInFlight) {
+      morningReportInFlight = true;
+      void sendMorningReport()
+        .catch((error) => console.error("Morning report failed:", error))
+        .finally(() => { morningReportInFlight = false; });
+    }
+    if (weekday && minutes >= 17 * 60 + 30 && minutes < 18 * 60 && dailyState.lastReportDate !== today && !closingReportInFlight) {
+      closingReportInFlight = true;
+      if (parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today) {
+        void sendWeeklyReport()
+          .catch((error) => console.error("Weekly report failed:", error))
+          .finally(() => { closingReportInFlight = false; });
+      } else {
+        void sendDailyReport()
+          .catch((error) => console.error("Daily report failed:", error))
+          .finally(() => { closingReportInFlight = false; });
+      }
     }
   };
   check();
