@@ -52,6 +52,7 @@ const commitments = new Map();
 const commitmentTimers = new Map();
 const awaitingClientByGroup = new Map();
 const clientWaitTimers = new Map();
+const teamAcknowledgedMessageIds = new Set();
 let dailyState = { lastReportDate: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
@@ -588,7 +589,7 @@ function saveResponseState() {
   try {
     fs.mkdirSync(path.dirname(responseStatePath), { recursive: true });
     const tempPath = `${responseStatePath}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify([...pendingByGroup.values()], null, 2));
+    fs.writeFileSync(tempPath, JSON.stringify({ schemaVersion: 2, records: [...pendingByGroup.values()] }, null, 2));
     fs.renameSync(tempPath, responseStatePath);
   } catch (error) {
     console.error("Response SLA state save failed:", error);
@@ -630,7 +631,14 @@ function scheduleResponseCheck(record) {
 function loadResponseState() {
   try {
     if (!fs.existsSync(responseStatePath)) return;
-    const records = JSON.parse(fs.readFileSync(responseStatePath, "utf8"));
+    const stored = JSON.parse(fs.readFileSync(responseStatePath, "utf8"));
+    if (stored.schemaVersion !== 2 || !Array.isArray(stored.records)) {
+      pendingByGroup.clear();
+      saveResponseState();
+      console.log("Response SLA state reset after reaction-handling upgrade.");
+      return;
+    }
+    const records = stored.records;
     for (const record of records) {
       if (teamMemberNames.has(normalizedName(record.senderName))) {
         console.log(`[SLA_CLEANUP] Removed employee ${record.senderName} from client waiting list.`);
@@ -682,6 +690,7 @@ function beginResponseWatch(message, chat, contact, messageText) {
   const receivedAt = new Date(message.timestamp * 1000);
   const record = {
     groupId: message.from,
+    messageId: serializedId(message.id),
     groupName: chat.name,
     senderName: contact.pushname || contact.name || contact.number || "Nepoznato",
     message: String(messageText || "Poruka bez teksta").slice(0, 300),
@@ -859,11 +868,39 @@ client.on("disconnected", (reason) => {
   console.error("WhatsApp disconnected:", reason);
 });
 
-client.on("message_reaction", (reaction) => {
+client.on("message_reaction", async (reaction) => {
   try {
-    if (!reaction?.reaction || !isKnownTeamId(reaction.senderId)) return;
-    const groupId = serializedId(reaction.msgId?.remote || reaction.msgId?._remote);
+    if (!reaction?.reaction) return;
+    let groupId = serializedId(reaction.msgId?.remote || reaction.msgId?._remote);
+    if (!groupId.endsWith("@g.us")) {
+      try {
+        const original = await client.getMessageById(serializedId(reaction.msgId));
+        groupId = serializedId(original?.from || original?.to);
+      } catch (error) {
+        console.error("Could not resolve reacted message:", error);
+      }
+    }
     if (!groupId.endsWith("@g.us")) return;
+    let reactionIsFromTeam = isKnownTeamId(reaction.senderId);
+    if (!reactionIsFromTeam) {
+      try {
+        const reactorId = serializedId(reaction.senderId);
+        const reactor = await client.getContactById(reactorId);
+        reactionIsFromTeam = isTeamSender({ author: reaction.senderId, from: groupId }, reactor);
+        if (!reactionIsFromTeam) {
+          await refreshTeamMembers();
+          reactionIsFromTeam = isTeamSender({ author: reaction.senderId, from: groupId }, reactor);
+        }
+      } catch (error) {
+        console.error("Could not identify reaction sender:", error);
+      }
+    }
+    if (!reactionIsFromTeam) return;
+    const reactedMessageId = serializedId(reaction.msgId);
+    if (reactedMessageId) {
+      teamAcknowledgedMessageIds.add(reactedMessageId);
+      setTimeout(() => teamAcknowledgedMessageIds.delete(reactedMessageId), 10 * 60 * 1000);
+    }
     const groupName = pendingByGroup.get(groupId)?.groupName || groupId;
     clearResponseWatch(groupId, groupName);
     console.log(`[TEAM_REACTION] ${groupName}: reaction counted as team acknowledgement`);
@@ -922,12 +959,13 @@ client.on("message_create", async (message) => {
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();
     const acknowledgementOnly = /^(ok|okej|okay|važi|vazi|super|hvala|hvala puno|dogovoreno|u redu|može|moze|odlično|odlicno|top|jasno)$/.test(normalizedAcknowledgement);
-    if (result.requiresTeamReply && !acknowledgementOnly) {
+    const acknowledgedByTeamReaction = teamAcknowledgedMessageIds.has(serializedId(message.id));
+    if (result.requiresTeamReply && !acknowledgementOnly && !acknowledgedByTeamReaction) {
       if (teamMemberIds.size) beginResponseWatch(message, chat, contact, messageText);
       else console.error("Response SLA watch skipped because the team roster is empty.");
     } else {
       clearResponseWatch(message.from, chat.name);
-      console.log(`[NO_REPLY_NEEDED] ${chat.name}: client acknowledgement/closed message`);
+      console.log(`[NO_REPLY_NEEDED] ${chat.name}: acknowledgement, closed message, or team reaction`);
     }
     await updateFollowups(message, chat, senderName, "client", messageText);
     const normalizedBody = messageText.toLocaleLowerCase("sr-Latn");
