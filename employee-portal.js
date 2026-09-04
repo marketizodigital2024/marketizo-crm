@@ -250,6 +250,16 @@ function saveState(options = {}) {
   return window.MarketizoRemote.save(state);
 }
 
+window.addEventListener("marketizo-state-conflict", (event) => {
+  if (event.detail?.payload) {
+    const activeId = activeEmployee?.id;
+    state = loadState(event.detail.payload);
+    activeEmployee = (state.employees || []).find((employee) => employee.id === activeId) || activeEmployee;
+    if (activeEmployee) renderEmployeePortal();
+  }
+  showToast("Podaci su osveženi", event.detail?.message || "Učitani su noviji podaci. Ponovi poslednju izmenu.", "warn");
+});
+
 function parseNumber(value, fallback = 0) {
   const normalized = String(value ?? "").replace(",", ".");
   const number = Number(normalized);
