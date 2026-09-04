@@ -26,6 +26,41 @@ function viennaTime(date = new Date()) {
 module.exports = async function handler(req, res) {
   if (req.method !== "GET") return send(res, 405, { error: "Method not allowed" });
 
+  const url = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!url || !key) return send(res, 503, { error: "Supabase is not configured" });
+
+  if (String(req.query?.inspect || "") === "1") {
+    try {
+      const response = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-daily-*&select=id,payload,updated_at&order=updated_at.desc`, {
+        headers: headers(key),
+      });
+      if (!response.ok) throw new Error(`Backup list failed (${response.status})`);
+      const rows = await response.json();
+      return send(res, 200, {
+        ok: true,
+        backups: rows.map((row) => {
+          const state = row.payload?.state || {};
+          const logs = Array.isArray(state.employeeWorkLogs) ? state.employeeWorkLogs : [];
+          const dates = logs.map((log) => String(log.date || "")).filter(Boolean).sort();
+          return {
+            slot: row.id,
+            backupDate: row.payload?.backupDate || "",
+            sourceUpdatedAt: row.payload?.sourceUpdatedAt || "",
+            updatedAt: row.updated_at || "",
+            workLogs: logs.length,
+            firstWorkLogDate: dates[0] || "",
+            lastWorkLogDate: dates[dates.length - 1] || "",
+            septemberWorkLogs: logs.filter((log) => String(log.date || "").startsWith("2026-09-")).length,
+            septemberDates: [...new Set(logs.map((log) => String(log.date || "")).filter((date) => date.startsWith("2026-09-")))].sort(),
+          };
+        }),
+      });
+    } catch (error) {
+      return send(res, 500, { error: error?.message || "Backup inspection failed" });
+    }
+  }
+
   const cronSecret = process.env.CRON_SECRET || "";
   const authorization = String(req.headers.authorization || "");
   if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
@@ -36,10 +71,6 @@ module.exports = async function handler(req, res) {
   if (["Sat", "Sun"].includes(local.weekday) || local.hour !== "17" || local.minute !== "30") {
     return send(res, 200, { ok: true, skipped: true, reason: "Outside 17:30 Europe/Vienna workday window" });
   }
-
-  const url = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-  if (!url || !key) return send(res, 503, { error: "Supabase is not configured" });
 
   try {
     const sourceResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, {
