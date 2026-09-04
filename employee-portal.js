@@ -589,12 +589,21 @@ function employeeMonthAbsenceDays(employeeId, monthKey) {
     }, 0);
 }
 
+function scheduledMinutesForDate(weeklyHours, date) {
+  const day = new Date(`${date}T12:00:00`).getDay();
+  if (day < 1 || day > 5) return 0;
+  const hours = parseNumber(weeklyHours || 0, 0);
+  if (hours >= 38) return day === 5 ? 390 : 510;
+  return Math.round((hours * 60) / 5);
+}
+
 function expectedHours(employee, monthKey) {
   const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
-  const dailyHours = weeklyHours / 5;
-  const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !employee.startDate || day >= employee.startDate);
-  const plannedDays = Math.max(eligibleWorkdays.length - employeeMonthAbsenceDays(employee.id, monthKey), 0);
-  return Math.round(plannedDays * dailyHours * 100) / 100;
+  const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) =>
+    (!employee.startDate || day >= employee.startDate) &&
+    !(state.employeeAbsences || []).some((absence) => absence.employeeId === employee.id && absence.status === "Odobreno" && day >= absence.startDate && day <= absence.endDate)
+  );
+  return Math.round(eligibleWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
 }
 
 function elapsedWorkdaysToDate(employee, monthKey) {
@@ -633,9 +642,8 @@ function expectedHoursToDate(employee, monthKey) {
   if (selectedMonth > currentMonth) return 0;
 
   const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
-  const dailyHours = weeklyHours / 5;
   const elapsedWorkdays = elapsedWorkdaysToDate(employee, monthKey);
-  return Math.round(elapsedWorkdays.length * dailyHours * 100) / 100;
+  return Math.round(elapsedWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
 }
 
 function employeeMonthLatePenaltyHours(employeeId, monthKey) {
@@ -748,7 +756,7 @@ function expectedMinutesForDate(employee, date) {
   if (position.includes("snimatelj")) return 0;
   const monthKey = String(date || "").slice(0, 7);
   const weeklyHours = Number(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 0);
-  return Math.round((weeklyHours * 60) / 5);
+  return scheduledMinutesForDate(weeklyHours, date);
 }
 
 function setupDailyMinuteProgress() {
