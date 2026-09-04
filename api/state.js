@@ -1,6 +1,6 @@
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
-const BACKUP_SLOTS = 14;
+const BACKUP_SLOTS = 30;
 
 function json(res, status, payload) {
   res.statusCode = status;
