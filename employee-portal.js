@@ -752,8 +752,6 @@ function loggedMinutesForDate(date) {
 
 function expectedMinutesForDate(employee, date) {
   if (!employee || !isAustrianWorkingDay(date)) return 0;
-  const position = String(employee.position || "").toLowerCase();
-  if (position.includes("snimatelj")) return 0;
   const monthKey = String(date || "").slice(0, 7);
   const weeklyHours = Number(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 0);
   return scheduledMinutesForDate(weeklyHours, date);
