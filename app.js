@@ -2920,12 +2920,8 @@ function generateSystemNotifications() {
           && absence.endDate >= yesterday
         );
         if (hasApprovedAbsence) return;
-        const weeklyHours = Number(employee.weeklyHours || 0);
-        const targetMinutes = weeklyHours === 20
-          ? 240
-          : weeklyHours >= 38
-            ? (dayOfWeek === 5 ? 390 : 510)
-            : Math.round((weeklyHours * 60) / 5);
+        const weeklyHours = Number(employee.weeklyHoursByMonth?.[yesterday.slice(0, 7)] ?? employee.weeklyHours ?? 0);
+        const targetMinutes = Math.round((weeklyHours * 60) / 5);
         if (targetMinutes <= 0) return;
         const enteredMinutes = (state.employeeWorkLogs || [])
           .filter((log) => log.employeeId === employee.id && log.date === yesterday)
@@ -5453,17 +5449,12 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
   saveState({ remote: false });
   const employee = state.employees.find((item) => item.id === employeeId);
   const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
-  const fullTimeTarget = dayOfWeek >= 1 && dayOfWeek <= 4 ? 480 : dayOfWeek === 5 ? 390 : 0;
-  const weeklyHours = Number(employee?.weeklyHours || 0);
+  const weeklyHours = Number(employee?.weeklyHoursByMonth?.[date.slice(0, 7)] ?? employee?.weeklyHours ?? 0);
   const isWorkingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
   const isCameraperson = String(employee?.position || "").toLowerCase().includes("snimatelj");
   const dailyTarget = isCameraperson
     ? 0
-    : weeklyHours === 20
-      ? (isWorkingDay ? 240 : 0)
-      : weeklyHours === 38.5
-        ? fullTimeTarget
-        : (isWorkingDay ? Math.round((weeklyHours * 60) / 5) : 0);
+    : (isWorkingDay ? Math.round((weeklyHours * 60) / 5) : 0);
   const dailyMinutes = state.employeeWorkLogs
     .filter((item) => item.employeeId === employeeId && item.date === date)
     .reduce((sum, item) => sum + Number(item.minutes || Math.round(Number(item.hours || 0) * 60)), 0);
