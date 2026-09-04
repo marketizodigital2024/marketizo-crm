@@ -14,11 +14,12 @@ function supabaseConfig() {
   return { configured: Boolean(url && key), key, url };
 }
 
-function supabaseHeaders(key) {
+function supabaseHeaders(key, prefer = "") {
   return {
     apikey: key,
     Authorization: `Bearer ${key}`,
     "Content-Type": "application/json",
+    ...(prefer ? { Prefer: prefer } : {}),
   };
 }
 
@@ -57,6 +58,14 @@ async function readStoredPayload(config) {
   if (!response.ok) throw new Error(`Čitanje postojećih naloga nije uspelo (${response.status}).`);
   const rows = await response.json();
   return rows[0]?.payload || {};
+}
+
+async function readStoredRow(config, id) {
+  const response = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(id)}&select=payload,updated_at`, {
+    headers: supabaseHeaders(config.key),
+  });
+  if (!response.ok) throw new Error(`Čitanje baze nije uspelo (${response.status}).`);
+  return (await response.json())[0] || null;
 }
 
 function mergeById(incoming, current) {
@@ -101,6 +110,68 @@ function preserveCredentials(payload, current) {
   };
 }
 
+function workLogSignature(log) {
+  return [
+    log.employeeId || "",
+    log.date || "",
+    Number(log.minutes || Math.round(Number(log.hours || 0) * 60)),
+    log.activityId || "",
+    log.activityName || "",
+    log.clientId || "",
+    log.clientName || "",
+    log.note || "",
+  ].join("|");
+}
+
+async function recoverSep3Hours(config) {
+  const targetDate = "2026-09-03";
+  const backupId = "backup-daily-7";
+  const [mainRow, backupRow] = await Promise.all([
+    readStoredRow(config, rowId),
+    readStoredRow(config, backupId),
+  ]);
+  if (!mainRow?.payload) return { status: 404, body: { ok: false, error: "Main state is empty" } };
+  if (!backupRow?.payload?.state) return { status: 404, body: { ok: false, error: "Backup snapshot is missing" } };
+  if (backupRow.payload.backupDate !== targetDate) {
+    return { status: 409, body: { ok: false, error: `Backup slot contains ${backupRow.payload.backupDate || "unknown"}, expected ${targetDate}` } };
+  }
+
+  const current = JSON.parse(JSON.stringify(mainRow.payload));
+  const currentLogs = Array.isArray(current.employeeWorkLogs) ? current.employeeWorkLogs : [];
+  const backupLogs = (Array.isArray(backupRow.payload.state.employeeWorkLogs) ? backupRow.payload.state.employeeWorkLogs : [])
+    .filter((log) => log.date === targetDate);
+  const currentIds = new Set(currentLogs.map((log) => log.id).filter(Boolean));
+  const currentSignatures = new Set(currentLogs.filter((log) => log.date === targetDate).map(workLogSignature));
+  const missing = backupLogs.filter((log) => !currentIds.has(log.id) && !currentSignatures.has(workLogSignature(log)));
+
+  if (!missing.length) {
+    return { status: 200, body: {
+      ok: true,
+      restored: 0,
+      backupDate: targetDate,
+      backupLogsForDate: backupLogs.length,
+      currentLogsForDate: currentLogs.filter((log) => log.date === targetDate).length,
+    } };
+  }
+
+  current.employeeWorkLogs = [...missing, ...currentLogs];
+  const response = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(mainRow.updated_at)}&select=updated_at`, {
+    method: "PATCH",
+    headers: supabaseHeaders(config.key, "return=representation"),
+    body: JSON.stringify({ payload: current, updated_at: new Date().toISOString() }),
+  });
+  if (!response.ok) throw new Error(`Recovery upis nije uspeo (${response.status}).`);
+  const rows = await response.json();
+  if (!rows.length) return { status: 409, body: { ok: false, error: "State changed during recovery; retry." } };
+
+  const minutesByEmployee = missing.reduce((result, log) => {
+    const employeeId = log.employeeId || "unknown";
+    result[employeeId] = (result[employeeId] || 0) + Number(log.minutes || Math.round(Number(log.hours || 0) * 60));
+    return result;
+  }, {});
+  return { status: 200, body: { ok: true, restored: missing.length, backupDate: targetDate, restoredMinutesByEmployee: minutesByEmployee } };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,PUT,POST,OPTIONS");
@@ -119,6 +190,11 @@ module.exports = async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
+      const requestUrl = new URL(req.url || "/api/state", "https://internal.local");
+      if (requestUrl.searchParams.get("recover") === "sep3-c520d333d0718f97") {
+        const result = await recoverSep3Hours(config);
+        return json(res, result.status, result.body);
+      }
       const response = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
         headers: supabaseHeaders(config.key),
       });
