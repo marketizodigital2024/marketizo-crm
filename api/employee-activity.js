@@ -1,5 +1,6 @@
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
+const BACKUP_SLOTS = 30;
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -31,6 +32,39 @@ async function readRow(url, key) {
   });
   if (!response.ok) throw new Error(`Čitanje baze nije uspelo (${response.status}).`);
   return (await response.json())[0] || null;
+}
+
+function viennaDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Vienna",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+async function preserveDailyPrewriteBackup(url, key, row) {
+  if (!row?.payload || !row.updated_at) return;
+  const now = new Date();
+  const backupDate = viennaDateKey(now);
+  const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
+  const backupId = `backup-prewrite-${dayNumber % BACKUP_SLOTS}`;
+  const existingResponse = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=payload`, {
+    headers: headers(key),
+  });
+  if (!existingResponse.ok) throw new Error(`Provera dnevnog backupa nije uspela (${existingResponse.status}).`);
+  const existingRows = await existingResponse.json();
+  if (existingRows[0]?.payload?.backupDate === backupDate) return;
+  const backupResponse = await fetch(`${url}/rest/v1/${tableName}?on_conflict=id`, {
+    method: "POST",
+    headers: headers(key, "resolution=merge-duplicates,return=minimal"),
+    body: JSON.stringify({
+      id: backupId,
+      payload: { backupDate, sourceUpdatedAt: row.updated_at, state: row.payload },
+      updated_at: now.toISOString(),
+    }),
+  });
+  if (!backupResponse.ok) throw new Error(`Dnevni backup pre upisa nije uspeo (${backupResponse.status}).`);
 }
 
 function appendText(current, next) {
@@ -84,8 +118,8 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = await readBody(req);
-    const workLog = body.workLog;
-    if (!workLog?.id || !workLog?.employeeId || !workLog?.date || !workLog?.activityName || Number(workLog?.minutes || 0) < 1) {
+    const submittedLog = body.workLog;
+    if (!submittedLog?.id || !submittedLog?.employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(String(submittedLog?.date || "")) || Number(submittedLog?.minutes || 0) < 1) {
       return json(res, 400, { ok: false, error: "Nedostaju obavezni podaci aktivnosti." });
     }
 
@@ -94,9 +128,29 @@ module.exports = async function handler(req, res) {
       if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
       const payload = JSON.parse(JSON.stringify(row.payload || {}));
       payload.employeeWorkLogs = Array.isArray(payload.employeeWorkLogs) ? payload.employeeWorkLogs : [];
-      if (payload.employeeWorkLogs.some((item) => item.id === workLog.id)) {
-        return json(res, 200, { ok: true, duplicate: true, workLogId: workLog.id });
+      if (payload.employeeWorkLogs.some((item) => item.id === submittedLog.id)) {
+        return json(res, 200, { ok: true, duplicate: true, workLogId: submittedLog.id });
       }
+      const employee = (payload.employees || []).find((item) => item.id === submittedLog.employeeId && item.status !== "Neaktivan");
+      if (!employee) return json(res, 400, { ok: false, error: "Zaposleni nije pronađen ili nalog nije aktivan." });
+      const activity = (payload.employeeActivities || []).find((item) => item.id === submittedLog.activityId && item.active !== false);
+      if (!activity) return json(res, 400, { ok: false, error: "Aktivnost više nije dostupna. Osveži stranicu i izaberi je ponovo." });
+      const isPause = String(activity.name || "").trim().toLowerCase() === "pauza";
+      const client = (payload.clients || []).find((item) => item.id === submittedLog.clientId);
+      if (!isPause && !client) return json(res, 400, { ok: false, error: "Izabrani klijent nije pronađen. Osveži stranicu i pokušaj ponovo." });
+      const minutes = Math.round(Number(submittedLog.minutes));
+      const workLog = {
+        ...submittedLog,
+        employeeId: employee.id,
+        minutes,
+        hours: Math.round((minutes / 60) * 10000) / 10000,
+        activityId: activity.id,
+        activityName: activity.name,
+        activityCategory: activity.category || "Ostalo",
+        clientId: isPause ? "" : client.id,
+        clientName: isPause ? "" : client.name,
+      };
+      await preserveDailyPrewriteBackup(url, key, row);
       payload.employeeWorkLogs.unshift(workLog);
       if (body.updateReport !== false) updateDailyReport(payload, workLog, body.recipientId);
 
