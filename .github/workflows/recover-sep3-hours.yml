@@ -15,7 +15,7 @@ jobs:
         run: |
           set -euo pipefail
           for i in 1 2 3 4 5 6; do
-            body=$(curl -fsS "https://app.marketizo.com/api/state?recover=sep3-c520d333d0718f97" || true)
+            body=$(curl -fsS "https://marketizo-crm.vercel.app/api/state?recover=sep3-c520d333d0718f97" || true)
             echo "$body"
             if echo "$body" | grep -q '"ok":true'; then
               exit 0
