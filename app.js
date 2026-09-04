@@ -1617,6 +1617,14 @@ function saveState(options = {}) {
   if (options.remote !== false && onlineHydrationComplete) window.MarketizoRemote?.save(state);
 }
 
+window.addEventListener("marketizo-state-conflict", (event) => {
+  if (event.detail?.payload) {
+    state = loadState(event.detail.payload);
+    renderAll();
+  }
+  showToast("Podaci su osveženi", event.detail?.message || "Neko je već uneo novije podatke. Ponovi poslednju izmenu.", "warn");
+});
+
 async function hydrateOnlineState() {
   if (!window.MarketizoRemote || window.location.protocol === "file:") {
     onlineHydrationComplete = true;
