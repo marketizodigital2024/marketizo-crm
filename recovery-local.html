@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="sr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketizo — provera lokalne kopije</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="client-login-body">
+    <main class="client-auth">
+      <section class="panel login-card">
+        <div>
+          <p class="eyebrow">Oporavak podataka</p>
+          <h1>Lokalna kopija aktivnosti</h1>
+          <p>Ova stranica ne menja niti šalje podatke. Samo proverava kopiju koja je već sačuvana na ovom uređaju.</p>
+        </div>
+        <div class="setup-item">
+          <strong id="recoveryStatus">Proveravam...</strong>
+          <span id="recoveryDetails"></span>
+        </div>
+        <button class="primary-button" id="downloadRecovery" type="button" hidden>Preuzmi lokalnu kopiju</button>
+      </section>
+    </main>
+    <script>
+      (() => {
+        const raw = localStorage.getItem("agencyCrmData") || "";
+        const status = document.getElementById("recoveryStatus");
+        const details = document.getElementById("recoveryDetails");
+        const button = document.getElementById("downloadRecovery");
+        let data = null;
+        try { data = raw ? JSON.parse(raw) : null; } catch {}
+        const logs = Array.isArray(data?.employeeWorkLogs) ? data.employeeWorkLogs : [];
+        const septemberDates = [...new Set(logs.map((log) => String(log.date || "")).filter((date) => date.startsWith("2026-09-")))].sort();
+        if (!data) {
+          status.textContent = "Na ovom uređaju nema lokalne kopije";
+          details.textContent = "Probaj drugi telefon ili računar na kom je portal korišćen juče.";
+          return;
+        }
+        status.textContent = `${logs.length} sačuvanih aktivnosti`;
+        details.textContent = septemberDates.length ? `Datumi u septembru: ${septemberDates.join(", ")}` : "Nema septembarskih aktivnosti u ovoj kopiji.";
+        button.hidden = false;
+        button.addEventListener("click", () => {
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `marketizo-lokalna-kopija-${new Date().toISOString().slice(0, 10)}.json`;
+          link.click();
+          URL.revokeObjectURL(url);
+        });
+      })();
+    </script>
+  </body>
+</html>
