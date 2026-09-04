@@ -31,9 +31,20 @@ async function readBody(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
+function normalizeLegacyAbsenceStatuses(payload) {
+  if (!payload || !Array.isArray(payload.employeeAbsences)) return payload;
+  return {
+    ...payload,
+    employeeAbsences: payload.employeeAbsences.map((absence) => ({
+      ...absence,
+      status: absence.status === "Evidentirano" ? "Odobreno" : absence.status,
+    })),
+  };
+}
+
 function hidePasswords(payload) {
   if (!payload) return payload;
-  const copy = JSON.parse(JSON.stringify(payload));
+  const copy = JSON.parse(JSON.stringify(normalizeLegacyAbsenceStatuses(payload)));
   if (Array.isArray(copy.employees)) copy.employees.forEach((employee) => delete employee.password);
   if (Array.isArray(copy.clients)) copy.clients.forEach((client) => delete client.loginPassword);
   return copy;
@@ -46,6 +57,26 @@ async function readStoredPayload(config) {
   if (!response.ok) throw new Error(`Čitanje postojećih naloga nije uspelo (${response.status}).`);
   const rows = await response.json();
   return rows[0]?.payload || {};
+}
+
+function mergeById(incoming, current) {
+  const next = Array.isArray(incoming) ? incoming.map((item) => ({ ...item })) : [];
+  const seen = new Set(next.map((item) => item?.id).filter(Boolean));
+  (Array.isArray(current) ? current : []).forEach((item) => {
+    if (!item?.id || seen.has(item.id)) return;
+    next.push(item);
+    seen.add(item.id);
+  });
+  return next;
+}
+
+function preserveConcurrentEmployeeData(payload, current) {
+  return {
+    ...payload,
+    employeeWorkLogs: mergeById(payload?.employeeWorkLogs, current?.employeeWorkLogs),
+    employeeReports: mergeById(payload?.employeeReports, current?.employeeReports),
+    employeeAbsences: mergeById(payload?.employeeAbsences, current?.employeeAbsences),
+  };
 }
 
 function preserveCredentials(payload, current) {
@@ -114,7 +145,10 @@ module.exports = async function handler(req, res) {
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
         return json(res, 400, { configured: true, error: "Nedostaje payload objekat." });
       }
-      payload = preserveCredentials(payload, await readStoredPayload(config));
+      const current = await readStoredPayload(config);
+      payload = normalizeLegacyAbsenceStatuses(payload);
+      payload = preserveConcurrentEmployeeData(payload, current);
+      payload = preserveCredentials(payload, current);
       const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
         method: "POST",
         headers: {
