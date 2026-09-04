@@ -61,12 +61,18 @@
       const response = await fetch("/api/state", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload }),
+        body: JSON.stringify({ payload, baseUpdatedAt: lastUpdatedAt }),
       });
       const data = await response.json().catch(() => ({}));
       configured = Boolean(data.configured);
       online = configured && response.ok && !data.error;
       lastError = data.error || "";
+      if (response.status === 409 && data.conflict) {
+        const latest = await load();
+        window.dispatchEvent(new CustomEvent("marketizo-state-conflict", { detail: { message: lastError, payload: latest.payload || null } }));
+      } else if (response.ok && data.updatedAt) {
+        lastUpdatedAt = data.updatedAt;
+      }
       result = { ok: online, error: lastError || (response.ok ? "" : `Online čuvanje nije uspelo (${response.status}).`) };
     } catch (error) {
       online = false;
