@@ -1,6 +1,6 @@
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
-const BACKUP_SLOTS = 14;
+const BACKUP_SLOTS = 30;
 
 function send(res, status, payload) {
   res.statusCode = status;
@@ -66,9 +66,6 @@ module.exports = async function handler(req, res) {
   if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
     return send(res, 401, { error: "Unauthorized" });
   }
-
-  const local = viennaTime();
-  if (["Sat", "Sun"].includes(local.weekday)) return send(res, 200, { ok: true, skipped: true, reason: "Weekend" });
 
   try {
     const sourceResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, {
