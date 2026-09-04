@@ -57,6 +57,29 @@ async function writeIndependentBackup(source, date, now) {
     addRandomSuffix: false,
     allowOverwrite: true,
   });
+  const downloaded = await blob.get(uploaded.pathname, { access: "private" });
+  if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) {
+    throw new Error("Vercel Blob backup nije moguće ponovo pročitati.");
+  }
+  const verified = JSON.parse(await new Response(downloaded.stream).text());
+  const expectedCounts = {
+    employees: Array.isArray(source.payload.employees) ? source.payload.employees.length : 0,
+    clients: Array.isArray(source.payload.clients) ? source.payload.clients.length : 0,
+    workLogs: Array.isArray(source.payload.employeeWorkLogs) ? source.payload.employeeWorkLogs.length : 0,
+    absences: Array.isArray(source.payload.employeeAbsences) ? source.payload.employeeAbsences.length : 0,
+    activities: Array.isArray(source.payload.employeeActivities) ? source.payload.employeeActivities.length : 0,
+  };
+  const verifiedCounts = {
+    employees: Array.isArray(verified.state?.employees) ? verified.state.employees.length : 0,
+    clients: Array.isArray(verified.state?.clients) ? verified.state.clients.length : 0,
+    workLogs: Array.isArray(verified.state?.employeeWorkLogs) ? verified.state.employeeWorkLogs.length : 0,
+    absences: Array.isArray(verified.state?.employeeAbsences) ? verified.state.employeeAbsences.length : 0,
+    activities: Array.isArray(verified.state?.employeeActivities) ? verified.state.employeeActivities.length : 0,
+  };
+  if (verified.format !== "marketizo-crm-backup-v1" || verified.sourceUpdatedAt !== document.sourceUpdatedAt
+    || JSON.stringify(verifiedCounts) !== JSON.stringify(expectedCounts)) {
+    throw new Error("Vercel Blob backup nije prošao proveru integriteta.");
+  }
   const inventory = await listBlobBackups();
   const obsolete = inventory.blobs.slice(30);
   if (obsolete.length) await blob.del(obsolete.map((item) => item.url));
@@ -64,6 +87,8 @@ async function writeIndependentBackup(source, date, now) {
     pathname: uploaded.pathname,
     size: Buffer.byteLength(body),
     retained: Math.min(inventory.blobs.length, 30),
+    verified: true,
+    counts: verifiedCounts,
   };
 }
 
