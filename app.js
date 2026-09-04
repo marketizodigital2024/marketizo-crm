@@ -2917,7 +2917,6 @@ function generateSystemNotifications() {
   if (yesterday >= employeeTrackingStartDate && dayOfWeek >= 1 && dayOfWeek <= 5) {
     (state.employees || [])
       .filter((employee) => employee.status === "Aktivan")
-      .filter((employee) => !String(employee.position || "").trim().toLocaleLowerCase("sr-Latn").includes("snimatelj"))
       .forEach((employee) => {
         const hasApprovedAbsence = (state.employeeAbsences || []).some((absence) =>
           absence.employeeId === employee.id
@@ -5455,10 +5454,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
   saveState({ remote: false });
   const employee = state.employees.find((item) => item.id === employeeId);
   const weeklyHours = Number(employee?.weeklyHoursByMonth?.[date.slice(0, 7)] ?? employee?.weeklyHours ?? 0);
-  const isCameraperson = String(employee?.position || "").toLowerCase().includes("snimatelj");
-  const dailyTarget = isCameraperson
-    ? 0
-    : scheduledMinutesForDate(weeklyHours, date);
+  const dailyTarget = scheduledMinutesForDate(weeklyHours, date);
   const dailyMinutes = state.employeeWorkLogs
     .filter((item) => item.employeeId === employeeId && item.date === date)
     .reduce((sum, item) => sum + Number(item.minutes || Math.round(Number(item.hours || 0) * 60)), 0);
