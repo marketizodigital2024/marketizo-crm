@@ -2666,13 +2666,21 @@ function employeeLateStatus(employeeId, monthKey) {
   return { count, className: "ok", label: `${count}/3 kašnjenja` };
 }
 
+function scheduledMinutesForDate(weeklyHours, date) {
+  const day = new Date(`${date}T12:00:00`).getDay();
+  if (day < 1 || day > 5) return 0;
+  const hours = parseNumber(weeklyHours || 0, 0);
+  if (hours >= 38) return day === 5 ? 390 : 510;
+  return Math.round((hours * 60) / 5);
+}
+
 function employeeExpectedHours(employee, monthKey) {
   const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
-  const dailyHours = weeklyHours / 5;
-  const absenceDays = employeeMonthAbsenceDays(employee.id, monthKey);
-  const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !employee.startDate || day >= employee.startDate);
-  const plannedDays = Math.max(eligibleWorkdays.length - absenceDays, 0);
-  return Math.round(plannedDays * dailyHours * 100) / 100;
+  const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) =>
+    (!employee.startDate || day >= employee.startDate) &&
+    !(state.employeeAbsences || []).some((absence) => absence.employeeId === employee.id && absence.status === "Odobreno" && day >= absence.startDate && day <= absence.endDate)
+  );
+  return Math.round(eligibleWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
 }
 
 function employeeExpectedHoursToDate(employee, monthKey) {
@@ -2683,7 +2691,6 @@ function employeeExpectedHoursToDate(employee, monthKey) {
 
   const today = currentDateKey();
   const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
-  const dailyHours = weeklyHours / 5;
   const elapsedWorkdays = workdaysInMonth(monthKey).filter((day) =>
     day < today &&
     (!employee.startDate || day >= employee.startDate) &&
@@ -2694,15 +2701,14 @@ function employeeExpectedHoursToDate(employee, monthKey) {
       day <= absence.endDate
     )
   );
-  return Math.round(elapsedWorkdays.length * dailyHours * 100) / 100;
+  return Math.round(elapsedWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
 }
 
 function employeeMonthlyHoursPreview(weeklyHours, monthKey, startDate = "") {
-  const dailyHours = parseNumber(weeklyHours || 0, 0) / 5;
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) => !startDate || day >= startDate);
   return {
     days: eligibleWorkdays.length,
-    hours: Math.round(eligibleWorkdays.length * dailyHours * 100) / 100,
+    hours: Math.round(eligibleWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100,
   };
 }
 
@@ -2921,7 +2927,7 @@ function generateSystemNotifications() {
         );
         if (hasApprovedAbsence) return;
         const weeklyHours = Number(employee.weeklyHoursByMonth?.[yesterday.slice(0, 7)] ?? employee.weeklyHours ?? 0);
-        const targetMinutes = Math.round((weeklyHours * 60) / 5);
+        const targetMinutes = scheduledMinutesForDate(weeklyHours, yesterday);
         if (targetMinutes <= 0) return;
         const enteredMinutes = (state.employeeWorkLogs || [])
           .filter((log) => log.employeeId === employee.id && log.date === yesterday)
@@ -5448,13 +5454,11 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
   selectedEmployeeId = employeeId;
   saveState({ remote: false });
   const employee = state.employees.find((item) => item.id === employeeId);
-  const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
   const weeklyHours = Number(employee?.weeklyHoursByMonth?.[date.slice(0, 7)] ?? employee?.weeklyHours ?? 0);
-  const isWorkingDay = dayOfWeek >= 1 && dayOfWeek <= 5;
   const isCameraperson = String(employee?.position || "").toLowerCase().includes("snimatelj");
   const dailyTarget = isCameraperson
     ? 0
-    : (isWorkingDay ? Math.round((weeklyHours * 60) / 5) : 0);
+    : scheduledMinutesForDate(weeklyHours, date);
   const dailyMinutes = state.employeeWorkLogs
     .filter((item) => item.employeeId === employeeId && item.date === date)
     .reduce((sum, item) => sum + Number(item.minutes || Math.round(Number(item.hours || 0) * 60)), 0);
