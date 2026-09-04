@@ -87,6 +87,7 @@ const workTimeFormatter = new Intl.DateTimeFormat("en-GB", {
 });
 
 function serializedId(id) {
+  if (typeof id === "string") return id;
   return id?._serialized || id?.$1 || (id?.user ? `${id.user}@${id.server || "c.us"}` : "");
 }
 
@@ -858,6 +859,19 @@ client.on("disconnected", (reason) => {
   console.error("WhatsApp disconnected:", reason);
 });
 
+client.on("message_reaction", (reaction) => {
+  try {
+    if (!reaction?.reaction || !isKnownTeamId(reaction.senderId)) return;
+    const groupId = serializedId(reaction.msgId?.remote || reaction.msgId?._remote);
+    if (!groupId.endsWith("@g.us")) return;
+    const groupName = pendingByGroup.get(groupId)?.groupName || groupId;
+    clearResponseWatch(groupId, groupName);
+    console.log(`[TEAM_REACTION] ${groupName}: reaction counted as team acknowledgement`);
+  } catch (error) {
+    console.error("Reaction processing failed:", error);
+  }
+});
+
 client.on("message_create", async (message) => {
   try {
     if (!message.from.endsWith("@g.us")) {
@@ -897,15 +911,24 @@ client.on("message_create", async (message) => {
     clearClientWait(message.from, chat.name);
     rememberGroupMessage(message.from, chat.name, senderName, "client", messageText);
 
-    if (teamMemberIds.size) beginResponseWatch(message, chat, contact, messageText);
-    else console.error("Response SLA watch skipped because the team roster is empty.");
-
     const result = await analyzeMessage(openai, model, {
       group: chat.name,
       sender: contact.pushname || contact.name || contact.number || "Nepoznato",
       message: messageText,
       timestamp: new Date(message.timestamp * 1000).toISOString()
     });
+    const normalizedAcknowledgement = messageText
+      .toLocaleLowerCase("sr-Latn")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
+    const acknowledgementOnly = /^(ok|okej|okay|važi|vazi|super|hvala|hvala puno|dogovoreno|u redu|može|moze|odlično|odlicno|top|jasno)$/.test(normalizedAcknowledgement);
+    if (result.requiresTeamReply && !acknowledgementOnly) {
+      if (teamMemberIds.size) beginResponseWatch(message, chat, contact, messageText);
+      else console.error("Response SLA watch skipped because the team roster is empty.");
+    } else {
+      clearResponseWatch(message.from, chat.name);
+      console.log(`[NO_REPLY_NEEDED] ${chat.name}: client acknowledgement/closed message`);
+    }
     await updateFollowups(message, chat, senderName, "client", messageText);
     const normalizedBody = messageText.toLocaleLowerCase("sr-Latn");
     const ownerMention = ["miljan", "vlasnik", "gazda", "direktor", "owner", "šef", "sef"]
