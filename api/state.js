@@ -1,5 +1,6 @@
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
+const BACKUP_SLOTS = 14;
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -20,6 +21,37 @@ function supabaseHeaders(key) {
     Authorization: `Bearer ${key}`,
     "Content-Type": "application/json",
   };
+}
+
+function viennaDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+async function preserveDailyPrewriteBackup(config, current) {
+  if (!current?.payload || !current.updatedAt) return;
+  const now = new Date();
+  const backupDate = viennaDateKey(now);
+  const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
+  const backupId = `backup-prewrite-${dayNumber % BACKUP_SLOTS}`;
+  const existingResponse = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=payload`, {
+    headers: supabaseHeaders(config.key),
+  });
+  if (!existingResponse.ok) throw new Error(`Provera dnevnog backupa nije uspela (${existingResponse.status}).`);
+  const existingRows = await existingResponse.json();
+  if (existingRows[0]?.payload?.backupDate === backupDate) return;
+  const backupResponse = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
+    method: "POST",
+    headers: {
+      ...supabaseHeaders(config.key),
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify({
+      id: backupId,
+      payload: { backupDate, sourceUpdatedAt: current.updatedAt, state: current.payload },
+      updated_at: now.toISOString(),
+    }),
+  });
+  if (!backupResponse.ok) throw new Error(`Dnevni backup pre upisa nije uspeo (${backupResponse.status}).`);
 }
 
 async function readBody(req) {
@@ -124,6 +156,7 @@ module.exports = async function handler(req, res) {
           updatedAt: current.updatedAt,
         });
       }
+      await preserveDailyPrewriteBackup(config, current);
       payload = preserveCredentials(payload, current.payload);
       const updatedAt = new Date().toISOString();
       const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
