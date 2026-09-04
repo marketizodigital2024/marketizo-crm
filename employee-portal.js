@@ -746,10 +746,8 @@ function expectedMinutesForDate(employee, date) {
   if (!employee || !isAustrianWorkingDay(date)) return 0;
   const position = String(employee.position || "").toLowerCase();
   if (position.includes("snimatelj")) return 0;
-  const weeklyHours = Number(employee.weeklyHours || 0);
-  const day = parseDate(date).getDay();
-  if (weeklyHours >= 38) return day === 5 ? 390 : 510;
-  if (weeklyHours <= 20) return 240;
+  const monthKey = String(date || "").slice(0, 7);
+  const weeklyHours = Number(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 0);
   return Math.round((weeklyHours * 60) / 5);
 }
 
