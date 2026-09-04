@@ -16,9 +16,11 @@ export async function analyzeMessage(openai, model, input) {
           "URGENT: immediate legal, safety, public-reputation, account-security, or same-day crisis.",
           "Set notifyOwner=true only for something Miljan as owner genuinely needs in real time: RED/URGENT risk, cancellation/refund/payment/legal/reputation/security issue, repeated unresolved failure, explicit request for Miljan/owner, or exceptional praise such as a testimonial, referral, or major result.",
           "Set notifyOwner=false for routine SMM work, normal questions, scheduling, approvals, content revisions, ordinary delays, mild dissatisfaction that the team can resolve, and generic thanks or compliments.",
+          "Set requiresTeamReply=false when the client is merely confirming, acknowledging, agreeing, thanking, reacting positively, or closing the conversation (for example: ok, važi, super, hvala, dogovoreno).",
+          "Set requiresTeamReply=true only when the latest client message contains a question, request, unresolved problem, required decision, new information that needs action, or otherwise reasonably expects a team response.",
           "Do not draft or send a client reply.",
           "Set isPraise=true only when the message contains an explicit compliment, thanks, satisfaction, or positive feedback.",
-          "Return JSON only: level, summary, reason, recommendedAction, isPraise, notifyOwner, ownerReason.",
+          "Return JSON only: level, summary, reason, recommendedAction, isPraise, notifyOwner, ownerReason, requiresTeamReply.",
           "Write summary, reason, and recommendedAction in Serbian."
         ].join(" ")
       },
@@ -39,7 +41,8 @@ export async function analyzeMessage(openai, model, input) {
     recommendedAction: String(parsed.recommendedAction || ""),
     isPraise: parsed.isPraise === true,
     notifyOwner: parsed.notifyOwner === true,
-    ownerReason: String(parsed.ownerReason || "")
+    ownerReason: String(parsed.ownerReason || ""),
+    requiresTeamReply: parsed.requiresTeamReply === true
   };
 }
 
