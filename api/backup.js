@@ -1,6 +1,7 @@
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
 const BACKUP_SLOTS = 30;
+const BLOB_PREFIX = "marketizo-crm/daily/";
 
 function send(res, status, payload) {
   res.statusCode = status;
@@ -23,6 +24,49 @@ function viennaTime(date = new Date()) {
   return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
 }
 
+async function blobClient() {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
+  return import("@vercel/blob");
+}
+
+async function listBlobBackups() {
+  const blob = await blobClient();
+  if (!blob) return { configured: false, blobs: [] };
+  const result = await blob.list({ prefix: BLOB_PREFIX, limit: 100 });
+  return {
+    configured: true,
+    blobs: (result.blobs || []).sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)),
+  };
+}
+
+async function writeIndependentBackup(source, date, now) {
+  const blob = await blobClient();
+  if (!blob) throw new Error("Vercel Blob backup nije povezan.");
+  const document = {
+    format: "marketizo-crm-backup-v1",
+    backupDate: date,
+    createdAt: now.toISOString(),
+    sourceUpdatedAt: source.updated_at || "",
+    state: source.payload,
+  };
+  const body = JSON.stringify(document);
+  const pathname = `${BLOB_PREFIX}${date}.json`;
+  const uploaded = await blob.put(pathname, body, {
+    access: "private",
+    contentType: "application/json",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+  const inventory = await listBlobBackups();
+  const obsolete = inventory.blobs.slice(30);
+  if (obsolete.length) await blob.del(obsolete.map((item) => item.url));
+  return {
+    pathname: uploaded.pathname,
+    size: Buffer.byteLength(body),
+    retained: Math.min(inventory.blobs.length, 30),
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "GET") return send(res, 405, { error: "Method not allowed" });
 
@@ -37,8 +81,18 @@ module.exports = async function handler(req, res) {
       });
       if (!response.ok) throw new Error(`Backup list failed (${response.status})`);
       const rows = await response.json();
+      const independent = await listBlobBackups();
       return send(res, 200, {
         ok: true,
+        independent: {
+          configured: independent.configured,
+          count: independent.blobs.length,
+          backups: independent.blobs.slice(0, 30).map((item) => ({
+            pathname: item.pathname,
+            size: item.size,
+            uploadedAt: item.uploadedAt,
+          })),
+        },
         backups: rows.map((row) => {
           const state = row.payload?.state || {};
           const logs = Array.isArray(state.employeeWorkLogs) ? state.employeeWorkLogs : [];
@@ -95,6 +149,8 @@ module.exports = async function handler(req, res) {
     });
     if (!backupResponse.ok) throw new Error(`Backup write failed (${backupResponse.status})`);
 
+    const independent = await writeIndependentBackup(source, date, now);
+
     return send(res, 200, {
       ok: true,
       backupDate: date,
@@ -102,6 +158,7 @@ module.exports = async function handler(req, res) {
       employees: Array.isArray(source.payload.employees) ? source.payload.employees.length : 0,
       clients: Array.isArray(source.payload.clients) ? source.payload.clients.length : 0,
       workLogs: Array.isArray(source.payload.employeeWorkLogs) ? source.payload.employeeWorkLogs.length : 0,
+      independent,
     });
   } catch (error) {
     return send(res, 500, { error: error?.message || "Backup failed" });
