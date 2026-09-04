@@ -39,13 +39,19 @@ const conversationStatePath = process.env.CONVERSATION_STATE_PATH
   || path.join(stateDirectory, "marketizo-group-context.json");
 const followupStatePath = process.env.FOLLOWUP_STATE_PATH
   || path.join(stateDirectory, "marketizo-followups.json");
+const clientWaitStatePath = process.env.CLIENT_WAIT_STATE_PATH
+  || path.join(stateDirectory, "marketizo-client-wait.json");
 const teamMemberIds = new Set();
+const teamMemberNumbers = new Set();
+const teamMemberNames = new Set();
 const pendingByGroup = new Map();
 const responseTimers = new Map();
 const groupHistory = new Map();
 const openIssues = new Map();
 const commitments = new Map();
 const commitmentTimers = new Map();
+const awaitingClientByGroup = new Map();
+const clientWaitTimers = new Map();
 let dailyState = { lastReportDate: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
@@ -82,6 +88,37 @@ const workTimeFormatter = new Intl.DateTimeFormat("en-GB", {
 
 function serializedId(id) {
   return id?._serialized || id?.$1 || (id?.user ? `${id.user}@${id.server || "c.us"}` : "");
+}
+
+function normalizedDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizedName(value) {
+  return String(value || "")
+    .toLocaleLowerCase("sr-Latn")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function isTeamSender(message, contact) {
+  const ids = [serializedId(message.author), serializedId(contact?.id), serializedId(message.from)].filter(Boolean);
+  if (ids.some((id) => teamMemberIds.has(id))) return true;
+  const numbers = [contact?.number, contact?.id?.user, message.author?.user]
+    .map(normalizedDigits)
+    .filter(Boolean);
+  if (numbers.some((number) => teamMemberNumbers.has(number))) return true;
+  const names = [contact?.pushname, contact?.name, contact?.shortName]
+    .map(normalizedName)
+    .filter(Boolean);
+  return names.some((name) => teamMemberNames.has(name));
+}
+
+function isKnownTeamId(id) {
+  const serialized = serializedId(id);
+  return teamMemberIds.has(serialized) || teamMemberNumbers.has(normalizedDigits(id?.user || serialized));
 }
 
 function viennaParts(date = new Date()) {
@@ -174,6 +211,7 @@ function saveFollowupState() {
     fs.mkdirSync(path.dirname(followupStatePath), { recursive: true });
     const tempPath = `${followupStatePath}.tmp`;
     fs.writeFileSync(tempPath, JSON.stringify({
+      schemaVersion: 2,
       issues: [...openIssues.values()],
       commitments: [...commitments.values()]
     }, null, 2));
@@ -211,6 +249,13 @@ function loadFollowupState() {
   try {
     if (!fs.existsSync(followupStatePath)) return;
     const stored = JSON.parse(fs.readFileSync(followupStatePath, "utf8"));
+    if (stored.schemaVersion !== 2) {
+      openIssues.clear();
+      commitments.clear();
+      saveFollowupState();
+      console.log("Follow-up state reset after employee-classification upgrade.");
+      return;
+    }
     for (const issue of stored.issues || []) openIssues.set(issue.groupId, issue);
     for (const record of stored.commitments || []) {
       commitments.set(record.groupId, record);
@@ -300,7 +345,7 @@ async function answerOwnerQuestion(message) {
         .map((item) => ({
           groupName: chat.name,
           sender: serializedId(item.author || item.from),
-          source: teamMemberIds.has(serializedId(item.author || item.from)) ? "team" : "client",
+          source: isKnownTeamId(item.author || item.from) ? "team" : "client",
           text: String(item.body).slice(0, 1500),
           at: new Date(item.timestamp * 1000).toISOString()
         }));
@@ -323,6 +368,7 @@ async function answerOwnerQuestion(message) {
   }));
   const unresolvedIssues = [...openIssues.values()];
   const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
+  const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
   const response = await openai.chat.completions.create({
     model,
     temperature: 0,
@@ -336,6 +382,7 @@ async function answerOwnerQuestion(message) {
           "Prepoznaj naziv grupe i kada je korisnik napisao samo deo naziva ili napravio malu slovnu grešku.",
           "Ako odgovor nije u kontekstu, reci da nema dovoljno informacija.",
           "Ne obećavaj rokove, rezultate, povrat novca niti bilo kakvu obavezu u ime Marketiza.",
+          "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. Ostali učesnici klijentskih grupa su klijenti.",
           "Ne izmišljaj činjenice. Navedi konkretno šta je ko napisao i kada, ako je to dostupno i važno.",
           "Ne počinji uvek istim naslovom ili frazom i ne koristi obavezne rubrike. Organizuj odgovor u kratke prirodne pasuse ili nekoliko smislenih stavki samo kada to zaista pomaže čitanju.",
           "Najpre prenesi suštinu konkretnog slučaja, zatim prirodno dodaj svoju procenu i preporuku kada su potrebne.",
@@ -344,7 +391,7 @@ async function answerOwnerQuestion(message) {
       },
       {
         role: "user",
-        content: JSON.stringify({ recentGroupMessages: history, groupsWaitingForReply: waitingForReply, unresolvedIssues, activeCommitments, question })
+        content: JSON.stringify({ teamMembers: [...teamMemberNames], recentGroupMessages: history, clientsWaitingForTeam: waitingForReply, silentClients, unresolvedIssues, activeCommitments, question })
       }
     ]
   });
@@ -388,14 +435,15 @@ function ownerActionSnapshot() {
   const pending = [...pendingByGroup.values()];
   const issues = [...openIssues.values()];
   const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
-  return { pending, issues, activeCommitments };
+  const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
+  return { pending, issues, activeCommitments, silentClients };
 }
 
 async function sendMorningReport() {
   const today = viennaDateKey();
   const snapshot = ownerActionSnapshot();
   const relevantCommitments = snapshot.activeCommitments.filter((record) => viennaDateKey(new Date(record.dueAt)) <= today);
-  if (!snapshot.pending.length && !snapshot.issues.length && !relevantCommitments.length) {
+  if (!snapshot.pending.length && !snapshot.issues.length && !relevantCommitments.length && !snapshot.silentClients.length) {
     dailyState.lastMorningDate = today;
     saveDailyState();
     console.log(`[MORNING_REPORT] ${today}: skipped, nothing actionable`);
@@ -405,8 +453,8 @@ async function sendMorningReport() {
     model,
     temperature: 0,
     messages: [
-      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja pred početak dana izdvaja samo ono na šta treba obratiti pažnju. Počni odmah suštinom, bez pozdrava, emodžija, generičkog uvoda i fiksnog šablona. Navedi otvorene probleme, klijente koji čekaju odgovor i rokove koji ističu ili su probijeni. Jasno reci gde Miljan lično treba da reaguje; ako ne treba, reci ko iz tima treba da preuzme. Ne izmišljaj činjenice." },
-      { role: "user", content: JSON.stringify({ date: today, pendingReplies: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments }) }
+      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja poznaje tim i pred početak dana izdvaja samo ono na šta treba obratiti pažnju. Počni odmah suštinom, bez pozdrava, markdown naslova, emodžija, generičkog uvoda i fiksnog šablona. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili posle četiri poruke. Ne prijavljuj druge slučajeve u kojima zaposleni čeka klijenta. Piši kao rukovodilac u nekoliko prirodnih pasusa, jasno reci gde Miljan lično treba da reaguje, a gde treba samo odgovorna osoba iz tima. Ne izmišljaj činjenice." },
+      { role: "user", content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients }) }
     ]
   });
   await client.sendMessage(alertTo, String(completion.choices[0]?.message?.content || "").trim());
@@ -424,7 +472,7 @@ async function sendWeeklyReport() {
     temperature: 0,
     messages: [
       { role: "system", content: "Napiši Miljanu nedeljni vlasnički izveštaj na srpskom kao iskusan rukovodilac koji je pratio klijentske grupe. Piši prirodno i konkretno, bez botovskog uvoda, emodžija i praznih fraza. Izdvoji ponovljene probleme, ozbiljne rizike, probijene rokove, brzinu reakcije tima, važne pohvale ili rezultate i tri prioriteta za sledeću nedelju. Nemoj prepričavati rutinsku komunikaciju niti izmišljati činjenice." },
-      { role: "user", content: JSON.stringify({ endingDate: today, events: weeklyEvents, unresolvedIssues: snapshot.issues, pendingReplies: snapshot.pending, activeCommitments: snapshot.activeCommitments }) }
+      { role: "user", content: JSON.stringify({ endingDate: today, teamMembers: [...teamMemberNames], events: weeklyEvents, unresolvedIssues: snapshot.issues, clientsWaitingForTeam: snapshot.pending, silentClients: snapshot.silentClients, activeCommitments: snapshot.activeCommitments }) }
     ]
   });
   await client.sendMessage(alertTo, String(completion.choices[0]?.message?.content || "Ove nedelje nije bilo događaja koji zahtevaju vlasničku pažnju.").trim());
@@ -444,6 +492,7 @@ async function sendDailyReport() {
   }));
   const unresolvedIssues = [...openIssues.values()];
   const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
+  const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
   const completion = await openai.chat.completions.create({
     model,
     temperature: 0,
@@ -452,7 +501,8 @@ async function sendDailyReport() {
         role: "system",
         content: [
           "Napiši Miljanu kratak dnevni izveštaj na srpskom kao osoba koja je tokom dana pratila Marketizo klijentske grupe.",
-          "Piši prirodno, konkretno i poslovno, bez botovskog uvoda, emodžija, generičkih fraza i fiksnog šablona.",
+          "Piši prirodno, konkretno i poslovno, bez botovskog uvoda, markdown naslova, emodžija, generičkih fraza i fiksnog šablona.",
+          "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. clientsWaitingForTeam znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili nakon četiri poruke.",
           "Počni odmah najvažnijim zaključkom dana. Prioritet daj ozbiljnim problemima, rizicima i grupama koje još čekaju odgovor.",
           "Pohvale i manje probleme navedi sažeto samo ako Miljanu daju koristan kontekst.",
           "Razdvoji smislenim kratkim pasusima ili stavkama kada ima više nepovezanih tema.",
@@ -461,7 +511,7 @@ async function sendDailyReport() {
       },
       {
         role: "user",
-        content: JSON.stringify({ date: today, events, groupsWaitingForReply: pending, unresolvedIssues, activeCommitments })
+        content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], events, clientsWaitingForTeam: pending, silentClients, unresolvedIssues, activeCommitments })
       }
     ]
   });
@@ -581,9 +631,14 @@ function loadResponseState() {
     if (!fs.existsSync(responseStatePath)) return;
     const records = JSON.parse(fs.readFileSync(responseStatePath, "utf8"));
     for (const record of records) {
+      if (teamMemberNames.has(normalizedName(record.senderName))) {
+        console.log(`[SLA_CLEANUP] Removed employee ${record.senderName} from client waiting list.`);
+        continue;
+      }
       pendingByGroup.set(record.groupId, record);
       scheduleResponseCheck(record);
     }
+    saveResponseState();
     console.log(`Response SLA watch restored: ${records.length} pending group(s).`);
   } catch (error) {
     console.error("Response SLA state restore failed:", error);
@@ -595,13 +650,30 @@ async function refreshTeamMembers() {
   const teamChat = chats.find((chat) => chat.isGroup && chat.name === teamGroupName);
   if (!teamChat) throw new Error(`Team group not found: ${teamGroupName}`);
   teamMemberIds.clear();
+  teamMemberNumbers.clear();
+  teamMemberNames.clear();
   for (const participant of teamChat.participants || []) {
     const id = serializedId(participant.id);
     if (id) teamMemberIds.add(id);
+    const participantNumber = normalizedDigits(participant.id?.user);
+    if (participantNumber) teamMemberNumbers.add(participantNumber);
+    try {
+      const contact = await client.getContactById(id);
+      const number = normalizedDigits(contact?.number);
+      if (number) teamMemberNumbers.add(number);
+      for (const value of [contact?.pushname, contact?.name, contact?.shortName]) {
+        const name = normalizedName(value);
+        if (name) teamMemberNames.add(name);
+      }
+      const contactId = serializedId(contact?.id);
+      if (contactId) teamMemberIds.add(contactId);
+    } catch (error) {
+      console.error("Could not expand one team identity:", error);
+    }
   }
   const ownId = serializedId(client.info?.wid);
   if (ownId) teamMemberIds.add(ownId);
-  console.log(`Team roster loaded from ${teamGroupName}: ${teamMemberIds.size} member(s).`);
+  console.log(`Team roster loaded from ${teamGroupName}: ${teamMemberIds.size} ID(s), ${teamMemberNames.size} name(s).`);
 }
 
 function beginResponseWatch(message, chat, contact, messageText) {
@@ -628,6 +700,89 @@ function clearResponseWatch(groupId, groupName) {
   pendingByGroup.delete(groupId);
   saveResponseState();
   console.log(`[SLA_ANSWERED] ${groupName}: team response received`);
+}
+
+function saveClientWaitState() {
+  try {
+    fs.mkdirSync(path.dirname(clientWaitStatePath), { recursive: true });
+    const tempPath = `${clientWaitStatePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify([...awaitingClientByGroup.values()], null, 2));
+    fs.renameSync(tempPath, clientWaitStatePath);
+  } catch (error) {
+    console.error("Client-wait state save failed:", error);
+  }
+}
+
+async function sendClientSilenceAlert(record) {
+  if (record.alerted) return;
+  await client.sendMessage(alertTo, [
+    `Klijent u grupi ${record.groupName} ne odgovara timu.`,
+    `Poslednje je pisao/la ${record.teamSender}: „${record.lastMessage}“`,
+    record.teamMessageCount >= 4
+      ? `Tim je poslao ${record.teamMessageCount} poruke bez odgovora klijenta.`
+      : "Od klijenta nema odgovora već dva dana.",
+    "Vredi proveriti da li je potrebno drugačije kontaktirati klijenta ili zaustaviti dalje čekanje."
+  ].join("\n"));
+  record.alerted = true;
+  awaitingClientByGroup.set(record.groupId, record);
+  recordDailyEvent({ type: "CLIENT_SILENCE", group: record.groupName, summary: "Klijent ne odgovara timu." });
+  saveClientWaitState();
+}
+
+function scheduleClientWait(record) {
+  clearTimeout(clientWaitTimers.get(record.groupId));
+  if (record.alerted) return;
+  const due = new Date(record.dueAt).getTime();
+  if (!Number.isFinite(due)) return;
+  const timer = setTimeout(() => {
+    void sendClientSilenceAlert(record).catch((error) => console.error("Client-silence alert failed:", error));
+  }, Math.min(Math.max(0, due - Date.now()), 2147483647));
+  clientWaitTimers.set(record.groupId, timer);
+}
+
+function noteTeamWaitingForClient(message, chat, senderName, messageText) {
+  const existing = awaitingClientByGroup.get(message.from);
+  const asksForReply = /\?|\b(javite|potvrdite|pošaljite|posaljite|možete li|mozete li|da li|čekamo|cekamo|odgovorite)\b/i.test(messageText);
+  if (!existing && !asksForReply) return;
+  const record = existing || {
+    groupId: message.from,
+    groupName: chat.name,
+    firstAskedAt: new Date().toISOString(),
+    dueAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    teamMessageCount: 0,
+    alerted: false
+  };
+  record.teamMessageCount += 1;
+  record.teamSender = senderName;
+  record.lastMessage = messageText.slice(0, 300);
+  awaitingClientByGroup.set(message.from, record);
+  saveClientWaitState();
+  scheduleClientWait(record);
+  if (record.teamMessageCount >= 4 && !record.alerted) {
+    void sendClientSilenceAlert(record).catch((error) => console.error("Client-silence alert failed:", error));
+  }
+}
+
+function clearClientWait(groupId, groupName) {
+  if (!awaitingClientByGroup.has(groupId)) return;
+  clearTimeout(clientWaitTimers.get(groupId));
+  clientWaitTimers.delete(groupId);
+  awaitingClientByGroup.delete(groupId);
+  saveClientWaitState();
+  console.log(`[CLIENT_REPLIED] ${groupName}: client answered the team`);
+}
+
+function loadClientWaitState() {
+  try {
+    if (!fs.existsSync(clientWaitStatePath)) return;
+    const records = JSON.parse(fs.readFileSync(clientWaitStatePath, "utf8"));
+    for (const record of records) {
+      awaitingClientByGroup.set(record.groupId, record);
+      scheduleClientWait(record);
+    }
+  } catch (error) {
+    console.error("Client-wait state restore failed:", error);
+  }
 }
 
 http.createServer((req, res) => {
@@ -680,6 +835,7 @@ client.on("ready", async () => {
   try {
     await refreshTeamMembers();
     loadResponseState();
+    loadClientWaitState();
     loadGroupHistory();
     loadFollowupState();
     startDailyReportScheduler();
@@ -720,13 +876,14 @@ client.on("message_create", async (message) => {
     if (chat.name !== teamGroupName && monitoredGroups.size && !monitoredGroups.has(chat.name)) return;
 
     const contact = await message.getContact();
-    const senderId = serializedId(message.author || contact.id);
     const senderName = contact.pushname || contact.name || contact.number || "Nepoznato";
     if (message.fromMe) return;
-    if (teamMemberIds.has(senderId)) {
+    if (chat.name === teamGroupName) return;
+    if (isTeamSender(message, contact)) {
       clearResponseWatch(message.from, chat.name);
       const teamText = String(message.body || "").trim();
       rememberGroupMessage(message.from, chat.name, senderName, "team", teamText);
+      if (teamText) noteTeamWaitingForClient(message, chat, senderName, teamText);
       const looksLikeCommitment = /\b(danas|sutra|rok|gotovo|završ|zavrs|šaljem|saljem|biće|bice|do\s+\d|ponedeljak|utorak|sred|četvrt|cetvrt|petak)\b/i.test(teamText);
       if (teamText && (openIssues.has(message.from) || commitments.has(message.from) || looksLikeCommitment)) {
         await updateFollowups(message, chat, senderName, "team", teamText);
@@ -734,11 +891,10 @@ client.on("message_create", async (message) => {
       return;
     }
 
-    if (chat.name === teamGroupName) return;
-
     const voiceTranscript = await transcribeVoiceMessage(message);
     const messageText = voiceTranscript || String(message.body || "").trim();
     if (!messageText) return;
+    clearClientWait(message.from, chat.name);
     rememberGroupMessage(message.from, chat.name, senderName, "client", messageText);
 
     if (teamMemberIds.size) beginResponseWatch(message, chat, contact, messageText);
