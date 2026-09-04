@@ -32,7 +32,7 @@ module.exports = async function handler(req, res) {
 
   if (String(req.query?.inspect || "") === "1") {
     try {
-      const response = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-daily-*&select=id,payload,updated_at&order=updated_at.desc`, {
+      const response = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,payload,updated_at&order=updated_at.desc`, {
         headers: headers(key),
       });
       if (!response.ok) throw new Error(`Backup list failed (${response.status})`);
@@ -68,9 +68,7 @@ module.exports = async function handler(req, res) {
   }
 
   const local = viennaTime();
-  if (["Sat", "Sun"].includes(local.weekday) || local.hour !== "17" || local.minute !== "30") {
-    return send(res, 200, { ok: true, skipped: true, reason: "Outside 17:30 Europe/Vienna workday window" });
-  }
+  if (["Sat", "Sun"].includes(local.weekday)) return send(res, 200, { ok: true, skipped: true, reason: "Weekend" });
 
   try {
     const sourceResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, {
