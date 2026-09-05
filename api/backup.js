@@ -20,7 +20,7 @@ function headers(key, prefer = "") {
 }
 
 function viennaTime(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Vienna", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Vienna", weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
   return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
 }
 
@@ -147,6 +147,25 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const now = new Date();
+    const vienna = viennaTime(now);
+    const date = `${vienna.year}-${vienna.month}-${vienna.day}`;
+    const isPrimaryRun = vienna.hour === "17" && vienna.minute === "30";
+    const isFallbackRun = vienna.hour === "18" && vienna.minute === "30";
+    const isForcedRun = String(req.query?.force || "") === "1";
+
+    if (!isForcedRun && !isPrimaryRun && !isFallbackRun) {
+      return send(res, 200, { ok: true, skipped: true, reason: "Outside the Vienna backup window", viennaTime: `${vienna.hour}:${vienna.minute}` });
+    }
+
+    if (!isForcedRun && isFallbackRun) {
+      const existing = await listBlobBackups();
+      const todayPath = `${BLOB_PREFIX}${date}.json`;
+      if (existing.configured && existing.blobs.some((item) => item.pathname === todayPath)) {
+        return send(res, 200, { ok: true, skipped: true, reason: "Primary backup already verified", backupDate: date });
+      }
+    }
+
     const sourceResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, {
       headers: headers(key),
     });
@@ -155,8 +174,6 @@ module.exports = async function handler(req, res) {
     const source = sourceRows[0];
     if (!source?.payload) return send(res, 404, { error: "Main state is empty" });
 
-    const now = new Date();
-    const date = now.toISOString().slice(0, 10);
     const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
     const backupId = `backup-daily-${dayNumber % BACKUP_SLOTS}`;
     const backupResponse = await fetch(`${url}/rest/v1/${TABLE}?on_conflict=id`, {
