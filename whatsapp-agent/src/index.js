@@ -302,7 +302,7 @@ async function updateFollowups(message, chat, senderName, source, messageText) {
     commitmentTimers.delete(groupId);
     commitments.delete(groupId);
     recordDailyEvent({ type: "COMPLETED", group: chat.name, summary: existingCommitment.summary });
-  } else if (result.commitment && result.commitmentDueAt) {
+  } else if (source === "team" && result.commitment && result.commitmentDueAt) {
     const due = new Date(result.commitmentDueAt);
     if (Number.isFinite(due.getTime()) && due.getTime() > Date.now()) {
       const record = {
@@ -438,7 +438,11 @@ function ownerActionSnapshot() {
   const issues = [...openIssues.values()];
   const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
   const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
-  return { pending, issues, activeCommitments, silentClients };
+  const recentGroupMessages = [...groupHistory.values()]
+    .flat()
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)))
+    .slice(-300);
+  return { pending, issues, activeCommitments, silentClients, recentGroupMessages };
 }
 
 async function sendMorningReport() {
@@ -455,8 +459,8 @@ async function sendMorningReport() {
     model,
     temperature: 0,
     messages: [
-      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja poznaje tim i pred početak dana izdvaja samo ono na šta treba obratiti pažnju. Počni odmah suštinom, bez pozdrava, markdown naslova, emodžija, generičkog uvoda i fiksnog šablona. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili posle četiri poruke. Ne prijavljuj druge slučajeve u kojima zaposleni čeka klijenta. Piši kao rukovodilac u nekoliko prirodnih pasusa, jasno reci gde Miljan lično treba da reaguje, a gde treba samo odgovorna osoba iz tima. Ne izmišljaj činjenice." },
-      { role: "user", content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients }) }
+      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja poznaje tim i pred početak dana izdvaja samo ono na šta treba obratiti pažnju. Počni odmah suštinom, bez pozdrava, markdown naslova, emodžija, generičkog uvoda i fiksnog šablona. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili posle četiri poruke. Ne prijavljuj druge slučajeve u kojima zaposleni čeka klijenta. Piši kao rukovodilac u nekoliko prirodnih pasusa, jasno reci gde Miljan lično treba da reaguje, a gde treba samo odgovorna osoba iz tima. Pre nego što nešto nazoveš problemom proveri recentGroupMessages. Ako je rešeno, napiši situaciju i konkretno rešenje; ako nije, napiši ko treba da preuzme i do kada. Miljanu izdvoji samo ono što traži njegovu odluku ili nosi ozbiljan rizik. Ne izmišljaj činjenice." },
+      { role: "user", content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
   await client.sendMessage(alertTo, String(completion.choices[0]?.message?.content || "").trim());
@@ -473,8 +477,8 @@ async function sendWeeklyReport() {
     model,
     temperature: 0,
     messages: [
-      { role: "system", content: "Napiši Miljanu nedeljni vlasnički izveštaj na srpskom kao iskusan rukovodilac koji je pratio klijentske grupe. Piši prirodno i konkretno, bez botovskog uvoda, emodžija i praznih fraza. Izdvoji ponovljene probleme, ozbiljne rizike, probijene rokove, brzinu reakcije tima, važne pohvale ili rezultate i tri prioriteta za sledeću nedelju. Nemoj prepričavati rutinsku komunikaciju niti izmišljati činjenice." },
-      { role: "user", content: JSON.stringify({ endingDate: today, teamMembers: [...teamMemberNames], events: weeklyEvents, unresolvedIssues: snapshot.issues, clientsWaitingForTeam: snapshot.pending, silentClients: snapshot.silentClients, activeCommitments: snapshot.activeCommitments }) }
+      { role: "system", content: "Napiši Miljanu nedeljni vlasnički izveštaj na srpskom kao iskusan rukovodilac koji je pratio klijentske grupe. Piši prirodno i konkretno, bez botovskog uvoda, emodžija i praznih fraza. Izdvoji ponovljene probleme, ozbiljne rizike, probijene rokove, brzinu reakcije tima, važne pohvale ili rezultate i tri prioriteta za sledeću nedelju. Za svaki problem navedi trenutno stanje: Situacija — rešeno: konkretno rešenje, ili Nerešeno — sledeća akcija, vlasnik i rok. Ne predstavljaj rešenu žalbu kao aktuelan problem. Proveri recentGroupMessages pre zaključka. Miljanu eskaliraj samo odluke, ozbiljan rizik i probleme koje tim nije zatvorio. Nemoj prepričavati rutinsku komunikaciju niti izmišljati činjenice." },
+      { role: "user", content: JSON.stringify({ endingDate: today, teamMembers: [...teamMemberNames], events: weeklyEvents, unresolvedIssues: snapshot.issues, clientsWaitingForTeam: snapshot.pending, silentClients: snapshot.silentClients, activeCommitments: snapshot.activeCommitments, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
   await client.sendMessage(alertTo, String(completion.choices[0]?.message?.content || "Ove nedelje nije bilo događaja koji zahtevaju vlasničku pažnju.").trim());
@@ -495,6 +499,10 @@ async function sendDailyReport() {
   const unresolvedIssues = [...openIssues.values()];
   const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
   const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
+  const recentGroupMessages = [...groupHistory.values()]
+    .flat()
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)))
+    .slice(-300);
   const completion = await openai.chat.completions.create({
     model,
     temperature: 0,
@@ -509,7 +517,9 @@ async function sendDailyReport() {
           "Posebno istakni direktan zahtev Miljanu ili Ivani, probijen rok, klijenta bez odgovora duže od dva radna sata, konflikt, zahtev za raskid ili povraćaj novca, problem sa kampanjom ili leadovima i slučaj gde se članovi tima međusobno čekaju.",
           "Za svaku važnu tvrdnju navedi grupu, osobu i vreme kada su dostupni. Ne izmišljaj status; ako završetak nije potvrđen napiši 'nije potvrđeno'.",
           "Organizuj samo rubrike koje imaju sadržaj: 'Danas najvažnije', 'Potrebna odluka Miljana/Ivane', 'Klijenti u riziku', 'Neodgovorene poruke', 'Dobri rezultati' i 'Tim može sam da reši'. Nemoj prikazivati prazne rubrike.",
-          "Kod svake potrebne odluke napiši preporuku i rok. Kod rizika napiši posledicu i ko treba da preuzme. Rutinsku komunikaciju koju tim već rešava izostavi.",
+          "Za svaku negativnu situaciju proveri recentGroupMessages i trenutno stanje pre zaključka. Ako postoji dokaz da je rešena, napiši kratko: Situacija — rešeno: konkretno rešenje. Ne predstavljaj rešenu žalbu kao aktuelan problem.",
+          "Ako nema dokaza rešenja, napiši: Nerešeno — konkretan problem, posledica, ko treba da preuzme i do kada. Nerešene ozbiljne stvari imaju prioritet nad istorijskim događajima.",
+          "Kod svake potrebne odluke napiši preporuku i rok. Kod rizika napiši posledicu i ko treba da preuzme. Rutinsku komunikaciju koju tim već rešava izostavi. Miljanu eskaliraj samo kada treba njegova odluka, postoji ozbiljan poslovni rizik ili tim ne uspeva da zatvori problem.",
           "Završi rečenicom 'Da sam na tvom mestu, prvo bih danas uradio: ...' samo kada postoji konkretna akcija za vlasnika.",
           "Ako nema ničega važnog, napiši samo: 'Sve klijentske grupe su pod kontrolom. Trenutno nema odluka ni intervencija za Miljana i Ivanu.'",
           "Nikada ne predlaži da agent odgovara u grupi, ne obećavaj ništa klijentima i ne predstavljaj neproverenu stvar kao završenu."
@@ -517,7 +527,7 @@ async function sendDailyReport() {
       },
       {
         role: "user",
-        content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], events, clientsWaitingForTeam: pending, silentClients, unresolvedIssues, activeCommitments })
+        content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], events, clientsWaitingForTeam: pending, silentClients, unresolvedIssues, activeCommitments, recentGroupMessages })
       }
     ]
   });
@@ -875,16 +885,28 @@ client.on("disconnected", (reason) => {
 client.on("message_reaction", async (reaction) => {
   try {
     if (!reaction?.reaction) return;
-    let groupId = serializedId(reaction.msgId?.remote || reaction.msgId?._remote);
-    if (!groupId.endsWith("@g.us")) {
-      try {
-        const original = await client.getMessageById(serializedId(reaction.msgId));
-        groupId = serializedId(original?.from || original?.to);
-      } catch (error) {
-        console.error("Could not resolve reacted message:", error);
-      }
+    let original = null;
+    try {
+      original = await client.getMessageById(serializedId(reaction.msgId));
+    } catch (error) {
+      console.error("Could not load reacted message:", error);
     }
+    let groupId = serializedId(reaction.msgId?.remote || reaction.msgId?._remote);
+    if (!groupId.endsWith("@g.us")) groupId = serializedId(original?.from || original?.to);
     if (!groupId.endsWith("@g.us")) return;
+
+    let groupName = pendingByGroup.get(groupId)?.groupName
+      || awaitingClientByGroup.get(groupId)?.groupName
+      || commitments.get(groupId)?.groupName
+      || openIssues.get(groupId)?.groupName
+      || groupId;
+    try {
+      const chat = original ? await original.getChat() : await client.getChatById(groupId);
+      if (chat?.name) groupName = chat.name;
+    } catch (error) {
+      console.error("Could not resolve reaction group name:", error);
+    }
+
     let reactionIsFromTeam = isKnownTeamId(reaction.senderId);
     if (!reactionIsFromTeam) {
       try {
@@ -899,15 +921,31 @@ client.on("message_reaction", async (reaction) => {
         console.error("Could not identify reaction sender:", error);
       }
     }
-    if (!reactionIsFromTeam) return;
+
     const reactedMessageId = serializedId(reaction.msgId);
-    if (reactedMessageId) {
-      teamAcknowledgedMessageIds.add(reactedMessageId);
-      setTimeout(() => teamAcknowledgedMessageIds.delete(reactedMessageId), 10 * 60 * 1000);
+    if (reactionIsFromTeam) {
+      if (reactedMessageId) {
+        teamAcknowledgedMessageIds.add(reactedMessageId);
+        setTimeout(() => teamAcknowledgedMessageIds.delete(reactedMessageId), 10 * 60 * 1000);
+      }
+      clearResponseWatch(groupId, groupName);
+      console.log(`[TEAM_REACTION] ${groupName}: reaction counted as team acknowledgement`);
+      return;
     }
-    const groupName = pendingByGroup.get(groupId)?.groupName || groupId;
-    clearResponseWatch(groupId, groupName);
-    console.log(`[TEAM_REACTION] ${groupName}: reaction counted as team acknowledgement`);
+
+    let originalWasFromTeam = original?.fromMe === true || isKnownTeamId(original?.author || original?.from);
+    if (!originalWasFromTeam && original) {
+      try {
+        const originalContact = await original.getContact();
+        originalWasFromTeam = isTeamSender(original, originalContact);
+      } catch (error) {
+        console.error("Could not identify reacted message sender:", error);
+      }
+    }
+    if (!originalWasFromTeam) return;
+
+    clearClientWait(groupId, groupName);
+    console.log(`[CLIENT_REACTION] ${groupName}: client reaction counted as acknowledgement of the team message`);
   } catch (error) {
     console.error("Reaction processing failed:", error);
   }
@@ -956,7 +994,10 @@ client.on("message_create", async (message) => {
       group: chat.name,
       sender: contact.pushname || contact.name || contact.number || "Nepoznato",
       message: messageText,
-      timestamp: new Date(message.timestamp * 1000).toISOString()
+      timestamp: new Date(message.timestamp * 1000).toISOString(),
+      recentConversation: (groupHistory.get(message.from) || []).slice(-12),
+      openIssue: openIssues.get(message.from) || null,
+      activeCommitment: commitments.get(message.from) || null
     });
     const normalizedAcknowledgement = messageText
       .toLocaleLowerCase("sr-Latn")
@@ -1004,6 +1045,7 @@ client.on("message_create", async (message) => {
       ownerMention ? "Razlog obaveštenja: Pomenut je Miljan/vlasnik." : "",
       !ownerMention && result.ownerReason ? `Razlog obaveštenja: ${result.ownerReason}` : "",
       importantPraise ? "Vrsta: Posebno važna pohvala/rezultat." : "",
+      `Originalna poruka: „${messageText.slice(0, 600)}“`,
       `Sažetak: ${result.summary}`,
       result.reason ? `Zašto: ${result.reason}` : "",
       result.recommendedAction ? `Preporuka: ${result.recommendedAction}` : ""
