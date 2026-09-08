@@ -4155,9 +4155,6 @@ function setupClientCostAnalysis() {
   view.className = "view client-cost-view";
   view.id = "clientCosts";
   view.innerHTML = `
-    <div class="client-cost-header">
-      <div><p class="eyebrow">Profitabilnost</p><h1>Trošak klijenata</h1><p>Koliko vremena i novca tim ulaže u svakog klijenta.</p></div>
-    </div>
     <section class="panel client-cost-filters">
       <div class="panel-head"><div><p class="eyebrow">Filter</p><h2>Period i tim</h2></div><button class="secondary-button" id="clientCostReset" type="button">Reset</button></div>
       <div class="client-cost-presets"><button type="button" data-cost-period="day">Danas</button><button type="button" data-cost-period="week">Ova nedelja</button><button type="button" data-cost-period="month" class="active">Ovaj mesec</button></div>
@@ -4240,7 +4237,7 @@ function setupClientCostAnalysis() {
     view.querySelector("#clientCostEntries").textContent = logs.length;
     view.querySelector("#clientCostPeople").textContent = new Set(logs.map((item) => item.employeeId)).size;
     view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
-    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span><b>${row.entries} unosa</b><small>${[...row.activities].join(" · ")}</small></span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
+    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span class="client-cost-activity-cell" tabindex="0"><b>${row.entries} unosa</b><small class="client-cost-activity-tooltip">${escapeInvoiceText([...row.activities].join(" · "))}</small></span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
   };
   const show = (event) => {
     event?.stopImmediatePropagation();
@@ -5577,7 +5574,7 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", (event) 
     targetId: record.employeeId,
     type: "warn",
     title: "Upisano kašnjenje",
-    message: `${record.minutes} minuta · odbija se ${record.penaltyMinutes} minuta · ${formatDate(record.date)} · ${record.reason}. Potvrdi u dashboardu.`,
+    message: `${record.minutes} minuta · odbija se ${record.penaltyMinutes} minuta · ${formatDate(record.date)} · ${record.reason}.`,
   });
   saveState();
   event.currentTarget.reset();

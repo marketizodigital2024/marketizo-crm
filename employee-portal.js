@@ -1164,7 +1164,7 @@ function renderPortalNotifications() {
           (notification) => `
           <div class="setup-item alert-item ${notification.type === "danger" ? "danger" : notification.type === "warn" ? "warn" : "ok"}">
             <strong>!</strong>
-            <span>${notification.title}<br />${notification.message}</span>
+            <span>${notification.title}<br />${String(notification.message || "").replace(/\s*Potvrdi u dashboardu\.?\s*$/i, "")}</span>
             <button class="mini-action" data-hide-notification="${notification.id}" type="button">Sakrij 7 dana</button>
           </div>`
         )
@@ -1215,7 +1215,7 @@ function showEmployeeNotificationPopups() {
     .filter((notification) => !isNotificationHidden(notification) && !nextShown.has(notification.id))
     .slice(0, 3)
     .forEach((notification) => {
-      showToast(notification.title, notification.message, notification.type);
+      showToast(notification.title, String(notification.message || "").replace(/\s*Potvrdi u dashboardu\.?\s*$/i, ""), notification.type);
       nextShown.add(notification.id);
     });
   sessionStorage.setItem(`shownEmployeeNotifications-${activeEmployee.id}`, JSON.stringify([...nextShown].slice(-50)));
@@ -1659,8 +1659,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   }
   saveState({ remote: false });
   form.reset();
-  form.elements.date.value = currentDateKey();
-  form.elements.minutes.value = 60;
+  form.elements.date.value = "";
+  form.elements.minutes.value = "";
   ["note", "positive", "negative"].forEach((fieldName) => {
     const field = form.elements[fieldName];
     if (field) field.value = "";
