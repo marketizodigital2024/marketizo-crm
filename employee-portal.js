@@ -1685,7 +1685,7 @@ function openDailyReportDialog(date) {
   if (!dialog || !form || !date || hasFinalDailyReport(date)) return;
   form.dataset.reportDate = date;
   form.reset();
-  setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)}. biće vidljiv tvom lideru.`);
+  setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)} biće vidljiv tvom lideru.`);
   if (!dialog.open) dialog.showModal();
 }
 
