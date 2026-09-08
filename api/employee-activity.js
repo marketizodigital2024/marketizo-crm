@@ -67,44 +67,6 @@ async function preserveDailyPrewriteBackup(url, key, row) {
   if (!backupResponse.ok) throw new Error(`Dnevni backup pre upisa nije uspeo (${backupResponse.status}).`);
 }
 
-function appendText(current, next) {
-  return [current, next].map((value) => String(value || "").trim()).filter(Boolean).join(" | ");
-}
-
-function updateDailyReport(payload, workLog, recipientId) {
-  payload.employeeReports = Array.isArray(payload.employeeReports) ? payload.employeeReports : [];
-  const minutes = Number(workLog.minutes || Math.round(Number(workLog.hours || 0) * 60));
-  const report = payload.employeeReports.find((item) => item.employeeId === workLog.employeeId && item.date === workLog.date);
-  if (report) {
-    report.minutes = Number(report.minutes || Number(report.hours || 0) * 60) + minutes;
-    report.hours = Math.round((report.minutes / 60) * 10000) / 10000;
-    report.activityName = "Dnevni zbir aktivnosti";
-    report.note = appendText(report.note, workLog.note);
-    report.positive = appendText(report.positive, workLog.positive);
-    report.negative = appendText(report.negative, workLog.negative);
-    report.updatedAt = new Date().toISOString();
-    return;
-  }
-  payload.employeeReports.unshift({
-    id: `report-${workLog.id}`,
-    employeeId: workLog.employeeId,
-    recipientId: recipientId || "",
-    date: workLog.date,
-    title: "Dnevni izveštaj",
-    hours: Math.round((minutes / 60) * 10000) / 10000,
-    minutes,
-    activityId: workLog.activityId || "",
-    activityName: workLog.activityName || "Aktivnost",
-    activityCategory: workLog.activityCategory || "Ostalo",
-    clientId: workLog.clientId || "",
-    clientName: workLog.clientName || "",
-    positive: workLog.positive || "",
-    negative: workLog.negative || "",
-    note: workLog.note || "",
-    createdAt: new Date().toISOString(),
-  });
-}
-
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
@@ -152,7 +114,7 @@ module.exports = async function handler(req, res) {
       };
       await preserveDailyPrewriteBackup(url, key, row);
       payload.employeeWorkLogs.unshift(workLog);
-      if (body.updateReport !== false) updateDailyReport(payload, workLog, body.recipientId);
+      // Dnevni izveštaj se šalje odvojeno tek kada zaposleni ispuni dnevnu kvotu.
 
       const updatedAt = new Date().toISOString();
       const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {

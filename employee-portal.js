@@ -44,6 +44,7 @@ let activeEmployee = null;
 let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
+let leaderReportInboxShown = false;
 const employeeSessionKey = "marketizoEmployeeSession";
 const employeeSessionDuration = 24 * 60 * 60 * 1000;
 
@@ -394,6 +395,11 @@ function monthLabel(monthKey) {
 function formatDate(value) {
   if (!value) return "nije unet";
   return parseDate(value).toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("sr-Latn-RS", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 function monthDayKeys(monthKey) {
@@ -781,8 +787,10 @@ function setupDailyMinuteProgress() {
   form.dataset.dailyProgressReady = "true";
   const progress = document.createElement("section");
   progress.className = "daily-minute-progress";
-  progress.innerHTML = `<div><span>Današnji učinak</span><strong id="dailyMinuteStatus">0 min</strong></div><div class="daily-minute-track"><span id="dailyMinuteBar"></span></div><p id="dailyMinuteMessage"></p>`;
+  progress.innerHTML = `<div><span>Današnji učinak</span><strong id="dailyMinuteStatus">0 min</strong></div><div class="daily-minute-track"><span id="dailyMinuteBar"></span></div><p id="dailyMinuteMessage"></p><button id="dailyReportPromptButton" class="secondary-button" type="button" hidden>Popuni izveštaj za lidera</button>`;
   form.insertAdjacentElement("afterbegin", progress);
+  const reportButton = progress.querySelector("#dailyReportPromptButton");
+  reportButton.addEventListener("click", () => openDailyReportDialog(dateInput.value || currentDateKey()));
   const render = () => {
     const date = dateInput.value || currentDateKey();
     const logged = loggedMinutesForDate(date);
@@ -791,6 +799,7 @@ function setupDailyMinuteProgress() {
     const status = progress.querySelector("#dailyMinuteStatus");
     const bar = progress.querySelector("#dailyMinuteBar");
     const message = progress.querySelector("#dailyMinuteMessage");
+    reportButton.hidden = !expected || logged < expected || hasFinalDailyReport(date);
     if (!expected) {
       status.textContent = `${logged} min upisano`;
       bar.style.width = logged ? "100%" : "0%";
@@ -1486,24 +1495,72 @@ function renderLeaderPanel() {
     : `<div class="empty-state">Nema 1:1 beleški za tim.</div>`;
 
   const reports = (state.employeeReports || [])
-    .filter((report) => teamIds.has(report.employeeId) || report.recipientId === activeEmployee.id)
+    .filter((report) => report.isFinalDailyReport === true && String(report.date || "").startsWith(portalMonth) && (teamIds.has(report.employeeId) || report.recipientId === activeEmployee.id))
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 8);
   document.getElementById("leaderReportList").innerHTML = reports.length
     ? reports
         .map((report) => {
           const employee = (state.employees || []).find((item) => item.id === report.employeeId);
-          const matchingLog = (state.employeeWorkLogs || []).find((item) => item.employeeId === report.employeeId && item.date === report.date && (!report.activityId || item.activityId === report.activityId));
-          const minutes = Number(report.minutes || matchingLog?.minutes || Number(report.hours || matchingLog?.hours || 0) * 60);
-          const activityName = report.activityName || matchingLog?.activityName || (state.employeeActivities || []).find((item) => item.id === report.activityId)?.name || "Aktivnost";
+          const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
           return `
-          <div class="setup-item">
+          <div class="setup-item leader-report-card">
             <strong>${formatNumber(minutes)} min</strong>
-            <span>${employee?.name || "Zaposleni"} · ${activityName}<br />${formatDate(report.date)} · + ${report.positive || matchingLog?.positive || "-"}<br />- ${report.negative || matchingLog?.negative || "-"}</span>
+            <span><b>${employee?.name || "Zaposleni"} · ${formatDate(report.date)}</b><br />${report.note || "Bez rezimea"}<br />+ ${report.positive || "-"}<br />- ${report.negative || "-"}<br />${report.acknowledgedAt ? `<small>✓ Pročitano ${formatDateTime(report.acknowledgedAt)}</small>` : `<button class="secondary-button leader-report-ack" data-report-id="${report.id}" type="button">Potvrđujem da sam pročitao</button>`}</span>
           </div>`;
         })
         .join("")
     : `<div class="empty-state">Nema izveštaja za tim.</div>`;
+  const unreadReports = reports.filter((report) => !report.acknowledgedAt);
+  renderLeaderReportInbox(unreadReports);
+  document.querySelectorAll(".leader-report-ack").forEach((button) => {
+    button.addEventListener("click", () => acknowledgeLeaderReport(button.dataset.reportId, button));
+  });
+}
+
+function renderLeaderReportInbox(reports) {
+  const dialog = document.getElementById("leaderReportsDialog");
+  const list = document.getElementById("leaderUnreadReportList");
+  if (!dialog || !list) return;
+  list.innerHTML = reports.map((report) => {
+    const employee = (state.employees || []).find((item) => item.id === report.employeeId);
+    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${employee?.name || "Zaposleni"}</b><br />${report.note || "Bez rezimea"}<br />+ ${report.positive || "-"}<br />- ${report.negative || "-"}<br /><button class="primary-button leader-report-ack" data-report-id="${report.id}" type="button">Potvrđujem da sam pročitao</button></span></div>`;
+  }).join("");
+  if (reports.length && !leaderReportInboxShown) {
+    leaderReportInboxShown = true;
+    window.setTimeout(() => { if (!dialog.open) dialog.showModal(); }, 250);
+  }
+}
+
+async function acknowledgeLeaderReport(reportId, button) {
+  if (!reportId || !activeEmployee?.id) return;
+  button.disabled = true;
+  button.textContent = "Čuvanje...";
+  let result = { ok: false, error: "Potvrda nije sačuvana." };
+  try {
+    const response = await fetch("/api/employee-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "acknowledge", reportId, leaderId: activeEmployee.id }),
+    });
+    result = await response.json().catch(() => ({}));
+    result.ok = response.ok && result.ok;
+  } catch (error) {
+    result = { ok: false, error: error?.message || "Potvrda nije sačuvana." };
+  }
+  if (!result.ok) {
+    button.disabled = false;
+    button.textContent = "Potvrđujem da sam pročitao";
+    showToast("Nije potvrđeno", result.error || "Pokušaj ponovo.", "danger");
+    return;
+  }
+  const report = (state.employeeReports || []).find((item) => item.id === reportId);
+  if (report) Object.assign(report, result.report || {});
+  saveState({ remote: false });
+  renderLeaderPanel();
+  const remaining = (state.employeeReports || []).filter((item) => item.isFinalDailyReport === true && item.recipientId === activeEmployee.id && !item.acknowledgedAt).length;
+  if (!remaining) document.getElementById("leaderReportsDialog")?.close();
+  showToast("Potvrđeno", "Sačuvano je da si pročitao/la izveštaj.", "ok");
 }
 
 document.getElementById("employeeLoginForm").addEventListener("submit", async (event) => {
@@ -1618,6 +1675,20 @@ function clearPortalHoursForm(form) {
   setPortalActivityOptionsOpen(false);
 }
 
+function hasFinalDailyReport(date) {
+  return (state.employeeReports || []).some((report) => report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true);
+}
+
+function openDailyReportDialog(date) {
+  const dialog = document.getElementById("dailyReportDialog");
+  const form = document.getElementById("dailyReportForm");
+  if (!dialog || !form || !date || hasFinalDailyReport(date)) return;
+  form.dataset.reportDate = date;
+  form.reset();
+  setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)}. biće vidljiv tvom lideru.`);
+  if (!dialog.open) dialog.showModal();
+}
+
 function restorePortalHoursForm(form, values) {
   ["date", "minutes", "note", "positive", "negative", "clientId"].forEach((fieldName) => {
     const field = form.elements[fieldName];
@@ -1656,8 +1727,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     clientId: client?.id || "",
     minutes: String(formData.get("minutes") || ""),
     note: String(formData.get("note") || ""),
-    positive: String(formData.get("positive") || ""),
-    negative: String(formData.get("negative") || ""),
+    positive: "",
+    negative: "",
   };
   const previousState = structuredClone(state);
   const employeeId = activeEmployee.id;
@@ -1680,38 +1751,19 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     clientName: client?.name || "",
     type: "Rad",
     note: formData.get("note"),
-    positive: formData.get("positive"),
-    negative: formData.get("negative"),
+    positive: "",
+    negative: "",
     locked: true,
     submittedAt: new Date().toISOString(),
   };
   state.employeeWorkLogs.unshift(workLog);
   const recipientId = reportRecipientId();
-  state.employeeReports = state.employeeReports || [];
-  const dailyReport = state.employeeReports.find((report) => report.employeeId === activeEmployee.id && report.date === date);
-  if (dailyReport) {
-    dailyReport.minutes = Number(dailyReport.minutes || Number(dailyReport.hours || 0) * 60) + minutes;
-    dailyReport.hours = Math.round((dailyReport.minutes / 60) * 10000) / 10000;
-    dailyReport.activityName = "Dnevni zbir aktivnosti";
-    dailyReport.note = [dailyReport.note, formData.get("note")].filter(Boolean).join(" | ");
-    dailyReport.positive = [dailyReport.positive, formData.get("positive")].filter(Boolean).join(" | ");
-    dailyReport.negative = [dailyReport.negative, formData.get("negative")].filter(Boolean).join(" | ");
-    dailyReport.updatedAt = new Date().toISOString();
-  } else {
-    state.employeeReports.unshift({
-      id: crypto.randomUUID(), employeeId: activeEmployee.id, recipientId, date,
-      title: "Dnevni izveštaj", hours: Math.round((minutes / 60) * 10000) / 10000, minutes,
-      activityId: activity.id, activityName: activity.name, activityCategory: activity.category || "Ostalo",
-      clientId: client?.id || "", clientName: client?.name || "", positive: formData.get("positive"),
-      negative: formData.get("negative"), note: formData.get("note"), createdAt: new Date().toISOString(),
-    });
-  }
   let saveResult = { ok: false, error: "Online čuvanje nije uspelo." };
   try {
     const response = await fetch("/api/employee-activity", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workLog, recipientId, updateReport: true }),
+      body: JSON.stringify({ workLog, recipientId, updateReport: false }),
     });
     const data = await response.json().catch(() => ({}));
     saveResult = { ok: response.ok && data.ok, error: data.error || "" };
@@ -1734,7 +1786,65 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   saveState({ remote: false });
   renderEmployeePortal();
   clearPortalHoursForm(form);
-  showToast("Sačuvano", "Sati i dnevni izveštaj su sačuvani.", "ok");
+  showToast("Sačuvano", "Sati su sačuvani.", "ok");
+  const expectedMinutes = expectedMinutesForDate(activeEmployee, date);
+  if (expectedMinutes > 0 && loggedMinutesForDate(date) >= expectedMinutes && !hasFinalDailyReport(date)) {
+    window.setTimeout(() => openDailyReportDialog(date), 250);
+  }
+});
+
+document.getElementById("closeDailyReportDialog")?.addEventListener("click", () => {
+  document.getElementById("dailyReportDialog")?.close();
+});
+
+document.getElementById("dailyReportLater")?.addEventListener("click", () => {
+  document.getElementById("dailyReportDialog")?.close();
+  showToast("Izveštaj nije poslat", "Dugme za izveštaj ostaje u delu Vreme za taj datum.", "warn");
+});
+
+document.getElementById("dailyReportForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const date = form.dataset.reportDate || "";
+  const formData = new FormData(form);
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Slanje...";
+  }
+  let result = { ok: false, error: "Online čuvanje nije uspelo." };
+  try {
+    const response = await fetch("/api/employee-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employeeId: activeEmployee.id,
+        recipientId: reportRecipientId(),
+        date,
+        note: String(formData.get("summary") || "").trim(),
+        positive: String(formData.get("positive") || "").trim(),
+        negative: String(formData.get("negative") || "").trim(),
+      }),
+    });
+    result = await response.json().catch(() => ({}));
+    result.ok = response.ok && result.ok;
+  } catch (error) {
+    result = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
+  }
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Pošalji lideru";
+  }
+  if (!result.ok) {
+    showToast("Izveštaj nije poslat", result.error || "Pokušaj ponovo.", "danger");
+    return;
+  }
+  state.employeeReports = (state.employeeReports || []).filter((report) => !(report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true));
+  state.employeeReports.unshift(result.report);
+  saveState({ remote: false });
+  document.getElementById("dailyReportDialog")?.close();
+  renderEmployeePortal();
+  showToast("Izveštaj poslat", "Dnevni izveštaj je sada vidljiv lideru.", "ok");
 });
 
 document.getElementById("portalAbsenceForm")?.addEventListener("submit", (event) => {
@@ -1780,9 +1890,14 @@ document.getElementById("logoutEmployee")?.addEventListener("click", () => {
   localStorage.removeItem(employeeSessionKey);
   document.documentElement.classList.remove("employee-session-cached");
   activeEmployee = null;
+  leaderReportInboxShown = false;
   document.getElementById("employeeApp").hidden = true;
   document.getElementById("employeeLoginScreen").hidden = false;
   document.getElementById("employeeLoginForm").reset();
+});
+
+document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", () => {
+  document.getElementById("leaderReportsDialog")?.close();
 });
 
 window.addEventListener("beforeinstallprompt", (event) => {

@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=83" />
+    <link rel="stylesheet" href="styles.css?v=84" />
     <style>html.employee-session-cached #employeeLoginScreen { display: none !important; }</style>
     <script>
       try {
@@ -330,12 +330,6 @@
                   <label class="span-2">Napomena
                     <textarea name="note" rows="5" placeholder="Opciono: rezultat ili detalj aktivnosti."></textarea>
                   </label>
-                  <label>Šta je bilo pozitivno (opciono)
-                    <textarea name="positive" rows="4" placeholder="Šta je danas išlo dobro?"></textarea>
-                  </label>
-                  <label>Šta je bilo negativno (opciono)
-                    <textarea name="negative" rows="4" placeholder="Šta je kočilo posao?"></textarea>
-                  </label>
                 </div>
                 <div class="admin-submit">
                   <button class="primary-button" type="submit">Sačuvaj sate</button>
@@ -399,6 +393,43 @@
       </main>
     </div>
     <div class="toast-stack" id="employeeToastStack" aria-live="polite"></div>
+    <dialog id="dailyReportDialog" class="daily-report-dialog">
+      <form id="dailyReportForm" class="modal-card daily-report-modal">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Dnevna kvota je ispunjena</p>
+            <h2>Kratak izveštaj za lidera</h2>
+            <p id="dailyReportDateLabel" class="muted"></p>
+          </div>
+          <button id="closeDailyReportDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
+        </div>
+        <label>Šta si danas završio/la?
+          <textarea name="summary" rows="4" maxlength="1200" required placeholder="Ukratko navedi najvažnije završene stvari."></textarea>
+        </label>
+        <label>Šta je išlo dobro? <span class="muted">(opciono)</span>
+          <textarea name="positive" rows="3" maxlength="800" placeholder="Rezultat, pohvala ili napredak."></textarea>
+        </label>
+        <label>Da li postoji prepreka ili ti treba pomoć? <span class="muted">(opciono)</span>
+          <textarea name="negative" rows="3" maxlength="800" placeholder="Ako nema prepreka, ostavi prazno."></textarea>
+        </label>
+        <div class="modal-actions">
+          <button class="secondary-button" id="dailyReportLater" type="button">Popuni kasnije</button>
+          <button class="primary-button" type="submit">Pošalji lideru</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="leaderReportsDialog" class="daily-report-dialog">
+      <section class="modal-card daily-report-modal">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Novi izveštaji tima</p>
+            <h2>Pročitaj izveštaje zaposlenih</h2>
+          </div>
+          <button id="closeLeaderReportsDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
+        </div>
+        <div id="leaderUnreadReportList" class="setup-list"></div>
+      </section>
+    </dialog>
     <dialog id="lateAckDialog">
       <section class="modal-card late-ack-modal">
         <div class="modal-head">
@@ -414,7 +445,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=73"></script>
+    <script src="employee-portal.js?v=74"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>
