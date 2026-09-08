@@ -4034,8 +4034,7 @@ function buildStructuredSidebar() {
     ["Odmori i kalendar", "employees-absences.html", "leave"],
     ["1:1 sastanci", "employees-recognitions.html", "meetings"],
     ["Učinak i ciljevi", "employees-ratings.html", "performance"],
-    ["Aktivnosti", "employees-goals.html", "activities"],
-    ["Podešavanja", "employees-settings.html", "settings"]
+    ["Aktivnosti", "employees-goals.html", "activities"]
   ];
   const navigation = document.createElement("nav");
   navigation.className = "team-navigation";
