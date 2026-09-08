@@ -4230,8 +4230,8 @@ function setupClientCostAnalysis() {
       const cost = minutes / 60 * hourlyRate(employee);
       const client = clientName(log);
       const key = `${client}::${log.employeeId}`;
-      const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0 };
-      group.minutes += minutes; group.cost += cost; group.entries += 1; groups.set(key, group);
+      const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0, activities: new Set() };
+      group.minutes += minutes; group.cost += cost; group.entries += 1; group.activities.add(log.activityName || "Aktivnost"); groups.set(key, group);
       totalMinutes += minutes; totalCost += cost;
     });
     const rows = [...groups.values()].sort((a,b) => b.cost - a.cost);
@@ -4240,7 +4240,7 @@ function setupClientCostAnalysis() {
     view.querySelector("#clientCostEntries").textContent = logs.length;
     view.querySelector("#clientCostPeople").textContent = new Set(logs.map((item) => item.employeeId)).size;
     view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
-    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span>${row.entries}</span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
+    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span><b>${row.entries} unosa</b><small>${[...row.activities].join(" · ")}</small></span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
   };
   const show = () => {
     document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
@@ -4455,19 +4455,18 @@ hideJsonDownloadAction();
 function renderEmployeeOneOnOneRows() {
   const rows = (state.employeeOneOnOnes || [])
     .filter(selectedEmployeeFilter)
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 8);
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
   const target = document.getElementById("employeeOneOnOneRows");
   if (!target) return;
   target.innerHTML = rows.length
     ? rows
         .map((note) => {
           const employee = employeeById(note.employeeId);
-          return `
-          <div class="setup-item">
-            <strong>1:1</strong>
-            <span>${employee?.name || "Zaposleni"} · ${formatDate(note.date)}<br />${note.title}: ${note.note}</span>
-          </div>`;
+          const blocks = String(note.note || "").split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
+          return `<details class="setup-item one-on-one-card">
+            <summary><strong>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(note.title || "1:1")}</strong><span>${formatDate(note.date)}</span></summary>
+            <div class="one-on-one-answers">${blocks.map((block) => { const lines = block.split("\n").filter(Boolean); return `<div class="one-on-one-answer"><strong>${escapeInvoiceText(lines[0] || "Beleška")}</strong><p>${escapeInvoiceText(lines.slice(1).join("\n") || "Bez upisanog odgovora.").replace(/\n/g, "<br />")}</p></div>`; }).join("")}</div>
+          </details>`;
         })
         .join("")
     : `<div class="empty-state">Nema 1:1 beleški.</div>`;

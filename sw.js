@@ -1,4 +1,4 @@
-const CACHE_NAME = "marketizo-crm-v86";
+const CACHE_NAME = "marketizo-crm-v88";
 const ASSETS = [
   "index.html",
   "client-login.html",
@@ -11,10 +11,10 @@ const ASSETS = [
   "employees-recognitions.html",
   "employees-goals.html",
   "employees-settings.html",
-  "styles.css?v=78",
-  "app.js?v=79",
+  "styles.css?v=79",
+  "app.js?v=80",
   "client-portal.js?v=6",
-  "employee-portal.js?v=67",
+  "employee-portal.js?v=68",
   "remote-state.js?v=7",
   "admin-auth.js?v=4",
   "marketizo-logo.png",
@@ -45,6 +45,13 @@ self.addEventListener("fetch", (event) => {
 
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
+
+  // Application data must always come from the server. Caching API responses
+  // can make an installed PWA appear stale while an incognito tab looks current.
+  if (requestUrl.pathname.startsWith("/api/")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
 
   if (event.request.mode === "navigate" || event.request.destination === "script" || event.request.destination === "style") {
     event.respondWith(

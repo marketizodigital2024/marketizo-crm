@@ -150,15 +150,11 @@ module.exports = async function handler(req, res) {
     const now = new Date();
     const vienna = viennaTime(now);
     const date = `${vienna.year}-${vienna.month}-${vienna.day}`;
-    const isPrimaryRun = vienna.hour === "17" && vienna.minute === "30";
     const isFallbackRun = vienna.hour === "18" && vienna.minute === "30";
-    const isForcedRun = String(req.query?.force || "") === "1";
 
-    if (!isForcedRun && !isPrimaryRun && !isFallbackRun) {
-      return send(res, 200, { ok: true, skipped: true, reason: "Outside the Vienna backup window", viennaTime: `${vienna.hour}:${vienna.minute}` });
-    }
-
-    if (!isForcedRun && isFallbackRun) {
+    // Authentication is the safety boundary. An authorized invocation should
+    // always make a backup, including a delayed cron or Vercel's manual Run.
+    if (isFallbackRun) {
       const existing = await listBlobBackups();
       const todayPath = `${BLOB_PREFIX}${date}.json`;
       if (existing.configured && existing.blobs.some((item) => item.pathname === todayPath)) {

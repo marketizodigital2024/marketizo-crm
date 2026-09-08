@@ -4133,3 +4133,10 @@ body.employee-editor-open {
 .invoice-payment-history div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 8px; background: rgba(20, 53, 85, 0.06); font-size: 12px; }
 .invoice-payment-history button { border: 0; background: transparent; color: var(--danger); cursor: pointer; }
 @media (max-width: 900px) { .invoice-payment-form { grid-template-columns: 1fr 1fr; } .invoice-payment-form label:last-of-type { grid-column: 1 / -1; } }
+.one-on-one-card { display: block; }
+.one-on-one-card summary { cursor: pointer; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.one-on-one-answers { display: grid; gap: 12px; margin-top: 14px; }
+.one-on-one-answer { padding: 12px; border-radius: 12px; background: var(--surface-soft, #f6f7f9); }
+.one-on-one-answer p { margin: 6px 0 0; white-space: normal; line-height: 1.55; }
+.employee-goal-progress { display: grid; grid-template-columns: minmax(120px, 1fr) auto auto; gap: 10px; align-items: center; width: 100%; }
+.client-cost-table-row small { display: block; margin-top: 4px; line-height: 1.4; }

@@ -266,6 +266,22 @@ function parseNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function escapePortalText(value) {
+  return String(value || "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
+}
+
+function oneOnOneContent(note) {
+  const blocks = String(note || "").split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
+  return `<div class="one-on-one-answers">${blocks.map((block) => {
+    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+    const question = lines[0] || "Beleška";
+    const answer = lines.slice(1).join("\n") || "Bez upisanog odgovora.";
+    return `<div class="one-on-one-answer"><strong>${escapePortalText(question)}</strong><p>${escapePortalText(answer).replace(/\n/g, "<br />")}</p></div>`;
+  }).join("")}</div>`;
+}
+
 function normalizedActivitySearch(value) {
   return String(value || "")
     .normalize("NFD")
@@ -1241,10 +1257,10 @@ function renderPortalGoals() {
             ? `Završeno ${formatDate(goal.completedDate)}`
             : isLate ? `Kasni ${Math.abs(daysLeft)} dana` : isNear ? `Rok za ${daysLeft} dana` : `Rok ${formatDate(goal.endDate)}`;
           return `
-          <div class="setup-item alert-item ${status} goal-progress-row">
+          <div class="setup-item alert-item ${status} goal-progress-row" data-employee-goal-id="${goal.id}">
             <strong>${goal.progress || 0}%</strong>
             <span>${goal.category || "Razvoj"} · ${goal.title}<br />${goal.target || ""} · ${deadline}</span>
-            ${goal.status !== "Završeno" ? `<button class="secondary-button goal-complete-button" data-complete-goal="${goal.id}" type="button">Označi završeno</button>` : ""}
+            <div class="employee-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapePortalText(goal.title)}" /><output>${goal.progress || 0}%</output><button class="secondary-button" type="button">Sačuvaj progres</button></div>
           </div>`;
         })
         .join("")
@@ -1312,10 +1328,10 @@ function renderPortalOneOnOnes() {
     ? notes
         .map(
           (note) => `
-          <div class="setup-item">
-            <strong>1:1</strong>
-            <span>${note.title} · ${formatDate(note.date)}<br />${note.note}</span>
-          </div>`
+          <details class="setup-item one-on-one-card">
+            <summary><strong>${escapePortalText(note.title || "1:1")}</strong><span>${formatDate(note.date)}</span></summary>
+            ${oneOnOneContent(note.note)}
+          </details>`
         )
         .join("")
     : `<div class="empty-state">Nema 1:1 beleški.</div>`;
@@ -1420,7 +1436,7 @@ function renderLeaderPanel() {
           return `
           <div class="setup-item activity-log-row">
             <strong>${formatNumber(minutes)} min</strong>
-            <span>${employee?.name || "Zaposleni"} · ${log.activityName || "Aktivnost"}<br />${formatDate(log.date)}${log.note ? ` · ${log.note}` : ""}</span>
+            <span>${employee?.name || "Zaposleni"} · ${log.activityName || "Aktivnost"}<br /><b>Klijent: ${log.clientName || "Bez klijenta"}</b> · ${formatDate(log.date)}${log.note ? ` · ${log.note}` : ""}</span>
           </div>`;
         })
         .join("")
@@ -1775,16 +1791,29 @@ document.querySelectorAll("[data-dashboard-section-button]").forEach((button) =>
   });
 });
 
-document.getElementById("portalGoalList")?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-complete-goal]");
-  if (!button) return;
-  const goal = (state.employeeGoals || []).find((item) => item.id === button.dataset.completeGoal && item.employeeId === activeEmployee.id);
+document.getElementById("portalGoalList")?.addEventListener("input", (event) => {
+  const row = event.target.closest("[data-employee-goal-id]");
+  if (!row || event.target.type !== "range") return;
+  row.querySelector("output").textContent = `${event.target.value}%`;
+});
+
+document.getElementById("portalGoalList")?.addEventListener("click", async (event) => {
+  const row = event.target.closest("[data-employee-goal-id]");
+  if (!row || event.target.tagName !== "BUTTON") return;
+  const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.employeeGoalId && item.employeeId === activeEmployee.id);
   if (!goal) return;
-  goal.status = "Završeno";
-  goal.progress = 100;
-  goal.completedDate = currentDateKey();
-  saveState();
+  const previous = { progress: goal.progress, status: goal.status, completedDate: goal.completedDate };
+  goal.progress = Number(row.querySelector('input[type="range"]').value);
+  goal.status = goal.progress >= 100 ? "Završeno" : "U toku";
+  goal.completedDate = goal.progress >= 100 ? (goal.completedDate || currentDateKey()) : "";
+  const result = await saveState();
+  if (!result?.ok) {
+    Object.assign(goal, previous);
+    renderEmployeePortal();
+    return showToast("Nije sačuvano", result?.error || "Online baza nije potvrdila progres.", "danger");
+  }
   renderEmployeePortal();
+  showToast("Progres sačuvan", `${goal.title}: ${goal.progress}%`, "ok");
 });
 
 window.addEventListener("storage", (event) => {
