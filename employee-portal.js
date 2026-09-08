@@ -1280,7 +1280,7 @@ function renderPortalGoals() {
     .filter((goal) => goal.status !== "Završeno")
     .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))[0];
   setText("portalFeaturedGoalTitle", featured?.title || "Nema aktivnog cilja");
-  setText("portalFeaturedGoalTarget", featured?.target || "Admin može da doda razvojni cilj.");
+  setText("portalFeaturedGoalTarget", featured?.target || "Admin ili tvoj lider mogu da dodaju razvojni cilj.");
   setText("portalFeaturedGoalDeadline", featured ? formatDate(featured.endDate) : "-");
   const featuredProgress = document.getElementById("portalFeaturedGoalProgress");
   if (featuredProgress) featuredProgress.style.width = `${Math.min(100, Math.max(0, Number(featured?.progress || 0)))}%`;
