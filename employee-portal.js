@@ -1436,6 +1436,30 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema zaposlenih ispod ovog lidera.</div>`;
   const teamIds = new Set(team.map((employee) => employee.id));
+  const leaderGoalEmployee = document.getElementById("leaderGoalEmployee");
+  if (leaderGoalEmployee) {
+    const selectedEmployeeId = leaderGoalEmployee.value;
+    leaderGoalEmployee.innerHTML = `<option value="">Izaberi zaposlenog</option>${team.map((employee) => `<option value="${employee.id}">${escapePortalText(employee.name)}</option>`).join("")}`;
+    if (teamIds.has(selectedEmployeeId)) leaderGoalEmployee.value = selectedEmployeeId;
+  }
+  const leaderGoalForm = document.getElementById("leaderGoalForm");
+  if (leaderGoalForm) {
+    const startDate = leaderGoalForm.elements.startDate;
+    const endDate = leaderGoalForm.elements.endDate;
+    if (startDate && !startDate.value) startDate.value = currentDateKey();
+    if (endDate && !endDate.value) endDate.value = currentDateKey();
+  }
+  const teamGoals = (state.employeeGoals || [])
+    .filter((goal) => teamIds.has(goal.employeeId))
+    .sort((a, b) => String(b.endDate || "").localeCompare(String(a.endDate || "")));
+  setText("leaderGoalsCount", `${teamGoals.length} ciljeva`);
+  document.getElementById("leaderGoalsList").innerHTML = teamGoals.length
+    ? teamGoals.map((goal) => {
+        const employee = (state.employees || []).find((item) => item.id === goal.employeeId);
+        const progress = Math.max(0, Math.min(100, Number(goal.progress || 0)));
+        return `<div class="setup-item leader-goal-card"><strong>${progress}%</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${escapePortalText(goal.title || "Cilj")}</b><br />${escapePortalText(goal.target || "Bez dodatnog opisa")} · rok ${formatDate(goal.endDate)}<div class="leader-goal-progress"><div class="progress-track"><span style="width:${progress}%"></span></div><b>${escapePortalText(goal.status || "U toku")}</b></div></span></div>`;
+      }).join("")
+    : `<div class="empty-state">Zaposleni ispod tebe trenutno nemaju ciljeve.</div>`;
   const activityDateFilter = document.getElementById("leaderActivityDateFilter");
   if (activityDateFilter?.value && !activityDateFilter.value.startsWith(portalMonth)) activityDateFilter.value = "";
   const selectedActivityDate = activityDateFilter?.value || "";
@@ -1628,6 +1652,67 @@ document.getElementById("leaderActivityDateReset")?.addEventListener("click", ()
   const dateFilter = document.getElementById("leaderActivityDateFilter");
   if (dateFilter) dateFilter.value = "";
   renderLeaderPanel();
+});
+
+document.getElementById("leaderGoalForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const employeeId = String(formData.get("employeeId") || "");
+  if (!leaderTeam().some((employee) => employee.id === employeeId)) {
+    showToast("Cilj nije dodat", "Možeš dodati cilj samo zaposlenom koji je dodeljen tebi.", "danger");
+    return;
+  }
+  const startDate = String(formData.get("startDate") || "");
+  const endDate = String(formData.get("endDate") || "");
+  if (startDate > endDate) {
+    showToast("Proveri datume", "Početni datum ne može biti posle krajnjeg datuma.", "warn");
+    return;
+  }
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Čuvanje...";
+  }
+  let result = { ok: false, error: "Online čuvanje nije uspelo." };
+  try {
+    const response = await fetch("/api/leader-goal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionToken: getEmployeeSession()?.token || "",
+        leaderId: activeEmployee.id,
+        employeeId,
+        category: String(formData.get("category") || "Razvoj"),
+        title: String(formData.get("title") || "").trim(),
+        target: String(formData.get("target") || "").trim(),
+        startDate,
+        endDate,
+      }),
+    });
+    result = await response.json().catch(() => ({}));
+    result.ok = response.ok && result.ok;
+  } catch (error) {
+    result = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
+  }
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Dodaj cilj zaposlenom";
+  }
+  if (!result.ok) {
+    showToast("Cilj nije dodat", result.error || "Pokušaj ponovo.", "danger");
+    return;
+  }
+  state.employeeGoals = (state.employeeGoals || []).filter((goal) => goal.id !== result.goal.id);
+  state.employeeGoals.unshift(result.goal);
+  if (result.notification) {
+    state.notifications = (state.notifications || []).filter((notification) => notification.id !== result.notification.id);
+    state.notifications.unshift(result.notification);
+  }
+  saveState({ remote: false });
+  form.reset();
+  renderEmployeePortal();
+  showToast("Cilj dodat", "Zaposleni ga sada vidi i može da ažurira procenat.", "ok");
 });
 
 document.getElementById("portalActivitySearch")?.addEventListener("focus", () => {

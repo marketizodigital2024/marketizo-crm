@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=84" />
+    <link rel="stylesheet" href="styles.css?v=85" />
     <style>html.employee-session-cached #employeeLoginScreen { display: none !important; }</style>
     <script>
       try {
@@ -257,6 +257,29 @@
                 <h3>Vreme tima</h3>
                 <div class="setup-list" id="leaderTeamHoursList"></div>
               </section>
+              <section class="span-2 leader-goals-section">
+                <div class="panel-head">
+                  <div>
+                    <h3>Ciljevi tima</h3>
+                    <p class="muted">Dodaj cilj samo zaposlenima koji su dodeljeni tebi.</p>
+                  </div>
+                  <span id="leaderGoalsCount">0 ciljeva</span>
+                </div>
+                <form id="leaderGoalForm" class="admin-form leader-goal-form">
+                  <div class="form-grid">
+                    <label>Zaposleni<select name="employeeId" id="leaderGoalEmployee" required></select></label>
+                    <label>Oblast razvoja
+                      <select name="category"><option>Stručne veštine</option><option>Komunikacija</option><option>Organizacija</option><option>Samostalnost</option><option>Liderstvo</option><option>Drugo</option></select>
+                    </label>
+                    <label>Od datuma<input name="startDate" type="date" required /></label>
+                    <label>Do datuma<input name="endDate" type="date" required /></label>
+                    <label class="span-2">Naziv cilja<input name="title" maxlength="160" required placeholder="npr. Samostalno vođenje 5 klijenata" /></label>
+                    <label class="span-2">Opis cilja<textarea name="target" rows="3" maxlength="1200" placeholder="Šta tačno zaposleni treba da postigne?"></textarea></label>
+                  </div>
+                  <div class="admin-submit"><button class="primary-button" type="submit">Dodaj cilj zaposlenom</button></div>
+                </form>
+                <div class="setup-list leader-goals-list" id="leaderGoalsList"></div>
+              </section>
               <section class="span-2">
                 <h3>Upisane aktivnosti tima</h3>
                 <p class="muted">Prvo izaberi mesec gore, a zatim po potrebi konkretan dan.</p>
@@ -445,7 +468,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=75"></script>
+    <script src="employee-portal.js?v=76"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

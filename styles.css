@@ -4174,3 +4174,9 @@ body.employee-editor-open {
 .daily-report-modal textarea { width: 100%; resize: vertical; }
 .leader-report-card span { min-width: 0; }
 .leader-report-card button { margin-top: 10px; }
+.leader-goals-section { display: grid; gap: 16px; }
+.leader-goal-form { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+.leader-goals-list { margin-top: 2px; }
+.leader-goal-card > span { min-width: 0; }
+.leader-goal-progress { display: grid; grid-template-columns: minmax(100px, 1fr) auto; gap: 10px; align-items: center; margin-top: 8px; }
+.leader-goal-progress .progress-track { margin: 0; }
