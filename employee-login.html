@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=81" />
+    <link rel="stylesheet" href="styles.css?v=82" />
     <style>html.employee-session-cached #employeeLoginScreen { display: none !important; }</style>
     <script>
       try {
@@ -340,6 +340,12 @@
                 <h2>Moji sati</h2>
                 <span id="portalHoursCount">0 unosa</span>
               </div>
+              <div class="portal-hours-filter">
+                <label>Prikaži aktivnosti za datum
+                  <input id="portalHoursDateFilter" type="date" />
+                </label>
+                <button id="portalHoursDateReset" class="secondary-button" type="button">Ceo mesec</button>
+              </div>
               <div class="work-log-list" id="portalHoursRows"></div>
             </section>
           </div>
@@ -401,7 +407,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=70"></script>
+    <script src="employee-portal.js?v=71"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

@@ -1113,7 +1113,10 @@ function renderPortalTeamTimeline() {
 }
 
 function renderPortalHourRows(logs) {
-  const rows = logs
+  const selectedDate = document.getElementById("portalHoursDateFilter")?.value || "";
+  const visibleLogs = selectedDate ? logs.filter((log) => log.date === selectedDate) : logs;
+  const totalMinutes = visibleLogs.reduce((sum, log) => sum + Number(log.minutes || Math.round(Number(log.hours || 0) * 60)), 0);
+  const rows = visibleLogs
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(
       (log) => `
@@ -1133,8 +1136,8 @@ function renderPortalHourRows(logs) {
         </div>
       </article>`
     );
-  setText("portalHoursCount", `${rows.length} unosa`);
-  document.getElementById("portalHoursRows").innerHTML = rows.join("") || `<div class="empty-state">Još nema unetih sati za ovaj mesec.</div>`;
+  setText("portalHoursCount", `${rows.length} unosa · ${formatHours(totalMinutes / 60)}h`);
+  document.getElementById("portalHoursRows").innerHTML = rows.join("") || `<div class="empty-state">${selectedDate ? "Nema upisanih aktivnosti za izabrani datum." : "Još nema unetih sati za ovaj mesec."}</div>`;
 }
 
 function renderPortalAbsences() {
@@ -1538,7 +1541,19 @@ document.querySelectorAll("[data-employee-tab]").forEach((button) => {
 
 document.getElementById("employeePortalMonth")?.addEventListener("input", (event) => {
   portalMonth = event.target.value || currentMonthKey();
+  const dateFilter = document.getElementById("portalHoursDateFilter");
+  if (dateFilter?.value && !dateFilter.value.startsWith(portalMonth)) dateFilter.value = "";
   renderEmployeePortal();
+});
+
+document.getElementById("portalHoursDateFilter")?.addEventListener("input", () => {
+  renderPortalHourRows(employeeWorkLogs(portalMonth));
+});
+
+document.getElementById("portalHoursDateReset")?.addEventListener("click", () => {
+  const dateFilter = document.getElementById("portalHoursDateFilter");
+  if (dateFilter) dateFilter.value = "";
+  renderPortalHourRows(employeeWorkLogs(portalMonth));
 });
 
 document.getElementById("portalActivitySearch")?.addEventListener("focus", () => {
