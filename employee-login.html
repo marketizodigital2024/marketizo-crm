@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=82" />
+    <link rel="stylesheet" href="styles.css?v=83" />
     <style>html.employee-session-cached #employeeLoginScreen { display: none !important; }</style>
     <script>
       try {
@@ -259,7 +259,14 @@
               </section>
               <section class="span-2">
                 <h3>Upisane aktivnosti tima</h3>
-                <p class="muted">Detaljan pregled aktivnosti i minuta za izabrani mesec.</p>
+                <p class="muted">Prvo izaberi mesec gore, a zatim po potrebi konkretan dan.</p>
+                <div class="leader-activity-filter">
+                  <label>Dan u izabranom mesecu
+                    <input id="leaderActivityDateFilter" type="date" />
+                  </label>
+                  <button id="leaderActivityDateReset" class="secondary-button" type="button">Ceo mesec</button>
+                  <strong id="leaderActivitySummary">0 aktivnosti</strong>
+                </div>
                 <div class="setup-list" id="leaderActivityLogList"></div>
               </section>
               <section>
@@ -407,7 +414,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=7"></script>
-    <script src="employee-portal.js?v=72"></script>
+    <script src="employee-portal.js?v=73"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

@@ -1427,9 +1427,17 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema zaposlenih ispod ovog lidera.</div>`;
   const teamIds = new Set(team.map((employee) => employee.id));
-  const teamLogs = (state.employeeWorkLogs || [])
+  const activityDateFilter = document.getElementById("leaderActivityDateFilter");
+  if (activityDateFilter?.value && !activityDateFilter.value.startsWith(portalMonth)) activityDateFilter.value = "";
+  const selectedActivityDate = activityDateFilter?.value || "";
+  const monthTeamLogs = (state.employeeWorkLogs || [])
     .filter((log) => teamIds.has(log.employeeId) && String(log.date || "").startsWith(portalMonth))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const teamLogs = selectedActivityDate
+    ? monthTeamLogs.filter((log) => log.date === selectedActivityDate)
+    : monthTeamLogs;
+  const teamLogMinutes = teamLogs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+  setText("leaderActivitySummary", `${teamLogs.length} aktivnosti · ${formatHours(teamLogMinutes / 60)}h`);
   document.getElementById("leaderActivityLogList").innerHTML = teamLogs.length
     ? teamLogs
         .map((log) => {
@@ -1442,7 +1450,7 @@ function renderLeaderPanel() {
           </div>`;
         })
         .join("")
-    : `<div class="empty-state">Nema upisanih aktivnosti za izabrani mesec.</div>`;
+    : `<div class="empty-state">Nema upisanih aktivnosti za ${selectedActivityDate ? "izabrani dan" : "izabrani mesec"}.</div>`;
   const absences = (state.employeeAbsences || [])
     .filter((absence) => teamIds.has(absence.employeeId) && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)))
     .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
@@ -1555,6 +1563,16 @@ document.getElementById("portalHoursDateReset")?.addEventListener("click", () =>
   renderPortalHourRows(employeeWorkLogs(portalMonth));
 });
 
+document.getElementById("leaderActivityDateFilter")?.addEventListener("input", () => {
+  renderLeaderPanel();
+});
+
+document.getElementById("leaderActivityDateReset")?.addEventListener("click", () => {
+  const dateFilter = document.getElementById("leaderActivityDateFilter");
+  if (dateFilter) dateFilter.value = "";
+  renderLeaderPanel();
+});
+
 document.getElementById("portalActivitySearch")?.addEventListener("focus", () => {
   renderPortalActivityOptions();
   setPortalActivityOptionsOpen(true);
@@ -1584,6 +1602,36 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".activity-combobox")) setPortalActivityOptionsOpen(false);
 });
 
+function clearPortalHoursForm(form) {
+  form.reset();
+  ["date", "minutes", "note", "positive", "negative", "clientId"].forEach((fieldName) => {
+    const field = form.elements[fieldName];
+    if (field) field.value = "";
+  });
+  const activitySearch = document.getElementById("portalActivitySearch");
+  if (activitySearch) activitySearch.value = "";
+  const activityIdInput = document.getElementById("portalActivityId");
+  if (activityIdInput) {
+    activityIdInput.value = "";
+    activityIdInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  setPortalActivityOptionsOpen(false);
+}
+
+function restorePortalHoursForm(form, values) {
+  ["date", "minutes", "note", "positive", "negative", "clientId"].forEach((fieldName) => {
+    const field = form.elements[fieldName];
+    if (field) field.value = values[fieldName] || "";
+  });
+  const activitySearch = document.getElementById("portalActivitySearch");
+  if (activitySearch) activitySearch.value = values.activityName || "";
+  const activityIdInput = document.getElementById("portalActivityId");
+  if (activityIdInput) {
+    activityIdInput.value = values.activityId || "";
+    activityIdInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
 document.getElementById("portalHoursForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1601,6 +1649,16 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     alert("Izaberi klijenta za kog si radio/la ovu aktivnost.");
     return;
   }
+  const submittedFormValues = {
+    date,
+    activityId: activity.id,
+    activityName: activity.name,
+    clientId: client?.id || "",
+    minutes: String(formData.get("minutes") || ""),
+    note: String(formData.get("note") || ""),
+    positive: String(formData.get("positive") || ""),
+    negative: String(formData.get("negative") || ""),
+  };
   const previousState = structuredClone(state);
   const employeeId = activeEmployee.id;
   const submitButton = form.querySelector('button[type="submit"]');
@@ -1608,6 +1666,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     submitButton.disabled = true;
     submitButton.textContent = "Čuvanje...";
   }
+  clearPortalHoursForm(form);
   const workLog = {
     id: crypto.randomUUID(),
     employeeId: activeEmployee.id,
@@ -1668,28 +1727,13 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     activeEmployee = (state.employees || []).find((employee) => employee.id === employeeId) || activeEmployee;
     saveState({ remote: false });
     renderEmployeePortal();
+    restorePortalHoursForm(form, submittedFormValues);
     showToast("Nije sačuvano", saveResult?.error || "Online baza nije potvrdila upis. Pokušaj ponovo.", "danger");
     return;
   }
   saveState({ remote: false });
-  form.reset();
-  form.elements.date.value = "";
-  form.elements.minutes.value = "";
-  ["note", "positive", "negative"].forEach((fieldName) => {
-    const field = form.elements[fieldName];
-    if (field) field.value = "";
-  });
-  const clientSelect = form.elements.clientId;
-  if (clientSelect) clientSelect.value = "";
-  const activitySearch = document.getElementById("portalActivitySearch");
-  if (activitySearch) activitySearch.value = "";
-  const activityIdInput = document.getElementById("portalActivityId");
-  if (activityIdInput) {
-    activityIdInput.value = "";
-    activityIdInput.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-  setPortalActivityOptionsOpen(false);
   renderEmployeePortal();
+  clearPortalHoursForm(form);
   showToast("Sačuvano", "Sati i dnevni izveštaj su sačuvani.", "ok");
 });
 
