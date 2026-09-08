@@ -1841,7 +1841,6 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     locked: true,
     submittedAt: new Date().toISOString(),
   };
-  state.employeeWorkLogs.unshift(workLog);
   const recipientId = reportRecipientId();
   let saveResult = { ok: false, error: "Online čuvanje nije uspelo." };
   try {
@@ -1868,8 +1867,12 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     showToast("Nije sačuvano", saveResult?.error || "Online baza nije potvrdila upis. Pokušaj ponovo.", "danger");
     return;
   }
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
+  state.employeeWorkLogs.unshift(workLog);
   saveState({ remote: false });
-  renderEmployeePortal();
+  renderPortalHourRows(employeeWorkLogs(portalMonth));
+  renderPortalCalendar();
+  window.refreshDailyMinuteProgress?.();
   clearPortalHoursForm(form);
   showToast("Sačuvano", "Sati su sačuvani.", "ok");
   const expectedMinutes = expectedMinutesForDate(activeEmployee, date);
