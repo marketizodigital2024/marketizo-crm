@@ -4242,7 +4242,8 @@ function setupClientCostAnalysis() {
     view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
     view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span><b>${row.entries} unosa</b><small>${[...row.activities].join(" · ")}</small></span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
   };
-  const show = () => {
+  const show = (event) => {
+    event?.stopImmediatePropagation();
     document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
     document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.remove("active"));
     view.classList.add("active"); button.classList.add("active");
@@ -4264,6 +4265,59 @@ function setupClientCostAnalysis() {
 }
 
 setupClientCostAnalysis();
+
+const oneOnOneQuestions = [
+  "Kako si generalno od prošlog 1:1 – u glavi i energiji?",
+  "Da li se nešto privatno dešavalo što utiče na tvoj fokus ili rad?",
+  "Kako je sa klijentima?",
+  "Da li ima nešto što treba da znam kako bismo lakše isplanirali narednih 30 dana?",
+  "Šta ti trenutno najviše uzima energiju u poslu, a ne daje rezultat?",
+  "Šta ti je u poslednjih 30 dana išlo najbolje i zašto?",
+  "Gde najčešće kasnimo ili grešimo i zbog čega se to ponavlja?",
+  "Da možeš jednu stvar da ukloniš iz svog posla – šta bi to bilo?",
+  "Da li su ti očekivanja, rokovi i prioriteti uvek jasni?",
+  "Šta bi pojednostavio ili automatizovao odmah da možeš?",
+  "Gde misliš da trenutno ne daješ maksimum i šta ti tu konkretno fali i šta ćemo da uradimo po tom pitanju?",
+  "Kako ocenjuješ komunikaciju u timu (1–10) i šta bi je podiglo za +2?",
+  "Da li vidiš sebe ovde za 6–12 meseci i u kojoj ulozi?",
+  "Šta ja mogu da radim drugačije da bi ti radio brže, lakše i kvalitetnije?",
+  "Koja je jedna konkretna stvar koju menjamo do sledećeg 1:1?",
+];
+
+function setupStructuredOneOnOneForm() {
+  const form = document.getElementById("employeeOneOnOneForm");
+  if (!form || form.dataset.structuredReady) return;
+  form.dataset.structuredReady = "true";
+  const grid = form.querySelector(".form-grid");
+  const employeeField = form.querySelector("#oneOnOneEmployeeSelect")?.closest("label");
+  const dateField = form.querySelector('input[name="date"]')?.closest("label");
+  const titleField = form.querySelector('input[name="title"]')?.closest("label");
+  const noteField = form.querySelector('textarea[name="note"]')?.closest("label");
+  if (!grid || !employeeField || !dateField || !titleField || !noteField) return;
+  titleField.hidden = true;
+  titleField.querySelector("input").required = false;
+  noteField.remove();
+  grid.prepend(dateField, employeeField);
+  const questions = document.createElement("section");
+  questions.className = "one-on-one-questionnaire span-2";
+  questions.innerHTML = `<h3>Pitanja za 1:1</h3><p>Otvori pitanje i upiši odgovor.</p>${oneOnOneQuestions.map((question, index) => `<details class="one-on-one-question" ${index === 0 ? "open" : ""}><summary><span>${index + 1}.</span>${escapeInvoiceText(question)}</summary><label>Odgovor<textarea name="oneOnOneAnswer${index}" rows="4" required placeholder="Upiši odgovor..."></textarea></label></details>`).join("")}`;
+  grid.append(questions, titleField);
+
+  const history = document.getElementById("employeeOneOnOneRows");
+  if (history) {
+    const historyBlock = document.createElement("section");
+    historyBlock.className = "one-on-one-history span-2";
+    historyBlock.innerHTML = "<h3>Prethodne 1:1 beleške</h3><p>Izaberi zaposlenog iznad, zatim otvori sastanak po datumu.</p>";
+    historyBlock.append(history);
+    form.insertAdjacentElement("afterend", historyBlock);
+  }
+  form.querySelector("#oneOnOneEmployeeSelect")?.addEventListener("change", (event) => {
+    selectedEmployeeId = event.target.value;
+    renderEmployeeOneOnOneRows();
+  });
+}
+
+setupStructuredOneOnOneForm();
 
 function setupEmployeeActivityCategories() {
   const form = document.getElementById("employeeActivityForm");
@@ -5585,12 +5639,14 @@ document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", (eve
     alert("Izaberi zaposlenog za ovaj unos.");
     return;
   }
+  const date = String(formData.get("date") || currentDateKey());
+  const structuredAnswers = oneOnOneQuestions.map((question, index) => ({ question, answer: String(formData.get(`oneOnOneAnswer${index}`) || "").trim() }));
   const note = {
     id: crypto.randomUUID(),
     employeeId,
-    date: formData.get("date"),
-    title: formData.get("title"),
-    note: formData.get("note"),
+    date,
+    title: `1:1 · ${formatDate(date)}`,
+    note: structuredAnswers.map(({ question, answer }) => `${question}\n${answer}`).join("\n\n"),
     createdBy: "Admin",
     visibleToEmployee: true,
   };

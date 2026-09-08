@@ -1572,7 +1572,8 @@ document.addEventListener("click", (event) => {
 
 document.getElementById("portalHoursForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
   const date = String(formData.get("date") || "");
   const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
   const client = (state.clients || []).find((item) => item.id === formData.get("clientId"));
@@ -1588,7 +1589,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   }
   const previousState = structuredClone(state);
   const employeeId = activeEmployee.id;
-  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  const submitButton = form.querySelector('button[type="submit"]');
   if (submitButton) {
     submitButton.disabled = true;
     submitButton.textContent = "Čuvanje...";
@@ -1657,14 +1658,14 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     return;
   }
   saveState({ remote: false });
-  event.currentTarget.reset();
-  event.currentTarget.elements.date.value = currentDateKey();
-  event.currentTarget.elements.minutes.value = 60;
+  form.reset();
+  form.elements.date.value = currentDateKey();
+  form.elements.minutes.value = 60;
   ["note", "positive", "negative"].forEach((fieldName) => {
-    const field = event.currentTarget.elements[fieldName];
+    const field = form.elements[fieldName];
     if (field) field.value = "";
   });
-  const clientSelect = event.currentTarget.elements.clientId;
+  const clientSelect = form.elements.clientId;
   if (clientSelect) clientSelect.value = "";
   const activitySearch = document.getElementById("portalActivitySearch");
   if (activitySearch) activitySearch.value = "";
