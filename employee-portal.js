@@ -1644,10 +1644,20 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   event.currentTarget.reset();
   event.currentTarget.elements.date.value = currentDateKey();
   event.currentTarget.elements.minutes.value = 60;
+  ["note", "positive", "negative"].forEach((fieldName) => {
+    const field = event.currentTarget.elements[fieldName];
+    if (field) field.value = "";
+  });
+  const clientSelect = event.currentTarget.elements.clientId;
+  if (clientSelect) clientSelect.value = "";
   const activitySearch = document.getElementById("portalActivitySearch");
   if (activitySearch) activitySearch.value = "";
   const activityIdInput = document.getElementById("portalActivityId");
-  if (activityIdInput) activityIdInput.value = "";
+  if (activityIdInput) {
+    activityIdInput.value = "";
+    activityIdInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  setPortalActivityOptionsOpen(false);
   renderEmployeePortal();
   showToast("Sačuvano", "Sati i dnevni izveštaj su sačuvani.", "ok");
 });
