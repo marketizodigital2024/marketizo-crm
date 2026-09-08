@@ -983,7 +983,6 @@ function renderEmployeePortal() {
   renderPortalLateRecords();
   renderPortalCompanyPlan();
   renderLeaderPanel();
-  renderLateAcknowledgement();
   showEmployeeNotificationPopups();
   window.refreshDailyMinuteProgress?.();
 }
