@@ -4369,6 +4369,11 @@ function setupEmployeeHourDeduction() {
   if (!workPanel || document.getElementById("employeeHourDeductionForm")) return;
   const panel = document.createElement("section");
   panel.className = "panel employee-work-panel hour-deduction-panel";
+  panel.dataset.workEntrySubsection = "hours";
+  const activeWorkEntrySubsection = location.hash.startsWith("#work/")
+    ? location.hash.split("/")[1]
+    : "hours";
+  panel.classList.toggle("work-entry-subsection-hidden", activeWorkEntrySubsection !== "hours");
   panel.innerHTML = `
     <div class="panel-head">
       <div><p class="eyebrow">Korekcija salda</p><h2>Oduzmi minute</h2></div>
