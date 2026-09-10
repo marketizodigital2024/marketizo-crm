@@ -19,10 +19,13 @@ for (const name of required) {
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: Number(process.env.OPENAI_TIMEOUT_MS || 45000),
+  timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000),
   maxRetries: Number(process.env.OPENAI_MAX_RETRIES || 2)
 });
-const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const routineModel = process.env.OPENAI_ROUTINE_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
+const smartModel = process.env.OPENAI_SMART_MODEL || "gpt-6-astra";
+const model = smartModel;
+const reasoningEffort = process.env.OPENAI_REASONING_EFFORT || "max";
 const alertTo = process.env.ALERT_TO;
 const alertNumber = alertTo.split("@")[0].replace(/\D/g, "");
 const whatsappPhoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || "").replace(/\D/g, "");
@@ -36,7 +39,14 @@ const whatsappOperationTimeoutMs = Number(process.env.WHATSAPP_OPERATION_TIMEOUT
 const whatsappProtocolTimeoutMs = Number(process.env.WHATSAPP_PROTOCOL_TIMEOUT_MS || 120000);
 const whatsappHealthIntervalMs = Number(process.env.WHATSAPP_HEALTH_INTERVAL_MS || 300000);
 const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LIMIT || 2);
-const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-10-recovery-1";
+const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-10-hybrid-1";
+const hybridTrialStartedAt = process.env.HYBRID_TRIAL_STARTED_AT || "2026-09-10";
+
+function reasoningOptions() {
+  return String(model).startsWith("gpt-6")
+    ? { reasoning_effort: reasoningEffort }
+    : { temperature: 0 };
+}
 const stateDirectory = process.env.WWEBJS_AUTH_PATH
   ? path.dirname(process.env.WWEBJS_AUTH_PATH)
   : process.cwd();
@@ -62,7 +72,7 @@ const commitmentTimers = new Map();
 const awaitingClientByGroup = new Map();
 const clientWaitTimers = new Map();
 const teamAcknowledgedMessageIds = new Set();
-let dailyState = { lastReportDate: "", lastReportVersion: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
+let dailyState = { lastReportDate: "", lastReportVersion: "", lastMorningDate: "", lastWeeklyDate: "", events: [], modelUsage: {} };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
     .split(",")
@@ -94,6 +104,23 @@ let initializationTimer = null;
 let consecutiveHealthFailures = 0;
 let lastHealthCheckAt = 0;
 let fatalExitScheduled = false;
+
+const rawCompletionCreate = openai.chat.completions.create.bind(openai.chat.completions);
+openai.chat.completions.create = async (params, options) => {
+  const response = await rawCompletionCreate(params, options);
+  const usage = response.usage || {};
+  const key = String(params.model || "unknown");
+  const current = dailyState.modelUsage?.[key] || { calls: 0, inputTokens: 0, outputTokens: 0 };
+  dailyState.modelUsage = dailyState.modelUsage || {};
+  dailyState.modelUsage[key] = {
+    calls: current.calls + 1,
+    inputTokens: current.inputTokens + Number(usage.prompt_tokens || 0),
+    outputTokens: current.outputTokens + Number(usage.completion_tokens || 0)
+  };
+  saveDailyState();
+  console.log(`[OPENAI_USAGE] trial=${hybridTrialStartedAt} model=${key} input=${usage.prompt_tokens || 0} output=${usage.completion_tokens || 0}`);
+  return response;
+};
 
 function saveAllState() {
   saveDailyState();
@@ -260,7 +287,7 @@ function loadDailyState() {
     }
   } catch (error) {
     console.error("Daily report state restore failed:", error);
-    dailyState = { lastReportDate: "", lastReportVersion: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
+    dailyState = { lastReportDate: "", lastReportVersion: "", lastMorningDate: "", lastWeeklyDate: "", events: [], modelUsage: {} };
   }
 }
 
@@ -467,12 +494,14 @@ async function answerOwnerQuestion(message) {
   const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
   const response = await openai.chat.completions.create({
     model,
-    temperature: 0,
+    ...reasoningOptions(),
     messages: [
       {
         role: "system",
         content: [
           "Ti si Miljanov privatni, nezavisni poslovni savetnik koji sa strane čita razgovore u Marketizo WhatsApp grupama.",
+          "Razmišljaj kao iskusan direktor agencije: poveži više poruka, promenu tona, ranija obećanja, kvalitet izvršenja, odnose među ljudima, rizik po prihod i reputaciju i posledice po garanciju od 30 leadova.",
+          "Nemoj samo proveravati da li je neko prekršio pravilo. Proceni šta se verovatno stvarno dešava, koliko je ozbiljno, šta je dokaz, šta je samo pretpostavka i koja odluka ima najveću vrednost za Miljana.",
           "Odgovaraj prirodno, direktno i konkretno, kao sposobna osoba koja je pročitala razgovor i napisala Miljanu kratak lični izveštaj — nikada kao generički bot ili automatski šablon.",
           "Koristi isključivo dati kontekst iz WhatsApp grupa koje agent prati.",
           "Prepoznaj naziv grupe i kada je korisnik napisao samo deo naziva ili napravio malu slovnu grešku.",
@@ -551,9 +580,9 @@ async function sendMorningReport() {
   }
   const completion = await openai.chat.completions.create({
     model,
-    temperature: 0,
+    ...reasoningOptions(),
     messages: [
-      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja poznaje tim i pred početak dana izdvaja samo ono na šta treba obratiti pažnju. Počni odmah suštinom, bez pozdrava, markdown naslova, emodžija, generičkog uvoda i fiksnog šablona. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili posle četiri poruke. Ne prijavljuj druge slučajeve u kojima zaposleni čeka klijenta. Piši kao rukovodilac u nekoliko prirodnih pasusa, jasno reci gde Miljan lično treba da reaguje, a gde treba samo odgovorna osoba iz tima. Pre nego što nešto nazoveš problemom proveri recentGroupMessages. Ako je rešeno, napiši situaciju i konkretno rešenje; ako nije, napiši ko treba da preuzme i do kada. Miljanu izdvoji samo ono što traži njegovu odluku ili nosi ozbiljan rizik. Ne izmišljaj činjenice." },
+      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja poznaje tim i izdvaja samo ono važno. Proceni kontekst i poslovnu posledicu, ne popunjavaj proceduralni šablon. Svaku relevantnu grupu prikaži ovako: u posebnom redu *Tačan naziv klijentske grupe*, a ispod jedan kratak ljudski pasus sa stanjem, značenjem i narednim potezom. Zvezdice koristi isključivo kao WhatsApp podebljanje oko imena klijenta; ne koristi markdown liste, druge naslove, emodžije ni rubrike. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili posle četiri poruke. Pre zaključka proveri recentGroupMessages. Ako je rešeno, reci konkretno kako; ako nije, reci ko treba da preuzme i do kada. Miljanu izdvoji samo ono što traži njegovu odluku ili nosi ozbiljan rizik. Ne izmišljaj činjenice." },
       { role: "user", content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
@@ -569,9 +598,9 @@ async function sendWeeklyReport() {
   const snapshot = ownerActionSnapshot();
   const completion = await openai.chat.completions.create({
     model,
-    temperature: 0,
+    ...reasoningOptions(),
     messages: [
-      { role: "system", content: "Napiši Miljanu nedeljni vlasnički izveštaj na srpskom kao iskusan rukovodilac koji je pratio klijentske grupe. Piši prirodno i konkretno, bez botovskog uvoda, emodžija i praznih fraza. Izdvoji ponovljene probleme, ozbiljne rizike, probijene rokove, brzinu reakcije tima, važne pohvale ili rezultate i tri prioriteta za sledeću nedelju. Za svaki problem navedi trenutno stanje: Situacija — rešeno: konkretno rešenje, ili Nerešeno — sledeća akcija, vlasnik i rok. Ne predstavljaj rešenu žalbu kao aktuelan problem. Proveri recentGroupMessages pre zaključka. Miljanu eskaliraj samo odluke, ozbiljan rizik i probleme koje tim nije zatvorio. Nemoj prepričavati rutinsku komunikaciju niti izmišljati činjenice." },
+      { role: "system", content: "Napiši Miljanu nedeljni vlasnički izveštaj na srpskom kao iskusan rukovodilac koji je stvarno pratio klijentske grupe. Proceni obrazac, ton, obećanja i poslovnu posledicu; nemoj mehanički slediti kategorije. Svaku relevantnu grupu prikaži ovako: u posebnom redu *Tačan naziv klijentske grupe*, a ispod kratak ljudski pasus sa zaključkom, trenutnim stanjem i sledećim potezom. Zvezdice koristi isključivo kao WhatsApp podebljanje oko imena klijenta; bez markdown lista, tabela, drugih naslova, emodžija i praznih fraza. Izdvoji ponovljene probleme, ozbiljne rizike, probijene rokove, važne pohvale ili rezultate. Ne predstavljaj rešenu žalbu kao aktuelan problem. Proveri recentGroupMessages pre zaključka. Na kraju dodaj jedan kratak prirodan pasus o najvažnijim prioritetima naredne nedelje samo ako postoje. Miljanu eskaliraj samo odluke, ozbiljan rizik i probleme koje tim nije zatvorio. Ne izmišljaj činjenice." },
       { role: "user", content: JSON.stringify({ endingDate: today, teamMembers: [...teamMemberNames], events: weeklyEvents, unresolvedIssues: snapshot.issues, clientsWaitingForTeam: snapshot.pending, silentClients: snapshot.silentClients, activeCommitments: snapshot.activeCommitments, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
@@ -600,7 +629,7 @@ async function sendDailyReport() {
     .slice(-300);
   const completion = await openai.chat.completions.create({
     model,
-    temperature: 0,
+    ...reasoningOptions(),
     messages: [
       {
         role: "system",
@@ -611,11 +640,12 @@ async function sendDailyReport() {
           "Izdvoji samo: najvažnije događaje; kašnjenja, blokade i obaveze bez vlasnika; nezadovoljstvo ili izuzetnu pohvalu klijenta; rizike za snimanje, scenarije, editovanje, objave, kampanje, budžet, leadove ili garanciju; i odluke koje traže Miljana ili Ivanu.",
           "Posebno istakni direktan zahtev Miljanu ili Ivani, probijen rok, klijenta bez odgovora duže od dva radna sata, konflikt, zahtev za raskid ili povraćaj novca, problem sa kampanjom ili leadovima i slučaj gde se članovi tima međusobno čekaju.",
           "Za svaku važnu tvrdnju navedi grupu, osobu i vreme kada su dostupni. Ne izmišljaj status; ako završetak nije potvrđen napiši 'nije potvrđeno'.",
-          "Organizuj samo rubrike koje imaju sadržaj: 'Danas najvažnije', 'Potrebna odluka Miljana/Ivane', 'Klijenti u riziku', 'Neodgovorene poruke', 'Dobri rezultati' i 'Tim može sam da reši'. Nemoj prikazivati prazne rubrike.",
+          "Ne organizuj izveštaj po proceduralnim rubrikama. Svaku relevantnu grupu prikaži ovako: u posebnom redu *Tačan naziv klijentske grupe*, a ispod jedan kratak ljudski pasus sa zaključkom, trenutnim stanjem, poslovnim značenjem i sledećim potezom kada je potreban.",
+          "Zvezdice koristi isključivo kao WhatsApp podebljanje oko imena klijenta. Ne koristi markdown liste, tabele, druge naslove ili dekorativne znakove.",
           "Za svaku negativnu situaciju proveri recentGroupMessages i trenutno stanje pre zaključka. Ako postoji dokaz da je rešena, napiši kratko: Situacija — rešeno: konkretno rešenje. Ne predstavljaj rešenu žalbu kao aktuelan problem.",
           "Ako nema dokaza rešenja, napiši: Nerešeno — konkretan problem, posledica, ko treba da preuzme i do kada. Nerešene ozbiljne stvari imaju prioritet nad istorijskim događajima.",
           "Kod svake potrebne odluke napiši preporuku i rok. Kod rizika napiši posledicu i ko treba da preuzme. Rutinsku komunikaciju koju tim već rešava izostavi. Miljanu eskaliraj samo kada treba njegova odluka, postoji ozbiljan poslovni rizik ili tim ne uspeva da zatvori problem.",
-          "Završi rečenicom 'Da sam na tvom mestu, prvo bih danas uradio: ...' samo kada postoji konkretna akcija za vlasnika.",
+          "Ako više klijenata ukazuje na isti problem u timu, na kraju dodaj jedan kratak prirodan zaključak o obrascu i šta bi Miljan prvo trebalo da uradi.",
           "Ako nema ničega važnog, napiši samo: 'Sve klijentske grupe su pod kontrolom. Trenutno nema odluka ni intervencija za Miljana i Ivanu.'",
           "Nikada ne predlaži da agent odgovara u grupi, ne obećavaj ništa klijentima i ne predstavljaj neproverenu stvar kao završenu."
         ].join(" ")
@@ -1114,7 +1144,7 @@ client.on("message_create", async (message) => {
     clearClientWait(message.from, chat.name);
     rememberGroupMessage(message.from, chat.name, senderName, "client", messageText);
 
-    const result = await analyzeMessage(openai, model, {
+    const result = await analyzeMessage(openai, routineModel, smartModel, {
       group: chat.name,
       sender: contact.pushname || contact.name || contact.number || "Nepoznato",
       message: messageText,
@@ -1141,7 +1171,7 @@ client.on("message_create", async (message) => {
     const ownerMention = ["miljan", "vlasnik", "gazda", "direktor", "owner", "šef", "sef"]
       .some((keyword) => normalizedBody.includes(keyword));
 
-    console.log(`[${result.level}] ${chat.name}: ${result.summary}`);
+    console.log(`[${result.level}] [${result.judgedBy}] ${chat.name}: ${result.summary}`);
 
     if (result.level !== "GREEN" || result.isPraise) {
       recordDailyEvent({ type: result.level, group: chat.name, summary: result.summary });
@@ -1154,25 +1184,13 @@ client.on("message_create", async (message) => {
     const notifyOwner = ownerMention || result.level === "RED" || result.level === "URGENT" || result.notifyOwner;
     if (!notifyOwner) return;
 
-    const icons = {
-      GREEN: "🟢",
-      YELLOW: "🟡",
-      RED: "🔴",
-      URGENT: "🚨"
-    };
-    const icon = icons[result.level] || "ℹ️";
     const alert = [
-      `${icon} MARKETIZO CLIENT UPDATE`,
-      `Nivo: ${result.level}`,
-      `Grupa: ${chat.name}`,
-      `Pošiljalac: ${contact.pushname || contact.name || contact.number || "Nepoznato"}`,
-      ownerMention ? "Razlog obaveštenja: Pomenut je Miljan/vlasnik." : "",
-      !ownerMention && result.ownerReason ? `Razlog obaveštenja: ${result.ownerReason}` : "",
-      importantPraise ? "Vrsta: Posebno važna pohvala/rezultat." : "",
-      `Originalna poruka: „${messageText.slice(0, 600)}“`,
-      `Sažetak: ${result.summary}`,
-      result.reason ? `Zašto: ${result.reason}` : "",
-      result.recommendedAction ? `Preporuka: ${result.recommendedAction}` : ""
+      `*${chat.name}*`,
+      result.summary,
+      ownerMention ? "Pomenut si direktno u razgovoru." : "",
+      !ownerMention && result.ownerReason ? result.ownerReason : "",
+      importantPraise ? "Ovo vredi sačuvati kao važnu pohvalu ili rezultat." : "",
+      result.recommendedAction ? `Predlog: ${result.recommendedAction}` : ""
     ].filter(Boolean).join("\n");
 
     await sendWhatsappMessage(alertTo, alert, "owner alert");

@@ -1,40 +1,62 @@
 const LEVELS = new Set(["GREEN", "YELLOW", "RED", "URGENT"]);
 
-export async function analyzeMessage(openai, model, input) {
+function reasoningOptions(model) {
+  return String(model).startsWith("gpt-6")
+    ? { reasoning_effort: process.env.OPENAI_REASONING_EFFORT || "max" }
+    : { temperature: 0 };
+}
+
+async function requestAnalysis(openai, model, systemPrompt, input) {
   const response = await openai.chat.completions.create({
     model,
     response_format: { type: "json_object" },
-    temperature: 0,
+    ...reasoningOptions(model),
     messages: [
-      {
-        role: "system",
-        content: [
-          "You monitor WhatsApp client groups for Marketizo, a marketing agency.",
-          "Classify the latest message using GREEN, YELLOW, RED, or URGENT.",
-          "GREEN: normal operations. YELLOW: delay, unanswered concern, or mild dissatisfaction.",
-          "RED: serious dissatisfaction, repeated failure, churn risk, money/results dispute.",
-          "URGENT: immediate legal, safety, public-reputation, account-security, or same-day crisis.",
-          "Set notifyOwner=true only for something Miljan as owner genuinely needs in real time: RED/URGENT risk, cancellation/refund/payment/legal/reputation/security issue, repeated unresolved failure, explicit request for Miljan/owner, or exceptional praise such as a testimonial, referral, or major result.",
-          "Set notifyOwner=false for routine SMM work, normal questions, scheduling, approvals, content revisions, ordinary delays, mild dissatisfaction that the team can resolve, and generic thanks or compliments.",
-          "Judge the latest message in the supplied recentConversation and openIssue context. A short follow-up, joke, emoji, thanks, or acknowledgement does not erase an unresolved RED issue; only concrete evidence of resolution does.",
-          "The summary must state the specific event, complaint, failed deliverable, disputed result, or business risk. Never write vague summaries such as 'serious concern', 'inappropriate situation', 'additional information needed', or 'investigate the situation'.",
-          "The ownerReason must explain the concrete business impact. recommendedAction must say who should do what next; do not use generic advice.",
-          "Set requiresTeamReply=false when the client is merely confirming, acknowledging, agreeing, thanking, reacting positively, or closing the conversation (for example: ok, važi, super, hvala, dogovoreno).",
-          "Set requiresTeamReply=true only when the latest client message contains a question, request, unresolved problem, required decision, new information that needs action, or otherwise reasonably expects a team response.",
-          "Do not draft or send a client reply.",
-          "Set isPraise=true only when the message contains an explicit compliment, thanks, satisfaction, or positive feedback.",
-          "Return JSON only: level, summary, reason, recommendedAction, isPraise, notifyOwner, ownerReason, requiresTeamReply.",
-          "Write summary, reason, and recommendedAction in Serbian."
-        ].join(" ")
-      },
-      {
-        role: "user",
-        content: JSON.stringify(input)
-      }
+      { role: "system", content: systemPrompt },
+      { role: "user", content: JSON.stringify(input) }
     ]
   });
+  return JSON.parse(response.choices[0]?.message?.content || "{}");
+}
 
-  const parsed = JSON.parse(response.choices[0]?.message?.content || "{}");
+function needsSeniorJudgment(input, firstPass) {
+  const text = String(input.message || "").toLocaleLowerCase("sr-Latn");
+  const consequentialLanguage = /\b(otkaz|raskid|refund|povra[cć]|novac|plat|advokat|tu[zž]|polic|prevar|hak|lozink|javno|recenzij|nezadovolj|razo[cč]aran|katastrof|nikad|opet|ponovo|kasni|rok|lead|kampanj|bud[zž]et|miljan|ivana|vlasnik|direktor)\b/i.test(text);
+  const ambiguousTone = /[?!]{2,}|\b(ali|ipak|stvarno|iskreno|na[zž]alost|ne razumem|nije jasno|o[cč]ekiv)\b/i.test(text);
+  return firstPass.level !== "GREEN"
+    || firstPass.notifyOwner === true
+    || firstPass.isPraise === true
+    || Boolean(input.openIssue)
+    || Boolean(input.activeCommitment)
+    || consequentialLanguage
+    || ambiguousTone;
+}
+
+const MESSAGE_PROMPT = [
+  "You monitor WhatsApp client groups for Marketizo, a marketing agency.",
+  "Act as an experienced agency operating director, not as a keyword classifier. Infer what the situation means for the client relationship, delivery quality, team accountability, cash, reputation, lead guarantee, and the owners' ability to intervene effectively.",
+  "Use judgment across the full supplied context. Consider changes in tone, repeated patterns, expectation gaps, hidden dependencies, whether the named owner can realistically fix the issue, and whether the team's current recovery plan is credible and timely.",
+  "The three levels YELLOW, RED and URGENT describe consequence and urgency only. They are not a checklist and must never replace contextual judgment. GREEN means no material concern.",
+  "Ask internally: if Miljan knew this now, would it materially change a decision, priority, person he contacts, or risk he accepts? Notify him when the answer is yes, even if no exact keyword rule matches. Do not notify him when the team clearly owns the issue and has a credible resolution already underway before meaningful harm occurs.",
+  "Classify the latest message using GREEN, YELLOW, RED, or URGENT.",
+  "GREEN: normal operations. YELLOW: delay, unanswered concern, or mild dissatisfaction. RED: serious dissatisfaction, repeated failure, churn risk, money/results dispute. URGENT: immediate legal, safety, public-reputation, account-security, or same-day crisis.",
+  "Set notifyOwner=true for anything Miljan as owner genuinely needs in real time: RED/URGENT risk, cancellation/refund/payment/legal/reputation/security issue, repeated unresolved failure, explicit request for Miljan/owner, exceptional praise such as a testimonial/referral/major result, or a contextual signal whose business consequence warrants an owner decision.",
+  "Set notifyOwner=false for routine SMM work, normal questions, scheduling, approvals, content revisions, ordinary delays, mild dissatisfaction that the team can resolve, and generic thanks or compliments.",
+  "Judge the latest message in the supplied recentConversation and openIssue context. A short follow-up, joke, emoji, thanks, or acknowledgement does not erase an unresolved RED issue; only concrete evidence of resolution does.",
+  "The summary must state the specific event, complaint, failed deliverable, disputed result, or business risk. Never use vague labels.",
+  "The ownerReason must explain the concrete business impact. recommendedAction must say who should do what next; do not use generic advice.",
+  "Set requiresTeamReply=false when the client is merely confirming, acknowledging, agreeing, thanking, reacting positively, or closing the conversation. Set it true only when the message reasonably expects a team response.",
+  "Do not draft or send a client reply. Set isPraise=true only for explicit meaningful positive feedback.",
+  "Return JSON only: level, summary, reason, recommendedAction, isPraise, notifyOwner, ownerReason, requiresTeamReply.",
+  "Write summary, reason, and recommendedAction in natural Serbian."
+].join(" ");
+
+export async function analyzeMessage(openai, routineModel, smartModel, input) {
+  const firstPass = await requestAnalysis(openai, routineModel, MESSAGE_PROMPT, input);
+  const useSeniorJudgment = smartModel !== routineModel && needsSeniorJudgment(input, firstPass);
+  const parsed = useSeniorJudgment
+    ? await requestAnalysis(openai, smartModel, `${MESSAGE_PROMPT} You are the senior final judge. Reconsider the first-pass assessment; do not rubber-stamp it. Prefer the conclusion best supported by the full conversation and business consequences.`, { ...input, firstPass })
+    : firstPass;
   const level = String(parsed.level || "GREEN").toUpperCase();
 
   return {
@@ -45,7 +67,8 @@ export async function analyzeMessage(openai, model, input) {
     isPraise: parsed.isPraise === true,
     notifyOwner: parsed.notifyOwner === true,
     ownerReason: String(parsed.ownerReason || ""),
-    requiresTeamReply: parsed.requiresTeamReply === true
+    requiresTeamReply: parsed.requiresTeamReply === true,
+    judgedBy: useSeniorJudgment ? smartModel : routineModel
   };
 }
 
@@ -53,12 +76,13 @@ export async function analyzeFollowup(openai, model, input) {
   const response = await openai.chat.completions.create({
     model,
     response_format: { type: "json_object" },
-    temperature: 0,
+    ...reasoningOptions(model),
     messages: [
       {
         role: "system",
         content: [
           "You track unresolved client issues and explicit delivery commitments in Marketizo WhatsApp groups.",
+          "Reason like an experienced agency operations director. Reconstruct the actual state of the work from the conversation, distinguish evidence from optimistic wording, and identify the operational consequence of ambiguity or delay.",
           "Use the recent conversation, the currently open issue, and the latest message.",
           "issueAction must be NONE, OPEN, KEEP_OPEN, or RESOLVE.",
           "OPEN only when a client reports a concrete problem or dissatisfaction that needs action.",

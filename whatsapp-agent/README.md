@@ -1,6 +1,6 @@
 # Marketizo WhatsApp Agent MVP
 
-This isolated service connects the dedicated **Marketizo Client Care** WhatsApp Business account as a linked device, reads new group messages, classifies client risk, and sends private WhatsApp alerts for **RED** and **URGENT** events.
+This isolated service connects the dedicated **Marketizo Client Care** WhatsApp Business account as a linked device, reads new group messages, judges client risk in context, and sends private owner alerts only when the situation is materially relevant.
 
 It does not automatically reply in client groups and does not modify the Marketizo CRM.
 
@@ -30,6 +30,8 @@ Example format: `43123456789@c.us`.
 
 - Reads only new group messages.
 - Ignores messages sent by the agent itself.
-- Classifies messages as GREEN, YELLOW, RED, or URGENT.
-- Sends private WhatsApp alerts only for RED and URGENT.
+- Uses `OPENAI_ROUTINE_MODEL` for the first pass and `OPENAI_SMART_MODEL` for ambiguous, sensitive, or consequential situations and owner reports.
+- Uses GREEN, YELLOW, RED, and URGENT as consequence labels, not as a substitute for contextual judgment.
+- Formats owner updates as a bold WhatsApp client name followed by a short, natural Serbian assessment.
+- Persists per-model call and token totals for the 30-day hybrid trial and logs each model decision for cost and quality review.
 - Never sends an automatic reply to a client group.
