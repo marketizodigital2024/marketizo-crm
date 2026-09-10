@@ -17,7 +17,11 @@ for (const name of required) {
   }
 }
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: Number(process.env.OPENAI_TIMEOUT_MS || 45000),
+  maxRetries: Number(process.env.OPENAI_MAX_RETRIES || 2)
+});
 const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const alertTo = process.env.ALERT_TO;
 const alertNumber = alertTo.split("@")[0].replace(/\D/g, "");
@@ -28,6 +32,10 @@ let qrDataUrl = null;
 const teamGroupName = process.env.TEAM_GROUP_NAME || "Marketizo Digital";
 const responseSlaMinutes = Number(process.env.RESPONSE_SLA_MINUTES || 120);
 const responseTimezone = process.env.RESPONSE_TIMEZONE || "Europe/Vienna";
+const whatsappOperationTimeoutMs = Number(process.env.WHATSAPP_OPERATION_TIMEOUT_MS || 45000);
+const whatsappProtocolTimeoutMs = Number(process.env.WHATSAPP_PROTOCOL_TIMEOUT_MS || 120000);
+const whatsappHealthIntervalMs = Number(process.env.WHATSAPP_HEALTH_INTERVAL_MS || 300000);
+const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LIMIT || 2);
 const stateDirectory = process.env.WWEBJS_AUTH_PATH
   ? path.dirname(process.env.WWEBJS_AUTH_PATH)
   : process.cwd();
@@ -69,7 +77,8 @@ const client = new Client({
   puppeteer: {
     headless: true,
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    protocolTimeout: whatsappProtocolTimeoutMs,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   }
 });
 
@@ -78,6 +87,88 @@ let pairingRetryTimer = null;
 let dailySchedulerStarted = false;
 let morningReportInFlight = false;
 let closingReportInFlight = false;
+let whatsappReady = false;
+let healthTimer = null;
+let consecutiveHealthFailures = 0;
+let lastHealthCheckAt = 0;
+let fatalExitScheduled = false;
+
+function saveAllState() {
+  saveDailyState();
+  saveResponseState();
+  saveGroupHistory();
+  saveFollowupState();
+  saveClientWaitState();
+}
+
+function recoveryWorthy(error) {
+  const message = String(error?.stack || error?.message || error || "");
+  return /ProtocolError|Runtime\.callFunctionOn|Target closed|Session closed|Execution context|timed out|detached Frame/i.test(message);
+}
+
+function scheduleProcessRecovery(reason, error) {
+  if (fatalExitScheduled) return;
+  fatalExitScheduled = true;
+  whatsappReady = false;
+  console.error(`[RECOVERY] ${reason}; saving state and restarting the process`, error || "");
+  try {
+    saveAllState();
+  } catch (saveError) {
+    console.error("Recovery state save failed:", saveError);
+  }
+  setTimeout(() => process.exit(1), 1500).unref();
+}
+
+async function withTimeout(promise, label, timeoutMs = whatsappOperationTimeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function sendWhatsappMessage(to, body, label = "WhatsApp send") {
+  try {
+    const result = await withTimeout(client.sendMessage(to, body), label);
+    consecutiveHealthFailures = 0;
+    lastHealthCheckAt = Date.now();
+    return result;
+  } catch (error) {
+    console.error(`[WHATSAPP_SEND_FAILED] ${label}:`, error);
+    if (recoveryWorthy(error)) scheduleProcessRecovery(`${label} failed`, error);
+    throw error;
+  }
+}
+
+async function checkWhatsAppHealth() {
+  if (!whatsappReady || fatalExitScheduled) return;
+  try {
+    const state = await withTimeout(client.getState(), "WhatsApp health check");
+    if (state !== "CONNECTED") throw new Error(`WhatsApp state is ${state || "unknown"}`);
+    consecutiveHealthFailures = 0;
+    lastHealthCheckAt = Date.now();
+    console.log(`[HEALTH] WhatsApp CONNECTED at ${new Date(lastHealthCheckAt).toISOString()}`);
+  } catch (error) {
+    consecutiveHealthFailures += 1;
+    console.error(`[HEALTH] WhatsApp check failed ${consecutiveHealthFailures}/${whatsappHealthFailureLimit}:`, error);
+    if (consecutiveHealthFailures >= whatsappHealthFailureLimit || recoveryWorthy(error)) {
+      scheduleProcessRecovery("WhatsApp health check failed", error);
+    }
+  }
+}
+
+function startWhatsAppHealthWatchdog() {
+  clearInterval(healthTimer);
+  void checkWhatsAppHealth();
+  healthTimer = setInterval(() => void checkWhatsAppHealth(), whatsappHealthIntervalMs);
+  healthTimer.unref();
+}
 
 const workTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: responseTimezone,
@@ -224,12 +315,12 @@ function saveFollowupState() {
 }
 
 async function sendCommitmentOverdueAlert(record) {
-  await client.sendMessage(alertTo, [
+  await sendWhatsappMessage(alertTo, [
     `U grupi ${record.groupName} istekao je dogovoreni rok.`,
     record.summary,
     record.owner ? `Dogovor je preuzeo/la: ${record.owner}.` : "",
     "Nisam pronašao jasnu potvrdu da je obaveza završena."
-  ].filter(Boolean).join("\n"));
+  ].filter(Boolean).join("\n"), "commitment overdue alert");
   record.alerted = true;
   commitments.set(record.groupId, record);
   recordDailyEvent({ type: "COMMITMENT", group: record.groupName, summary: `Probijen rok: ${record.summary}` });
@@ -463,7 +554,7 @@ async function sendMorningReport() {
       { role: "user", content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
-  await client.sendMessage(alertTo, String(completion.choices[0]?.message?.content || "").trim());
+  await sendWhatsappMessage(alertTo, String(completion.choices[0]?.message?.content || "").trim(), "morning report");
   dailyState.lastMorningDate = today;
   saveDailyState();
 }
@@ -481,7 +572,7 @@ async function sendWeeklyReport() {
       { role: "user", content: JSON.stringify({ endingDate: today, teamMembers: [...teamMemberNames], events: weeklyEvents, unresolvedIssues: snapshot.issues, clientsWaitingForTeam: snapshot.pending, silentClients: snapshot.silentClients, activeCommitments: snapshot.activeCommitments, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
-  await client.sendMessage(alertTo, String(completion.choices[0]?.message?.content || "Ove nedelje nije bilo događaja koji zahtevaju vlasničku pažnju.").trim());
+  await sendWhatsappMessage(alertTo, String(completion.choices[0]?.message?.content || "Ove nedelje nije bilo događaja koji zahtevaju vlasničku pažnju.").trim(), "weekly report");
   dailyState.lastWeeklyDate = today;
   dailyState.lastReportDate = today;
   saveDailyState();
@@ -532,7 +623,7 @@ async function sendDailyReport() {
     ]
   });
   const report = String(completion.choices[0]?.message?.content || "Danas nije bilo važnih događaja koji zahtevaju tvoju pažnju.").trim();
-  await client.sendMessage(alertTo, report);
+  await sendWhatsappMessage(alertTo, report, "daily report");
   dailyState.lastReportDate = today;
   saveDailyState();
   console.log(`[DAILY_REPORT] ${today}: private report sent`);
@@ -547,13 +638,13 @@ function startDailyReportScheduler() {
     const today = viennaDateKey();
     const weekday = parts.weekday !== "Sat" && parts.weekday !== "Sun";
     const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-    if (weekday && minutes >= 9 * 60 && minutes < 9 * 60 + 30 && dailyState.lastMorningDate !== today && !morningReportInFlight) {
+    if (weekday && minutes >= 9 * 60 && minutes < 12 * 60 && dailyState.lastMorningDate !== today && !morningReportInFlight) {
       morningReportInFlight = true;
       void sendMorningReport()
         .catch((error) => console.error("Morning report failed:", error))
         .finally(() => { morningReportInFlight = false; });
     }
-    if (weekday && minutes >= 17 * 60 + 30 && minutes < 18 * 60 && dailyState.lastReportDate !== today && !closingReportInFlight) {
+    if (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60 && dailyState.lastReportDate !== today && !closingReportInFlight) {
       closingReportInFlight = true;
       if (parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today) {
         void sendWeeklyReport()
@@ -619,7 +710,7 @@ async function sendOverdueAlert(record) {
     `Poruka: ${record.message}`,
     "Akcija: Neko iz Marketizo tima treba odmah da odgovori."
   ].join("\n");
-  await client.sendMessage(alertTo, alert);
+  await sendWhatsappMessage(alertTo, alert, "response SLA alert");
   recordDailyEvent({ type: "SLA", group: record.groupName, summary: "Klijent nije dobio odgovor u roku od 2 radna sata." });
   pendingByGroup.delete(record.groupId);
   responseTimers.delete(record.groupId);
@@ -739,14 +830,14 @@ function saveClientWaitState() {
 
 async function sendClientSilenceAlert(record) {
   if (record.alerted) return;
-  await client.sendMessage(alertTo, [
+  await sendWhatsappMessage(alertTo, [
     `Klijent u grupi ${record.groupName} ne odgovara timu.`,
     `Poslednje je pisao/la ${record.teamSender}: „${record.lastMessage}“`,
     record.teamMessageCount >= 4
       ? `Tim je poslao ${record.teamMessageCount} poruke bez odgovora klijenta.`
       : "Od klijenta nema odgovora već dva dana.",
     "Vredi proveriti da li je potrebno drugačije kontaktirati klijenta ili zaustaviti dalje čekanje."
-  ].join("\n"));
+  ].join("\n"), "client silence alert");
   record.alerted = true;
   awaitingClientByGroup.set(record.groupId, record);
   recordDailyEvent({ type: "CLIENT_SILENCE", group: record.groupName, summary: "Klijent ne odgovara timu." });
@@ -810,6 +901,20 @@ function loadClientWaitState() {
 }
 
 http.createServer((req, res) => {
+  if (req.url === "/health") {
+    const fresh = lastHealthCheckAt && Date.now() - lastHealthCheckAt < whatsappHealthIntervalMs * 3;
+    const healthy = whatsappReady && fresh && !fatalExitScheduled;
+    res.writeHead(healthy ? 200 : 503, {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    });
+    return res.end(JSON.stringify({
+      status: healthy ? "ok" : "unhealthy",
+      whatsappReady,
+      fresh: Boolean(fresh),
+      consecutiveHealthFailures
+    }));
+  }
   if (req.url !== `/pair/${pairingToken}`) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     return res.end("Not found");
@@ -852,6 +957,11 @@ client.on("qr", async (code) => {
 });
 
 client.on("ready", async () => {
+  whatsappReady = true;
+  fatalExitScheduled = false;
+  consecutiveHealthFailures = 0;
+  lastHealthCheckAt = Date.now();
+  startWhatsAppHealthWatchdog();
   qrDataUrl = null;
   clearTimeout(pairingRetryTimer);
   pairingRetryTimer = null;
@@ -869,6 +979,8 @@ client.on("ready", async () => {
 });
 
 client.on("auth_failure", (message) => {
+  whatsappReady = false;
+  clearInterval(healthTimer);
   clearTimeout(pairingRetryTimer);
   pairingRetryTimer = null;
   pairingCodeRequested = false;
@@ -876,10 +988,13 @@ client.on("auth_failure", (message) => {
 });
 
 client.on("disconnected", (reason) => {
+  whatsappReady = false;
+  clearInterval(healthTimer);
   clearTimeout(pairingRetryTimer);
   pairingRetryTimer = null;
   pairingCodeRequested = false;
   console.error("WhatsApp disconnected:", reason);
+  scheduleProcessRecovery("WhatsApp disconnected", reason);
 });
 
 client.on("message_reaction", async (reaction) => {
@@ -1051,10 +1166,32 @@ client.on("message_create", async (message) => {
       result.recommendedAction ? `Preporuka: ${result.recommendedAction}` : ""
     ].filter(Boolean).join("\n");
 
-    await client.sendMessage(alertTo, alert);
+    await sendWhatsappMessage(alertTo, alert, "owner alert");
   } catch (error) {
     console.error("Message processing failed:", error);
   }
 });
 
-client.initialize();
+process.on("unhandledRejection", (error) => {
+  console.error("Unhandled rejection:", error);
+  if (recoveryWorthy(error)) scheduleProcessRecovery("Unhandled WhatsApp rejection", error);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
+  scheduleProcessRecovery("Uncaught exception", error);
+});
+
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => {
+    console.log(`[SHUTDOWN] ${signal}; saving state`);
+    try {
+      saveAllState();
+    } catch (error) {
+      console.error("Shutdown state save failed:", error);
+    }
+    process.exit(0);
+  });
+}
+
+client.initialize().catch((error) => scheduleProcessRecovery("WhatsApp initialization failed", error));
