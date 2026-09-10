@@ -36,6 +36,7 @@ const whatsappOperationTimeoutMs = Number(process.env.WHATSAPP_OPERATION_TIMEOUT
 const whatsappProtocolTimeoutMs = Number(process.env.WHATSAPP_PROTOCOL_TIMEOUT_MS || 120000);
 const whatsappHealthIntervalMs = Number(process.env.WHATSAPP_HEALTH_INTERVAL_MS || 300000);
 const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LIMIT || 2);
+const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-10-recovery-1";
 const stateDirectory = process.env.WWEBJS_AUTH_PATH
   ? path.dirname(process.env.WWEBJS_AUTH_PATH)
   : process.cwd();
@@ -61,7 +62,7 @@ const commitmentTimers = new Map();
 const awaitingClientByGroup = new Map();
 const clientWaitTimers = new Map();
 const teamAcknowledgedMessageIds = new Set();
-let dailyState = { lastReportDate: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
+let dailyState = { lastReportDate: "", lastReportVersion: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
     .split(",")
@@ -259,7 +260,7 @@ function loadDailyState() {
     }
   } catch (error) {
     console.error("Daily report state restore failed:", error);
-    dailyState = { lastReportDate: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
+    dailyState = { lastReportDate: "", lastReportVersion: "", lastMorningDate: "", lastWeeklyDate: "", events: [] };
   }
 }
 
@@ -577,6 +578,7 @@ async function sendWeeklyReport() {
   await sendWhatsappMessage(alertTo, String(completion.choices[0]?.message?.content || "Ove nedelje nije bilo događaja koji zahtevaju vlasničku pažnju.").trim(), "weekly report");
   dailyState.lastWeeklyDate = today;
   dailyState.lastReportDate = today;
+  dailyState.lastReportVersion = reportDeliveryVersion;
   saveDailyState();
 }
 
@@ -627,6 +629,7 @@ async function sendDailyReport() {
   const report = String(completion.choices[0]?.message?.content || "Danas nije bilo važnih događaja koji zahtevaju tvoju pažnju.").trim();
   await sendWhatsappMessage(alertTo, report, "daily report");
   dailyState.lastReportDate = today;
+  dailyState.lastReportVersion = reportDeliveryVersion;
   saveDailyState();
   console.log(`[DAILY_REPORT] ${today}: private report sent`);
 }
@@ -646,7 +649,8 @@ function startDailyReportScheduler() {
         .catch((error) => console.error("Morning report failed:", error))
         .finally(() => { morningReportInFlight = false; });
     }
-    if (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60 && dailyState.lastReportDate !== today && !closingReportInFlight) {
+    const closingReportMissing = dailyState.lastReportDate !== today || dailyState.lastReportVersion !== reportDeliveryVersion;
+    if (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60 && closingReportMissing && !closingReportInFlight) {
       closingReportInFlight = true;
       if (parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today) {
         void sendWeeklyReport()
@@ -914,7 +918,9 @@ http.createServer((req, res) => {
       status: healthy ? "ok" : "unhealthy",
       whatsappReady,
       fresh: Boolean(fresh),
-      consecutiveHealthFailures
+      consecutiveHealthFailures,
+      lastReportDate: dailyState.lastReportDate || "",
+      lastReportVersion: dailyState.lastReportVersion || ""
     }));
   }
   if (req.url !== `/pair/${pairingToken}`) {
