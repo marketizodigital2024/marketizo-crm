@@ -2,7 +2,7 @@ const LEVELS = new Set(["GREEN", "YELLOW", "RED", "URGENT"]);
 
 function reasoningOptions(model) {
   return String(model).startsWith("gpt-6")
-    ? { reasoning_effort: process.env.OPENAI_REASONING_EFFORT || "max" }
+    ? { reasoning_effort: process.env.OPENAI_REASONING_EFFORT || "xhigh" }
     : { temperature: 0 };
 }
 
