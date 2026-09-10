@@ -603,7 +603,7 @@ async function sendDailyReport() {
       {
         role: "system",
         content: [
-          "Ti si Miljanov operativni direktor koji je tokom dana čitao Marketizo klijentske WhatsApp grupe. Napiši mu izveštaj koji pomaže da donese odluke, a ne prepričavanje poruka.",client.sendMessage(to, body)client.sendMessage(to, String(body || "").slice(0, 3500))
+          "Ti si Miljanov operativni direktor koji je tokom dana čitao Marketizo klijentske WhatsApp grupe. Napiši mu izveštaj koji pomaže da donese odluke, a ne prepričavanje poruka.",
           "Piši na srpskom, prirodno, konkretno i poslovno, kao čovek koji poznaje tim. Bez botovskog uvoda, emodžija, praznih fraza i ponavljanja.",
           "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. clientsWaitingForTeam znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili nakon četiri poruke.",
           "Izdvoji samo: najvažnije događaje; kašnjenja, blokade i obaveze bez vlasnika; nezadovoljstvo ili izuzetnu pohvalu klijenta; rizike za snimanje, scenarije, editovanje, objave, kampanje, budžet, leadove ili garanciju; i odluke koje traže Miljana ili Ivanu.",
