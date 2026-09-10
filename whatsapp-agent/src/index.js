@@ -89,6 +89,7 @@ let morningReportInFlight = false;
 let closingReportInFlight = false;
 let whatsappReady = false;
 let healthTimer = null;
+let initializationTimer = null;
 let consecutiveHealthFailures = 0;
 let lastHealthCheckAt = 0;
 let fatalExitScheduled = false;
@@ -957,6 +958,7 @@ client.on("qr", async (code) => {
 });
 
 client.on("ready", async () => {
+  clearTimeout(initializationTimer);
   whatsappReady = true;
   fatalExitScheduled = false;
   consecutiveHealthFailures = 0;
@@ -1193,5 +1195,15 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
     process.exit(0);
   });
 }
+
+initializationTimer = setTimeout(() => {
+  if (!whatsappReady) {
+    scheduleProcessRecovery(
+      "WhatsApp initialization timed out",
+      new Error("WhatsApp did not become ready within 120 seconds")
+    );
+  }
+}, 120000);
+initializationTimer.unref();
 
 client.initialize().catch((error) => scheduleProcessRecovery("WhatsApp initialization failed", error));
