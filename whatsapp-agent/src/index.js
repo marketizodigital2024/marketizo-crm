@@ -136,7 +136,8 @@ async function withTimeout(promise, label, timeoutMs = whatsappOperationTimeoutM
 
 async function sendWhatsappMessage(to, body, label = "WhatsApp send") {
   try {
-    const result = await withTimeout(client.sendMessage(to, body), label);
+    const safeBody = String(body || "").slice(0, 3500);
+    const result = await withTimeout(client.sendMessage(to, safeBody), label);
     consecutiveHealthFailures = 0;
     lastHealthCheckAt = Date.now();
     return result;
