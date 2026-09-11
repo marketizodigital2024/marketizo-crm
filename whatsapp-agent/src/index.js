@@ -606,7 +606,7 @@ async function isOwnerPrivateMessage(message) {
   // previously received our branded alerts, so use that history as a safe match.
   const privateChat = await message.getChat();
   const recent = await privateChat.fetchMessages({ limit: 30 });
-  return recent.some((item) => item.fromMe && /MARKETIZO (CLIENT UPDATE|DNEVNI PREGLED|— KLIJENT ČEKA ODGOVOR)/i.test(String(item.body || "")));
+  return recent.some((item) => item.fromMe && /(?:MARKETIZO (?:CLIENT UPDATE|DNEVNI PREGLED|— KLIJENT ČEKA ODGOVOR)|Marketizo agent — test)/i.test(String(item.body || "")));
 }
 
 function recordDailyEvent(event) {
