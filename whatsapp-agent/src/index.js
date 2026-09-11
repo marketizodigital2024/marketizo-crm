@@ -62,6 +62,8 @@ const followupStatePath = process.env.FOLLOWUP_STATE_PATH
   || path.join(stateDirectory, "marketizo-followups.json");
 const clientWaitStatePath = process.env.CLIENT_WAIT_STATE_PATH
   || path.join(stateDirectory, "marketizo-client-wait.json");
+const processedMessagesStatePath = process.env.PROCESSED_MESSAGES_STATE_PATH
+  || path.join(stateDirectory, "marketizo-processed-messages.json");
 const teamMemberIds = new Set();
 const teamMemberNumbers = new Set();
 const teamMemberNames = new Set();
@@ -74,6 +76,8 @@ const commitmentTimers = new Map();
 const awaitingClientByGroup = new Map();
 const clientWaitTimers = new Map();
 const teamAcknowledgedMessageIds = new Set();
+const processedMessageIds = new Set();
+const processingMessageIds = new Set();
 let dailyState = { lastReportDate: "", lastReportVersion: "", lastMorningDate: "", lastWeeklyDate: "", events: [], modelUsage: {} };
 const monitoredGroups = new Set(
   (process.env.MONITORED_GROUPS || "")
@@ -110,6 +114,8 @@ let healthTimer = null;
 let initializationTimer = null;
 let consecutiveHealthFailures = 0;
 let lastHealthCheckAt = 0;
+let lastIncomingMessageAt = 0;
+let lastProcessedMessageAt = 0;
 let fatalExitScheduled = false;
 
 const rawCompletionCreate = openai.chat.completions.create.bind(openai.chat.completions);
@@ -135,6 +141,40 @@ function saveAllState() {
   saveGroupHistory();
   saveFollowupState();
   saveClientWaitState();
+  saveProcessedMessagesState();
+}
+
+function saveProcessedMessagesState() {
+  try {
+    fs.mkdirSync(path.dirname(processedMessagesStatePath), { recursive: true });
+    const ids = [...processedMessageIds].slice(-2000);
+    const tempPath = `${processedMessagesStatePath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify({ schemaVersion: 1, ids }, null, 2));
+    fs.renameSync(tempPath, processedMessagesStatePath);
+  } catch (error) {
+    console.error("Processed-message state save failed:", error);
+  }
+}
+
+function loadProcessedMessagesState() {
+  try {
+    if (!fs.existsSync(processedMessagesStatePath)) return;
+    const stored = JSON.parse(fs.readFileSync(processedMessagesStatePath, "utf8"));
+    if (stored.schemaVersion !== 1 || !Array.isArray(stored.ids)) return;
+    for (const id of stored.ids.slice(-2000)) processedMessageIds.add(String(id));
+    console.log(`Processed-message deduplication restored: ${processedMessageIds.size} ID(s).`);
+  } catch (error) {
+    console.error("Processed-message state restore failed:", error);
+  }
+}
+
+function markMessageProcessed(messageId) {
+  if (!messageId) return;
+  processingMessageIds.delete(messageId);
+  processedMessageIds.add(messageId);
+  while (processedMessageIds.size > 2000) processedMessageIds.delete(processedMessageIds.values().next().value);
+  lastProcessedMessageAt = Date.now();
+  saveProcessedMessagesState();
 }
 
 function recoveryWorthy(error) {
@@ -700,7 +740,7 @@ async function sendDailyReport() {
           "Počni sa *DNEVNI IZVEŠTAJ — datum*, pa u sledećem redu napiši kratak zbir: *Danas: X hitno · Y zahtevaju pažnju · Z pozitivno*. Broji samo klijente koje si zaista uključio.",
           "Za svakog relevantnog klijenta koristi tačno ovaj čitljiv oblik: *Kratko ime klijenta* — zatim 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno. Ispod napiši dva do četiri kratka prirodna pasusa: šta se dogodilo, trenutni status i zašto je važno. Završi sa *Sledeći korak:* i jednom konkretnom akcijom, odgovornom osobom i rokom kada su poznati.",
           "Ne koristi tabele, duge liste, horizontalne crte ni tehničke nazive rubrika. Ostavi prazan red između pasusa i klijenata da poruka bude laka za čitanje na telefonu.",
-          "Za svaku negativnu situaciju proveri recentGroupMessages i trenutno stanje pre zaključka. Ako postoji dokaz da je rešena, napiši kratko: Situacija — rešeno: konkretno rešenje. Ne predstavljaj rešenu žalbu kao aktuelan problem.",
+          "Za svaku negativnu situaciju proveri recentGroupMessages i trenutno stanje pre zaključka. Ako postoji dokaz da je rešena, potpuno je izostavi iz izveštaja; Miljanu ne šalji obaveštenja o zatvorenim situacijama.",
           "Ako nema dokaza rešenja, napiši: Nerešeno — konkretan problem, posledica, ko treba da preuzme i do kada. Nerešene ozbiljne stvari imaju prioritet nad istorijskim događajima.",
           "Kod svake potrebne odluke napiši preporuku i rok. Kod rizika napiši posledicu i ko treba da preuzme. Rutinsku komunikaciju koju tim već rešava izostavi. Miljanu eskaliraj samo kada treba njegova odluka, postoji ozbiljan poslovni rizik ili tim ne uspeva da zatvori problem.",
           "Ako više klijenata ukazuje na isti problem u timu, na kraju dodaj jedan kratak prirodan zaključak o obrascu i šta bi Miljan prvo trebalo da uradi.",
@@ -1008,7 +1048,11 @@ http.createServer((req, res) => {
       consecutiveHealthFailures,
       lastReportDate: dailyState.lastReportDate || "",
       lastReportVersion: dailyState.lastReportVersion || "",
-      lastYesterdayAnalysisTestVersion: dailyState.lastYesterdayAnalysisTestVersion || ""
+      lastYesterdayAnalysisTestVersion: dailyState.lastYesterdayAnalysisTestVersion || "",
+      lastHealthCheckAt: lastHealthCheckAt ? new Date(lastHealthCheckAt).toISOString() : "",
+      lastIncomingMessageAt: lastIncomingMessageAt ? new Date(lastIncomingMessageAt).toISOString() : "",
+      lastProcessedMessageAt: lastProcessedMessageAt ? new Date(lastProcessedMessageAt).toISOString() : "",
+      processingMessages: processingMessageIds.size
     }));
   }
   if (req.url !== `/pair/${pairingToken}` && req.url !== pairingAlias) {
@@ -1049,6 +1093,7 @@ client.on("ready", async () => {
     loadClientWaitState();
     loadGroupHistory();
     loadFollowupState();
+    loadProcessedMessagesState();
     startDailyReportScheduler();
     await sendDeploymentTest();
     await sendYesterdayAnalysisTest();
@@ -1061,6 +1106,7 @@ client.on("auth_failure", (message) => {
   whatsappReady = false;
   clearInterval(healthTimer);
   console.error("WhatsApp authentication failed:", message);
+  scheduleProcessRecovery("WhatsApp authentication failed", message);
 });
 
 client.on("disconnected", (reason) => {
@@ -1140,6 +1186,19 @@ client.on("message_reaction", async (reaction) => {
 });
 
 client.on("message_create", async (message) => {
+  const messageId = serializedId(message.id);
+  if (messageId && (processedMessageIds.has(messageId) || processingMessageIds.has(messageId))) {
+    console.log(`[MESSAGE_DEDUPED] ${messageId}`);
+    return;
+  }
+  if (messageId) {
+    processingMessageIds.add(messageId);
+    const staleProcessingTimer = setTimeout(() => {
+      if (processingMessageIds.delete(messageId)) console.error(`[MESSAGE_PROCESSING_STALE] Released ${messageId} after 10 minutes.`);
+    }, 10 * 60 * 1000);
+    staleProcessingTimer.unref();
+  }
+  lastIncomingMessageAt = Date.now();
   try {
     if (!message.from.endsWith("@g.us")) {
       if (!message.fromMe) {
@@ -1149,17 +1208,18 @@ client.on("message_create", async (message) => {
           console.log("[PRIVATE_AI_IGNORED] private sender is not the configured owner");
         }
       }
+      markMessageProcessed(messageId);
       return;
     }
 
     const chat = await message.getChat();
-    if (!chat.isGroup) return;
-    if (chat.name !== teamGroupName && monitoredGroups.size && !monitoredGroups.has(chat.name)) return;
+    if (!chat.isGroup) { markMessageProcessed(messageId); return; }
+    if (chat.name !== teamGroupName && monitoredGroups.size && !monitoredGroups.has(chat.name)) { markMessageProcessed(messageId); return; }
 
     const contact = await message.getContact();
     const senderName = contact.pushname || contact.name || contact.number || "Nepoznato";
-    if (message.fromMe) return;
-    if (chat.name === teamGroupName) return;
+    if (message.fromMe) { markMessageProcessed(messageId); return; }
+    if (chat.name === teamGroupName) { markMessageProcessed(messageId); return; }
     if (isTeamSender(message, contact)) {
       clearResponseWatch(message.from, chat.name);
       const teamText = String(message.body || "").trim();
@@ -1169,12 +1229,13 @@ client.on("message_create", async (message) => {
       if (teamText && (openIssues.has(message.from) || commitments.has(message.from) || looksLikeCommitment)) {
         await updateFollowups(message, chat, senderName, "team", teamText);
       }
+      markMessageProcessed(messageId);
       return;
     }
 
     const voiceTranscript = await transcribeVoiceMessage(message);
     const messageText = voiceTranscript || String(message.body || "").trim();
-    if (!messageText) return;
+    if (!messageText) { markMessageProcessed(messageId); return; }
     clearClientWait(message.from, chat.name);
     rememberGroupMessage(message.from, chat.name, senderName, "client", messageText);
 
@@ -1216,7 +1277,7 @@ client.on("message_create", async (message) => {
 
     const importantPraise = result.isPraise && result.notifyOwner;
     const notifyOwner = ownerMention || result.level === "URGENT" || result.notifyOwner;
-    if (!notifyOwner) return;
+    if (!notifyOwner) { markMessageProcessed(messageId); return; }
 
     const alertStatus = result.level === "URGENT" || result.level === "RED"
       ? "🔴 Hitno"
@@ -1235,8 +1296,23 @@ client.on("message_create", async (message) => {
     ].filter((line, index, lines) => line || (index > 0 && lines[index - 1])).join("\n");
 
     await sendWhatsappMessage(alertTo, alert, "owner alert");
+    markMessageProcessed(messageId);
   } catch (error) {
+    processingMessageIds.delete(messageId);
     console.error("Message processing failed:", error);
+    try {
+      if (message.from?.endsWith("@g.us") && !message.fromMe) {
+        const chat = await message.getChat();
+        const contact = await message.getContact();
+        if (chat?.isGroup && chat.name !== teamGroupName && !isTeamSender(message, contact)) {
+          const fallbackText = String(message.body || "Poruka koju analiza nije uspela da obradi").trim();
+          if (!pendingByGroup.has(message.from) && teamMemberIds.size) beginResponseWatch(message, chat, contact, fallbackText);
+          recordDailyEvent({ type: "ANALYSIS_FAILURE", group: chat.name, summary: "Automatska analiza poruke nije uspela; odgovor tima se ipak prati." });
+        }
+      }
+    } catch (fallbackError) {
+      console.error("Message-processing fallback failed:", fallbackError);
+    }
   }
 });
 
