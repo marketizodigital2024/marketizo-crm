@@ -33,7 +33,7 @@ const pairingToken = crypto.randomBytes(24).toString("hex");
 const pairingAlias = "/pair/marketizo-reconnect";
 let qrDataUrl = null;
 const teamGroupName = process.env.TEAM_GROUP_NAME || "Marketizo Digital";
-const responseSlaMinutes = Number(process.env.RESPONSE_SLA_MINUTES || 120);
+const responseSlaMinutes = Number(process.env.RESPONSE_SLA_MINUTES || 180);
 const responseTimezone = process.env.RESPONSE_TIMEZONE || "Europe/Vienna";
 const whatsappOperationTimeoutMs = Number(process.env.WHATSAPP_OPERATION_TIMEOUT_MS || 45000);
 const whatsappProtocolTimeoutMs = Number(process.env.WHATSAPP_PROTOCOL_TIMEOUT_MS || 120000);
@@ -408,12 +408,6 @@ function saveFollowupState() {
 }
 
 async function sendCommitmentOverdueAlert(record) {
-  await sendWhatsappMessage(alertTo, [
-    `U grupi ${record.groupName} istekao je dogovoreni rok.`,
-    record.summary,
-    record.owner ? `Dogovor je preuzeo/la: ${record.owner}.` : "",
-    "Nisam pronašao jasnu potvrdu da je obaveza završena."
-  ].filter(Boolean).join("\n"), "commitment overdue alert");
   record.alerted = true;
   commitments.set(record.groupId, record);
   recordDailyEvent({ type: "COMMITMENT", group: record.groupName, summary: `Probijen rok: ${record.summary}` });
@@ -645,7 +639,7 @@ async function sendMorningReport() {
     model,
     ...reasoningOptions(),
     messages: [
-      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja poznaje tim i izdvaja samo ono važno. Proceni kontekst i poslovnu posledicu, ne popunjavaj proceduralni šablon. Svaku relevantnu grupu prikaži ovako: u posebnom redu *Tačan naziv klijentske grupe*, a ispod jedan kratak ljudski pasus sa stanjem, značenjem i narednim potezom. Zvezdice koristi isključivo kao WhatsApp podebljanje oko imena klijenta; ne koristi markdown liste, druge naslove, emodžije ni rubrike. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili posle četiri poruke. Pre zaključka proveri recentGroupMessages. Ako je rešeno, reci konkretno kako; ako nije, reci ko treba da preuzme i do kada. Miljanu izdvoji samo ono što traži njegovu odluku ili nosi ozbiljan rizik. Ne izmišljaj činjenice." },
+      { role: "system", content: "Napiši Miljanu kratak jutarnji vlasnički pregled na srpskom kao osoba koja poznaje tim i izdvaja samo ono važno. Proceni kontekst i poslovnu posledicu, ne popunjavaj proceduralni šablon. Svaku relevantnu grupu prikaži ovako: u posebnom redu *Tačan naziv klijentske grupe*, a ispod jedan kratak ljudski pasus sa stanjem, značenjem i narednim potezom. Zvezdice koristi isključivo kao WhatsApp podebljanje oko imena klijenta; ne koristi markdown liste, druge naslove, emodžije ni rubrike. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog duže od tri radna sata. silentClients znači da zaposleni čeka odgovor klijenta duže od 48 sati. Pre zaključka proveri recentGroupMessages. Ako je rešeno, ne navodi ga. Ako nije, reci ko treba da preuzme i do kada. Miljanu izdvoji samo ono što traži njegovu odluku ili nosi ozbiljan rizik. Ne izmišljaj činjenice." },
       { role: "user", content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
@@ -698,13 +692,14 @@ async function sendDailyReport() {
         role: "system",
         content: [
           "Ti si Miljanov operativni direktor koji je tokom dana čitao Marketizo klijentske WhatsApp grupe. Napiši mu izveštaj koji pomaže da donese odluke, a ne prepričavanje poruka.",
-          "Piši na srpskom, prirodno, konkretno i poslovno, kao čovek koji poznaje tim. Bez botovskog uvoda, emodžija, praznih fraza i ponavljanja.",
-          "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. clientsWaitingForTeam znači da klijent čeka odgovor zaposlenog. silentClients znači da zaposleni čeka odgovor klijenta najmanje dva dana ili nakon četiri poruke.",
+          "Piši na srpskom, prirodno, konkretno i poslovno, kao čovek koji poznaje tim. Bez botovskog uvoda, praznih fraza i ponavljanja.",
+          "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. clientsWaitingForTeam znači da klijent čeka odgovor zaposlenog duže od tri radna sata. silentClients znači da zaposleni čeka odgovor klijenta duže od 48 sati.",
           "Izdvoji samo: najvažnije događaje; kašnjenja, blokade i obaveze bez vlasnika; nezadovoljstvo ili izuzetnu pohvalu klijenta; rizike za snimanje, scenarije, editovanje, objave, kampanje, budžet, leadove ili garanciju; i odluke koje traže Miljana ili Ivanu.",
-          "Posebno istakni direktan zahtev Miljanu ili Ivani, probijen rok, klijenta bez odgovora duže od dva radna sata, konflikt, zahtev za raskid ili povraćaj novca, problem sa kampanjom ili leadovima i slučaj gde se članovi tima međusobno čekaju.",
+          "Posebno istakni direktan zahtev Miljanu ili Ivani, probijen rok, klijenta bez odgovora duže od tri radna sata, konflikt, zahtev za raskid ili povraćaj novca, problem sa kampanjom ili leadovima i slučaj gde se članovi tima međusobno čekaju.",
           "Za svaku važnu tvrdnju navedi grupu, osobu i vreme kada su dostupni. Ne izmišljaj status; ako završetak nije potvrđen napiši 'nije potvrđeno'.",
-          "Ne organizuj izveštaj po proceduralnim rubrikama. Svaku relevantnu grupu prikaži ovako: u posebnom redu *Tačan naziv klijentske grupe*, a ispod jedan kratak ljudski pasus sa zaključkom, trenutnim stanjem, poslovnim značenjem i sledećim potezom kada je potreban.",
-          "Zvezdice koristi isključivo kao WhatsApp podebljanje oko imena klijenta. Ne koristi markdown liste, tabele, druge naslove ili dekorativne znakove.",
+          "Počni sa *DNEVNI IZVEŠTAJ — datum*, pa u sledećem redu napiši kratak zbir: *Danas: X hitno · Y zahtevaju pažnju · Z pozitivno*. Broji samo klijente koje si zaista uključio.",
+          "Za svakog relevantnog klijenta koristi tačno ovaj čitljiv oblik: *Kratko ime klijenta* — zatim 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno. Ispod napiši dva do četiri kratka prirodna pasusa: šta se dogodilo, trenutni status i zašto je važno. Završi sa *Sledeći korak:* i jednom konkretnom akcijom, odgovornom osobom i rokom kada su poznati.",
+          "Ne koristi tabele, duge liste, horizontalne crte ni tehničke nazive rubrika. Ostavi prazan red između pasusa i klijenata da poruka bude laka za čitanje na telefonu.",
           "Za svaku negativnu situaciju proveri recentGroupMessages i trenutno stanje pre zaključka. Ako postoji dokaz da je rešena, napiši kratko: Situacija — rešeno: konkretno rešenje. Ne predstavljaj rešenu žalbu kao aktuelan problem.",
           "Ako nema dokaza rešenja, napiši: Nerešeno — konkretan problem, posledica, ko treba da preuzme i do kada. Nerešene ozbiljne stvari imaju prioritet nad istorijskim događajima.",
           "Kod svake potrebne odluke napiši preporuku i rok. Kod rizika napiši posledicu i ko treba da preuzme. Rutinsku komunikaciju koju tim već rešava izostavi. Miljanu eskaliraj samo kada treba njegova odluka, postoji ozbiljan poslovni rizik ili tim ne uspeva da zatvori problem.",
@@ -802,19 +797,18 @@ function saveResponseState() {
 
 async function sendOverdueAlert(record) {
   const alert = [
-    "⏰ MARKETIZO — KLIJENT ČEKA ODGOVOR",
-    `Grupa: ${record.groupName}`,
-    `Klijent: ${record.senderName}`,
-    `Rok: 2 radna sata (09:00–17:30)`,
-    `Poruka: ${record.message}`,
-    "Akcija: Neko iz Marketizo tima treba odmah da odgovori."
+    `*${record.groupName}* — 🔴 Klijent čeka odgovor`,
+    "",
+    `${record.senderName} nije dobio/la odgovor našeg tima duže od tri radna sata. Poslednja poruka je: „${record.message}“`,
+    "",
+    "*Sledeći korak:* Tim treba odmah da preuzme razgovor. Miljan ne mora lično da odgovara, ali dobija upozorenje jer je probijen vlasnički SLA."
   ].join("\n");
   await sendWhatsappMessage(alertTo, alert, "response SLA alert");
-  recordDailyEvent({ type: "SLA", group: record.groupName, summary: "Klijent nije dobio odgovor u roku od 2 radna sata." });
+  recordDailyEvent({ type: "SLA", group: record.groupName, summary: "Klijent nije dobio odgovor u roku od 3 radna sata." });
   pendingByGroup.delete(record.groupId);
   responseTimers.delete(record.groupId);
   saveResponseState();
-  console.log(`[SLA_OVERDUE] ${record.groupName}: private alert sent`);
+  console.log(`[SLA_OVERDUE] ${record.groupName}: private three-working-hour alert sent`);
 }
 
 function scheduleResponseCheck(record) {
@@ -930,12 +924,11 @@ function saveClientWaitState() {
 async function sendClientSilenceAlert(record) {
   if (record.alerted) return;
   await sendWhatsappMessage(alertTo, [
-    `Klijent u grupi ${record.groupName} ne odgovara timu.`,
-    `Poslednje je pisao/la ${record.teamSender}: „${record.lastMessage}“`,
-    record.teamMessageCount >= 4
-      ? `Tim je poslao ${record.teamMessageCount} poruke bez odgovora klijenta.`
-      : "Od klijenta nema odgovora već dva dana.",
-    "Vredi proveriti da li je potrebno drugačije kontaktirati klijenta ili zaustaviti dalje čekanje."
+    `*${record.groupName}* — 🟡 Klijent ne odgovara`,
+    "",
+    `Od klijenta nema odgovora duže od 48 sati. ${record.teamSender} je poslednje poslao/la: „${record.lastMessage}“`,
+    "",
+    "*Sledeći korak:* Tim treba da proveri da li klijenta kontaktirati drugim putem ili privremeno zaustaviti dalje čekanje."
   ].join("\n"), "client silence alert");
   record.alerted = true;
   awaitingClientByGroup.set(record.groupId, record);
@@ -972,9 +965,6 @@ function noteTeamWaitingForClient(message, chat, senderName, messageText) {
   awaitingClientByGroup.set(message.from, record);
   saveClientWaitState();
   scheduleClientWait(record);
-  if (record.teamMessageCount >= 4 && !record.alerted) {
-    void sendClientSilenceAlert(record).catch((error) => console.error("Client-silence alert failed:", error));
-  }
 }
 
 function clearClientWait(groupId, groupName) {
@@ -1225,17 +1215,24 @@ client.on("message_create", async (message) => {
     }
 
     const importantPraise = result.isPraise && result.notifyOwner;
-    const notifyOwner = ownerMention || result.level === "RED" || result.level === "URGENT" || result.notifyOwner;
+    const notifyOwner = ownerMention || result.level === "URGENT" || result.notifyOwner;
     if (!notifyOwner) return;
 
+    const alertStatus = result.level === "URGENT" || result.level === "RED"
+      ? "🔴 Hitno"
+      : importantPraise
+        ? "🟢 Važan pozitivan signal"
+        : "🟡 Potrebna pažnja";
     const alert = [
-      `*${chat.name}*`,
+      `*${chat.name}* — ${alertStatus}`,
+      "",
       result.summary,
       ownerMention ? "Pomenut si direktno u razgovoru." : "",
       !ownerMention && result.ownerReason ? result.ownerReason : "",
       importantPraise ? "Ovo vredi sačuvati kao važnu pohvalu ili rezultat." : "",
-      result.recommendedAction ? `Predlog: ${result.recommendedAction}` : ""
-    ].filter(Boolean).join("\n");
+      "",
+      result.recommendedAction ? `*Sledeći korak:* ${result.recommendedAction}` : "*Sledeći korak:* Pregledaj situaciju i odredi ko je preuzima."
+    ].filter((line, index, lines) => line || (index > 0 && lines[index - 1])).join("\n");
 
     await sendWhatsappMessage(alertTo, alert, "owner alert");
   } catch (error) {
