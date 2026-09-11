@@ -239,7 +239,7 @@ async function sendYesterdayAnalysisTest() {
       }
     ]
   });
-  const report = String(completion.choices[0]?.message?.content || "Nema dovoljno podataka za pouzdanu analizu jučerašnjih klijenata.").trim();
+  const report = String(completion.choices[0]?.message?.content || "Nema dovoljno podataka za pouzdanu analizu jučerašnjih klijenata.").trim().slice(0, 1200);
   await sendWhatsappMessage(alertTo, `*Test — analiza klijenata od juče*\n\n${report}`, "yesterday analysis test");
   dailyState.lastYesterdayAnalysisTestVersion = yesterdayAnalysisTestVersion;
   saveDailyState();
