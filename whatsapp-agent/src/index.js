@@ -31,6 +31,7 @@ const alertNumber = alertTo.split("@")[0].replace(/\D/g, "");
 const whatsappPhoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || "").replace(/\D/g, "");
 const port = Number(process.env.PORT || 3000);
 const pairingToken = crypto.randomBytes(24).toString("hex");
+const pairingAlias = "/pair/marketizo-reconnect";
 let qrDataUrl = null;
 const teamGroupName = process.env.TEAM_GROUP_NAME || "Marketizo Digital";
 const responseSlaMinutes = Number(process.env.RESPONSE_SLA_MINUTES || 120);
@@ -1008,10 +1009,11 @@ http.createServer((req, res) => {
       fresh: Boolean(fresh),
       consecutiveHealthFailures,
       lastReportDate: dailyState.lastReportDate || "",
-      lastReportVersion: dailyState.lastReportVersion || ""
+      lastReportVersion: dailyState.lastReportVersion || "",
+      lastYesterdayAnalysisTestVersion: dailyState.lastYesterdayAnalysisTestVersion || ""
     }));
   }
-  if (req.url !== `/pair/${pairingToken}`) {
+  if (req.url !== `/pair/${pairingToken}` && req.url !== pairingAlias) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     return res.end("Not found");
   }
@@ -1026,6 +1028,7 @@ http.createServer((req, res) => {
   res.end(`<main style="font-family:Arial;text-align:center;padding:30px"><h2>Marketizo WhatsApp povezivanje</h2><p>WhatsApp Business → Povezani uređaji → Poveži uređaj</p><img src="${qrDataUrl}" width="420" height="420" alt="WhatsApp QR"><p>QR se automatski menja. Ako ne radi, osvežite stranicu.</p></main>`);
 }).listen(port, "0.0.0.0", () => {
   console.log(`PAIRING_PAGE_PATH: /pair/${pairingToken}`);
+  console.log(`PAIRING_PAGE_ALIAS: ${pairingAlias}`);
 });
 
 async function requestPhonePairingCode() {
