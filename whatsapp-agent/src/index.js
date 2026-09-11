@@ -92,7 +92,14 @@ const client = new Client({
     headless: true,
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     protocolTimeout: whatsappProtocolTimeoutMs,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-extensions",
+      "--disable-background-networking"
+    ]
   }
 });
 
@@ -998,13 +1005,17 @@ function loadClientWaitState() {
 http.createServer((req, res) => {
   if (req.url === "/health") {
     const fresh = lastHealthCheckAt && Date.now() - lastHealthCheckAt < whatsappHealthIntervalMs * 3;
-    const healthy = whatsappReady && fresh && !fatalExitScheduled;
-    res.writeHead(healthy ? 200 : 503, {
+    const ready = whatsappReady && fresh && !fatalExitScheduled;
+    // Railway uses this endpoint as a liveness check. An unpaired WhatsApp
+    // account is an operational state, not a dead HTTP process; returning 503
+    // here caused the container to be replaced while a user was scanning a QR.
+    res.writeHead(fatalExitScheduled ? 503 : 200, {
       "content-type": "application/json",
       "cache-control": "no-store"
     });
     return res.end(JSON.stringify({
-      status: healthy ? "ok" : "unhealthy",
+      status: fatalExitScheduled ? "restarting" : "ok",
+      ready,
       whatsappReady,
       fresh: Boolean(fresh),
       consecutiveHealthFailures,
@@ -1023,9 +1034,9 @@ http.createServer((req, res) => {
     "cache-control": "no-store"
   });
   if (!qrDataUrl) {
-    return res.end("<h2>Marketizo WhatsApp agent</h2><p>QR se priprema ili je WhatsApp već povezan. Osvežite stranicu za nekoliko sekundi.</p>");
+    return res.end('<meta http-equiv="refresh" content="3"><main style="font-family:Arial;text-align:center;padding:30px"><h2>Marketizo WhatsApp agent</h2><p>QR se priprema ili je WhatsApp već povezan. Stranica se automatski osvežava.</p></main>');
   }
-  res.end(`<main style="font-family:Arial;text-align:center;padding:30px"><h2>Marketizo WhatsApp povezivanje</h2><p>WhatsApp Business → Povezani uređaji → Poveži uređaj</p><img src="${qrDataUrl}" width="420" height="420" alt="WhatsApp QR"><p>QR se automatski menja. Ako ne radi, osvežite stranicu.</p></main>`);
+  res.end(`<meta http-equiv="refresh" content="8"><main style="font-family:Arial;text-align:center;padding:30px"><h2>Marketizo WhatsApp povezivanje</h2><p>WhatsApp Business → Povezani uređaji → Poveži uređaj</p><img src="${qrDataUrl}" width="420" height="420" alt="WhatsApp QR"><p>QR se automatski osvežava na svakih 8 sekundi. Skenirajte trenutno prikazani kod.</p></main>`);
 }).listen(port, "0.0.0.0", () => {
   console.log(`PAIRING_PAGE_PATH: /pair/${pairingToken}`);
   console.log(`PAIRING_PAGE_ALIAS: ${pairingAlias}`);
@@ -1285,13 +1296,16 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
 }
 
 initializationTimer = setTimeout(() => {
-  if (!whatsappReady) {
-    scheduleProcessRecovery(
-      "WhatsApp initialization timed out",
-      new Error("WhatsApp did not become ready within 120 seconds")
-    );
+  if (whatsappReady) return;
+  if (qrDataUrl) {
+    console.log("[INITIALIZATION] Waiting for the QR code to be scanned; keeping the process alive.");
+    return;
   }
-}, 120000);
+  scheduleProcessRecovery(
+    "WhatsApp initialization stalled before producing a QR code",
+    new Error("WhatsApp produced neither a ready event nor a QR code within 180 seconds")
+  );
+}, 180000);
 initializationTimer.unref();
 
 client.initialize().catch((error) => scheduleProcessRecovery("WhatsApp initialization failed", error));
