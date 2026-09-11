@@ -41,6 +41,7 @@ const whatsappHealthIntervalMs = Number(process.env.WHATSAPP_HEALTH_INTERVAL_MS 
 const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LIMIT || 2);
 const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-10-hybrid-1";
 const hybridTrialStartedAt = process.env.HYBRID_TRIAL_STARTED_AT || "2026-09-10";
+const deploymentTestVersion = "2026-09-11-stability-test-1";
 
 function reasoningOptions() {
   return String(model).startsWith("gpt-6")
@@ -132,7 +133,7 @@ function saveAllState() {
 
 function recoveryWorthy(error) {
   const message = String(error?.stack || error?.message || error || "");
-  return /ProtocolError|Runtime\.callFunctionOn|Target closed|Session closed|Execution context|timed out|detached Frame/i.test(message);
+  return /ProtocolError|Runtime\.callFunctionOn|Target closed|Session closed|Execution context|detached Frame/i.test(message);
 }
 
 function scheduleProcessRecovery(reason, error) {
@@ -145,7 +146,11 @@ function scheduleProcessRecovery(reason, error) {
   } catch (saveError) {
     console.error("Recovery state save failed:", saveError);
   }
-  setTimeout(() => process.exit(1), 1500).unref();
+  const forceExit = setTimeout(() => process.exit(1), 10000);
+  forceExit.unref();
+  void Promise.resolve(client.destroy())
+    .catch((destroyError) => console.error("WhatsApp cleanup before restart failed:", destroyError))
+    .finally(() => process.exit(1));
 }
 
 async function withTimeout(promise, label, timeoutMs = whatsappOperationTimeoutMs) {
@@ -191,6 +196,18 @@ async function checkWhatsAppHealth() {
       scheduleProcessRecovery("WhatsApp health check failed", error);
     }
   }
+}
+
+async function sendDeploymentTest() {
+  if (dailyState.lastDeploymentTestVersion === deploymentTestVersion) return;
+  await sendWhatsappMessage(alertTo, [
+    "*Marketizo agent — test*",
+    "Agent je povezan i ova poruka je poslata iz aktivnog produkcionog sistema.",
+    "Rutinske poruke procenjujem brzo, a važne, nejasne ili rizične situacije šaljem dubljem Astra mozgu. Javljam ti samo ono što stvarno traži tvoju pažnju."
+  ].join("\n\n"), "deployment test");
+  dailyState.lastDeploymentTestVersion = deploymentTestVersion;
+  saveDailyState();
+  console.log(`[DEPLOYMENT_TEST] ${deploymentTestVersion}: private test sent`);
 }
 
 function startWhatsAppHealthWatchdog() {
@@ -1012,6 +1029,7 @@ client.on("ready", async () => {
     loadGroupHistory();
     loadFollowupState();
     startDailyReportScheduler();
+    await sendDeploymentTest();
   } catch (error) {
     console.error("Team roster setup failed:", error);
   }
