@@ -42,6 +42,7 @@ const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LI
 const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-10-hybrid-1";
 const hybridTrialStartedAt = process.env.HYBRID_TRIAL_STARTED_AT || "2026-09-10";
 const deploymentTestVersion = "2026-09-11-stability-test-1";
+const yesterdayAnalysisTestVersion = "2026-09-11-yesterday-analysis-1";
 
 function reasoningOptions() {
   return String(model).startsWith("gpt-6")
@@ -208,6 +209,41 @@ async function sendDeploymentTest() {
   dailyState.lastDeploymentTestVersion = deploymentTestVersion;
   saveDailyState();
   console.log(`[DEPLOYMENT_TEST] ${deploymentTestVersion}: private test sent`);
+}
+
+async function sendYesterdayAnalysisTest() {
+  if (dailyState.lastYesterdayAnalysisTestVersion === yesterdayAnalysisTestVersion) return;
+  const yesterday = viennaDateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  const events = dailyState.events.filter((event) => event.date === yesterday);
+  const snapshot = ownerActionSnapshot();
+  const completion = await openai.chat.completions.create({
+    model,
+    ...reasoningOptions(),
+    messages: [
+      {
+        role: "system",
+        content: "Napiši Miljanu kratak, ljudski test-izveštaj o jučerašnjim Marketizo klijentima na srpskom. Koristi samo dostavljene stvarne podatke. Proceni šta je za vlasnika zaista važno: nezadovoljstvo, ozbiljan rizik, probijen rok, blokadu, važnu pohvalu ili odluku. Rutinu izostavi. Za svaku relevantnu grupu napiši u posebnom redu *Tačan naziv klijentske grupe*, a ispod kratak prirodan pasus: šta se desilo, da li je sada rešeno i šta je sledeći potez. Zvezdice koristi samo za podebljano ime grupe; bez lista, tabela, emodžija i proceduralnih rubrika. Proveri recentGroupMessages pre nego što nešto nazoveš nerešenim. Ako nema dovoljno jučerašnjih podataka za pouzdan zaključak, reci to jasno i ne izmišljaj."
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          date: yesterday,
+          teamMembers: [...teamMemberNames],
+          yesterdayEvents: events,
+          unresolvedIssuesNow: snapshot.issues,
+          clientsWaitingForTeamNow: snapshot.pending,
+          silentClientsNow: snapshot.silentClients,
+          activeCommitmentsNow: snapshot.activeCommitments,
+          recentGroupMessages: snapshot.recentGroupMessages
+        })
+      }
+    ]
+  });
+  const report = String(completion.choices[0]?.message?.content || "Nema dovoljno podataka za pouzdanu analizu jučerašnjih klijenata.").trim();
+  await sendWhatsappMessage(alertTo, `*Test — analiza klijenata od juče*\n\n${report}`, "yesterday analysis test");
+  dailyState.lastYesterdayAnalysisTestVersion = yesterdayAnalysisTestVersion;
+  saveDailyState();
+  console.log(`[YESTERDAY_ANALYSIS_TEST] ${yesterdayAnalysisTestVersion}: private report sent`);
 }
 
 function startWhatsAppHealthWatchdog() {
@@ -1030,6 +1066,7 @@ client.on("ready", async () => {
     loadFollowupState();
     startDailyReportScheduler();
     await sendDeploymentTest();
+    await sendYesterdayAnalysisTest();
   } catch (error) {
     console.error("Team roster setup failed:", error);
   }
