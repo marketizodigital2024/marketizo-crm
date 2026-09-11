@@ -240,7 +240,12 @@ async function sendYesterdayAnalysisTest() {
     ]
   });
   const report = String(completion.choices[0]?.message?.content || "Nema dovoljno podataka za pouzdanu analizu jučerašnjih klijenata.").trim().slice(0, 1200);
-  await sendWhatsappMessage(alertTo, `*Test — analiza klijenata od juče*\n\n${report}`, "yesterday analysis test");
+  await sendWhatsappMessage(alertTo, "*Test — analiza klijenata od juče*", "yesterday analysis test heading");
+  const chunks = report.match(/[\s\S]{1,280}(?:\s|$)/g) || [report];
+  for (const [index, chunk] of chunks.entries()) {
+    await sendWhatsappMessage(alertTo, chunk.trim(), `yesterday analysis test ${index + 1}/${chunks.length}`);
+    await new Promise((resolve) => setTimeout(resolve, 750));
+  }
   dailyState.lastYesterdayAnalysisTestVersion = yesterdayAnalysisTestVersion;
   saveDailyState();
   console.log(`[YESTERDAY_ANALYSIS_TEST] ${yesterdayAnalysisTestVersion}: private report sent`);
