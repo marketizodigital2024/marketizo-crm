@@ -28,7 +28,6 @@ const model = smartModel;
 const reasoningEffort = process.env.OPENAI_REASONING_EFFORT || "xhigh";
 const alertTo = process.env.ALERT_TO;
 const alertNumber = alertTo.split("@")[0].replace(/\D/g, "");
-const whatsappPhoneNumber = (process.env.WHATSAPP_PHONE_NUMBER || "").replace(/\D/g, "");
 const port = Number(process.env.PORT || 3000);
 const pairingToken = crypto.randomBytes(24).toString("hex");
 const pairingAlias = "/pair/marketizo-reconnect";
@@ -103,8 +102,6 @@ const client = new Client({
   }
 });
 
-let pairingCodeRequested = false;
-let pairingRetryTimer = null;
 let dailySchedulerStarted = false;
 let morningReportInFlight = false;
 let closingReportInFlight = false;
@@ -1042,28 +1039,9 @@ http.createServer((req, res) => {
   console.log(`PAIRING_PAGE_ALIAS: ${pairingAlias}`);
 });
 
-async function requestPhonePairingCode() {
-  try {
-    const pairingCode = await client.requestPairingCode(whatsappPhoneNumber, false, 180000);
-    console.log("========================================");
-    console.log(`WHATSAPP PAIRING CODE: ${pairingCode}`);
-    console.log("Phone: Linked devices > Link a device > Link with phone number instead");
-    console.log("========================================");
-  } catch (error) {
-    console.error("Pairing code request failed; retrying in 30 minutes:", error);
-    clearTimeout(pairingRetryTimer);
-    pairingRetryTimer = setTimeout(requestPhonePairingCode, 1800000);
-  }
-}
-
 client.on("qr", async (code) => {
   qrDataUrl = await QRCode.toDataURL(code, { width: 700, margin: 4 });
   console.log("WhatsApp QR is ready on the private pairing page.");
-
-  if (whatsappPhoneNumber && !pairingCodeRequested) {
-    pairingCodeRequested = true;
-    void requestPhonePairingCode();
-  }
 });
 
 client.on("ready", async () => {
@@ -1074,8 +1052,6 @@ client.on("ready", async () => {
   lastHealthCheckAt = Date.now();
   startWhatsAppHealthWatchdog();
   qrDataUrl = null;
-  clearTimeout(pairingRetryTimer);
-  pairingRetryTimer = null;
   console.log("Marketizo WhatsApp agent is connected.");
   try {
     await refreshTeamMembers();
@@ -1094,18 +1070,12 @@ client.on("ready", async () => {
 client.on("auth_failure", (message) => {
   whatsappReady = false;
   clearInterval(healthTimer);
-  clearTimeout(pairingRetryTimer);
-  pairingRetryTimer = null;
-  pairingCodeRequested = false;
   console.error("WhatsApp authentication failed:", message);
 });
 
 client.on("disconnected", (reason) => {
   whatsappReady = false;
   clearInterval(healthTimer);
-  clearTimeout(pairingRetryTimer);
-  pairingRetryTimer = null;
-  pairingCodeRequested = false;
   console.error("WhatsApp disconnected:", reason);
   scheduleProcessRecovery("WhatsApp disconnected", reason);
 });
