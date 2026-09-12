@@ -39,7 +39,7 @@ const whatsappOperationTimeoutMs = Number(process.env.WHATSAPP_OPERATION_TIMEOUT
 const whatsappProtocolTimeoutMs = Number(process.env.WHATSAPP_PROTOCOL_TIMEOUT_MS || 120000);
 const whatsappHealthIntervalMs = Number(process.env.WHATSAPP_HEALTH_INTERVAL_MS || 300000);
 const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LIMIT || 2);
-const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-12-natural-full-context-2";
+const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-12-weekly-all-clients-3";
 const hybridTrialStartedAt = process.env.HYBRID_TRIAL_STARTED_AT || "2026-09-10";
 const deploymentTestVersion = "2026-09-11-stability-test-1";
 const yesterdayAnalysisTestVersion = "2026-09-11-yesterday-analysis-1";
@@ -552,7 +552,7 @@ async function updateFollowups(message, chat, senderName, source, messageText) {
 }
 
 async function answerOwnerQuestion(message) {
-  const question = String(message.body || "").trim() || "Daj mi pregled najvažnijih stvari.";
+  const question = String(message.body || "").trim() || "Daj mi pregled najvažnijih stvari."; const normalizedQuestion = normalizedName(question); const allClientsRequested = /\b(sve|svih|svaki|svaku|svakog)\b/.test(normalizedQuestion) && /\b(klijent|klijente|klijenata|grupe|grupa)\b/.test(normalizedQuestion);
   const storedHistory = [...groupHistory.values()]
     .flat()
     .sort((a, b) => String(a.at).localeCompare(String(b.at)))
@@ -560,7 +560,7 @@ async function answerOwnerQuestion(message) {
   const chats = await client.getChats();
   const clientGroups = chats.filter((chat) => chat.isGroup
     && chat.name !== teamGroupName
-    && (!monitoredGroups.size || monitoredGroups.has(chat.name)));
+    && (allClientsRequested || !monitoredGroups.size || monitoredGroups.has(chat.name)));
   const queryTokens = question.toLocaleLowerCase("sr-Latn")
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length >= 2 && !["sta", "šta", "kod", "grupi", "grupa", "cemu", "čemu", "radi", "ima"].includes(token));
@@ -614,7 +614,9 @@ async function answerOwnerQuestion(message) {
   const unresolvedIssues = [...openIssues.values()];
   const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
   const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
-  const response = await openai.chat.completions.create({
+  if (allClientsRequested) { const sortedGroups = [...clientGroups].sort((a, b) => a.name.localeCompare(b.name, "sr-Latn")); const batchSize = 5; const batches = []; for (let index = 0; index < sortedGroups.length; index += batchSize) batches.push(sortedGroups.slice(index, index + batchSize)); await message.reply("Vidim ukupno " + sortedGroups.length + " klijentskih grupa. Šaljem pregled u " + batches.length + " kratkih delova, tako da nijedan klijent ne bude preskočen."); for (const [batchIndex, batch] of batches.entries()) { const names = new Set(batch.map((chat) => chat.name)); const batchHistory = (await Promise.all(batch.map(async (chat) => { try { const items = await chat.fetchMessages({ limit: 50 }); return items.filter((item) => !item.fromMe && String(item.body || "").trim()).map((item) => ({ groupName: chat.name, sender: serializedId(item.author || item.from), source: isKnownTeamId(item.author || item.from) ? "team" : "client", text: String(item.body), at: new Date(item.timestamp * 1000).toISOString() })); } catch (error) { console.error("[PRIVATE_ALL_CONTEXT] Could not read " + chat.name + ":", error); return []; } }))).flat(); const completion = await openai.chat.completions.create({ model, ...reasoningOptions(), messages: [{ role: "system", content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja. Za mirnog klijenta dovoljna je jedna rečenica. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Sve u redu. Dodaj *Sledeći korak:* samo kada postoji stvarna akcija. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Ako za grupu nema poruka, napiši da nema dovoljno novih podataka, ali je ne preskači. Bez uvoda, zaključka, tabela i korporativnog tona." }, { role: "user", content: JSON.stringify({ clientGroups: batch.map((chat) => chat.name), teamMembers: [...teamMemberNames], recentGroupMessages: batchHistory, clientsWaitingForTeam: waitingForReply.filter((item) => names.has(item.group)), silentClients: silentClients.filter((item) => names.has(item.groupName)), unresolvedIssues: unresolvedIssues.filter((item) => names.has(item.groupName)), activeCommitments: activeCommitments.filter((item) => names.has(item.groupName)) }) }] }); const part = String(completion.choices[0]?.message?.content || "").trim(); await message.reply("*Deo " + (batchIndex + 1) + "/" + batches.length + "*
+
+" + part); await new Promise((resolve) => setTimeout(resolve, 750)); } console.log("[PRIVATE_ALL_CLIENTS_REPORT] sent " + sortedGroups.length + " groups in " + batches.length + " part(s)"); return; } const response = await openai.chat.completions.create({
     model,
     ...reasoningOptions(),
     messages: [
@@ -716,7 +718,11 @@ async function sendMorningReport() {
   saveDailyState();
 }
 
-async function sendWeeklyReport() {
+async function sendWeeklyAllClientsReport() { const today = viennaDateKey(); const snapshot = ownerActionSnapshot(); const chats = await client.getChats(); const groups = chats.filter((chat) => chat.isGroup && chat.name !== teamGroupName).sort((a, b) => a.name.localeCompare(b.name, "sr-Latn")); const batchSize = 5; const batches = []; for (let index = 0; index < groups.length; index += batchSize) batches.push(groups.slice(index, index + batchSize)); await sendWhatsappMessage(alertTo, "*NEDELJNI PREGLED — " + today + "*
+
+Vidim ukupno " + groups.length + " klijentskih grupa. Šaljem pregled u " + batches.length + " kratkih delova, bez preskakanja klijenata.", "weekly report heading"); for (const [batchIndex, batch] of batches.entries()) { const names = new Set(batch.map((chat) => chat.name)); const messages = (await Promise.all(batch.map(async (chat) => { try { const items = await chat.fetchMessages({ limit: 50 }); return items.filter((item) => !item.fromMe && String(item.body || "").trim()).map((item) => ({ groupName: chat.name, sender: serializedId(item.author || item.from), source: isKnownTeamId(item.author || item.from) ? "team" : "client", text: String(item.body), at: new Date(item.timestamp * 1000).toISOString() })); } catch (error) { console.error("[WEEKLY_CONTEXT] Could not read " + chat.name + ":", error); return []; } }))).flat(); const completion = await openai.chat.completions.create({ model, ...reasoningOptions(), messages: [{ role: "system", content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja. Za mirnog klijenta dovoljna je jedna rečenica. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Sve u redu. Dodaj *Sledeći korak:* samo kada postoji stvarna akcija. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Ako za grupu nema poruka, napiši da nema dovoljno novih podataka, ali je ne preskači. Bez uvoda, zaključka, tabela i korporativnog tona." }, { role: "user", content: JSON.stringify({ clientGroups: batch.map((chat) => chat.name), teamMembers: [...teamMemberNames], recentGroupMessages: messages, clientsWaitingForTeam: snapshot.pending.filter((item) => names.has(item.groupName)), silentClients: snapshot.silentClients.filter((item) => names.has(item.groupName)), unresolvedIssues: snapshot.issues.filter((item) => names.has(item.groupName)), activeCommitments: snapshot.activeCommitments.filter((item) => names.has(item.groupName)) }) }] }); const part = String(completion.choices[0]?.message?.content || "").trim(); await sendWhatsappMessage(alertTo, "*Deo " + (batchIndex + 1) + "/" + batches.length + "*
+
+" + part, "weekly report " + (batchIndex + 1) + "/" + batches.length); await new Promise((resolve) => setTimeout(resolve, 750)); } dailyState.lastWeeklyDate = today; dailyState.lastReportDate = today; dailyState.lastReportVersion = reportDeliveryVersion; saveDailyState(); } async function sendWeeklyReport() { return sendWeeklyAllClientsReport(); } async function sendWeeklyReportLegacy() {
   const today = viennaDateKey();
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const weeklyEvents = dailyState.events.filter((event) => new Date(event.at || 0).getTime() >= cutoff);
