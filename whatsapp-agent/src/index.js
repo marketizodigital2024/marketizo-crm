@@ -39,7 +39,7 @@ const whatsappOperationTimeoutMs = Number(process.env.WHATSAPP_OPERATION_TIMEOUT
 const whatsappProtocolTimeoutMs = Number(process.env.WHATSAPP_PROTOCOL_TIMEOUT_MS || 120000);
 const whatsappHealthIntervalMs = Number(process.env.WHATSAPP_HEALTH_INTERVAL_MS || 300000);
 const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LIMIT || 2);
-const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-12-readable-owner-report-1";
+const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-12-natural-full-context-2";
 const hybridTrialStartedAt = process.env.HYBRID_TRIAL_STARTED_AT || "2026-09-10";
 const deploymentTestVersion = "2026-09-11-stability-test-1";
 const yesterdayAnalysisTestVersion = "2026-09-11-yesterday-analysis-1";
@@ -437,7 +437,7 @@ function rememberGroupMessage(groupId, groupName, sender, source, text) {
     groupName,
     sender,
     source,
-    text: String(text).slice(0, 1500),
+    text: String(text),
     at: new Date().toISOString()
   });
   groupHistory.set(groupId, messages.slice(-60));
@@ -584,14 +584,14 @@ async function answerOwnerQuestion(message) {
   const groupsToRead = matchingGroups.length ? matchingGroups : clientGroups;
   const liveHistory = (await Promise.all(groupsToRead.map(async (chat) => {
     try {
-      const messages = await chat.fetchMessages({ limit: 50 });
+      const messages = await chat.fetchMessages({ limit: matchingGroups.length ? 150 : 50 });
       return messages
         .filter((item) => !item.fromMe && String(item.body || "").trim())
         .map((item) => ({
           groupName: chat.name,
           sender: serializedId(item.author || item.from),
           source: isKnownTeamId(item.author || item.from) ? "team" : "client",
-          text: String(item.body).slice(0, 1500),
+          text: String(item.body),
           at: new Date(item.timestamp * 1000).toISOString()
         }));
     } catch (error) {
@@ -625,7 +625,7 @@ async function answerOwnerQuestion(message) {
           `Članovi WhatsApp grupe ${teamGroupName} su zaposleni Marketiza. Miljan i Ivana su vlasnici i deo tima. U svim ostalim grupama, osobe iz teamMembers su zaposleni, a svi ostali učesnici su klijenti. Naziv grupe koristi kao naziv klijenta.`,
           "Razmišljaj kao iskusan direktor agencije: poveži više poruka, promenu tona, ranija obećanja, kvalitet izvršenja, odnose među ljudima, rizik po prihod i reputaciju i posledice po garanciju od 30 leadova.",
           "Nemoj samo proveravati da li je neko prekršio pravilo. Proceni šta se verovatno stvarno dešava, koliko je ozbiljno, šta je dokaz, šta je samo pretpostavka i koja odluka ima najveću vrednost za Miljana.",
-          "Odgovaraj prirodno, direktno i konkretno, kao sposobna osoba koja je pročitala razgovor i napisala Miljanu kratak lični izveštaj — nikada kao generički bot ili automatski šablon.",
+          "Odgovaraj kao sposoban kolega koji Miljanu normalnim rečima prepričava šta se dešava. Piši opušteno, jasno i kratko; ne kao konsultant, pravnik, revizor ili korporativni izveštaj.",
           "Kada Miljan direktno postavi pitanje, ne primenjuj pravilo tihih proaktivnih upozorenja: pregledaj sav dati relevantni kontekst i odgovori potpuno.",
           "Objasni šta se dogodilo, šta su napisali klijent i tim, šta je završeno, šta nije, ko čeka koga, kakav je ton, koja obećanja i rokovi postoje, da li se vidi obrazac ili skriveni rizik i koji je najbolji naredni potez.",
           "Koristi isključivo dati kontekst iz WhatsApp grupa koje agent prati. Razlikuj činjenice od procene i jasno označi procenu.",
@@ -634,7 +634,7 @@ async function answerOwnerQuestion(message) {
           "Ne obećavaj rokove, rezultate, povrat novca niti bilo kakvu obavezu u ime Marketiza.",
           "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. Ostali učesnici klijentskih grupa su klijenti.",
           "Ne izmišljaj činjenice. Navedi konkretno šta je ko napisao i kada, ako je to dostupno i važno.",
-          "Ne počinji uvek istim naslovom ili frazom. Za svakog klijenta napiši u posebnom redu *Tačan naziv klijentske grupe*, pa ispod kratak prirodan pasus. Ne zatrpavaj Miljana sirovim porukama i ne ponavljaj isto. Kada pitanje traži pregled jednog ili više klijenata, koristi isti stil kao vlasnički izveštaj: *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno; zatim dva do četiri kratka prirodna pasusa i na kraju *Sledeći korak:* sa jednom konkretnom akcijom. Po klijentu ciljaj približno 90–160 reči, osim kada nema dovoljno činjenica. Piši u kratkim odvojenim pasusima koji se lako čitaju na telefonu. Ne koristi tabele, nabrajanje sirovih poruka, proceduralne rubrike niti dugačak uvod.",
+          "Ne počinji uvek istim naslovom ili frazom. Za svakog klijenta napiši u posebnom redu *Tačan naziv klijentske grupe*, pa ispod kratak prirodan pasus. Ne zatrpavaj Miljana sirovim porukama i ne ponavljaj isto. Kada pitanje traži pregled jednog ili više klijenata, napiši *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno; zatim jedan do tri kratka prirodna pasusa i po potrebi *Sledeći korak:*. Obično je dovoljno 50–100 reči po klijentu, a više samo kada postoji ozbiljan i složen problem. Izbegavaj ukočene izraze kao što su 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena', 'nije probijen' i 'ne mogu potvrditi'. Reci jednostavno: ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Ne pretvaraj normalnu korekciju sadržaja ili čekanje unutar dogovorenog roka u vlasnički rizik. Piši u kratkim odvojenim pasusima koji se lako čitaju na telefonu. Ne koristi tabele, nabrajanje sirovih poruka, proceduralne rubrike niti dugačak uvod. Pročitaj ceo tekst svake dostavljene poruke ili skripte, uključujući završetak i poziv na akciju, pre nego što kažeš da nešto nedostaje.",
           "Najpre prenesi suštinu konkretnog slučaja, zatim prirodno dodaj svoju procenu i preporuku kada su potrebne.",
           "Ako nema stvarnog problema, reci to jasno. Ako vidiš rizik koji tim možda previđa, reci Miljanu otvoreno koliko je ozbiljan i zašto."
         ].join(" ")
@@ -766,7 +766,7 @@ async function sendDailyReport() {
           "Posebno istakni direktan zahtev Miljanu ili Ivani, probijen rok, klijenta bez odgovora duže od tri radna sata, konflikt, zahtev za raskid ili povraćaj novca, problem sa kampanjom ili leadovima i slučaj gde se članovi tima međusobno čekaju.",
           "Za svaku važnu tvrdnju navedi grupu, osobu i vreme kada su dostupni. Ne izmišljaj status; ako završetak nije potvrđen napiši 'nije potvrđeno'.",
           "Počni sa *DNEVNI IZVEŠTAJ — datum*, pa u sledećem redu napiši kratak zbir: *Danas: X hitno · Y zahtevaju pažnju · Z pozitivno*. Broji samo klijente koje si zaista uključio.",
-          "Za svakog relevantnog klijenta koristi tačno ovaj čitljiv oblik: *Kratko ime klijenta* — zatim 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno. Ispod napiši dva do četiri kratka prirodna pasusa: šta se dogodilo, trenutni status i zašto je važno. Završi sa *Sledeći korak:* i jednom konkretnom akcijom, odgovornom osobom i rokom kada su poznati. Ciljaj približno 90–160 reči po klijentu, kao sažet ali dovoljno detaljan vlasnički pregled.",
+          "Za svakog relevantnog klijenta napiši *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno, pa jedan do tri kratka prirodna pasusa. Obično je dovoljno 50–100 reči po klijentu; više samo za ozbiljan složen problem. Dodaj *Sledeći korak:* samo kada stvarno postoji konkretna akcija. Piši kao sposoban kolega koji Miljanu usput jasno prepričava stanje, ne kao konsultant, pravnik, revizor ili korporativni izveštaj. Izbegavaj izraze 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena', 'nije probijen' i 'ne mogu potvrditi'. Reci jednostavno ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Normalna korekcija sadržaja, ljubazan razgovor ili čekanje unutar dogovorenog roka nisu vlasnički problem i ne treba im izmišljati rizik. Pre zaključka pročitaj ceo sadržaj dostavljenih poruka i skripti, uključujući završetak i poziv na akciju.",
           "Ne koristi tabele, duge liste, horizontalne crte ni tehničke nazive rubrika. Ostavi prazan red između pasusa i klijenata da poruka bude laka za čitanje na telefonu.",
           "Za svaku negativnu situaciju proveri recentGroupMessages i trenutno stanje pre zaključka. Ako postoji dokaz da je rešena, potpuno je izostavi iz izveštaja; Miljanu ne šalji obaveštenja o zatvorenim situacijama.",
           "Ako nema dokaza rešenja, napiši: Nerešeno — konkretan problem, posledica, ko treba da preuzme i do kada. Nerešene ozbiljne stvari imaju prioritet nad istorijskim događajima.",
