@@ -552,7 +552,10 @@ async function updateFollowups(message, chat, senderName, source, messageText) {
 }
 
 async function answerOwnerQuestion(message) {
-  const question = String(message.body || "").trim() || "Daj mi pregled najvažnijih stvari."; const normalizedQuestion = normalizedName(question); const allClientsRequested = /\b(sve|svih|svaki|svaku|svakog)\b/.test(normalizedQuestion) && /\b(klijent|klijente|klijenata|grupe|grupa)\b/.test(normalizedQuestion);
+  const question = String(message.body || "").trim() || "Daj mi pregled najvažnijih stvari.";
+  const normalizedQuestion = normalizedName(question);
+  const allClientsRequested = /\b(sve|svih|svaki|svaku|svakog)\b/.test(normalizedQuestion)
+    && /\b(klijent|klijente|klijenata|grupe|grupa)\b/.test(normalizedQuestion);
   const storedHistory = [...groupHistory.values()]
     .flat()
     .sort((a, b) => String(a.at).localeCompare(String(b.at)))
@@ -582,9 +585,10 @@ async function answerOwnerQuestion(message) {
     matchingGroups = participantMatches.filter(Boolean);
   }
   const groupsToRead = matchingGroups.length ? matchingGroups : clientGroups;
+  const messageLimit = matchingGroups.length ? 150 : 50;
   const liveHistory = (await Promise.all(groupsToRead.map(async (chat) => {
     try {
-      const messages = await chat.fetchMessages({ limit: matchingGroups.length ? 150 : 50 });
+      const messages = await chat.fetchMessages({ limit: messageLimit });
       return messages
         .filter((item) => !item.fromMe && String(item.body || "").trim())
         .map((item) => ({
@@ -602,9 +606,9 @@ async function answerOwnerQuestion(message) {
   const relevantStoredHistory = matchingGroups.length
     ? storedHistory.filter((item) => matchingGroups.some((chat) => chat.name === item.groupName))
     : storedHistory;
-  const history = [...relevantStoredHistory, ...liveHistory]
-    .sort((a, b) => String(a.at).localeCompare(String(b.at)))
-    .slice(-300);
+  const combinedHistory = [...relevantStoredHistory, ...liveHistory]
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const history = allClientsRequested ? combinedHistory : combinedHistory.slice(-300);
   const waitingForReply = [...pendingByGroup.values()].map((record) => ({
     group: record.groupName,
     client: record.senderName,
@@ -614,9 +618,51 @@ async function answerOwnerQuestion(message) {
   const unresolvedIssues = [...openIssues.values()];
   const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
   const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
-  if (allClientsRequested) { const sortedGroups = [...clientGroups].sort((a, b) => a.name.localeCompare(b.name, "sr-Latn")); const batchSize = 5; const batches = []; for (let index = 0; index < sortedGroups.length; index += batchSize) batches.push(sortedGroups.slice(index, index + batchSize)); await message.reply("Vidim ukupno " + sortedGroups.length + " klijentskih grupa. Šaljem pregled u " + batches.length + " kratkih delova, tako da nijedan klijent ne bude preskočen."); for (const [batchIndex, batch] of batches.entries()) { const names = new Set(batch.map((chat) => chat.name)); const batchHistory = (await Promise.all(batch.map(async (chat) => { try { const items = await chat.fetchMessages({ limit: 50 }); return items.filter((item) => !item.fromMe && String(item.body || "").trim()).map((item) => ({ groupName: chat.name, sender: serializedId(item.author || item.from), source: isKnownTeamId(item.author || item.from) ? "team" : "client", text: String(item.body), at: new Date(item.timestamp * 1000).toISOString() })); } catch (error) { console.error("[PRIVATE_ALL_CONTEXT] Could not read " + chat.name + ":", error); return []; } }))).flat(); const completion = await openai.chat.completions.create({ model, ...reasoningOptions(), messages: [{ role: "system", content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja. Za mirnog klijenta dovoljna je jedna rečenica. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Sve u redu. Dodaj *Sledeći korak:* samo kada postoji stvarna akcija. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Ako za grupu nema poruka, napiši da nema dovoljno novih podataka, ali je ne preskači. Bez uvoda, zaključka, tabela i korporativnog tona." }, { role: "user", content: JSON.stringify({ clientGroups: batch.map((chat) => chat.name), teamMembers: [...teamMemberNames], recentGroupMessages: batchHistory, clientsWaitingForTeam: waitingForReply.filter((item) => names.has(item.group)), silentClients: silentClients.filter((item) => names.has(item.groupName)), unresolvedIssues: unresolvedIssues.filter((item) => names.has(item.groupName)), activeCommitments: activeCommitments.filter((item) => names.has(item.groupName)) }) }] }); const part = String(completion.choices[0]?.message?.content || "").trim(); await message.reply("*Deo " + (batchIndex + 1) + "/" + batches.length + "*
-
-" + part); await new Promise((resolve) => setTimeout(resolve, 750)); } console.log("[PRIVATE_ALL_CLIENTS_REPORT] sent " + sortedGroups.length + " groups in " + batches.length + " part(s)"); return; } const response = await openai.chat.completions.create({
+  if (allClientsRequested) {
+    const sortedGroups = [...clientGroups].sort((a, b) => a.name.localeCompare(b.name, "sr-Latn"));
+    const batchSize = 5;
+    const batches = [];
+    for (let index = 0; index < sortedGroups.length; index += batchSize) {
+      batches.push(sortedGroups.slice(index, index + batchSize));
+    }
+    await message.reply(`Vidim ukupno ${sortedGroups.length} klijentskih grupa. Šaljem pregled u ${batches.length} kratkih delova, tako da nijedan klijent ne bude preskočen.`);
+    for (const [batchIndex, batch] of batches.entries()) {
+      const names = new Set(batch.map((chat) => chat.name));
+      const batchHistory = history.filter((item) => names.has(item.groupName));
+      const batchWaiting = waitingForReply.filter((item) => names.has(item.group));
+      const batchIssues = unresolvedIssues.filter((item) => names.has(item.groupName));
+      const batchCommitments = activeCommitments.filter((item) => names.has(item.groupName));
+      const batchSilent = silentClients.filter((item) => names.has(item.groupName));
+      const completion = await openai.chat.completions.create({
+        model,
+        ...reasoningOptions(),
+        messages: [
+          {
+            role: "system",
+            content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja. Za mirnog klijenta dovoljna je jedna rečenica. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Sve u redu. Dodaj *Sledeći korak:* samo kada postoji stvarna akcija. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Ako za grupu nema poruka, napiši da nema dovoljno novih podataka, ali je ne preskači. Bez uvoda, zaključka, tabela i korporativnog tona."
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              clientGroups: batch.map((chat) => chat.name),
+              teamMembers: [...teamMemberNames],
+              recentGroupMessages: batchHistory,
+              clientsWaitingForTeam: batchWaiting,
+              silentClients: batchSilent,
+              unresolvedIssues: batchIssues,
+              activeCommitments: batchCommitments
+            })
+          }
+        ]
+      });
+      const part = String(completion.choices[0]?.message?.content || "").trim();
+      await message.reply(`*Deo ${batchIndex + 1}/${batches.length}*\n\n${part}`);
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    }
+    console.log(`[PRIVATE_ALL_CLIENTS_REPORT] sent ${sortedGroups.length} groups in ${batches.length} part(s)`);
+    return;
+  }
+  const response = await openai.chat.completions.create({
     model,
     ...reasoningOptions(),
     messages: [
@@ -636,7 +682,10 @@ async function answerOwnerQuestion(message) {
           "Ne obećavaj rokove, rezultate, povrat novca niti bilo kakvu obavezu u ime Marketiza.",
           "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. Ostali učesnici klijentskih grupa su klijenti.",
           "Ne izmišljaj činjenice. Navedi konkretno šta je ko napisao i kada, ako je to dostupno i važno.",
-          "Ne počinji uvek istim naslovom ili frazom. Za svakog klijenta napiši u posebnom redu *Tačan naziv klijentske grupe*, pa ispod kratak prirodan pasus. Ne zatrpavaj Miljana sirovim porukama i ne ponavljaj isto. Kada pitanje traži pregled jednog ili više klijenata, napiši *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno; zatim jedan do tri kratka prirodna pasusa i po potrebi *Sledeći korak:*. Obično je dovoljno 50–100 reči po klijentu, a više samo kada postoji ozbiljan i složen problem. Izbegavaj ukočene izraze kao što su 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena', 'nije probijen' i 'ne mogu potvrditi'. Reci jednostavno: ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Ne pretvaraj normalnu korekciju sadržaja ili čekanje unutar dogovorenog roka u vlasnički rizik. Piši u kratkim odvojenim pasusima koji se lako čitaju na telefonu. Ne koristi tabele, nabrajanje sirovih poruka, proceduralne rubrike niti dugačak uvod. Pročitaj ceo tekst svake dostavljene poruke ili skripte, uključujući završetak i poziv na akciju, pre nego što kažeš da nešto nedostaje.",
+          "Ne počinji uvek istim naslovom ili frazom. Za svakog klijenta napiši u posebnom redu *Tačan naziv klijentske grupe*, pa ispod kratak prirodan pasus. Ne zatrpavaj Miljana sirovim porukama i ne ponavljaj isto.",
+          "Kada pitanje traži pregled jednog ili više klijenata, napiši *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno; zatim jedan do tri kratka prirodna pasusa i po potrebi *Sledeći korak:*. Obično je dovoljno 50–100 reči po klijentu, a više samo kada postoji ozbiljan i složen problem.",
+          "Izbegavaj ukočene izraze kao što su 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena', 'nije probijen' i 'ne mogu potvrditi'. Reci jednostavno: ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Ne pretvaraj normalnu korekciju sadržaja ili čekanje unutar dogovorenog roka u vlasnički rizik.",
+          "Piši u kratkim odvojenim pasusima koji se lako čitaju na telefonu. Ne koristi tabele, nabrajanje sirovih poruka, proceduralne rubrike niti dugačak uvod. Pročitaj ceo tekst svake dostavljene poruke ili skripte, uključujući završetak i poziv na akciju, pre nego što kažeš da nešto nedostaje.",
           "Najpre prenesi suštinu konkretnog slučaja, zatim prirodno dodaj svoju procenu i preporuku kada su potrebne.",
           "Ako nema stvarnog problema, reci to jasno. Ako vidiš rizik koji tim možda previđa, reci Miljanu otvoreno koliko je ozbiljan i zašto."
         ].join(" ")
@@ -709,7 +758,7 @@ async function sendMorningReport() {
     model,
     ...reasoningOptions(),
     messages: [
-      { role: "system", content: "Napiši Miljanu jutarnji pregled kao sposoban kolega koji mu normalnim rečima kaže samo ono važno. Za klijenta napiši *Kratko ime* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno, pa jedan do tri kratka pasusa i po potrebi *Sledeći korak:*. Obično je dovoljno 50–100 reči po klijentu. Bez konsultantskog, pravničkog i korporativnog tona. Reci jednostavno ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Normalna korekcija ili čekanje unutar dogovorenog roka nije vlasnički problem. Pročitaj ceo sadržaj poruka i skripti, uključujući poziv na akciju. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog duže od tri radna sata. silentClients znači da zaposleni čeka odgovor klijenta duže od 48 sati. Pre zaključka proveri recentGroupMessages. Ako je rešeno, ne navodi ga. Ako nije, reci ko treba da preuzme i do kada. Miljanu izdvoji samo ono što traži njegovu odluku ili nosi ozbiljan rizik. Ne izmišljaj činjenice." },
+      { role: "system", content: "Napiši Miljanu jutarnji pregled kao sposoban kolega koji mu normalnim rečima kaže samo ono važno. Za klijenta napiši *Kratko ime* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno, pa jedan do tri kratka pasusa i po potrebi *Sledeći korak:*. Obično je dovoljno 50–100 reči po klijentu. Bez konsultantskog, pravničkog i korporativnog tona; izbegavaj izraze 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena' i 'nije probijen'. Reci jednostavno ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Normalna korekcija ili čekanje unutar dogovorenog roka nije vlasnički problem. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog duže od tri radna sata. silentClients znači da zaposleni čeka odgovor klijenta duže od 48 sati. Pročitaj ceo sadržaj poruka i skripti, uključujući poziv na akciju. Ako je rešeno, ne navodi ga. Miljanu izdvoji samo ono što traži njegovu odluku ili nosi ozbiljan rizik. Ne izmišljaj činjenice." },
       { role: "user", content: JSON.stringify({ date: today, teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
@@ -718,24 +767,42 @@ async function sendMorningReport() {
   saveDailyState();
 }
 
-async function sendWeeklyAllClientsReport() { const today = viennaDateKey(); const snapshot = ownerActionSnapshot(); const chats = await client.getChats(); const groups = chats.filter((chat) => chat.isGroup && chat.name !== teamGroupName).sort((a, b) => a.name.localeCompare(b.name, "sr-Latn")); const batchSize = 5; const batches = []; for (let index = 0; index < groups.length; index += batchSize) batches.push(groups.slice(index, index + batchSize)); await sendWhatsappMessage(alertTo, "*NEDELJNI PREGLED — " + today + "*
-
-Vidim ukupno " + groups.length + " klijentskih grupa. Šaljem pregled u " + batches.length + " kratkih delova, bez preskakanja klijenata.", "weekly report heading"); for (const [batchIndex, batch] of batches.entries()) { const names = new Set(batch.map((chat) => chat.name)); const messages = (await Promise.all(batch.map(async (chat) => { try { const items = await chat.fetchMessages({ limit: 50 }); return items.filter((item) => !item.fromMe && String(item.body || "").trim()).map((item) => ({ groupName: chat.name, sender: serializedId(item.author || item.from), source: isKnownTeamId(item.author || item.from) ? "team" : "client", text: String(item.body), at: new Date(item.timestamp * 1000).toISOString() })); } catch (error) { console.error("[WEEKLY_CONTEXT] Could not read " + chat.name + ":", error); return []; } }))).flat(); const completion = await openai.chat.completions.create({ model, ...reasoningOptions(), messages: [{ role: "system", content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja. Za mirnog klijenta dovoljna je jedna rečenica. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Sve u redu. Dodaj *Sledeći korak:* samo kada postoji stvarna akcija. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Ako za grupu nema poruka, napiši da nema dovoljno novih podataka, ali je ne preskači. Bez uvoda, zaključka, tabela i korporativnog tona." }, { role: "user", content: JSON.stringify({ clientGroups: batch.map((chat) => chat.name), teamMembers: [...teamMemberNames], recentGroupMessages: messages, clientsWaitingForTeam: snapshot.pending.filter((item) => names.has(item.groupName)), silentClients: snapshot.silentClients.filter((item) => names.has(item.groupName)), unresolvedIssues: snapshot.issues.filter((item) => names.has(item.groupName)), activeCommitments: snapshot.activeCommitments.filter((item) => names.has(item.groupName)) }) }] }); const part = String(completion.choices[0]?.message?.content || "").trim(); await sendWhatsappMessage(alertTo, "*Deo " + (batchIndex + 1) + "/" + batches.length + "*
-
-" + part, "weekly report " + (batchIndex + 1) + "/" + batches.length); await new Promise((resolve) => setTimeout(resolve, 750)); } dailyState.lastWeeklyDate = today; dailyState.lastReportDate = today; dailyState.lastReportVersion = reportDeliveryVersion; saveDailyState(); } async function sendWeeklyReport() { return sendWeeklyAllClientsReport(); } async function sendWeeklyReportLegacy() {
+async function sendWeeklyReport() {
   const today = viennaDateKey();
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const weeklyEvents = dailyState.events.filter((event) => new Date(event.at || 0).getTime() >= cutoff);
   const snapshot = ownerActionSnapshot();
-  const completion = await openai.chat.completions.create({
-    model,
-    ...reasoningOptions(),
-    messages: [
-      { role: "system", content: "Napiši Miljanu nedeljni pregled kao iskusan kolega koji mu normalnim rečima kaže šta je važno. Za klijenta napiši *Kratko ime* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno, pa jedan do tri kratka pasusa i po potrebi *Sledeći korak:*. Obično je dovoljno 50–100 reči po klijentu, a više samo za ozbiljan složen problem. Bez konsultantskog, pravničkog i korporativnog tona. Reci jednostavno ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Normalna korekcija ili čekanje unutar dogovorenog roka nije vlasnički problem. Pročitaj ceo sadržaj poruka i skripti, uključujući poziv na akciju. Izdvoji ponovljene probleme, ozbiljne rizike, probijene rokove, važne pohvale ili rezultate. Ne predstavljaj rešenu žalbu kao aktuelan problem. Proveri recentGroupMessages pre zaključka. Na kraju dodaj jedan kratak prirodan pasus o najvažnijim prioritetima naredne nedelje samo ako postoje. Miljanu eskaliraj samo odluke, ozbiljan rizik i probleme koje tim nije zatvorio. Ne izmišljaj činjenice." },
-      { role: "user", content: JSON.stringify({ endingDate: today, teamMembers: [...teamMemberNames], events: weeklyEvents, unresolvedIssues: snapshot.issues, clientsWaitingForTeam: snapshot.pending, silentClients: snapshot.silentClients, activeCommitments: snapshot.activeCommitments, recentGroupMessages: snapshot.recentGroupMessages }) }
-    ]
-  });
-  await sendWhatsappMessage(alertTo, String(completion.choices[0]?.message?.content || "Ove nedelje nije bilo događaja koji zahtevaju vlasničku pažnju.").trim(), "weekly report");
+  const chats = await client.getChats();
+  const groups = chats
+    .filter((chat) => chat.isGroup && chat.name !== teamGroupName)
+    .sort((a, b) => a.name.localeCompare(b.name, "sr-Latn"));
+  const batchSize = 5;
+  const batches = [];
+  for (let index = 0; index < groups.length; index += batchSize) batches.push(groups.slice(index, index + batchSize));
+  await sendWhatsappMessage(alertTo, `*NEDELJNI PREGLED — ${today}*\n\nVidim ukupno ${groups.length} klijentskih grupa. Šaljem pregled u ${batches.length} kratkih delova, bez preskakanja klijenata.`, "weekly report heading");
+  for (const [batchIndex, batch] of batches.entries()) {
+    const names = new Set(batch.map((chat) => chat.name));
+    const messages = (await Promise.all(batch.map(async (chat) => {
+      try {
+        const items = await chat.fetchMessages({ limit: 50 });
+        return items
+          .filter((item) => !item.fromMe && String(item.body || "").trim())
+          .map((item) => ({ groupName: chat.name, sender: serializedId(item.author || item.from), source: isKnownTeamId(item.author || item.from) ? "team" : "client", text: String(item.body), at: new Date(item.timestamp * 1000).toISOString() }));
+      } catch (error) {
+        console.error(`[WEEKLY_CONTEXT] Could not read ${chat.name}:`, error);
+        return [];
+      }
+    }))).flat();
+    const completion = await openai.chat.completions.create({
+      model,
+      ...reasoningOptions(),
+      messages: [
+        { role: "system", content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja. Za mirnog klijenta dovoljna je jedna rečenica. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Sve u redu. Dodaj *Sledeći korak:* samo kada postoji stvarna akcija. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Ako za grupu nema poruka, napiši da nema dovoljno novih podataka, ali je ne preskači. Bez uvoda, zaključka, tabela i korporativnog tona." },
+        { role: "user", content: JSON.stringify({ clientGroups: batch.map((chat) => chat.name), teamMembers: [...teamMemberNames], recentGroupMessages: messages, clientsWaitingForTeam: snapshot.pending.filter((item) => names.has(item.groupName)), silentClients: snapshot.silentClients.filter((item) => names.has(item.groupName)), unresolvedIssues: snapshot.issues.filter((item) => names.has(item.groupName)), activeCommitments: snapshot.activeCommitments.filter((item) => names.has(item.groupName)) }) }
+      ]
+    });
+    const part = String(completion.choices[0]?.message?.content || "").trim();
+    await sendWhatsappMessage(alertTo, `*Deo ${batchIndex + 1}/${batches.length}*\n\n${part}`, `weekly report ${batchIndex + 1}/${batches.length}`);
+    await new Promise((resolve) => setTimeout(resolve, 750));
+  }
   dailyState.lastWeeklyDate = today;
   dailyState.lastReportDate = today;
   dailyState.lastReportVersion = reportDeliveryVersion;
@@ -772,7 +839,9 @@ async function sendDailyReport() {
           "Posebno istakni direktan zahtev Miljanu ili Ivani, probijen rok, klijenta bez odgovora duže od tri radna sata, konflikt, zahtev za raskid ili povraćaj novca, problem sa kampanjom ili leadovima i slučaj gde se članovi tima međusobno čekaju.",
           "Za svaku važnu tvrdnju navedi grupu, osobu i vreme kada su dostupni. Ne izmišljaj status; ako završetak nije potvrđen napiši 'nije potvrđeno'.",
           "Počni sa *DNEVNI IZVEŠTAJ — datum*, pa u sledećem redu napiši kratak zbir: *Danas: X hitno · Y zahtevaju pažnju · Z pozitivno*. Broji samo klijente koje si zaista uključio.",
-          "Za svakog relevantnog klijenta napiši *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno, pa jedan do tri kratka prirodna pasusa. Obično je dovoljno 50–100 reči po klijentu; više samo za ozbiljan složen problem. Dodaj *Sledeći korak:* samo kada stvarno postoji konkretna akcija. Piši kao sposoban kolega koji Miljanu usput jasno prepričava stanje, ne kao konsultant, pravnik, revizor ili korporativni izveštaj. Izbegavaj izraze 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena', 'nije probijen' i 'ne mogu potvrditi'. Reci jednostavno ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Normalna korekcija sadržaja, ljubazan razgovor ili čekanje unutar dogovorenog roka nisu vlasnički problem i ne treba im izmišljati rizik. Pre zaključka pročitaj ceo sadržaj dostavljenih poruka i skripti, uključujući završetak i poziv na akciju.",
+          "Za svakog relevantnog klijenta napiši *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno, pa jedan do tri kratka prirodna pasusa. Obično je dovoljno 50–100 reči po klijentu; više samo za ozbiljan složen problem. Dodaj *Sledeći korak:* samo kada stvarno postoji konkretna akcija.",
+          "Piši kao sposoban kolega koji Miljanu usput jasno prepričava stanje, ne kao konsultant, pravnik, revizor ili korporativni izveštaj. Izbegavaj izraze 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena', 'nije probijen' i 'ne mogu potvrditi'. Reci jednostavno ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio.",
+          "Normalna korekcija sadržaja, ljubazan razgovor ili čekanje unutar dogovorenog roka nisu vlasnički problem i ne treba im izmišljati rizik. Pre zaključka pročitaj ceo sadržaj dostavljenih poruka i skripti, uključujući završetak i poziv na akciju.",
           "Ne koristi tabele, duge liste, horizontalne crte ni tehničke nazive rubrika. Ostavi prazan red između pasusa i klijenata da poruka bude laka za čitanje na telefonu.",
           "Za svaku negativnu situaciju proveri recentGroupMessages i trenutno stanje pre zaključka. Ako postoji dokaz da je rešena, potpuno je izostavi iz izveštaja; Miljanu ne šalji obaveštenja o zatvorenim situacijama.",
           "Ako nema dokaza rešenja, napiši: Nerešeno — konkretan problem, posledica, ko treba da preuzme i do kada. Nerešene ozbiljne stvari imaju prioritet nad istorijskim događajima.",
