@@ -24,6 +24,38 @@ function viennaTime(date = new Date()) {
   return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
 }
 
+function backupCounts(state = {}) {
+  return {
+    employees: Array.isArray(state.employees) ? state.employees.length : 0,
+    clients: Array.isArray(state.clients) ? state.clients.length : 0,
+    workLogs: Array.isArray(state.employeeWorkLogs) ? state.employeeWorkLogs.length : 0,
+    absences: Array.isArray(state.employeeAbsences) ? state.employeeAbsences.length : 0,
+    activities: Array.isArray(state.employeeActivities) ? state.employeeActivities.length : 0,
+  };
+}
+
+function summarizeBackup(row) {
+  const state = row.payload?.state || {};
+  const logs = Array.isArray(state.employeeWorkLogs) ? state.employeeWorkLogs : [];
+  const dates = logs.map((log) => String(log.date || "")).filter(Boolean).sort();
+  const storedCounts = row.counts || row.payload?.counts || null;
+  return {
+    slot: row.id,
+    backupDate: row.backupDate || row.payload?.backupDate || "",
+    sourceUpdatedAt: row.sourceUpdatedAt || row.payload?.sourceUpdatedAt || "",
+    updatedAt: row.updated_at || "",
+    workLogs: logs.length || storedCounts?.workLogs || null,
+    firstWorkLogDate: dates[0] || row.firstWorkLogDate || row.payload?.firstWorkLogDate || "",
+    lastWorkLogDate: dates[dates.length - 1] || row.lastWorkLogDate || row.payload?.lastWorkLogDate || "",
+    septemberWorkLogs: logs.length
+      ? logs.filter((log) => String(log.date || "").startsWith("2026-09-")).length
+      : (row.septemberWorkLogs || row.payload?.septemberWorkLogs || null),
+    septemberDates: logs.length
+      ? [...new Set(logs.map((log) => String(log.date || "")).filter((date) => date.startsWith("2026-09-")))].sort()
+      : (row.septemberDates || row.payload?.septemberDates || []),
+  };
+}
+
 async function blobClient() {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
   return import("@vercel/blob");
@@ -101,11 +133,19 @@ module.exports = async function handler(req, res) {
 
   if (String(req.query?.inspect || "") === "1") {
     try {
-      const response = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,payload,updated_at&order=updated_at.desc`, {
+      // Do not download every multi-megabyte backup payload just to list them.
+      // That response grows on every run and can make PostgREST return 500.
+      const response = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,updated_at,backupDate:payload->>backupDate,sourceUpdatedAt:payload->>sourceUpdatedAt,counts:payload->counts,firstWorkLogDate:payload->>firstWorkLogDate,lastWorkLogDate:payload->>lastWorkLogDate,septemberWorkLogs:payload->septemberWorkLogs,septemberDates:payload->septemberDates&order=updated_at.desc`, {
         headers: headers(key),
       });
       if (!response.ok) throw new Error(`Backup list failed (${response.status})`);
       const rows = await response.json();
+      const recentResponse = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,payload,updated_at&order=updated_at.desc&limit=3`, {
+        headers: headers(key),
+      });
+      if (!recentResponse.ok) throw new Error(`Recent backup check failed (${recentResponse.status})`);
+      const recentRows = await recentResponse.json();
+      const recentById = new Map(recentRows.map((row) => [row.id, row]));
       const independent = await listBlobBackups();
       return send(res, 200, {
         ok: true,
@@ -118,22 +158,7 @@ module.exports = async function handler(req, res) {
             uploadedAt: item.uploadedAt,
           })),
         },
-        backups: rows.map((row) => {
-          const state = row.payload?.state || {};
-          const logs = Array.isArray(state.employeeWorkLogs) ? state.employeeWorkLogs : [];
-          const dates = logs.map((log) => String(log.date || "")).filter(Boolean).sort();
-          return {
-            slot: row.id,
-            backupDate: row.payload?.backupDate || "",
-            sourceUpdatedAt: row.payload?.sourceUpdatedAt || "",
-            updatedAt: row.updated_at || "",
-            workLogs: logs.length,
-            firstWorkLogDate: dates[0] || "",
-            lastWorkLogDate: dates[dates.length - 1] || "",
-            septemberWorkLogs: logs.filter((log) => String(log.date || "").startsWith("2026-09-")).length,
-            septemberDates: [...new Set(logs.map((log) => String(log.date || "")).filter((date) => date.startsWith("2026-09-")))].sort(),
-          };
-        }),
+        backups: rows.map((row) => summarizeBackup({ ...row, ...(recentById.get(row.id) || {}) })),
       });
     } catch (error) {
       return send(res, 500, { error: error?.message || "Backup inspection failed" });
@@ -172,6 +197,8 @@ module.exports = async function handler(req, res) {
 
     const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
     const backupId = `backup-daily-${dayNumber % BACKUP_SLOTS}`;
+    const workLogs = Array.isArray(source.payload.employeeWorkLogs) ? source.payload.employeeWorkLogs : [];
+    const workLogDates = workLogs.map((log) => String(log.date || "")).filter(Boolean).sort();
     const backupResponse = await fetch(`${url}/rest/v1/${TABLE}?on_conflict=id`, {
       method: "POST",
       headers: headers(key, "resolution=merge-duplicates,return=minimal"),
@@ -180,6 +207,11 @@ module.exports = async function handler(req, res) {
         payload: {
           backupDate: date,
           sourceUpdatedAt: source.updated_at || "",
+          counts: backupCounts(source.payload),
+          firstWorkLogDate: workLogDates[0] || "",
+          lastWorkLogDate: workLogDates[workLogDates.length - 1] || "",
+          septemberWorkLogs: workLogs.filter((log) => String(log.date || "").startsWith("2026-09-")).length,
+          septemberDates: [...new Set(workLogs.map((log) => String(log.date || "")).filter((item) => item.startsWith("2026-09-")))].sort(),
           state: source.payload,
         },
         updated_at: now.toISOString(),
