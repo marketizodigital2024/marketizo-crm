@@ -1,6 +1,7 @@
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
 const BACKUP_SLOTS = 30;
+const MAX_WRITE_ATTEMPTS = 8;
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -16,6 +17,10 @@ function headers(key, prefer = "") {
     "Content-Type": "application/json",
     ...(prefer ? { Prefer: prefer } : {}),
   };
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function readBody(req) {
@@ -49,12 +54,12 @@ async function preserveDailyPrewriteBackup(url, key, row) {
   const backupDate = viennaDateKey(now);
   const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
   const backupId = `backup-prewrite-${dayNumber % BACKUP_SLOTS}`;
-  const existingResponse = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=payload`, {
+  const existingResponse = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=backupDate:payload->>backupDate`, {
     headers: headers(key),
   });
   if (!existingResponse.ok) throw new Error(`Provera dnevnog backupa nije uspela (${existingResponse.status}).`);
   const existingRows = await existingResponse.json();
-  if (existingRows[0]?.payload?.backupDate === backupDate) return;
+  if (existingRows[0]?.backupDate === backupDate) return;
   const backupResponse = await fetch(`${url}/rest/v1/${tableName}?on_conflict=id`, {
     method: "POST",
     headers: headers(key, "resolution=merge-duplicates,return=minimal"),
@@ -85,7 +90,7 @@ module.exports = async function handler(req, res) {
       return json(res, 400, { ok: false, error: "Nedostaju obavezni podaci aktivnosti." });
     }
 
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
       const row = await readRow(url, key);
       if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
       const payload = JSON.parse(JSON.stringify(row.payload || {}));
@@ -125,6 +130,8 @@ module.exports = async function handler(req, res) {
       if (!response.ok) throw new Error(`Upis aktivnosti nije uspeo (${response.status}).`);
       const updatedRows = await response.json();
       if (updatedRows.length) return json(res, 200, { ok: true, workLogId: workLog.id, updatedAt });
+      const backoff = Math.min(800, 45 * (2 ** attempt)) + Math.floor(Math.random() * 80);
+      await wait(backoff);
     }
     return json(res, 409, { ok: false, error: "Baza je trenutno zauzeta drugim upisima. Pokušaj ponovo." });
   } catch (error) {
