@@ -48,6 +48,23 @@ let leaderReportInboxShown = false;
 const employeeSessionKey = "marketizoEmployeeSession";
 const employeeSessionDuration = 24 * 60 * 60 * 1000;
 
+function createId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `fallback-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function cloneState(value) {
+  return JSON.parse(JSON.stringify(value || {}));
+}
+
 function showCachedEmployeeSession(session) {
   if (!session?.token) return false;
   activeEmployee = (state.employees || []).find(
@@ -75,15 +92,20 @@ function getEmployeeSession() {
 }
 
 function setEmployeeSession(employee, token, expiresAt) {
-  localStorage.setItem(
-    employeeSessionKey,
-    JSON.stringify({
-      employeeId: employee.id,
-      email: String(employee.email || "").toLowerCase(),
-      token,
-      expiresAt: Number(expiresAt || (Date.now() + employeeSessionDuration)),
-    })
-  );
+  try {
+    localStorage.setItem(
+      employeeSessionKey,
+      JSON.stringify({
+        employeeId: employee.id,
+        email: String(employee.email || "").toLowerCase(),
+        token,
+        expiresAt: Number(expiresAt || (Date.now() + employeeSessionDuration)),
+      })
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function restoreEmployeeSession() {
@@ -128,7 +150,7 @@ function loadState(sourceData = null) {
     data = {};
   }
   data.employees = (data.employees?.length ? data.employees : defaultEmployees).map((employee) => ({
-    id: employee.id || crypto.randomUUID(),
+    id: employee.id || createId(),
     name: "",
     email: "",
     password: "",
@@ -155,7 +177,7 @@ function loadState(sourceData = null) {
   }));
   data.employeeAbsences = data.employeeAbsences || [];
   data.employeeWorkLogs = (data.employeeWorkLogs || []).map((log) => ({
-    id: log.id || crypto.randomUUID(),
+    id: log.id || createId(),
     employeeId: log.employeeId || "",
     date: log.date || currentDateKey(),
     hours: Number(log.hours || 0),
@@ -173,13 +195,13 @@ function loadState(sourceData = null) {
     submittedAt: log.submittedAt || new Date().toISOString(),
   }));
   data.employeeActivities = (data.employeeActivities || []).map((activity) => ({
-    id: activity.id || crypto.randomUUID(),
+    id: activity.id || createId(),
     name: activity.name || "Aktivnost",
     category: activity.category || "Ostalo",
     active: activity.active !== false,
   }));
   data.employeeHourAdjustments = (data.employeeHourAdjustments || []).map((adjustment) => ({
-    id: adjustment.id || crypto.randomUUID(),
+    id: adjustment.id || createId(),
     employeeId: adjustment.employeeId || "",
     date: adjustment.date || currentDateKey(),
     minutes: Math.max(1, Math.round(Number(adjustment.minutes || 0))),
@@ -190,7 +212,7 @@ function loadState(sourceData = null) {
     data.employeeActivities.push({ id: "activity-pause", name: "Pauza", category: "Interno", active: true });
   }
   data.employeeDocuments = (data.employeeDocuments || []).map((documentItem) => ({
-    id: documentItem.id || crypto.randomUUID(),
+    id: documentItem.id || createId(),
     employeeId: documentItem.employeeId || "",
     month: documentItem.month || currentMonthKey(),
     type: documentItem.type || "Faktura",
@@ -201,7 +223,7 @@ function loadState(sourceData = null) {
     uploadedAt: documentItem.uploadedAt || new Date().toISOString(),
   }));
   data.employeeLateRecords = (data.employeeLateRecords || []).map((record) => ({
-    id: record.id || crypto.randomUUID(),
+    id: record.id || createId(),
     employeeId: record.employeeId || "",
     date: record.date || currentDateKey(),
     minutes: Number(record.minutes || 0),
@@ -878,7 +900,7 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
   state.notifications = state.notifications || [];
   if (key && state.notifications.some((notification) => notification.key === key)) return;
   state.notifications.unshift({
-    id: crypto.randomUUID(),
+    id: createId(),
     key,
     scope,
     targetId,
@@ -1590,24 +1612,51 @@ async function acknowledgeLeaderReport(reportId, button) {
 document.getElementById("employeeLoginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
-  await waitForOnlineHydration();
   const formData = new FormData(form);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
-  const response = await fetch("/api/employee-auth", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "login", email, password }),
-  });
-  const result = await response.json().catch(() => ({}));
-  activeEmployee = response.ok ? state.employees.find((employee) =>
-    employee.id === result.employee?.id || String(employee.email || "").toLowerCase() === result.employee?.email
-  ) : null;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const errorMessage = document.getElementById("employeeLoginError");
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Prijavljivanje...";
+  }
+  if (errorMessage) errorMessage.hidden = true;
+  let response;
+  let result = {};
+  try {
+    response = await fetch("/api/employee-auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "login", email, password }),
+    });
+    result = await response.json().catch(() => ({}));
+    if (response.ok && result.employee) {
+      activeEmployee = state.employees.find((employee) =>
+        employee.id === result.employee.id || String(employee.email || "").toLowerCase() === result.employee.email
+      );
+      if (!activeEmployee) {
+        await waitForOnlineHydration();
+        activeEmployee = state.employees.find((employee) =>
+          employee.id === result.employee.id || String(employee.email || "").toLowerCase() === result.employee.email
+        );
+      }
+    }
+  } catch {
+    result = { error: "Veza sa bazom trenutno nije dostupna. Proveri internet i pokušaj ponovo." };
+  }
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Uloguj se";
+  }
   if (!activeEmployee || !result.token) {
-    document.getElementById("employeeLoginError").hidden = false;
+    if (errorMessage) {
+      errorMessage.textContent = result.error || "Login podaci nisu tačni. Pokušaj ponovo.";
+      errorMessage.hidden = false;
+    }
     return;
   }
-  document.getElementById("employeeLoginError").hidden = true;
+  if (errorMessage) errorMessage.hidden = true;
   setEmployeeSession(activeEmployee, result.token, result.expiresAt);
   if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
   document.getElementById("employeeLoginScreen").hidden = true;
@@ -1815,7 +1864,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     positive: "",
     negative: "",
   };
-  const previousState = structuredClone(state);
+  const previousState = cloneState(state);
   const employeeId = activeEmployee.id;
   const submitButton = form.querySelector('button[type="submit"]');
   if (submitButton) {
@@ -1824,7 +1873,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   }
   clearPortalHoursForm(form);
   const workLog = {
-    id: crypto.randomUUID(),
+    id: createId(),
     employeeId: activeEmployee.id,
     date,
     hours: Math.round((minutes / 60) * 10000) / 10000,
@@ -1941,7 +1990,7 @@ document.getElementById("portalAbsenceForm")?.addEventListener("submit", (event)
   const startDate = String(formData.get("startDate") || "");
   const endDate = String(formData.get("endDate") || startDate);
   const absence = {
-    id: crypto.randomUUID(),
+    id: createId(),
     employeeId: activeEmployee.id,
     type: formData.get("type"),
     startDate: startDate <= endDate ? startDate : endDate,
