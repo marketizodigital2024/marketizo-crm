@@ -329,6 +329,18 @@ function normalizedName(value) {
     .trim();
 }
 
+function queryTokenMatches(value, token) {
+  const normalizedValue = normalizedName(value);
+  const normalizedToken = normalizedName(token);
+  if (!normalizedValue || !normalizedToken) return false;
+  if (normalizedValue.includes(normalizedToken)) return true;
+  if (normalizedToken.length >= 5) {
+    const stem = normalizedToken.slice(0, -1);
+    return normalizedValue.split(" ").some((part) => part.startsWith(stem));
+  }
+  return false;
+}
+
 function isTeamSender(message, contact) {
   const ids = [serializedId(message.author), serializedId(contact?.id), serializedId(message.from)].filter(Boolean);
   if (ids.some((id) => teamMemberIds.has(id))) return true;
@@ -552,10 +564,23 @@ async function answerOwnerQuestion(message) {
   const queryTokens = question.toLocaleLowerCase("sr-Latn")
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length >= 2 && !["sta", "šta", "kod", "grupi", "grupa", "cemu", "čemu", "radi", "ima"].includes(token));
-  const matchingGroups = clientGroups.filter((chat) => {
-    const name = chat.name.toLocaleLowerCase("sr-Latn");
-    return queryTokens.some((token) => name.includes(token));
-  });
+  let matchingGroups = clientGroups.filter((chat) => queryTokens.some((token) => queryTokenMatches(chat.name, token)));
+  if (!matchingGroups.length && queryTokens.length) {
+    const participantMatches = await Promise.all(clientGroups.map(async (chat) => {
+      for (const participant of chat.participants || []) {
+        if (isKnownTeamId(participant.id)) continue;
+        try {
+          const contact = await client.getContactById(serializedId(participant.id));
+          const names = [contact?.pushname, contact?.name, contact?.shortName];
+          if (names.some((name) => queryTokens.some((token) => queryTokenMatches(name, token)))) return chat;
+        } catch (error) {
+          console.error(`[PRIVATE_LOOKUP] Could not resolve one participant in ${chat.name}:`, error);
+        }
+      }
+      return null;
+    }));
+    matchingGroups = participantMatches.filter(Boolean);
+  }
   const groupsToRead = matchingGroups.length ? matchingGroups : clientGroups;
   const liveHistory = (await Promise.all(groupsToRead.map(async (chat) => {
     try {
@@ -596,17 +621,20 @@ async function answerOwnerQuestion(message) {
       {
         role: "system",
         content: [
-          "Ti si Miljanov privatni, nezavisni poslovni savetnik koji sa strane čita razgovore u Marketizo WhatsApp grupama.",
+          "Ti si Miljanov privatni operativni direktor i savetnik za Marketizo. Pratiš komunikaciju kao iskusan zaposleni koji razume marketing agenciju, odnose sa klijentima, kvalitet rada, rokove, kampanje, sadržaj, leadove i rizik od prekida saradnje.",
+          `Članovi WhatsApp grupe ${teamGroupName} su zaposleni Marketiza. Miljan i Ivana su vlasnici i deo tima. U svim ostalim grupama, osobe iz teamMembers su zaposleni, a svi ostali učesnici su klijenti. Naziv grupe koristi kao naziv klijenta.`,
           "Razmišljaj kao iskusan direktor agencije: poveži više poruka, promenu tona, ranija obećanja, kvalitet izvršenja, odnose među ljudima, rizik po prihod i reputaciju i posledice po garanciju od 30 leadova.",
           "Nemoj samo proveravati da li je neko prekršio pravilo. Proceni šta se verovatno stvarno dešava, koliko je ozbiljno, šta je dokaz, šta je samo pretpostavka i koja odluka ima najveću vrednost za Miljana.",
           "Odgovaraj prirodno, direktno i konkretno, kao sposobna osoba koja je pročitala razgovor i napisala Miljanu kratak lični izveštaj — nikada kao generički bot ili automatski šablon.",
-          "Koristi isključivo dati kontekst iz WhatsApp grupa koje agent prati.",
-          "Prepoznaj naziv grupe i kada je korisnik napisao samo deo naziva ili napravio malu slovnu grešku.",
+          "Kada Miljan direktno postavi pitanje, ne primenjuj pravilo tihih proaktivnih upozorenja: pregledaj sav dati relevantni kontekst i odgovori potpuno.",
+          "Objasni šta se dogodilo, šta su napisali klijent i tim, šta je završeno, šta nije, ko čeka koga, kakav je ton, koja obećanja i rokovi postoje, da li se vidi obrazac ili skriveni rizik i koji je najbolji naredni potez.",
+          "Koristi isključivo dati kontekst iz WhatsApp grupa koje agent prati. Razlikuj činjenice od procene i jasno označi procenu.",
+          "Prepoznaj klijenta kada je Miljan napisao deo naziva, ime učesnika, padežni oblik imena ili malu slovnu grešku.",
           "Ako odgovor nije u kontekstu, reci da nema dovoljno informacija.",
           "Ne obećavaj rokove, rezultate, povrat novca niti bilo kakvu obavezu u ime Marketiza.",
           "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. Ostali učesnici klijentskih grupa su klijenti.",
           "Ne izmišljaj činjenice. Navedi konkretno šta je ko napisao i kada, ako je to dostupno i važno.",
-          "Ne počinji uvek istim naslovom ili frazom i ne koristi obavezne rubrike. Organizuj odgovor u kratke prirodne pasuse ili nekoliko smislenih stavki samo kada to zaista pomaže čitanju.",
+          "Ne počinji uvek istim naslovom ili frazom. Za svakog klijenta napiši u posebnom redu *Tačan naziv klijentske grupe*, pa ispod kratak prirodan pasus. Ne zatrpavaj Miljana sirovim porukama i ne ponavljaj isto.",
           "Najpre prenesi suštinu konkretnog slučaja, zatim prirodno dodaj svoju procenu i preporuku kada su potrebne.",
           "Ako nema stvarnog problema, reci to jasno. Ako vidiš rizik koji tim možda previđa, reci Miljanu otvoreno koliko je ozbiljan i zašto."
         ].join(" ")
