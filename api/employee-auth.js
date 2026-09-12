@@ -34,13 +34,13 @@ function verify(token) {
   return payload.exp > Date.now() ? payload : null;
 }
 
-async function readState() {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload`, {
+async function readEmployees() {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=employees:payload->employees`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
   });
   if (!response.ok) throw new Error(`State fetch failed (${response.status})`);
   const rows = await response.json();
-  return rows[0]?.payload || {};
+  return Array.isArray(rows[0]?.employees) ? rows[0].employees : [];
 }
 
 function publicEmployee(employee) {
@@ -53,8 +53,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    const state = await readState();
-    const employees = Array.isArray(state.employees) ? state.employees : [];
+    const employees = await readEmployees();
 
     if (body.action === "login") {
       const email = String(body.email || "").trim().toLowerCase();
