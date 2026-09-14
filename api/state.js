@@ -102,6 +102,27 @@ function preserveCredentials(payload, current) {
   };
 }
 
+const protectedCollections = [
+  "clients",
+  "employees",
+  "employeeWorkLogs",
+  "employeeAbsences",
+  "employeeActivities",
+];
+
+function unsafeCollectionShrink(payload, current) {
+  for (const key of protectedCollections) {
+    const previous = Array.isArray(current?.[key]) ? current[key] : [];
+    const next = Array.isArray(payload?.[key]) ? payload[key] : [];
+    if (previous.length < 10) continue;
+    const allowedDrop = Math.max(1, Math.floor(previous.length * 0.05));
+    if (next.length < previous.length - allowedDrop) {
+      return { key, previous: previous.length, next: next.length, allowedDrop };
+    }
+  }
+  return null;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,PUT,POST,OPTIONS");
@@ -153,6 +174,16 @@ module.exports = async function handler(req, res) {
           configured: true,
           conflict: true,
           error: "Podaci su u međuvremenu promenjeni. Učitana je najnovija verzija; ponovi izmenu.",
+          updatedAt: current.updatedAt,
+        });
+      }
+      const unsafeShrink = unsafeCollectionShrink(payload, current.payload);
+      if (unsafeShrink) {
+        return json(res, 409, {
+          configured: true,
+          conflict: true,
+          unsafeShrink: true,
+          error: `Zaustavljen je neuobičajen gubitak podataka u ${unsafeShrink.key} (${unsafeShrink.previous} → ${unsafeShrink.next}). Osveži stranicu i pokušaj ponovo.`,
           updatedAt: current.updatedAt,
         });
       }
