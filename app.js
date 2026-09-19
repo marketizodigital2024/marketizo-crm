@@ -1896,7 +1896,6 @@ function renderAdminPanel() {
   renderAdminClientSnapshot(active);
   renderAdminEmployeeRisk(monthKey);
   renderContractExpiryList();
-  renderPackageSummary(active);
 }
 
 function dashboardEscape(value) {
