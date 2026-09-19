@@ -1914,9 +1914,11 @@ function dashboardOutstandingRows(endMonth) {
   dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(visibleClients(), month).forEach((client) => {
     const remaining = invoiceRemainingAmount(client, month);
     if (!remaining) return;
-    const current = totals.get(client.id) || { client, total: 0, oldestAge: 0 };
+    const age = invoiceAgeDays(monthlyInvoice(client, month), month);
+    const current = totals.get(client.id) || { client, total: 0, overdueTotal: 0, oldestAge: 0 };
     current.total += remaining;
-    current.oldestAge = Math.max(current.oldestAge, invoiceAgeDays(monthlyInvoice(client, month), month));
+    if (age > 30) current.overdueTotal += remaining;
+    current.oldestAge = Math.max(current.oldestAge, age);
     totals.set(client.id, current);
   }));
   return [...totals.values()].sort((a, b) => b.total - a.total);
@@ -1926,8 +1928,8 @@ function renderAdminActionSummary(active, monthKey) {
   const target = document.getElementById("adminActionSummary");
   if (!target) return;
   const unsent = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
-  const overdue = dashboardOutstandingRows(monthKey).filter((row) => row.oldestAge > 30);
-  const overdueTotal = overdue.reduce((sum, row) => sum + row.total, 0);
+  const overdue = dashboardOutstandingRows(monthKey).filter((row) => row.overdueTotal > 0);
+  const overdueTotal = overdue.reduce((sum, row) => sum + row.overdueTotal, 0);
   const teamExceptions = (state.employees || []).filter((employee) => employee.status === "Aktivan").filter((employee) => {
     const expected = employeeExpectedHoursToDate(employee, monthKey);
     const ratio = expected ? (employeeMonthRawHours(employee.id, monthKey) / expected) * 100 : 100;
