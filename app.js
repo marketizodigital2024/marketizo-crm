@@ -649,6 +649,27 @@ function applyMonthlyInvoiceRostersV5() {
   return true;
 }
 
+function applyMikrohausSeptemberInvoiceV1() {
+  state.backup = state.backup || {};
+  if (state.backup.mikrohausSeptemberInvoiceV1) return false;
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const client = (state.clients || []).find((item) => normalize(item.name) === "mikrohaus");
+  if (!client) return false;
+  client.invoices = client.invoices || {};
+  client.invoices["2026-09"] = {
+    invoiceStatus: "Nije poslat",
+    paymentStatus: "Nije plaćeno",
+    paymentMethod: client.paymentMethod || "Firma",
+    sentAt: "",
+    paidAt: "",
+    amount: Number(client.revenue || 0),
+    ...(client.invoices["2026-09"] || {}),
+  };
+  state.backup.mikrohausSeptemberInvoiceV1 = true;
+  return true;
+}
+
 function applySladjan2026BalanceCorrections() {
   state.backup = state.backup || {};
   if (state.backup.sladjan2026BalancesCorrected) return false;
@@ -1120,6 +1141,7 @@ function applyEmployeeActivityCatalogV1() {
 applyAugust2026FinanceCorrections();
 applyAugust2026ClickUpInvoiceSyncV2();
 applyMonthlyInvoiceRostersV5();
+applyMikrohausSeptemberInvoiceV1();
 applySladjan2026BalanceCorrections();
 applyHazim2026ActualsV1();
 applyMilica2026ActualsV1();
@@ -1213,6 +1235,28 @@ function monthlyInvoice(client, monthKey = selectedMonthKey()) {
     sentAt: "",
     paidAt: "",
   };
+}
+
+function ensureInvoiceMonthRoster(monthKey) {
+  if (!monthKey || monthKey <= "2026-09") return false;
+  let changed = false;
+  (state.clients || []).forEach((client) => {
+    const excludedMonths = Array.isArray(client.invoiceExcludedMonths) ? client.invoiceExcludedMonths : [];
+    const startsAfterMonth = client.startDate && String(client.startDate).slice(0, 7) > monthKey;
+    if (client.status !== "Aktivan" || Number(client.revenue || 0) <= 0 || startsAfterMonth || excludedMonths.includes(monthKey)) return;
+    client.invoices = client.invoices || {};
+    if (client.invoices[monthKey]) return;
+    client.invoices[monthKey] = {
+      invoiceStatus: "Nije poslat",
+      paymentStatus: "Nije plaćeno",
+      paymentMethod: client.paymentMethod || "Firma",
+      sentAt: "",
+      paidAt: "",
+      amount: Number(client.revenue || 0),
+    };
+    changed = true;
+  });
+  return changed;
 }
 
 function invoicePaymentEntries(invoice) {
@@ -1647,6 +1691,7 @@ async function hydrateOnlineState() {
     const financeCorrected = applyAugust2026FinanceCorrections();
     const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
     const invoiceRostersCorrected = applyMonthlyInvoiceRostersV5();
+    const mikrohausSeptemberInvoiceAdded = applyMikrohausSeptemberInvoiceV1();
     const sladjanCorrected = applySladjan2026BalanceCorrections();
     const hazimCorrected = applyHazim2026ActualsV1();
     const nikolaCorrected = applyNikola2026BalanceV1();
@@ -1657,7 +1702,7 @@ async function hydrateOnlineState() {
     const qa20260828DataCleanedV2 = applyQa20260828CleanupV2();
     const activityCatalogAdded = applyEmployeeActivityCatalogV1();
     onlineHydrationComplete = true;
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || sladjanCorrected || hazimCorrected || nikolaCorrected || confirmedAbsencesAdded || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || qa20260828DataCleanedV2 || activityCatalogAdded });
+    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || mikrohausSeptemberInvoiceAdded || sladjanCorrected || hazimCorrected || nikolaCorrected || confirmedAbsencesAdded || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || qa20260828DataCleanedV2 || activityCatalogAdded });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     return;
@@ -2252,6 +2297,8 @@ function bindInvoiceControls() {
       if (!confirm(`Ukloniti ${client.name} samo iz računa za ${monthLabel(monthKey)}? Klijent ostaje u bazi.`)) return;
 
       const previousInvoice = structuredClone(invoice);
+      const previousExcludedMonths = Array.isArray(client.invoiceExcludedMonths) ? [...client.invoiceExcludedMonths] : [];
+      client.invoiceExcludedMonths = [...new Set([...previousExcludedMonths, monthKey])];
       delete client.invoices[monthKey];
       button.disabled = true;
       let result;
@@ -2262,6 +2309,7 @@ function bindInvoiceControls() {
       }
       if (!result?.ok) {
         client.invoices[monthKey] = previousInvoice;
+        client.invoiceExcludedMonths = previousExcludedMonths;
         saveState({ remote: false });
         renderAll();
         showToast("Nije sačuvano", result?.error || "Online baza nije potvrdila izmenu. Pokušaj ponovo.", "warn");
@@ -4887,6 +4935,7 @@ function renderClients() {
 function renderReports() {
   const clients = visibleClients();
   const monthKey = selectedMonthKey();
+  if (ensureInvoiceMonthRoster(monthKey)) saveState();
   const invoiceClients = financeClientsForMonth(clients, monthKey);
   const revenueByCountry = groupInvoiceSum(invoiceClients, "country", monthKey);
   const revenueByStatus = groupInvoiceSum(invoiceClients, "status", monthKey);
