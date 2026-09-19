@@ -2,10 +2,11 @@
 
 ## Pre objave
 
-1. U Vercel projektu koji hostuje `app.marketizo.com` dodati environment variables za Production: `CLICKUP_API_TOKEN` (ClickUp token sa pristupom dokumentu „Raspodela klijenata“) i `KPI_ADMIN_PASSWORD` (nova jaka lozinka za KPI administratorski ekran). `KPI_SESSION_SECRET` je preporučen zaseban nasumičan tajni ključ; bez njega se za potpisivanje sesije koristi postojeći `SUPABASE_SERVICE_ROLE_KEY`. Nikad ne unositi vrednosti u Git.
-2. Ponovo deployovati iz ove grane ili nakon spajanja u `main`.
-3. Otvoriti `/kpi.html`, prijaviti se, izabrati klijenta i proveriti članove tima. Status iznad klijenta mora reći da je ClickUp raspodela učitana uživo.
-4. Napraviti probni link za internog klijenta, otvoriti `/feedback.html` u privatnom prozoru, poslati probni odgovor i proveriti da se vidi u KPI filtrima. Ukloniti probne podatke iz KPI reda tek nakon zasebnog backupa; aplikacija nema dugme za brisanje.
+1. Za objavu ručnog režima u Vercel projektu koji hostuje `app.marketizo.com` dodati `KPI_ADMIN_PASSWORD` (nova jaka lozinka za KPI administratorski ekran). `KPI_SESSION_SECRET` je preporučen zaseban nasumičan tajni ključ; bez njega se za potpisivanje sesije koristi postojeći `SUPABASE_SERVICE_ROLE_KEY`. Nikad ne unositi vrednosti u Git.
+2. `CLICKUP_API_TOKEN` je opciono podešavanje za kasnije automatsko čitanje dokumenta „Raspodela klijenata“. Ručno povezivanje ljudi i klijenata radi bez njega.
+3. Ponovo deployovati iz ove grane ili nakon spajanja u `main`.
+4. Otvoriti `/kpi.html`, prijaviti se, izabrati klijenta i ručno sačuvati tim. Kada se kasnije doda ClickUp token, status iznad klijenta mora reći da je raspodela učitana uživo.
+5. Napraviti probni link za internog klijenta, otvoriti `/feedback.html` u privatnom prozoru, poslati probni odgovor i proveriti da se vidi u KPI filtrima. Ukloniti probne podatke iz KPI reda tek nakon zasebnog backupa; aplikacija nema dugme za brisanje.
 
 ## Pravilo podataka
 
