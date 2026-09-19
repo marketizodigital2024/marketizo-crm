@@ -943,6 +943,55 @@ th {
   margin-bottom: 14px;
 }
 
+.dashboard-filter-notice { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; padding:13px 16px; border:1px solid rgba(255,107,0,.28); border-radius:14px; background:rgba(255,107,0,.07); }
+.dashboard-filter-notice div { display:grid; gap:3px; }
+.dashboard-filter-notice span { color:var(--muted); font-size:13px; }
+.dashboard-insights-grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(300px,.85fr); gap:14px; margin-bottom:14px; }
+.dashboard-insights-grid.equal { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.analytics-panel { min-height:320px; overflow:hidden; }
+.analytics-panel .panel-head { align-items:flex-start; }
+.analytics-panel h3 { margin:0 0 12px; font-size:13px; color:var(--muted); }
+.chart-legend { display:flex; justify-content:flex-end; gap:18px; margin-bottom:4px; color:var(--muted); font-size:12px; font-weight:800; }
+.chart-legend span,.donut-stats span { display:inline-flex; align-items:center; gap:7px; }
+.legend-dot { width:9px; height:9px; border-radius:50%; background:#ff6b00; display:inline-block; }
+.legend-dot.paid { background:#2c9b68; }
+.legend-dot.open { background:#e7b36b; }
+.line-chart-wrap { width:100%; overflow:hidden; }
+.line-chart { display:block; width:100%; height:210px; overflow:visible; }
+.chart-gridline { stroke:#e9eee9; stroke-width:1; }
+.trend-line { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+.trend-line.billed { stroke:#ff6b00; }
+.trend-line.paid { stroke:#2c9b68; }
+.trend-dot { stroke:#fff; stroke-width:3; }
+.trend-dot.billed { fill:#ff6b00; }
+.trend-dot.paid { fill:#2c9b68; }
+.chart-axis { display:grid; grid-template-columns:repeat(6,1fr); color:var(--muted); font-size:12px; font-weight:700; text-align:center; }
+.donut-layout { display:grid; grid-template-columns:minmax(150px,.9fr) minmax(150px,1fr); align-items:center; gap:22px; min-height:218px; }
+.donut-chart { width:174px; aspect-ratio:1; margin:auto; border-radius:50%; display:grid; place-items:center; background:conic-gradient(#2c9b68 0 var(--paid),#f0c58b var(--paid) 360deg); position:relative; }
+.donut-chart::after { content:""; width:118px; aspect-ratio:1; border-radius:50%; background:var(--surface); position:absolute; }
+.donut-chart>div { position:relative; z-index:1; display:grid; text-align:center; }
+.donut-chart strong { font:800 28px/1 Montserrat,Inter,sans-serif; }
+.donut-chart span { margin-top:5px; color:var(--muted); font-size:12px; }
+.donut-stats { display:grid; gap:12px; }
+.donut-stats p { display:grid; gap:5px; margin:0; padding-bottom:10px; border-bottom:1px solid var(--line); }
+.donut-stats p>strong { font-size:18px; }
+.column-chart { display:grid; grid-template-columns:repeat(6,1fr); align-items:end; gap:10px; height:225px; padding-top:12px; }
+.column-item { height:100%; display:grid; grid-template-rows:22px 1fr 22px; gap:6px; text-align:center; }
+.column-item strong,.column-item small { font-size:12px; }
+.column-item small { color:var(--muted); font-weight:700; }
+.column-track { display:flex; align-items:end; min-height:140px; border-radius:10px; background:#f4f6f4; overflow:hidden; }
+.column-track span { width:100%; border-radius:10px 10px 5px 5px; background:linear-gradient(180deg,#ff8a32,#ff6b00); }
+.modern-bars { display:grid; gap:15px; }
+.modern-bars.compact { max-height:230px; overflow:auto; padding-right:4px; }
+.modern-bar-row { display:grid; gap:7px; }
+.modern-bar-row>div:first-child { display:flex; justify-content:space-between; gap:10px; font-size:12px; }
+.modern-bar-row>div:first-child span,.modern-bar-row>small { color:var(--muted); font-weight:700; }
+.modern-bar-track { height:9px; border-radius:999px; background:#edf1ed; overflow:hidden; }
+.modern-bar-track span { display:block; height:100%; min-width:2px; border-radius:inherit; background:linear-gradient(90deg,#ff8a32,#ff6b00); }
+.modern-bar-track span.warn { background:linear-gradient(90deg,#efc063,#e99b35); }
+.split-chart { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.chart-empty { color:var(--muted); }
+
 [hidden] {
   display: none !important;
 }
@@ -2418,6 +2467,8 @@ select option {
 
   .dashboard-grid,
   .report-grid,
+  .dashboard-insights-grid,
+  .dashboard-insights-grid.equal,
   .admin-layout,
   .employee-admin-layout,
   .employee-workspace,

@@ -20,7 +20,7 @@
     <meta name="theme-color" content="#ff6b00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=87" />
+    <link rel="stylesheet" href="styles.css?v=88" />
   </head>
   <body>
     <div class="app-shell">
@@ -116,6 +116,47 @@
             </div>
           </section>
 
+          <div class="dashboard-filter-notice" id="adminFilterNotice" hidden>
+            <div><strong>Aktivni filteri</strong><span id="adminFilterNoticeText"></span></div>
+            <button class="secondary-button" id="clearDashboardFiltersBtn" type="button">Prikaži sve</button>
+          </div>
+
+          <div class="dashboard-insights-grid">
+            <section class="panel analytics-panel analytics-panel-wide">
+              <div class="panel-head"><div><p class="eyebrow">Finansije</p><h2>Prihod i naplata</h2></div><span>poslednjih 6 meseci</span></div>
+              <div id="adminRevenueTrend"></div>
+            </section>
+            <section class="panel analytics-panel">
+              <div class="panel-head"><div><p class="eyebrow">Izabrani mesec</p><h2>Status naplate</h2></div><span id="adminPaymentMonth"></span></div>
+              <div id="adminPaymentDonut"></div>
+            </section>
+          </div>
+
+          <div class="dashboard-insights-grid equal">
+            <section class="panel analytics-panel">
+              <div class="panel-head"><div><p class="eyebrow">Rast baze</p><h2>Novi klijenti</h2></div><span>po mesecu</span></div>
+              <div id="adminClientGrowth"></div>
+            </section>
+            <section class="panel analytics-panel">
+              <div class="panel-head"><div><p class="eyebrow">Tim</p><h2>Iskorišćenost kapaciteta</h2></div><span>upisano / očekivano</span></div>
+              <div id="adminTeamUtilization"></div>
+            </section>
+          </div>
+
+          <div class="dashboard-insights-grid equal">
+            <section class="panel analytics-panel">
+              <div class="panel-head"><div><p class="eyebrow">Potraživanja</p><h2>Starost otvorenih računa</h2></div><span>neuplaćeni iznos</span></div>
+              <div id="adminInvoiceAging"></div>
+            </section>
+            <section class="panel analytics-panel">
+              <div class="panel-head"><div><p class="eyebrow">Struktura prihoda</p><h2>Paketi i države</h2></div><span>izabrani mesec</span></div>
+              <div class="split-chart">
+                <div><h3>Paketi</h3><div id="adminPackageChart"></div></div>
+                <div><h3>Države</h3><div id="adminCountryChart"></div></div>
+              </div>
+            </section>
+          </div>
+
           <div class="admin-layout">
             <section class="panel">
               <div class="panel-head">
@@ -152,23 +193,6 @@
                 <span>30 dana unapred</span>
               </div>
               <div class="setup-list" id="contractExpiryList"></div>
-            </section>
-          </div>
-
-          <div class="admin-layout">
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Klijenti po paketima</h2>
-                <span>broj klijenata i mesečni prihod</span>
-              </div>
-              <div class="setup-list" id="adminPackageSummary"></div>
-            </section>
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Po državama</h2>
-                <span>promet</span>
-              </div>
-              <div class="bars" id="adminCountryBars"></div>
             </section>
           </div>
 
@@ -947,7 +971,7 @@
     <script src="admin-auth.js?v=4"></script>
     <div class="toast-stack" id="toastStack" aria-live="polite"></div>
     <script src="remote-state.js?v=9"></script>
-    <script src="app.js?v=87"></script>
+    <script src="app.js?v=88"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

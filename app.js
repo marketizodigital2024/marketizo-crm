@@ -1885,12 +1885,123 @@ function renderAdminPanel() {
   setText("adminPaidCount", `${paidClients.length} klijenata`);
   setText("adminUnpaidTotal", currency.format(unpaidTotal));
   setText("adminUnpaidCount", `${unpaidClients.length} nije plaćeno · ${unsentClients.length} nije poslat račun`);
+  renderDashboardFilterNotice();
+  renderRevenueTrend(monthKey);
+  renderPaymentDonut(active, monthKey);
+  renderClientGrowth(monthKey);
+  renderTeamUtilization(monthKey);
+  renderInvoiceAging(monthKey);
+  renderRevenueBreakdown(active, monthKey);
   renderAdminNotifications();
   renderAdminClientSnapshot(active);
   renderAdminEmployeeRisk(monthKey);
   renderContractExpiryList();
   renderPackageSummary(active);
-  renderBars("adminCountryBars", groupSum(active, "country", "revenue"), "€");
+}
+
+function dashboardEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+}
+
+function dashboardMonths(endMonth, count = 6) {
+  return Array.from({ length: count }, (_, index) => shiftMonth(endMonth, index - count + 1));
+}
+
+function shortMonthLabel(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("sr-Latn-RS", { month: "short" }).replace(".", "");
+}
+
+function renderDashboardFilterNotice() {
+  const notice = document.getElementById("adminFilterNotice");
+  const text = document.getElementById("adminFilterNoticeText");
+  if (!notice || !text) return;
+  const filters = [];
+  if (searchTerm) filters.push(`Pretraga: “${searchTerm}”`);
+  if (monthFilter) filters.push(monthLabel(monthFilter));
+  if (dateFromFilter) filters.push(`od ${dateFromFilter}`);
+  if (dateToFilter) filters.push(`do ${dateToFilter}`);
+  if (countryFilter !== "all") filters.push(countryFilter);
+  notice.hidden = filters.length === 0;
+  text.textContent = filters.join(" · ");
+}
+
+function renderRevenueTrend(endMonth) {
+  const target = document.getElementById("adminRevenueTrend");
+  if (!target) return;
+  const months = dashboardMonths(endMonth);
+  const points = months.map((month) => {
+    const clients = financeClientsForMonth(visibleClients(), month);
+    return { month, billed: clients.reduce((sum, client) => sum + invoiceAmount(client, month), 0), paid: clients.reduce((sum, client) => sum + invoicePaidAmount(client, month), 0) };
+  });
+  const max = Math.max(1, ...points.flatMap((point) => [point.billed, point.paid]));
+  const width = 720, height = 210, padX = 38, padY = 22, chartWidth = width - padX * 2, chartHeight = height - padY * 2;
+  const xy = (value, index) => [padX + (chartWidth * index) / Math.max(1, points.length - 1), padY + chartHeight - (value / max) * chartHeight];
+  const line = (field) => points.map((point, index) => xy(point[field], index).join(",")).join(" ");
+  target.innerHTML = `<div class="chart-legend"><span><i class="legend-dot billed"></i>Fakturisano</span><span><i class="legend-dot paid"></i>Naplaćeno</span></div><div class="line-chart-wrap"><svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafikon fakturisanog i naplaćenog prihoda">${[0, .25, .5, .75, 1].map((ratio) => `<line x1="${padX}" y1="${padY + chartHeight * ratio}" x2="${width - padX}" y2="${padY + chartHeight * ratio}" class="chart-gridline" />`).join("")}<polyline points="${line("billed")}" class="trend-line billed" /><polyline points="${line("paid")}" class="trend-line paid" />${points.map((point, index) => { const billed = xy(point.billed, index), paid = xy(point.paid, index); return `<circle cx="${billed[0]}" cy="${billed[1]}" r="5" class="trend-dot billed"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.billed)}</title></circle><circle cx="${paid[0]}" cy="${paid[1]}" r="5" class="trend-dot paid"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.paid)}</title></circle>`; }).join("")}</svg></div><div class="chart-axis">${points.map((point) => `<span>${dashboardEscape(shortMonthLabel(point.month))}</span>`).join("")}</div>`;
+}
+
+function renderPaymentDonut(clients, monthKey) {
+  const target = document.getElementById("adminPaymentDonut");
+  if (!target) return;
+  setText("adminPaymentMonth", monthLabel(monthKey));
+  const billed = clients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
+  const paid = clients.reduce((sum, client) => sum + invoicePaidAmount(client, monthKey), 0);
+  const remaining = Math.max(0, billed - paid);
+  const ratio = billed ? Math.min(100, Math.round((paid / billed) * 100)) : 0;
+  target.innerHTML = `<div class="donut-layout"><div class="donut-chart" style="--paid:${ratio * 3.6}deg"><div><strong>${ratio}%</strong><span>naplaćeno</span></div></div><div class="donut-stats"><p><span><i class="legend-dot paid"></i>Naplaćeno</span><strong>${currency.format(paid)}</strong></p><p><span><i class="legend-dot open"></i>Otvoreno</span><strong>${currency.format(remaining)}</strong></p><p><span>Ukupno računa</span><strong>${clients.length}</strong></p></div></div>`;
+}
+
+function renderClientGrowth(endMonth) {
+  const target = document.getElementById("adminClientGrowth");
+  if (!target) return;
+  const months = dashboardMonths(endMonth);
+  const values = months.map((month) => state.clients.filter((client) => String(client.startDate || "").slice(0, 7) === month).length);
+  const max = Math.max(1, ...values);
+  target.innerHTML = `<div class="column-chart">${months.map((month, index) => `<div class="column-item"><strong>${values[index]}</strong><div class="column-track"><span style="height:${Math.max(values[index] ? 10 : 2, (values[index] / max) * 100)}%"></span></div><small>${dashboardEscape(shortMonthLabel(month))}</small></div>`).join("")}</div>`;
+}
+
+function renderTeamUtilization(monthKey) {
+  const target = document.getElementById("adminTeamUtilization");
+  if (!target) return;
+  const employees = (state.employees || []).filter((employee) => employee.status === "Aktivan").map((employee) => {
+    const expected = employeeExpectedHoursToDate(employee, monthKey), logged = employeeMonthRawHours(employee.id, monthKey);
+    return { name: employee.name, expected, logged, ratio: expected ? Math.round((logged / expected) * 100) : 0 };
+  }).sort((a, b) => b.ratio - a.ratio);
+  target.innerHTML = employees.length ? `<div class="modern-bars compact">${employees.map((item) => `<div class="modern-bar-row"><div><strong>${dashboardEscape(item.name)}</strong><span>${formatHours(item.logged)} / ${formatHours(item.expected)}h</span></div><div class="modern-bar-track"><span style="width:${Math.min(100, item.ratio)}%" class="${item.ratio < 70 ? "warn" : ""}"></span></div><small>${item.ratio}%</small></div>`).join("")}</div>` : '<p class="chart-empty">Nema aktivnih zaposlenih za prikaz.</p>';
+}
+
+function invoiceAgeDays(invoice, monthKey) {
+  const date = new Date(invoice.sentAt || `${monthKey}-01`);
+  return Number.isNaN(date.getTime()) ? 0 : Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+}
+
+function renderInvoiceAging(endMonth) {
+  const target = document.getElementById("adminInvoiceAging");
+  if (!target) return;
+  const buckets = [{ label: "0–7 dana", min: 0, max: 7, value: 0 }, { label: "8–14 dana", min: 8, max: 14, value: 0 }, { label: "15–30 dana", min: 15, max: 30, value: 0 }, { label: "Preko 30 dana", min: 31, max: Infinity, value: 0 }];
+  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(visibleClients(), month).forEach((client) => {
+    const remaining = invoiceRemainingAmount(client, month);
+    if (!remaining) return;
+    const age = invoiceAgeDays(monthlyInvoice(client, month), month);
+    const bucket = buckets.find((item) => age >= item.min && age <= item.max);
+    if (bucket) bucket.value += remaining;
+  }));
+  renderModernBars(target, buckets.map((bucket) => [bucket.label, bucket.value]), (value) => currency.format(value));
+}
+
+function renderModernBars(target, entries, formatter) {
+  const max = Math.max(1, ...entries.map(([, value]) => value));
+  target.innerHTML = `<div class="modern-bars">${entries.map(([label, value]) => `<div class="modern-bar-row"><div><strong>${dashboardEscape(label)}</strong><span>${dashboardEscape(formatter(value))}</span></div><div class="modern-bar-track"><span style="width:${(value / max) * 100}%"></span></div></div>`).join("")}</div>`;
+}
+
+function renderRevenueBreakdown(clients, monthKey) {
+  const packageTarget = document.getElementById("adminPackageChart"), countryTarget = document.getElementById("adminCountryChart");
+  if (!packageTarget || !countryTarget) return;
+  const totals = (field) => clients.reduce((result, client) => { const key = client[field] || "Ostalo"; result[key] = (result[key] || 0) + invoiceAmount(client, monthKey); return result; }, {});
+  const sorted = (object) => Object.entries(object).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  renderModernBars(packageTarget, sorted(totals("package")), (value) => currency.format(value));
+  renderModernBars(countryTarget, sorted(totals("country")), (value) => currency.format(value));
 }
 
 function notificationClass(type) {
@@ -5332,6 +5443,22 @@ document.getElementById("resetFiltersBtn")?.addEventListener("click", () => {
   document.getElementById("dateFromFilter").value = "";
   document.getElementById("dateToFilter").value = "";
   document.getElementById("countryFilter").value = "all";
+  renderAll();
+});
+
+document.getElementById("clearDashboardFiltersBtn")?.addEventListener("click", () => {
+  searchTerm = "";
+  monthFilter = "";
+  dateFromFilter = "";
+  dateToFilter = "";
+  countryFilter = "all";
+  document.getElementById("searchInput").value = "";
+  document.getElementById("monthFilter").value = "";
+  document.getElementById("dateFromFilter").value = "";
+  document.getElementById("dateToFilter").value = "";
+  document.getElementById("countryFilter").value = "all";
+  const invoiceMonth = document.getElementById("invoiceMonthFilter");
+  if (invoiceMonth) invoiceMonth.value = currentMonthKey();
   renderAll();
 });
 
