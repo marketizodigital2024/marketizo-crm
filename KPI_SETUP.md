@@ -11,5 +11,6 @@
 ## Pravilo podataka
 
 KPI podaci su u posebnom Supabase redu `marketizo-kpi-v1`, izvan javnog `/api/state` odgovora. Link sadrži jednokratni slučajni token, a u bazi se čuva samo njegov SHA-256 otisak. Upitnik i raspodela se kopiraju u poziv pri pravljenju linka. Izmene pitanja i ClickUp raspodele važe za nove linkove. Dnevni `/api/backup` sada uključuje i KPI red u obe vrste kopija.
+Pregledni Vercel deploy koristi zaseban red `marketizo-kpi-preview-v1`, pa probni upitnici ne ulaze u produkcione KPI rezultate.
 
 ClickUp tabela se čita pri otvaranju KPI ekrana i pravljenju linka. Raspodela se ne čuva u javnom repozitorijumu. Ako ClickUp nije dostupan, link se ne može napraviti dok se tim ne sačuva ručno. Klijenti sa nejasnim imenom se prikazuju za povezivanje sa postojećim CRM klijentom; novi CRM klijent se ne pravi automatski.
