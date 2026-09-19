@@ -5439,7 +5439,7 @@ function setActiveView(viewName, updateUrl = false) {
 
 function activateMainRoute() {
   const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
-  if (currentFile.startsWith("employees-")) {
+  if (currentFile.startsWith("employees-") || currentFile === "employee-profile") {
     setActiveView("employees");
     return;
   }
