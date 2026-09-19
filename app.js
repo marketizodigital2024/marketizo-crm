@@ -3315,7 +3315,10 @@ function renderEmployees() {
     .filter((employee) => employee.status === "Aktivan")
     .reduce((sum, employee) => sum + Number(employee.salary || 0), 0);
   const totalHourBalance = employees.reduce((sum, employee) => sum + employeeHourBalance(employee, monthKey), 0);
-  const vacationUsed = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Godišnji odmor"), 0);
+  const vacationReserved = year === Number(currentDateKey().slice(0, 4))
+    ? employees.reduce((sum, employee) => sum + employeeVacationSnapshot(employee).reserved, 0)
+    : 0;
+  const vacationUsed = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Godišnji odmor"), 0) - vacationReserved;
   const sickDays = employees.reduce((sum, employee) => sum + employeeYearAbsenceDays(employee.id, year, "Bolovanje"), 0);
   if (!employees.some((employee) => employee.id === selectedEmployeeId)) selectedEmployeeId = employees[0]?.id || state.employees[0]?.id || "";
   const employee = selectedEmployee();
@@ -3325,6 +3328,7 @@ function renderEmployees() {
   setText("employeeSalaryTotal", currency.format(totalSalary));
   setText("employeeHourBalance", formatHourBalance(totalHourBalance));
   setText("employeeVacationUsed", vacationUsed);
+  setText("employeeVacationReserved", `${vacationReserved} rezervisano`);
   setText("employeeSickDays", sickDays);
   const workDateInput = document.querySelector('#employeeWorkForm input[name="date"]');
   const absenceStartInput = document.querySelector('#employeeAbsenceForm input[name="startDate"]');
