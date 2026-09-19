@@ -1141,6 +1141,7 @@ let dateFromFilter = "";
 let dateToFilter = "";
 let countryFilter = "all";
 const openInvoiceGroups = new Set(["unpaid"]);
+const openEmployeeOneOnOneIds = new Set();
 let selectedPortalClientId = state.clients[0]?.id || "";
 let employeeMonthFilter = currentMonthKey();
 let employeeStatusFilter = "all";
@@ -4545,18 +4546,27 @@ function renderEmployeeOneOnOneRows() {
     .sort((a, b) => new Date(b.date) - new Date(a.date));
   const target = document.getElementById("employeeOneOnOneRows");
   if (!target) return;
+  target.querySelectorAll("details[data-one-on-one-id][open]").forEach((details) => {
+    openEmployeeOneOnOneIds.add(details.dataset.oneOnOneId);
+  });
   target.innerHTML = rows.length
     ? rows
         .map((note) => {
           const employee = employeeById(note.employeeId);
           const blocks = String(note.note || "").split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
-          return `<details class="setup-item one-on-one-card">
+          return `<details class="setup-item one-on-one-card" data-one-on-one-id="${escapeInvoiceText(note.id)}" ${openEmployeeOneOnOneIds.has(note.id) ? "open" : ""}>
             <summary><strong>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(note.title || "1:1")}</strong><span>${formatDate(note.date)}</span></summary>
             <div class="one-on-one-answers">${blocks.map((block) => { const lines = block.split("\n").filter(Boolean); return `<div class="one-on-one-answer"><strong>${escapeInvoiceText(lines[0] || "Beleška")}</strong><p>${escapeInvoiceText(lines.slice(1).join("\n") || "Bez upisanog odgovora.").replace(/\n/g, "<br />")}</p></div>`; }).join("")}</div>
           </details>`;
         })
         .join("")
     : `<div class="empty-state">Nema 1:1 beleški.</div>`;
+  target.querySelectorAll("details[data-one-on-one-id]").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      if (details.open) openEmployeeOneOnOneIds.add(details.dataset.oneOnOneId);
+      else openEmployeeOneOnOneIds.delete(details.dataset.oneOnOneId);
+    });
+  });
 }
 
 function renderCompanyPlanList() {
