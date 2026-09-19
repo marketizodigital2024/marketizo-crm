@@ -616,8 +616,11 @@ function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
   const lastYear = reference.getUTCFullYear();
   let used = 0;
   for (let year = firstYear; year <= lastYear; year += 1) used += employeeYearAbsenceDays("Godišnji odmor", year);
-  used = Math.round(used * 100) / 100;
-  return { earned, used, left: Math.max(Math.round((earned - used) * 100) / 100, 0) };
+  const reserved = employeeAbsences("Godišnji odmor")
+    .filter((absence) => absence.status === "Odobreno")
+    .reduce((sum, absence) => sum + workdayKeysBetween(absence.startDate, absence.endDate).filter((day) => day > referenceDate && day.slice(0, 4) <= String(lastYear)).length, 0);
+  used = Math.round((used - reserved) * 100) / 100;
+  return { earned, used, reserved, left: Math.round((earned - used - reserved) * 100) / 100 };
 }
 
 function formatVacationDays(value) {
@@ -637,7 +640,9 @@ function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
   const hours = parseNumber(weeklyHours || 0, 0);
-  if (hours >= 38) return day === 5 ? 390 : 510;
+  // Keep the historical plan unchanged; apply contractual weekly hours from the next full workweek.
+  if (date < "2026-09-21" && hours >= 38) return day === 5 ? 390 : 510;
+  if (hours === 38.5) return day === 5 ? 390 : 480;
   return Math.round((hours * 60) / 5);
 }
 
@@ -979,7 +984,7 @@ function renderEmployeePortal() {
   setText("portalExpectedHours", `od ${formatHours(expected)}h · ${carryoverLabel(activeEmployee, portalMonth)}`);
   setText("portalHourBalance", formatHourBalance(balance));
   setText("portalVacation", `${formatVacationDays(vacation.used)}/${formatVacationDays(vacation.earned)}`);
-  setText("portalVacationLeft", `${formatVacationDays(vacation.left)} preostalo`);
+  setText("portalVacationLeft", `${formatVacationDays(vacation.reserved)} rezervisano · ${formatVacationDays(vacation.left)} raspoloživo`);
   setText("portalGiftDay", `${giftUsed}/${activeEmployee.giftDays || 1}`);
   setText("portalGiftLeft", `${giftLeft} preostalo`);
   setText("portalSickDays", sickDays);
