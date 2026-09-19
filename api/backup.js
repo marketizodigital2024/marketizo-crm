@@ -1,5 +1,6 @@
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
+const KPI_ROW_ID = "marketizo-kpi-v1";
 const BACKUP_SLOTS = 30;
 const BLOB_PREFIX = "marketizo-crm/daily/";
 
@@ -71,7 +72,7 @@ async function listBlobBackups() {
   };
 }
 
-async function writeIndependentBackup(source, date, now) {
+async function writeIndependentBackup(source, date, now, kpiSource = null) {
   const blob = await blobClient();
   if (!blob) throw new Error("Vercel Blob backup nije povezan.");
   const document = {
@@ -80,6 +81,7 @@ async function writeIndependentBackup(source, date, now) {
     createdAt: now.toISOString(),
     sourceUpdatedAt: source.updated_at || "",
     state: source.payload,
+    kpi: kpiSource?.payload || null,
   };
   const body = JSON.stringify(document);
   const pathname = `${BLOB_PREFIX}${date}.json`;
@@ -109,7 +111,8 @@ async function writeIndependentBackup(source, date, now) {
     activities: Array.isArray(verified.state?.employeeActivities) ? verified.state.employeeActivities.length : 0,
   };
   if (verified.format !== "marketizo-crm-backup-v1" || verified.sourceUpdatedAt !== document.sourceUpdatedAt
-    || JSON.stringify(verifiedCounts) !== JSON.stringify(expectedCounts)) {
+    || JSON.stringify(verifiedCounts) !== JSON.stringify(expectedCounts)
+    || JSON.stringify(verified.kpi || null) !== JSON.stringify(document.kpi)) {
     throw new Error("Vercel Blob backup nije prošao proveru integriteta.");
   }
   const inventory = await listBlobBackups();
@@ -194,6 +197,9 @@ module.exports = async function handler(req, res) {
     const sourceRows = await sourceResponse.json();
     const source = sourceRows[0];
     if (!source?.payload) return send(res, 404, { error: "Main state is empty" });
+    const kpiResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(KPI_ROW_ID)}&select=payload,updated_at`, { headers: headers(key) });
+    if (!kpiResponse.ok) throw new Error(`KPI state fetch failed (${kpiResponse.status})`);
+    const kpiSource = (await kpiResponse.json())[0] || null;
 
     const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
     const backupId = `backup-daily-${dayNumber % BACKUP_SLOTS}`;
@@ -213,13 +219,14 @@ module.exports = async function handler(req, res) {
           septemberWorkLogs: workLogs.filter((log) => String(log.date || "").startsWith("2026-09-")).length,
           septemberDates: [...new Set(workLogs.map((log) => String(log.date || "")).filter((item) => item.startsWith("2026-09-")))].sort(),
           state: source.payload,
+          kpi: kpiSource?.payload || null,
         },
         updated_at: now.toISOString(),
       }),
     });
     if (!backupResponse.ok) throw new Error(`Backup write failed (${backupResponse.status})`);
 
-    const independent = await writeIndependentBackup(source, date, now);
+    const independent = await writeIndependentBackup(source, date, now, kpiSource);
 
     return send(res, 200, {
       ok: true,
