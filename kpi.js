@@ -52,7 +52,7 @@ function renderResults(){
     for(const person of visiblePeople){
       const personKey=person.employeeId||`name:${norm(person.name)}`;
       let employee=employees.get(personKey);
-      if(!employee){employee={name:person.name,linked:!!person.employeeId,scores:[],roles:new Map(),clients:new Map(),responses:new Set()};employees.set(personKey,employee);}
+      if(!employee){employee={name:person.name,employeeId:person.employeeId||null,linked:!!person.employeeId,scores:[],roles:new Map(),clients:new Map(),responses:new Set()};employees.set(personKey,employee);}
       employee.responses.add(response.id);
       const ratings=response.questions.filter(q=>matches(q,person)).map(q=>score(response,q)).filter(n=>n!==null);
       employee.scores.push(...ratings);individualScores.push(...ratings);
@@ -72,7 +72,7 @@ function renderResults(){
   if(!employeeItems.length)employeeRoot.append(node('p','Nema ocenjenih zaposlenih za izabrane filtere.',{class:'empty-state'}));
   for(const employee of employeeItems){
     const card=node('article',null,{class:'kpi-person'});
-    const head=node('div',null,{class:'kpi-card-head'});const title=node('div');title.append(node('strong',employee.name),node('small',employee.linked?'Povezan sa zaposlenim u CRM-u':'Ime nije povezano sa zaposlenim u CRM-u'));head.append(title,node('b',`${average(employee.scores)} / 5`,{class:'score-badge'}));card.append(head);
+    const head=node('div',null,{class:'kpi-card-head'});const title=node('div');title.append(node('strong',employee.name),node('small',employee.linked?'Povezan sa zaposlenim u CRM-u':'Ime nije povezano sa zaposlenim u CRM-u'));head.append(title,node('b',`${average(employee.scores)} / 5`,{class:'score-badge'}));card.append(head);if(employee.employeeId)card.append(node('a','Otvori ličnu kartu zaposlenog',{href:`/employee-profile?employee=${encodeURIComponent(employee.employeeId)}`,class:'secondary-button'}));
     card.append(node('p',`${countText(employee.responses.size,'odgovor','odgovora')} · ${countText(employee.clients.size,'klijent','klijenata')} · ${countText(employee.scores.length,'lična ocena','ličnih ocena')}`,{class:'kpi-subline'}));
     const roles=node('div',null,{class:'kpi-tags'});for(const [role,values] of employee.roles)roles.append(node('span',`${role}: ${average(values)} / 5`));card.append(roles);
     const clients=node('div',null,{class:'kpi-breakdown'});for(const client of [...employee.clients.values()].sort((a,b)=>a.name.localeCompare(b.name,'sr')))clients.append(node('div',`${client.name}: lično ${average(client.scores)} / 5 · tim ${average(client.teamScores)} / 5`));card.append(clients);employeeRoot.append(card);

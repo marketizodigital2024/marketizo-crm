@@ -4286,3 +4286,8 @@ body.employee-editor-open {
 .leader-goal-card > span { min-width: 0; }
 .leader-goal-progress { display: grid; grid-template-columns: minmax(100px, 1fr) auto; gap: 10px; align-items: center; margin-top: 8px; }
 .leader-goal-progress .progress-track { margin: 0; }
+
+/* KPI navigation and employee profile */
+.sidebar a.nav-item { display: flex; align-items: center; text-decoration: none !important; }
+.employee-client-ratings { display: grid; gap: 10px; }
+.one-on-one-profile-note { white-space: normal; line-height: 1.6; }
