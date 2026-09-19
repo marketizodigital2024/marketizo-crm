@@ -20,7 +20,7 @@
     <meta name="theme-color" content="#ff6b00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=89" />
+    <link rel="stylesheet" href="styles.css?v=90" />
   </head>
   <body>
     <div class="app-shell">
@@ -63,16 +63,16 @@
         </header>
 
         <section class="view active" id="admin">
-          <div class="admin-kpi-grid">
+          <div class="admin-kpi-grid dashboard-kpis">
             <article class="metric metric-link" data-go-view="clients">
-              <span>Klijenti</span>
+              <span>Klijenti sa računom</span>
               <strong id="adminTotalClients">0</strong>
-              <small>ukupno u bazi</small>
+              <small>u izabranom mesecu</small>
             </article>
             <article class="metric metric-link" data-go-view="reports">
-              <span>Mesečno</span>
+              <span>Fakturisano</span>
               <strong id="adminMrr">€0</strong>
-              <small>ukupna cena paketa</small>
+              <small>ukupna vrednost računa</small>
             </article>
             <article class="metric metric-link" data-go-view="reports">
               <span>Plaćeno u mesecu</span>
@@ -84,16 +84,26 @@
               <strong id="adminUnpaidTotal">€0</strong>
               <small id="adminUnpaidCount">0 klijenata</small>
             </article>
+            <article class="metric metric-link collection-metric" data-go-view="reports">
+              <span>Stopa naplate</span>
+              <strong id="adminCollectionRate">0%</strong>
+              <small>naplaćeno od fakturisanog</small>
+            </article>
           </div>
 
-          <section class="panel filter-panel">
-            <div class="panel-head">
+          <section class="panel dashboard-action-panel">
+            <div class="panel-head"><div><p class="eyebrow">Fokus danas</p><h2>Šta traži reakciju</h2></div><span>klik vodi na detalje</span></div>
+            <div class="dashboard-action-grid" id="adminActionSummary"></div>
+          </section>
+
+          <details class="panel filter-panel dashboard-filter-panel">
+            <summary>
               <div>
                 <p class="eyebrow">Filter perioda</p>
-                <h2>Pregled po mesecu i datumu</h2>
+                <h2>Mesec, država i napredni filteri</h2>
               </div>
-              <button class="secondary-button" id="resetFiltersBtn" type="button">Reset</button>
-            </div>
+              <span>Otvori filtere</span>
+            </summary>
             <div class="filter-grid">
               <label>Mesec
                 <input id="monthFilter" type="month" />
@@ -114,7 +124,8 @@
                 </select>
               </label>
             </div>
-          </section>
+            <button class="secondary-button filter-reset-button" id="resetFiltersBtn" type="button">Resetuj filtere</button>
+          </details>
 
           <div class="dashboard-filter-notice" id="adminFilterNotice" hidden>
             <div><strong>Aktivni filteri</strong><span id="adminFilterNoticeText"></span></div>
@@ -134,19 +145,19 @@
 
           <div class="dashboard-insights-grid equal">
             <section class="panel analytics-panel">
-              <div class="panel-head"><div><p class="eyebrow">Rast baze</p><h2>Novi klijenti</h2></div><span>po mesecu</span></div>
-              <div id="adminClientGrowth"></div>
+              <div class="panel-head"><div><p class="eyebrow">Potraživanja</p><h2>Starost otvorenih računa</h2></div><span>poslednjih 12 meseci</span></div>
+              <div id="adminInvoiceAging"></div>
             </section>
             <section class="panel analytics-panel">
-              <div class="panel-head"><div><p class="eyebrow">Tim</p><h2>Iskorišćenost kapaciteta</h2></div><span>upisano / očekivano</span></div>
-              <div id="adminTeamUtilization"></div>
+              <div class="panel-head"><div><p class="eyebrow">Naplata</p><h2>Najveća otvorena dugovanja</h2></div><span>top 5</span></div>
+              <div id="adminTopDebtors"></div>
             </section>
           </div>
 
           <div class="dashboard-insights-grid equal">
             <section class="panel analytics-panel">
-              <div class="panel-head"><div><p class="eyebrow">Potraživanja</p><h2>Starost otvorenih računa</h2></div><span>neuplaćeni iznos</span></div>
-              <div id="adminInvoiceAging"></div>
+              <div class="panel-head"><div><p class="eyebrow">Tim</p><h2>Odstupanja kapaciteta</h2></div><span>ispod 80% ili preko 110%</span></div>
+              <div id="adminTeamUtilization"></div>
             </section>
             <section class="panel analytics-panel">
               <div class="panel-head"><div><p class="eyebrow">Struktura prihoda</p><h2>Paketi i države</h2></div><span>izabrani mesec</span></div>
@@ -157,33 +168,11 @@
             </section>
           </div>
 
-          <div class="admin-layout">
-            <section class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="eyebrow">Obaveštenja</p>
-                  <h2>Šta traži reakciju</h2>
-                </div>
-                <span id="adminNotificationCount">0</span>
-              </div>
-              <div class="setup-list" id="adminNotificationList"></div>
+          <div class="dashboard-insights-grid equal">
+            <section class="panel analytics-panel">
+              <div class="panel-head"><div><p class="eyebrow">Rast baze</p><h2>Novi klijenti</h2></div><span>po mesecu</span></div>
+              <div id="adminClientGrowth"></div>
             </section>
-          </div>
-
-          <div class="admin-layout">
-            <section class="panel">
-              <div class="panel-head">
-                <div>
-                  <p class="eyebrow">Zaposleni</p>
-                  <h2>Sati, ciljevi i odgovornost</h2>
-                </div>
-                <span id="adminEmployeeRiskCount">0</span>
-              </div>
-              <div class="setup-list" id="adminEmployeeRiskList"></div>
-            </section>
-          </div>
-
-          <div class="admin-layout single-highlight">
             <section class="panel">
               <div class="panel-head">
                 <div>
@@ -195,6 +184,18 @@
               <div class="setup-list" id="contractExpiryList"></div>
             </section>
           </div>
+
+          <details class="panel dashboard-detail-section">
+            <summary><div><p class="eyebrow">Obaveštenja</p><h2>Sva aktivna obaveštenja</h2></div><span id="adminNotificationCount">0</span></summary>
+            <div class="dashboard-detail-content"><div class="setup-list" id="adminNotificationList"></div></div>
+          </details>
+
+          <details class="panel dashboard-detail-section">
+            <summary><div><p class="eyebrow">Zaposleni</p><h2>Detaljni sati, ciljevi i odgovornost</h2></div><span id="adminEmployeeRiskCount">0</span></summary>
+            <div class="dashboard-detail-content">
+              <div class="setup-list" id="adminEmployeeRiskList"></div>
+            </div>
+          </details>
 
         </section>
 
@@ -971,7 +972,7 @@
     <script src="admin-auth.js?v=4"></script>
     <div class="toast-stack" id="toastStack" aria-live="polite"></div>
     <script src="remote-state.js?v=9"></script>
-    <script src="app.js?v=89"></script>
+    <script src="app.js?v=90"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

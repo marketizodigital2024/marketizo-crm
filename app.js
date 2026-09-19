@@ -1885,17 +1885,62 @@ function renderAdminPanel() {
   setText("adminPaidCount", `${paidClients.length} klijenata`);
   setText("adminUnpaidTotal", currency.format(unpaidTotal));
   setText("adminUnpaidCount", `${unpaidClients.length} nije plaćeno · ${unsentClients.length} nije poslat račun`);
+  setText("adminCollectionRate", `${mrr ? Math.round((paidTotal / mrr) * 100) : 0}%`);
+  renderAdminActionSummary(active, monthKey);
   renderDashboardFilterNotice();
   renderRevenueTrend(monthKey);
   renderPaymentDonut(active, monthKey);
   renderClientGrowth(monthKey);
   renderTeamUtilization(monthKey);
   renderInvoiceAging(monthKey);
+  renderTopDebtors(monthKey);
   renderRevenueBreakdown(active, monthKey);
   renderAdminNotifications();
   renderAdminClientSnapshot(active);
   renderAdminEmployeeRisk(monthKey);
   renderContractExpiryList();
+}
+
+function dashboardContractRows() {
+  const today = currentDateKey();
+  return state.clients
+    .map((client) => ({ client, endDate: contractEndDate(client) }))
+    .filter(({ endDate }) => endDate && daysBetween(today, endDate) <= 30 && daysBetween(today, endDate) >= 0)
+    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
+}
+
+function dashboardOutstandingRows(endMonth) {
+  const totals = new Map();
+  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(visibleClients(), month).forEach((client) => {
+    const remaining = invoiceRemainingAmount(client, month);
+    if (!remaining) return;
+    const current = totals.get(client.id) || { client, total: 0, oldestAge: 0 };
+    current.total += remaining;
+    current.oldestAge = Math.max(current.oldestAge, invoiceAgeDays(monthlyInvoice(client, month), month));
+    totals.set(client.id, current);
+  }));
+  return [...totals.values()].sort((a, b) => b.total - a.total);
+}
+
+function renderAdminActionSummary(active, monthKey) {
+  const target = document.getElementById("adminActionSummary");
+  if (!target) return;
+  const unsent = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
+  const overdue = dashboardOutstandingRows(monthKey).filter((row) => row.oldestAge > 30);
+  const overdueTotal = overdue.reduce((sum, row) => sum + row.total, 0);
+  const teamExceptions = (state.employees || []).filter((employee) => employee.status === "Aktivan").filter((employee) => {
+    const expected = employeeExpectedHoursToDate(employee, monthKey);
+    const ratio = expected ? (employeeMonthRawHours(employee.id, monthKey) / expected) * 100 : 100;
+    return ratio < 80 || ratio > 110;
+  });
+  const contracts = dashboardContractRows();
+  const cards = [
+    { view: "reports", tone: "warn", value: unsent.length, label: "računa nije poslato", detail: monthLabel(monthKey) },
+    { view: "reports", tone: "danger", value: currency.format(overdueTotal), label: "duga preko 30 dana", detail: `${overdue.length} klijenata` },
+    { view: "employees", tone: "warn", value: teamExceptions.length, label: "odstupanja kapaciteta", detail: "ispod 80% ili preko 110%" },
+    { view: "clients", tone: "info", value: contracts.length, label: "ugovora ističe uskoro", detail: "narednih 30 dana" },
+  ];
+  target.innerHTML = cards.map((card) => `<button class="dashboard-action-card ${card.tone}" type="button" data-go-view="${card.view}"><strong>${dashboardEscape(card.value)}</strong><span>${card.label}</span><small>${dashboardEscape(card.detail)}</small></button>`).join("");
 }
 
 function dashboardEscape(value) {
@@ -1937,7 +1982,9 @@ function renderRevenueTrend(endMonth) {
   const width = 720, height = 210, padX = 38, padY = 22, chartWidth = width - padX * 2, chartHeight = height - padY * 2;
   const xy = (value, index) => [padX + (chartWidth * index) / Math.max(1, points.length - 1), padY + chartHeight - (value / max) * chartHeight];
   const line = (field) => points.map((point, index) => xy(point[field], index).join(",")).join(" ");
-  target.innerHTML = `<div class="chart-legend"><span><i class="legend-dot billed"></i>Fakturisano</span><span><i class="legend-dot paid"></i>Naplaćeno</span></div><div class="line-chart-wrap"><svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafikon fakturisanog i naplaćenog prihoda">${[0, .25, .5, .75, 1].map((ratio) => `<line x1="${padX}" y1="${padY + chartHeight * ratio}" x2="${width - padX}" y2="${padY + chartHeight * ratio}" class="chart-gridline" />`).join("")}<polyline points="${line("billed")}" class="trend-line billed" /><polyline points="${line("paid")}" class="trend-line paid" />${points.map((point, index) => { const billed = xy(point.billed, index), paid = xy(point.paid, index); return `<circle cx="${billed[0]}" cy="${billed[1]}" r="5" class="trend-dot billed"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.billed)}</title></circle><circle cx="${paid[0]}" cy="${paid[1]}" r="5" class="trend-dot paid"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.paid)}</title></circle>`; }).join("")}</svg></div><div class="chart-axis">${points.map((point) => `<span>${dashboardEscape(shortMonthLabel(point.month))}</span>`).join("")}</div>`;
+  const latest = points.at(-1), previous = points.at(-2);
+  const delta = previous?.billed ? Math.round(((latest.billed - previous.billed) / previous.billed) * 100) : 0;
+  target.innerHTML = `<div class="chart-legend"><span><i class="legend-dot billed"></i>Fakturisano</span><span><i class="legend-dot paid"></i>Naplaćeno</span></div><div class="line-chart-wrap"><svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafikon fakturisanog i naplaćenog prihoda">${[0, .25, .5, .75, 1].map((ratio) => `<line x1="${padX}" y1="${padY + chartHeight * ratio}" x2="${width - padX}" y2="${padY + chartHeight * ratio}" class="chart-gridline" />`).join("")}<polyline points="${line("billed")}" class="trend-line billed" /><polyline points="${line("paid")}" class="trend-line paid" />${points.map((point, index) => { const billed = xy(point.billed, index), paid = xy(point.paid, index); return `<circle cx="${billed[0]}" cy="${billed[1]}" r="5" class="trend-dot billed"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.billed)}</title></circle><circle cx="${paid[0]}" cy="${paid[1]}" r="5" class="trend-dot paid"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.paid)}</title></circle>`; }).join("")}</svg></div><div class="chart-axis">${points.map((point) => `<span>${dashboardEscape(shortMonthLabel(point.month))}</span>`).join("")}</div><div class="trend-summary"><span><b>${currency.format(latest.billed)}</b> fakturisano</span><span><b>${currency.format(latest.paid)}</b> naplaćeno</span><span class="${delta >= 0 ? "positive" : "negative"}"><b>${delta >= 0 ? "+" : ""}${delta}%</b> prema prethodnom mesecu</span></div>`;
 }
 
 function renderPaymentDonut(clients, monthKey) {
@@ -1967,7 +2014,10 @@ function renderTeamUtilization(monthKey) {
     const expected = employeeExpectedHoursToDate(employee, monthKey), logged = employeeMonthRawHours(employee.id, monthKey);
     return { name: employee.name, expected, logged, ratio: expected ? Math.round((logged / expected) * 100) : 0 };
   }).sort((a, b) => b.ratio - a.ratio);
-  target.innerHTML = employees.length ? `<div class="modern-bars compact">${employees.map((item) => `<div class="modern-bar-row"><div><strong>${dashboardEscape(item.name)}</strong><span>${formatHours(item.logged)} / ${formatHours(item.expected)}h</span></div><div class="modern-bar-track"><span style="width:${Math.min(100, item.ratio)}%" class="${item.ratio < 70 ? "warn" : ""}"></span></div><small>${item.ratio}%</small></div>`).join("")}</div>` : '<p class="chart-empty">Nema aktivnih zaposlenih za prikaz.</p>';
+  const exceptions = employees.filter((item) => item.ratio < 80 || item.ratio > 110);
+  const normal = employees.filter((item) => item.ratio >= 80 && item.ratio <= 110);
+  const rows = (items) => items.map((item) => `<div class="modern-bar-row utilization-row ${item.ratio < 80 ? "under" : item.ratio > 110 ? "over" : "normal"}"><div><strong>${dashboardEscape(item.name)}</strong><span>${formatHours(item.logged)} / ${formatHours(item.expected)}h</span></div><div class="modern-bar-track"><span style="width:${Math.min(100, item.ratio)}%"></span></div><small>${item.ratio}%</small></div>`).join("");
+  target.innerHTML = employees.length ? `<div class="modern-bars">${rows(exceptions)}${normal.length ? `<details class="utilization-all"><summary>Prikaži uredne (${normal.length})</summary><div class="modern-bars">${rows(normal)}</div></details>` : ""}</div>` : '<p class="chart-empty">Nema aktivnih zaposlenih za prikaz.</p>';
 }
 
 function invoiceAgeDays(invoice, monthKey) {
@@ -1987,6 +2037,13 @@ function renderInvoiceAging(endMonth) {
     if (bucket) bucket.value += remaining;
   }));
   renderModernBars(target, buckets.map((bucket) => [bucket.label, bucket.value]), (value) => currency.format(value));
+}
+
+function renderTopDebtors(endMonth) {
+  const target = document.getElementById("adminTopDebtors");
+  if (!target) return;
+  const rows = dashboardOutstandingRows(endMonth).slice(0, 5);
+  target.innerHTML = rows.length ? `<div class="debtor-list">${rows.map((row, index) => `<button type="button" data-go-view="reports"><b>${index + 1}</b><span><strong>${dashboardEscape(row.client.name)}</strong><small>najstarije ${row.oldestAge} dana</small></span><em>${currency.format(row.total)}</em></button>`).join("")}</div>` : '<p class="chart-empty">Nema otvorenih potraživanja.</p>';
 }
 
 function renderModernBars(target, entries, formatter) {
@@ -2242,10 +2299,7 @@ function renderContractExpiryList() {
   const target = document.getElementById("contractExpiryList");
   if (!target) return;
   const today = currentDateKey();
-  const rows = state.clients
-    .map((client) => ({ client, endDate: contractEndDate(client) }))
-    .filter(({ endDate }) => endDate && daysBetween(today, endDate) <= 30 && daysBetween(today, endDate) >= 0)
-    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
+  const rows = dashboardContractRows();
   target.innerHTML = rows.length
     ? rows
         .map(({ client, endDate }) => {
