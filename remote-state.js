@@ -11,6 +11,7 @@
   let lastServerPayload = null;
   let pollTimer = null;
   let pollCallback = null;
+  let deferredRemoteState = null;
   const stateChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("marketizo-crm-state-v1") : null;
 
   function clone(value) {
@@ -24,6 +25,27 @@
 
   function setLocal(payload) {
     localStorage.setItem(storageKey, JSON.stringify(payload || {}));
+  }
+
+  function userIsEditing() {
+    const active = document.activeElement;
+    return Boolean(active && active.matches?.("input, textarea, select, [contenteditable='true']"));
+  }
+
+  function applyRemoteState(payload, updatedAt) {
+    lastUpdatedAt = updatedAt || lastUpdatedAt;
+    lastServerPayload = clone(payload);
+    setLocal(payload);
+    pollCallback?.(clone(payload), lastUpdatedAt);
+  }
+
+  function queueOrApplyRemoteState(payload, updatedAt) {
+    if (userIsEditing() || saveInFlight || pendingPayload) {
+      deferredRemoteState = { payload: clone(payload), updatedAt };
+      return;
+    }
+    deferredRemoteState = null;
+    applyRemoteState(payload, updatedAt);
   }
 
   function sameValue(left, right) {
@@ -165,23 +187,28 @@
     if (typeof onPayload !== "function" || isLocalFile()) return;
     pollCallback = onPayload;
     pollTimer = window.setInterval(async () => {
-      if (saveInFlight || pendingPayload || document.hidden) return;
+      if (saveInFlight || pendingPayload || document.hidden || userIsEditing()) return;
       const previousUpdatedAt = lastUpdatedAt;
       const result = await load({ writeLocal: false });
       if (result.payload && result.updatedAt && result.updatedAt !== previousUpdatedAt) {
-        setLocal(result.payload);
-        onPayload(clone(result.payload), result.updatedAt);
+        queueOrApplyRemoteState(result.payload, result.updatedAt);
       }
     }, Math.max(1000, Math.min(2000, Number(interval) || 1500)));
   }
 
   stateChannel?.addEventListener("message", (event) => {
     const message = event.data || {};
-    if (message.type !== "saved" || !message.payload || message.updatedAt === lastUpdatedAt || saveInFlight || pendingPayload) return;
-    lastUpdatedAt = message.updatedAt || lastUpdatedAt;
-    lastServerPayload = clone(message.payload);
-    setLocal(message.payload);
-    pollCallback?.(clone(message.payload), lastUpdatedAt);
+    if (message.type !== "saved" || !message.payload || message.updatedAt === lastUpdatedAt) return;
+    queueOrApplyRemoteState(message.payload, message.updatedAt);
+  });
+
+  document.addEventListener("focusout", () => {
+    window.setTimeout(() => {
+      if (!deferredRemoteState || userIsEditing() || saveInFlight || pendingPayload) return;
+      const pending = deferredRemoteState;
+      deferredRemoteState = null;
+      applyRemoteState(pending.payload, pending.updatedAt);
+    }, 500);
   });
 
   window.MarketizoRemote = {
