@@ -3905,7 +3905,7 @@ function renderEmployeePerformanceOverview() {
           ? recognitions.map((item) => `${item.month}: ${item.type} · ${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}`).join("<hr />")
           : "Nema pohvala ili fokusa.";
         return `<tr class="performance-employee-row ${employee.id === selectedEmployeeId ? "selected-row" : ""}" data-performance-employee="${employee.id}" tabindex="0" role="button" aria-label="Otvori dosije za ${employee.name}">
-          <td><strong>${employee.name}</strong><br /><span class="muted">${employee.position || "Zaposleni"}</span></td>
+          <td><strong>${employee.name}</strong><br /><span class="muted">${employee.position || "Zaposleni"}</span><br /><a class="employee-profile-inline-link" href="/employee-profile?employee=${encodeURIComponent(employee.id)}">Otvori ličnu kartu →</a></td>
           <td><strong>${score === null ? "Bez ocene" : `${score.toFixed(1).replace(".", ",")}/5`}</strong><br /><span class="muted">${monthlyRatings.length} ${monthlyRatings.length === 1 ? "ocena" : "ocena"} za mesec</span></td>
           <td><strong>${progress === null ? "Nema aktivnog cilja" : `${progress}%`}</strong><br /><span class="muted">${goals.length} aktivnih ciljeva</span></td>
           <td>${recognition ? `<strong>${recognition.type}</strong><br /><span class="muted">${recognition.text || recognition.message || "Bez poruke"}</span><details><summary class="history-link">Sve poruke (${recognitions.length})</summary><div class="employee-rating-history">${recognitionHistory}</div></details>` : `<span class="muted">Nema poruke</span>`}</td>
@@ -4325,6 +4325,7 @@ function buildStructuredSidebar() {
 
   const teamPages = [
     ["Pregled tima", "employees-overview.html", "overview"],
+    ["Lične karte zaposlenih", "/employee-profile", "profile"],
     ["Odmori i kalendar", "employees-absences.html", "leave"],
     ["1:1 sastanci", "employees-recognitions.html", "meetings"],
     ["Učinak i ciljevi", "employees-ratings.html", "performance"],
@@ -4356,6 +4357,7 @@ function buildStructuredSidebar() {
     const currentFile = location.pathname.replace(/\/+$/, "").split("/").pop().replace(/\.html$/, "");
     const fileSections = {
       "employees-overview": "overview",
+      "employee-profile": "profile",
       "employees-absences": "leave",
       "employees-recognitions": "meetings",
       "employees-ratings": "performance",
