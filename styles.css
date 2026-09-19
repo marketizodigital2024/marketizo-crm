@@ -1225,6 +1225,10 @@ th {
 .invoice-compact-amount { align-self: center; white-space: nowrap; }
 .invoice-compact-row label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 800; }
 .invoice-compact-row select { min-width: 0; width: 100%; }
+.invoice-month-remove {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
 .invoice-carryover-compact { margin: 0 !important; }
 
 @media (max-width: 900px) {
@@ -1232,6 +1236,7 @@ th {
   .invoice-status-group summary b, .invoice-status-group summary em { grid-column: 2 / -1; }
   .invoice-compact-row { grid-template-columns: 1fr 1fr; }
   .invoice-compact-client { grid-column: 1 / -1; }
+  .invoice-month-remove { justify-self: stretch; }
 }
 
 .checkbox-field input {

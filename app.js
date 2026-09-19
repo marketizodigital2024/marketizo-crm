@@ -1614,7 +1614,10 @@ function isClientLeadStatusContacted(status) {
 
 function saveState(options = {}) {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
-  if (options.remote !== false && onlineHydrationComplete) window.MarketizoRemote?.save(state);
+  if (options.remote !== false && onlineHydrationComplete && window.MarketizoRemote) {
+    return window.MarketizoRemote.save(state);
+  }
+  return Promise.resolve({ ok: true, localOnly: true });
 }
 
 window.addEventListener("marketizo-state-conflict", (event) => {
@@ -2152,6 +2155,7 @@ function renderMonthlyInvoices(clients, monthKey) {
           <button class="secondary-button" type="submit">Dodaj uplatu</button>
         </form>
         <div class="invoice-payment-history">${payments.length ? payments.map((payment) => `<div><span>${formatDate(payment.date)} · ${currency.format(Number(payment.amount || 0))}${payment.note ? ` · ${escapeInvoiceText(payment.note)}` : ""}</span><button type="button" data-delete-invoice-payment="${payment.id}" data-invoice-client="${client.id}">Obriši</button></div>`).join("") : `<small>Nema pojedinačnih uplata.</small>`}</div>
+        <button class="invoice-month-remove danger-action" type="button" data-remove-invoice-client="${client.id}" data-invoice-month="${monthKey}">Ukloni iz meseca</button>
       </div>`;
   };
   const sorted = [...clients].sort((a, b) => invoiceAmount(b, monthKey) - invoiceAmount(a, monthKey));
@@ -2236,6 +2240,34 @@ function bindInvoiceControls() {
       saveState();
       renderAll();
       showToast("Uplata obrisana", `${client.name}: stanje računa je preračunato.`, "ok");
+    });
+  });
+  document.querySelectorAll("[data-remove-invoice-client]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const client = state.clients.find((item) => item.id === button.dataset.removeInvoiceClient);
+      const monthKey = button.dataset.invoiceMonth;
+      const invoice = client?.invoices?.[monthKey];
+      if (!client || !invoice) return;
+      if (!confirm(`Ukloniti ${client.name} samo iz računa za ${monthLabel(monthKey)}? Klijent ostaje u bazi.`)) return;
+
+      const previousInvoice = structuredClone(invoice);
+      delete client.invoices[monthKey];
+      button.disabled = true;
+      let result;
+      try {
+        result = await saveState();
+      } catch (error) {
+        result = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
+      }
+      if (!result?.ok) {
+        client.invoices[monthKey] = previousInvoice;
+        saveState({ remote: false });
+        renderAll();
+        showToast("Nije sačuvano", result?.error || "Online baza nije potvrdila izmenu. Pokušaj ponovo.", "warn");
+        return;
+      }
+      renderAll();
+      showToast("Uklonjeno iz meseca", `${client.name} više nije u računima za ${monthLabel(monthKey)}.`, "ok");
     });
   });
 }
