@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 const table = process.env.SUPABASE_TABLE || 'agency_crm_state';
-const rowId = 'marketizo-kpi-v1';
+const rowId = process.env.VERCEL_ENV === 'preview' ? 'marketizo-kpi-preview-v1' : 'marketizo-kpi-v1';
 const mainId = process.env.CRM_STATE_ID || 'marketizo-main';
 const roles = ['Scenarista', 'Voice Over', 'Editor', 'Checking', 'Social Media Manager', 'Snimatelj', 'Paid Ads'];
 const baseQuestions = [
