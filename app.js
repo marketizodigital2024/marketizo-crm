@@ -3827,13 +3827,15 @@ async function renderProfileClientRatings(employeeId) {
     const data = await response.json();
     if (document.getElementById("employeeClientRatings") !== target) return;
     const rows = (data.responses || []).filter((item) => (item.team || []).some((person) => person.employeeId === employeeId));
+    const assigned = (data.assignments || []).flatMap((assignment) => (assignment.roles || []).filter((person) => person.employeeId === employeeId).map((person) => ({ clientId: assignment.clientId, role: person.role })));
+    const assignmentHtml = assigned.length ? `<div class="history-record"><strong>Klijenti u timu (${new Set(assigned.map((item) => item.clientId)).size})</strong><span>${assigned.map((item) => `${escapeInvoiceText(data.clients?.find((client) => client.id === item.clientId)?.name || "Klijent")} · ${escapeInvoiceText(item.role || "Uloga")}`).join("<br />")}</span></div>` : '<div class="empty-state">Za ovog zaposlenog još nije sačuvana raspodela klijenata u KPI timu.</div>';
     const allPersonal = [];
     rows.forEach((item) => (item.questions || []).forEach((question) => { const value = Number(item.answers?.[question.id]); if (question.type === "rating" && question.targetEmployeeId === employeeId && value >= 1 && value <= 5) allPersonal.push(value); }));
     const summaryScore = document.getElementById("employeeClientScore");
     if (summaryScore) summaryScore.textContent = allPersonal.length ? `${(allPersonal.reduce((a, b) => a + b, 0) / allPersonal.length).toFixed(1).replace(".", ",")}/5` : "Bez ocene";
-    if (!rows.length) { target.innerHTML = '<div class="empty-state">Još nema ocena klijenata za ovog zaposlenog.</div>'; return; }
+    if (!rows.length) { target.innerHTML = assignmentHtml + '<div class="empty-state">Još nema ocena klijenata za ovog zaposlenog.</div>'; return; }
     const score = (values) => values.length ? `${(values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1).replace(".", ",")}/5` : "Bez ocene";
-    target.innerHTML = rows.sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt))).map((item) => {
+    target.innerHTML = assignmentHtml + rows.sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt))).map((item) => {
       const personal = [], team = [];
       (item.questions || []).forEach((question) => {
         if (question.type !== "rating") return;
