@@ -8,10 +8,14 @@
   let pendingPayload = null;
   let pendingWaiters = [];
   let lastUpdatedAt = "";
+  let lastServerPayload = null;
   let pollTimer = null;
+  let pollCallback = null;
+  const stateChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("marketizo-crm-state-v1") : null;
 
   function clone(value) {
-    return JSON.parse(JSON.stringify(value || {}));
+    if (value === undefined) return undefined;
+    return JSON.parse(JSON.stringify(value));
   }
 
   function isLocalFile() {
@@ -22,7 +26,51 @@
     localStorage.setItem(storageKey, JSON.stringify(payload || {}));
   }
 
-  async function load() {
+  function sameValue(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function mergeChanges(base, desired, latest) {
+    if (sameValue(desired, base)) return clone(latest);
+    if (Array.isArray(base) && Array.isArray(desired) && Array.isArray(latest)) {
+      const idArrays = [...base, ...desired, ...latest].every((item) => item && typeof item === "object" && !Array.isArray(item) && item.id);
+      if (!idArrays) return clone(desired);
+      const baseById = new Map(base.map((item) => [item.id, item]));
+      const desiredById = new Map(desired.map((item) => [item.id, item]));
+      const latestById = new Map(latest.map((item) => [item.id, item]));
+      baseById.forEach((item, id) => {
+        if (!desiredById.has(id)) latestById.delete(id);
+      });
+      desiredById.forEach((item, id) => {
+        const baseItem = baseById.get(id);
+        if (!baseItem) latestById.set(id, clone(item));
+        else if (!sameValue(item, baseItem)) latestById.set(id, mergeChanges(baseItem, item, latestById.get(id) || baseItem));
+      });
+      const desiredOrder = desired.map((item) => item.id);
+      return [...latestById.values()].sort((left, right) => {
+        const leftIndex = desiredOrder.indexOf(left.id);
+        const rightIndex = desiredOrder.indexOf(right.id);
+        if (leftIndex < 0 && rightIndex < 0) return 0;
+        if (leftIndex < 0) return 1;
+        if (rightIndex < 0) return -1;
+        return leftIndex - rightIndex;
+      });
+    }
+    if (base && desired && latest && typeof base === "object" && typeof desired === "object" && typeof latest === "object" && !Array.isArray(base) && !Array.isArray(desired) && !Array.isArray(latest)) {
+      const merged = clone(latest);
+      new Set([...Object.keys(base), ...Object.keys(desired)]).forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(desired, key)) {
+          if (Object.prototype.hasOwnProperty.call(base, key)) delete merged[key];
+          return;
+        }
+        merged[key] = mergeChanges(base[key], desired[key], latest[key]);
+      });
+      return merged;
+    }
+    return clone(desired);
+  }
+
+  async function load(options = {}) {
     if (isLocalFile()) {
       configured = false;
       online = false;
@@ -36,7 +84,8 @@
       lastError = data.error || "";
       if (data.payload && typeof data.payload === "object") {
         lastUpdatedAt = data.updatedAt || lastUpdatedAt;
-        setLocal(data.payload);
+        lastServerPayload = clone(data.payload);
+        if (options.writeLocal !== false) setLocal(data.payload);
         return { configured, online, payload: clone(data.payload), updatedAt: data.updatedAt || "" };
       }
       return { configured, empty: Boolean(data.empty), online, payload: null, error: lastError };
@@ -52,28 +101,43 @@
     if (!pendingPayload || isLocalFile()) return { ok: true, localOnly: isLocalFile() };
     if (saveInFlight) return;
     saveInFlight = true;
-    const payload = pendingPayload;
+    let payload = pendingPayload;
+    let basePayload = clone(lastServerPayload || {});
     const waiters = pendingWaiters;
     pendingPayload = null;
     pendingWaiters = [];
     let result = { ok: false, error: "Online čuvanje nije uspelo." };
     try {
-      const response = await fetch("/api/state", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload, baseUpdatedAt: lastUpdatedAt }),
-      });
-      const data = await response.json().catch(() => ({}));
-      configured = Boolean(data.configured);
-      online = configured && response.ok && !data.error;
-      lastError = data.error || "";
-      if (response.status === 409 && data.conflict) {
-        const latest = await load();
-        window.dispatchEvent(new CustomEvent("marketizo-state-conflict", { detail: { message: lastError, payload: latest.payload || null } }));
-      } else if (response.ok && data.updatedAt) {
-        lastUpdatedAt = data.updatedAt;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const response = await fetch("/api/state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payload, baseUpdatedAt: lastUpdatedAt }),
+        });
+        const data = await response.json().catch(() => ({}));
+        configured = Boolean(data.configured);
+        online = configured && response.ok && !data.error;
+        lastError = data.error || "";
+        if (response.status === 409 && data.conflict && attempt < 3) {
+          const latest = await load({ writeLocal: false });
+          if (!latest.payload) break;
+          payload = mergeChanges(basePayload, payload, latest.payload);
+          basePayload = clone(latest.payload);
+          continue;
+        }
+        if (response.ok && data.updatedAt) {
+          lastUpdatedAt = data.updatedAt;
+          lastServerPayload = clone(payload);
+          setLocal(payload);
+          stateChannel?.postMessage({ type: "saved", payload: clone(payload), updatedAt: lastUpdatedAt });
+          result = { ok: true, error: "", updatedAt: lastUpdatedAt, payload: clone(payload) };
+        } else {
+          const latest = response.status === 409 ? await load({ writeLocal: false }) : { payload: null };
+          if (latest.payload) window.dispatchEvent(new CustomEvent("marketizo-state-conflict", { detail: { message: lastError, payload: latest.payload } }));
+          result = { ok: false, error: lastError || `Online čuvanje nije uspelo (${response.status}).` };
+        }
+        break;
       }
-      result = { ok: online, error: lastError || (response.ok ? "" : `Online čuvanje nije uspelo (${response.status}).`) };
     } catch (error) {
       online = false;
       lastError = error?.message || "Online čuvanje nije uspelo.";
@@ -99,15 +163,26 @@
   function startPolling(onPayload, interval = 5000) {
     window.clearInterval(pollTimer);
     if (typeof onPayload !== "function" || isLocalFile()) return;
+    pollCallback = onPayload;
     pollTimer = window.setInterval(async () => {
       if (saveInFlight || pendingPayload || document.hidden) return;
       const previousUpdatedAt = lastUpdatedAt;
-      const result = await load();
+      const result = await load({ writeLocal: false });
       if (result.payload && result.updatedAt && result.updatedAt !== previousUpdatedAt) {
+        setLocal(result.payload);
         onPayload(clone(result.payload), result.updatedAt);
       }
-    }, Math.max(3000, Number(interval) || 5000));
+    }, Math.max(1000, Math.min(2000, Number(interval) || 1500)));
   }
+
+  stateChannel?.addEventListener("message", (event) => {
+    const message = event.data || {};
+    if (message.type !== "saved" || !message.payload || message.updatedAt === lastUpdatedAt || saveInFlight || pendingPayload) return;
+    lastUpdatedAt = message.updatedAt || lastUpdatedAt;
+    lastServerPayload = clone(message.payload);
+    setLocal(message.payload);
+    pollCallback?.(clone(message.payload), lastUpdatedAt);
+  });
 
   window.MarketizoRemote = {
     load,
