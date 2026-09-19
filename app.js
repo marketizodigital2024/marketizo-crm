@@ -2854,8 +2854,12 @@ function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
   for (let year = firstYear; year <= lastYear; year += 1) {
     used += employeeYearAbsenceDays(employee.id, year, "Godišnji odmor");
   }
-  used = Math.round(used * 100) / 100;
-  return { earned, used, left: Math.max(Math.round((earned - used) * 100) / 100, 0) };
+  const overriddenMonths = new Set(Object.keys(employee.monthlyAbsenceDays || {}));
+  const reserved = (state.employeeAbsences || [])
+    .filter((absence) => absence.employeeId === employee.id && absence.type === "Godišnji odmor" && absence.status === "Odobreno")
+    .reduce((sum, absence) => sum + absenceWorkdays(absence).filter((day) => day > referenceDate && day.slice(0, 4) <= String(lastYear) && !overriddenMonths.has(day.slice(0, 7))).length, 0);
+  used = Math.round((used - reserved) * 100) / 100;
+  return { earned, used, reserved, left: Math.round((earned - used - reserved) * 100) / 100 };
 }
 
 function employeeVacationAllowance(employee, year) {
@@ -2926,7 +2930,9 @@ function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
   const hours = parseNumber(weeklyHours || 0, 0);
-  if (hours >= 38) return day === 5 ? 390 : 510;
+  // Keep the historical plan unchanged; apply contractual weekly hours from the next full workweek.
+  if (date < "2026-09-21" && hours >= 38) return day === 5 ? 390 : 510;
+  if (hours === 38.5) return day === 5 ? 390 : 480;
   return Math.round((hours * 60) / 5);
 }
 
@@ -3423,7 +3429,7 @@ function renderSelectedEmployeeAbsenceList(employeeId, year) {
   document.getElementById("selectedEmployeeAbsenceList").innerHTML = `
     <div class="setup-item">
       <strong>${formatVacationDays(vacation.used)}</strong>
-      <span>Godišnji iskorišćen · ${formatVacationDays(vacation.left)} dana preostalo<br />Stečeno ukupno: ${formatVacationDays(vacation.earned)} dana</span>
+      <span>Godišnji iskorišćen · ${formatVacationDays(vacation.reserved)} dana rezervisano<br />${formatVacationDays(vacation.left)} dana raspoloživo · stečeno ${formatVacationDays(vacation.earned)}</span>
     </div>
     <div class="setup-item">
       <strong>${giftUsed}</strong>
@@ -3933,9 +3939,9 @@ function renderEmployeePerformanceOverview() {
     const currentScore = average(monthRatings);
     const previousScore = average(previousRatings);
     const monthLogs = workLogs.filter((item) => String(item.date || "").startsWith(month));
-    const monthMinutes = monthLogs.reduce((sum, item) => sum + Number(item.minutes || Number(item.hours || 0) * 60), 0);
-    const expectedHours = employeeExpectedHours(employee, month);
-    const balance = monthMinutes / 60 - expectedHours;
+    const accountedHours = employeeMonthHours(employee.id, month);
+    const expectedHours = employeeExpectedHoursToDate(employee, month);
+    const balance = employeeHourBalance(employee, month);
     const activeGoals = goals.filter((item) => item.status !== "Završeno");
     const goalProgress = activeGoals.length ? Math.round(activeGoals.reduce((sum, item) => sum + Number(item.progress || 0), 0) / activeGoals.length) : 0;
     const alerts = [
@@ -3955,8 +3961,8 @@ function renderEmployeePerformanceOverview() {
       <nav class="employee-profile-tabs" aria-label="Sekcije dosijea"><button data-profile-tab="summary" type="button">Sažetak</button><button data-profile-tab="performance" type="button">Učinak</button><button data-profile-tab="clients" type="button">Klijenti i ocene</button><button data-profile-tab="meetings" type="button">1:1</button><button data-profile-tab="time" type="button">Sati</button><button data-profile-tab="absence" type="button">Odsustva</button><button data-profile-tab="admin" type="button">Admin beleške</button></nav>
       <section class="employee-summary-grid profile-panel" data-profile-panel="summary">
         <article><span>Ocena</span><strong>${currentScore === null ? "Bez ocene" : `${currentScore.toFixed(1).replace(".", ",")}/5`}</strong><small>${previousScore === null || currentScore === null ? "Nema poređenja" : `${currentScore >= previousScore ? "Rast" : "Pad"} ${Math.abs(currentScore - previousScore).toFixed(1).replace(".", ",")} prema prošlom mesecu`}</small></article>
-        <article><span>Sati</span><strong>${formatHours(monthMinutes / 60)}h</strong><small>od ${formatHours(expectedHours)}h</small></article>
-        <article><span>Saldo</span><strong>${formatHourBalance(balance)}</strong><small>za izabrani mesec</small></article>
+        <article><span>Sati</span><strong>${formatHours(accountedHours)}h</strong><small>od ${formatHours(expectedHours)}h do danas</small></article>
+        <article><span>Saldo</span><strong>${formatHourBalance(balance)}</strong><small>ukupno sa prenosom</small></article>
         <article><span>Ciljevi</span><strong>${goalProgress}%</strong><div class="profile-progress-track" aria-label="Napredak ciljeva ${goalProgress}%"><span style="width:${Math.max(0, Math.min(100, goalProgress))}%"></span></div><small>${activeGoals.length} ${activeGoals.length === 1 ? "aktivan cilj" : "aktivnih ciljeva"}</small></article>
       </section>
         <section class="employee-summary-grid profile-panel" data-profile-panel="summary"><article><span>Ocena klijenata</span><strong id="employeeClientScore">Učitavam...</strong><small>lična ocena iz KPI upitnika</small></article><article><span>Poslednji 1:1</span><strong>${oneOnOnes.length ? formatDate(oneOnOnes[0].date) : "Nije održan"}</strong><small>${oneOnOnes.length} ${oneOnOnes.length === 1 ? "sastanak" : "sastanaka"} u dosijeu</small></article><article><span>U toku</span><strong>${activeGoals.length} ${activeGoals.length === 1 ? "cilj" : "ciljeva"}</strong><small>${activeGoals[0]?.endDate ? `Sledeći rok ${formatDate(activeGoals[0].endDate)}` : "Bez roka"}</small></article><article><span>U timu od</span><strong>${employee.startDate ? formatDate(employee.startDate) : "—"}</strong><small>${escapeInvoiceText(employee.position || "Zaposleni")}</small></article></section>
