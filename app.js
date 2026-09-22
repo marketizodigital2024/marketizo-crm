@@ -2930,9 +2930,8 @@ function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
   const hours = parseNumber(weeklyHours || 0, 0);
-  // Keep the historical plan unchanged; apply contractual weekly hours from the next full workweek.
-  if (date < "2026-09-21" && hours >= 38) return day === 5 ? 390 : 510;
-  if (hours === 38.5) return day === 5 ? 390 : 480;
+  // Full-time starts at 09:00: Mon-Thu 8h work + 30m break; Friday 6.5h work + 30m break.
+  if (hours >= 38) return day === 5 ? 420 : 510;
   return Math.round((hours * 60) / 5);
 }
 
