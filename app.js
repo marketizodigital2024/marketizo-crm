@@ -1223,7 +1223,46 @@ function withLoginDefaults(client) {
 
 function withInvoiceDefaults(client) {
   client.invoices = client.invoices || {};
+  client.invoiceStartMonth = String(client.invoiceStartMonth || client.startDate || "").slice(0, 7);
   return client;
+}
+
+function invoiceStartMonthFor(client) {
+  return String(client?.invoiceStartMonth || client?.startDate || "").slice(0, 7);
+}
+
+function invoiceHasFinancialHistory(invoice) {
+  if (!invoice) return false;
+  return invoice.invoiceStatus === "Poslat"
+    || invoice.paymentStatus === "Plaćeno"
+    || invoice.paymentStatus === "Delimično"
+    || Number(invoice.paidAmount || 0) > 0
+    || invoicePaymentEntries(invoice).length > 0;
+}
+
+function reconcileClientInvoiceStart(client, requestedMonth, { ensureStartInvoice = true } = {}) {
+  const monthKey = String(requestedMonth || client.startDate || "").slice(0, 7);
+  client.invoiceStartMonth = monthKey;
+  client.invoices = client.invoices || {};
+  if (!monthKey) return false;
+  let changed = false;
+  Object.keys(client.invoices).forEach((invoiceMonth) => {
+    if (invoiceMonth >= monthKey || invoiceHasFinancialHistory(client.invoices[invoiceMonth])) return;
+    delete client.invoices[invoiceMonth];
+    changed = true;
+  });
+  if (ensureStartInvoice && !client.invoices[monthKey] && client.status === "Aktivan" && Number(client.revenue || 0) > 0) {
+    client.invoices[monthKey] = {
+      invoiceStatus: "Nije poslat",
+      paymentStatus: "Nije plaćeno",
+      paymentMethod: client.paymentMethod || "Firma",
+      sentAt: "",
+      paidAt: "",
+      amount: Number(client.revenue || 0),
+    };
+    changed = true;
+  }
+  return changed;
 }
 
 function monthlyInvoice(client, monthKey = selectedMonthKey()) {
@@ -1242,7 +1281,8 @@ function ensureInvoiceMonthRoster(monthKey) {
   let changed = false;
   (state.clients || []).forEach((client) => {
     const excludedMonths = Array.isArray(client.invoiceExcludedMonths) ? client.invoiceExcludedMonths : [];
-    const startsAfterMonth = client.startDate && String(client.startDate).slice(0, 7) > monthKey;
+    const invoiceStartMonth = invoiceStartMonthFor(client);
+    const startsAfterMonth = invoiceStartMonth && invoiceStartMonth > monthKey;
     if (client.status !== "Aktivan" || Number(client.revenue || 0) <= 0 || startsAfterMonth || excludedMonths.includes(monthKey)) return;
     client.invoices = client.invoices || {};
     if (client.invoices[monthKey]) return;
@@ -2592,6 +2632,7 @@ function openEditClient(id) {
   form.elements.revenue.value = Number(client.revenue || 0);
   form.elements.contractMonths.value = String(client.contractMonths || 3);
   form.elements.startDate.value = client.startDate || "";
+  form.elements.invoiceStartMonth.value = invoiceStartMonthFor(client);
   form.elements.status.value = normalizeClientStatus(client.status);
   form.elements.billingDay.value = Number(client.billingDay || 1);
   form.elements.contactName.value = client.contactName || "";
@@ -6057,6 +6098,8 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const invoiceStatus = "Nije poslat";
   const paymentStatus = "Nije plaćeno";
   const paymentMethod = "Firma";
+  const startDate = String(formData.get("startDate") || "");
+  const invoiceStartMonth = String(formData.get("invoiceStartMonth") || startDate.slice(0, 7) || selectedMonthKey());
   state.clients.unshift({
     id: crypto.randomUUID(),
     name,
@@ -6078,8 +6121,9 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     paymentStatus,
     invoiceStatus,
     paymentMethod,
+    invoiceStartMonth,
     invoices: {
-      [selectedMonthKey()]: {
+      [invoiceStartMonth]: {
         invoiceStatus,
         paymentStatus,
         paymentMethod,
@@ -6088,7 +6132,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
       },
     },
     contractMonths: values.contractMonths,
-    startDate: formData.get("startDate"),
+    startDate,
     contractFileName: contractFile?.name || "",
     contractFileData: await readSmallFile(contractFile),
     contractNote: formData.get("contractNote"),
@@ -6140,6 +6184,7 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     revenue: values.revenue,
     contractMonths: values.contractMonths,
     startDate: formData.get("startDate"),
+    invoiceStartMonth: String(formData.get("invoiceStartMonth") || formData.get("startDate") || "").slice(0, 7),
     status: formData.get("status"),
     billingDay: Number(formData.get("billingDay")),
     contactName: formData.get("contactName"),
@@ -6161,11 +6206,13 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     client.contractFileName = contractFile.name;
     client.contractFileData = contractFileData;
   }
-  client.invoices = client.invoices || {};
-  client.invoices[selectedMonthKey()] = {
-    ...monthlyInvoice(client, selectedMonthKey()),
-    amount: values.revenue,
-  };
+  reconcileClientInvoiceStart(client, client.invoiceStartMonth);
+  if (client.invoices?.[selectedMonthKey()]) {
+    client.invoices[selectedMonthKey()] = {
+      ...client.invoices[selectedMonthKey()],
+      amount: values.revenue,
+    };
+  }
   withLoginDefaults(client);
   saveState();
   editClientModal.close();
@@ -6715,4 +6762,26 @@ window.addEventListener("load", () => {
     if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
     if (typeof render === "function") render();
   }, 5500);
+});
+
+// Keep CRM creation history separate from the first invoice month.
+// Only empty, unsent and unpaid invoice drafts before the selected month are removed.
+function applyInvoiceStartMonthV1() {
+  state.backup = state.backup || {};
+  if (state.backup.invoiceStartMonthV1) return false;
+  (state.clients || []).forEach((client) => {
+    const monthKey = invoiceStartMonthFor(client);
+    if (monthKey) reconcileClientInvoiceStart(client, monthKey);
+  });
+  state.backup.invoiceStartMonthV1 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyInvoiceStartMonthV1()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 6000);
 });
