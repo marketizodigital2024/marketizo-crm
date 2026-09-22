@@ -58,7 +58,7 @@ const defaultEmployeeProfiles = [
     position: "Scenarista",
     startDate: "2026-01-15",
     salary: 0,
-    weeklyHours: 40,
+    weeklyHours: 38.5,
     vacationDays: 25,
     giftDays: 1,
     isLeader: false,
@@ -73,7 +73,7 @@ const defaultEmployeeProfiles = [
     position: "Editor",
     startDate: "2026-02-01",
     salary: 0,
-    weeklyHours: 40,
+    weeklyHours: 38.5,
     vacationDays: 25,
     giftDays: 1,
     isLeader: false,
@@ -1393,7 +1393,7 @@ function migrateState(data) {
     position: "",
     startDate: "",
     salary: 0,
-    weeklyHours: 40,
+    weeklyHours: 38.5,
     openingHourBalance: 0,
     openingBalanceMonth: "",
     vacationDays: 25,
@@ -1403,7 +1403,7 @@ function migrateState(data) {
     leaderId: "",
     status: "Aktivan",
     ...employee,
-    weeklyHours: parseNumber(employee.weeklyHours || 40, 40),
+    weeklyHours: parseNumber(employee.weeklyHours || 38.5, 38.5),
     openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
     openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
     vacationDays: parseNumber(employee.vacationDays || 25, 26),
@@ -2244,7 +2244,7 @@ function renderAdminEmployeeRisk(monthKey) {
           return `
           <div class="setup-item alert-item clickable-item employee-hours-row ${status}" data-go-view="employees" data-select-shortcut-employee="${employee.id}">
             <strong>${formatHourBalance(balance)}</strong>
-            <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours || 40)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
+            <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours || 38.5)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
             <button class="mini-action" data-view-employee-activities="${employee.id}" type="button">Vidi aktivnosti</button>
           </div>`;
         })
@@ -2936,7 +2936,7 @@ function scheduledMinutesForDate(weeklyHours, date) {
 }
 
 function employeeExpectedHours(employee, monthKey) {
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 38.5, 38.5);
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) =>
     (!employee.startDate || day >= employee.startDate) &&
     !(state.employeeAbsences || []).some((absence) => absence.employeeId === employee.id && absence.status === "Odobreno" && day >= absence.startDate && day <= absence.endDate)
@@ -2951,7 +2951,7 @@ function employeeExpectedHoursToDate(employee, monthKey) {
   if (selectedMonth > currentMonth) return 0;
 
   const today = currentDateKey();
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 38.5, 38.5);
   const elapsedWorkdays = workdaysInMonth(monthKey).filter((day) =>
     day < today &&
     (!employee.startDate || day >= employee.startDate) &&
@@ -3402,7 +3402,7 @@ function renderSelectedEmployeeDetail(employee, monthKey, year) {
   setText("selectedEmployeePosition", employee.position || "Pozicija nije uneta");
   setText("selectedEmployeeStart", formatDate(employee.startDate));
   setText("selectedEmployeeSalary", currency.format(Number(employee.salary || 0)));
-  setText("selectedEmployeeWeekly", `${formatHours(employee.weeklyHours || 40)}h`);
+  setText("selectedEmployeeWeekly", `${formatHours(employee.weeklyHours || 38.5)}h`);
   setText("selectedEmployeeLeader", employee.isLeader ? "Lider" : employeeLeaderName(employee));
   setText("selectedEmployeeTeamCount", `${team.length} osoba`);
   renderSelectedEmployeeAbsenceList(employee.id, year);
@@ -3538,7 +3538,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.password.value = employee.password || "";
     form.elements.startDate.value = employee.startDate || "";
     form.elements.salary.value = Number(employee.salary || 0);
-    form.elements.weeklyHours.value = parseNumber(employee.weeklyHours || 40);
+    form.elements.weeklyHours.value = parseNumber(employee.weeklyHours || 38.5);
     form.elements.openingHourBalance.value = parseNumber(employee.openingHourBalance || 0);
     form.elements.openingBalanceMonth.value = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = Boolean(employee.isLeader);
@@ -3552,7 +3552,7 @@ function showEmployeeProfileForm(employee = null) {
     form.reset();
     form.elements.id.value = "";
     form.elements.password.value = "123456";
-    form.elements.weeklyHours.value = 40;
+    form.elements.weeklyHours.value = 38.5;
     form.elements.openingHourBalance.value = 0;
     form.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = false;
@@ -3572,7 +3572,7 @@ function updateEmployeeMonthlyPreview() {
   const preview = document.getElementById("weeklyHoursMonthlyPreview");
   if (!form || !preview) return;
   const monthKey = employeeMonthKey();
-  const estimate = employeeMonthlyHoursPreview(form.elements.weeklyHours?.value || 40, monthKey, form.elements.startDate?.value || "");
+  const estimate = employeeMonthlyHoursPreview(form.elements.weeklyHours?.value || 38.5, monthKey, form.elements.startDate?.value || "");
   preview.textContent = `Mesečno: ${formatHours(estimate.hours)}h za ${estimate.days} radnih dana u ${monthLabel(monthKey)}`;
 }
 
@@ -3985,4 +3985,2734 @@ function renderEmployeePerformanceOverview() {
       profileTarget.querySelectorAll("[data-profile-tab]").forEach((button) => button.classList.toggle("active", button.dataset.profileTab === employeeProfileTab));
     };
     profileTarget.querySelectorAll("[data-profile-tab]").forEach((button) => button.addEventListener("click", () => {
-      employeeP[Truncated]
+      employeeProfileTab = button.dataset.profileTab;
+      activateProfileTab();
+    }));
+    document.getElementById("employeeProfileMonth")?.addEventListener("change", (event) => {
+      employeeMonthFilter = event.target.value || currentMonthKey();
+      const globalMonth = document.getElementById("employeeMonthFilter");
+      if (globalMonth) globalMonth.value = employeeMonthFilter;
+      renderAll();
+    });
+    activateProfileTab();
+    renderProfileClientRatings(employee.id);
+    document.getElementById("saveEmployeeInternalNote")?.addEventListener("click", () => {
+      state.employeeInternalNotes = state.employeeInternalNotes || {};
+      state.employeeInternalNotes[employee.id] = document.getElementById("employeeInternalNote")?.value.trim() || "";
+      saveState();
+      showToast("Sačuvano", "Interna napomena je sačuvana samo za admina.", "ok");
+    });
+  }
+  target.querySelectorAll("[data-performance-employee]").forEach((row) => {
+    const nameCell = row.querySelector("td");
+    if (nameCell && !nameCell.querySelector(".employee-row-edit")) {
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "employee-row-edit";
+      editButton.setAttribute("aria-label", `Izmeni ${employeeById(row.dataset.performanceEmployee)?.name || "zaposlenog"}`);
+      editButton.title = "Izmeni zaposlenog";
+      editButton.innerHTML = "&#9998;";
+      editButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        selectedEmployeeId = row.dataset.performanceEmployee;
+        setSelectedEmployeeOnForms(selectedEmployeeId);
+        showEmployeeProfileForm(employeeById(selectedEmployeeId));
+      });
+      nameCell.classList.add("employee-name-cell");
+      nameCell.append(editButton);
+    }
+    const openEmployee = () => {
+      selectedEmployeeId = row.dataset.performanceEmployee;
+      setSelectedEmployeeOnForms(selectedEmployeeId);
+      renderAll();
+      if (isEmployeeProfilePage) {
+        history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
+        document.getElementById("employeeCompleteHistory")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        location.href = `/employee-profile?employee=${selectedEmployeeId}`;
+      }
+    };
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("details, summary, button, a")) return;
+      openEmployee();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openEmployee();
+    });
+  });
+}
+
+function renderEmployeeGoalRows() {
+  renderEmployeePerformanceOverview();
+  const selectedEmployee = employeeById(selectedEmployeeId);
+  const rows = (state.employeeGoals || [])
+    .filter(selectedEmployeeFilter)
+    .sort((a, b) => new Date(b.endDate) - new Date(a.endDate))
+    .slice(0, 8);
+  const target = document.getElementById("employeeGoalRows");
+  if (!target) return;
+  target.innerHTML = rows.length
+    ? rows
+        .map((goal) => {
+          const employee = employeeById(goal.employeeId);
+          const daysLeft = Math.ceil((new Date(`${goal.endDate}T23:59:59`) - new Date()) / 86400000);
+          const isLate = goal.status !== "Završeno" && daysLeft < 0;
+          const isNear = goal.status !== "Završeno" && daysLeft >= 0 && daysLeft <= 7;
+          const status = isLate || goal.status === "Rizik" ? "danger" : goal.status === "Završeno" ? "ok" : "warn";
+          const deadline = goal.status === "Završeno"
+            ? `Završeno ${formatDate(goal.completedDate)}`
+            : isLate ? `Kasni ${Math.abs(daysLeft)} dana` : isNear ? `Rok za ${daysLeft} dana` : `Rok ${formatDate(goal.endDate)}`;
+          return `
+          <div class="setup-item alert-item ${status}" data-admin-goal-id="${goal.id}">
+            <strong>${goal.progress || 0}%</strong>
+            <span>${employee?.name || "Zaposleni"} · ${goal.category || "Razvoj"} · ${goal.title}<br />${goal.target || ""} · ${deadline}</span>
+            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${goal.title}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih ciljeva.` : "Nema ciljeva."}</div>`;
+
+  target.querySelectorAll("[data-admin-goal-id]").forEach((row) => {
+    const slider = row.querySelector('input[type="range"]');
+    const output = row.querySelector("output");
+    slider.addEventListener("input", () => output.value = `${slider.value}%`);
+    row.querySelector("button").addEventListener("click", () => {
+      const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.adminGoalId);
+      if (!goal) return;
+      goal.progress = Number(slider.value);
+      if (goal.progress >= 100) {
+        goal.status = "Završeno";
+        goal.completedDate = goal.completedDate || currentDateKey();
+      } else if (goal.status === "Završeno") {
+        goal.status = "U toku";
+        goal.completedDate = "";
+      }
+      saveState();
+      renderAll();
+      showToast("Progres sačuvan", `${employeeById(goal.employeeId)?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+    });
+  });
+
+  const ratingTarget = document.getElementById("employeeRatingRows");
+  if (!ratingTarget) return;
+  const ratings = (state.employeeRatings || [])
+    .filter(selectedEmployeeFilter)
+    .sort((a, b) => String(b.month).localeCompare(String(a.month)))
+    .slice(0, 12);
+  ratingTarget.innerHTML = ratings.length
+    ? ratings.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${rating.month} · ${rating.source}${rating.reviewer ? ` · ${rating.reviewer}` : ""}<br />${rating.note || "Bez komentara"}</span></div>`).join("")
+    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema mesečnih ocena.` : "Nema mesečnih ocena."}</div>`;
+
+  const recognitionTarget = document.getElementById("employeeRecognitionRows");
+  if (!recognitionTarget) return;
+  const recognitions = (state.employeeRecognitions || [])
+    .filter(selectedEmployeeFilter)
+    .sort((a, b) => String(b.month).localeCompare(String(a.month)))
+    .slice(0, 10);
+  recognitionTarget.innerHTML = recognitions.length
+    ? recognitions.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span>${item.month} · ${item.type} · ${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}</span></div>`).join("")
+    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih pohvala ili fokusa.` : "Nema unetih pohvala ili fokusa."}</div>`;
+}
+
+document.getElementById("employeeRatingForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  selectedEmployeeId = data.employeeId;
+  state.employeeRatings = state.employeeRatings || [];
+  state.employeeRatings.push({
+    id: crypto.randomUUID(),
+    employeeId: data.employeeId,
+    month: data.month,
+    source: data.source,
+    reviewer: data.reviewer.trim(),
+    score: Number(data.score),
+    note: data.note.trim(),
+    createdAt: new Date().toISOString(),
+  });
+  saveState();
+  form.reset();
+  form.elements.month.value = currentMonthKey();
+  setSelectedEmployeeOnForms(selectedEmployeeId);
+  renderAll();
+});
+
+document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) => {
+  const submitted = Object.fromEntries(new FormData(event.currentTarget));
+  window.setTimeout(() => {
+    const goal = [...(state.employeeGoals || [])].reverse().find((item) => item.employeeId === submitted.employeeId && item.title === submitted.title);
+    if (!goal) return;
+    goal.category = submitted.category || "Razvoj";
+    if (goal.status === "Završeno" && !goal.completedDate) goal.completedDate = currentDateKey();
+    saveState();
+    renderAll();
+  }, 0);
+});
+
+document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  selectedEmployeeId = data.employeeId;
+  state.employeeRecognitions = state.employeeRecognitions || [];
+  const recognition = {
+    id: crypto.randomUUID(),
+    employeeId: data.employeeId,
+    month: data.month,
+    type: data.type,
+    author: data.author.trim() || "Admin",
+    text: data.text.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  state.employeeRecognitions.push(recognition);
+  notifyOnce({
+    key: `recognition-created-${recognition.id}`,
+    scope: "employee",
+    targetId: recognition.employeeId,
+    type: recognition.type === "Pohvala" ? "ok" : "info",
+    title: recognition.type === "Pohvala" ? "Dobio/la si pohvalu" : "Novi razvojni fokus",
+    message: `${recognition.text} - ${recognition.author}`,
+  });
+  saveState();
+  form.reset();
+  form.elements.month.value = currentMonthKey();
+  setSelectedEmployeeOnForms(selectedEmployeeId);
+  renderAll();
+});
+
+function setupEmployeeAdminSections() {
+  const monthFilter = document.getElementById("employeeMonthFilter");
+  const root = monthFilter?.closest(".view");
+  if (!root || root.dataset.sectionsReady) return;
+  root.dataset.sectionsReady = "true";
+  root.dataset.employeeSection = "overview";
+  const simpleLabels = { admin: "Početna", clients: "Klijenti", employees: "Tim", calendar: "Kalendar", reports: "Finansije" };
+  document.querySelectorAll(".sidebar .nav-item[data-view]").forEach((item) => {
+    if (simpleLabels[item.dataset.view]) item.textContent = simpleLabels[item.dataset.view];
+  });
+  const employeeTitle = document.getElementById("pageTitle");
+  if (employeeTitle) employeeTitle.textContent = "Tim";
+  const mainNav = document.querySelector('.sidebar .nav-item[data-view="employees"]');
+
+  const sections = [
+    ["overview", "Tim"],
+    ["entries", "Unosi rada"],
+    ["leave", "Odmori i kalendar"],
+    ["meetings", "1:1 sastanci"],
+    ["performance", "Učinak i ciljevi"],
+    ["activities", "Aktivnosti"],
+    ["settings", "Podešavanja"],
+  ];
+  const sectionRoutes = {
+    overview: "employees-overview.html",
+    entries: "employees-hours.html",
+    leave: "employees-absences.html",
+    meetings: "employees-recognitions.html",
+    performance: "employees-ratings.html",
+    activities: "employees-goals.html",
+    settings: "employees-settings.html",
+  };
+  const validSections = new Set(Object.keys(sectionRoutes));
+
+  const classifyPanel = (panel) => {
+    const heading = [...panel.querySelectorAll("h2, h3")].map((item) => item.textContent.trim().toLowerCase()).join(" ");
+    const text = panel.textContent.toLowerCase();
+    const result = new Set();
+    if (/dodaj sate|sati zaposlenih|uneti sati|evidencija sati|radni sati/.test(heading)) result.add("entries");
+    if (/dodaj kašnjenje/.test(heading)) result.add("entries");
+    if (/dodaj odsustvo/.test(heading)) result.add("entries");
+    if (/odmori za odobrenje|datumi, plan firme i odsustva tima|ko je na odmoru|odsustva po danima|lista odsustava/.test(heading)) result.add("leave");
+    if (/beleške sa sastanka|1:1/.test(heading)) result.add("meetings");
+    if (/učinak zaposlenog|mesečna ocena|pohvala ili fokus|motivacij|cilj zaposlenog|ciljevi razvoja|napredak|datumi i ciljevi za tim/.test(heading)) result.add("performance");
+    if (/aktivnosti zaposlenih/.test(heading) || /admin definiše ponuđene aktivnosti/.test(text)) result.add("activities");
+    if (/dodaj zaposlenog|izmeni zaposlenog|dokumenti|pristup|podešavanj/.test(heading) || panel.classList.contains("employee-detail-panel")) result.add("settings");
+    if (result.size > 1) result.delete("overview");
+    if (panel.classList.contains("employee-detail-panel")) result.add("overview");
+    if (!result.size) result.add("overview");
+    return [...result];
+  };
+
+  root.querySelectorAll(".panel").forEach((panel) => {
+    panel.dataset.employeeSections = classifyPanel(panel).join(" ");
+  });
+
+  // Glavna navigacija ostaje kratka. Sve informacije o jednoj osobi
+  // otvaraju se iz njenog dosijea, umesto kroz dodatni bočni podmeni.
+  // Elementi postoje samo interno da ostatak rutiranja ostane kompatibilan.
+  const mobileNav = document.createElement("nav");
+  const sideNav = document.createElement("div");
+
+  const activate = (section) => {
+    if (!validSections.has(section)) section = "overview";
+    root.dataset.employeeSection = section;
+    root.querySelectorAll(".panel[data-employee-sections]").forEach((panel) => {
+      panel.classList.toggle("employee-section-hidden", !panel.dataset.employeeSections.split(" ").includes(section));
+    });
+    document.querySelectorAll("[data-employee-admin-section]").forEach((button) => button.classList.toggle("active", button.dataset.employeeAdminSection === section));
+    root.querySelectorAll(".employee-action-grid").forEach((grid) => grid.classList.toggle("employee-grid-empty", !grid.querySelector(".panel:not(.employee-section-hidden)")));
+    root.querySelectorAll(".employee-section-heading").forEach((heading) => heading.classList.toggle("employee-section-hidden", section !== "performance"));
+    const sectionLabel = sections.find(([key]) => key === section)?.[1] || "Pregled";
+    const pageTitle = document.querySelector(".main .topbar h1");
+    if (pageTitle) pageTitle.textContent = section === "overview" ? "Zaposleni" : sectionLabel;
+    if (location.hash.startsWith("#employees")) history.replaceState(null, "", `#employees/${section}`);
+    root.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  window.activateEmployeeAdminSection = activate;
+
+  document.querySelectorAll("[data-employee-admin-section]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const section = button.dataset.employeeAdminSection;
+      const route = sectionRoutes[section];
+      if (route && !location.pathname.endsWith(route)) {
+        location.href = route;
+        return;
+      }
+      if (mainNav && !mainNav.classList.contains("active")) mainNav.click();
+      activate(section);
+    });
+  });
+  const currentFile = location.pathname.replace(/\/+$/, "").split("/").pop().replace(/\.html$/, "");
+  const routedSection = Object.entries(sectionRoutes).find(([, route]) => route.replace(/\.html$/, "") === currentFile)?.[0];
+  if (routedSection) {
+    document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
+    root.classList.add("active");
+    document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.toggle("active", item === mainNav));
+  }
+  const requestedSection = routedSection || (location.hash.startsWith("#employees/") ? location.hash.split("/")[1] : "overview");
+  const legacySections = { hours: "entries", absences: "leave", ratings: "performance", recognitions: "meetings", goals: "activities", development: "performance" };
+  const initialSection = legacySections[requestedSection] || requestedSection;
+  activate(sections.some(([key]) => key === initialSection) ? initialSection : "overview");
+
+  window.addEventListener("hashchange", () => {
+    if (!location.hash.startsWith("#employees/")) return;
+    const nextSection = location.hash.split("/")[1];
+    activate(validSections.has(nextSection) ? nextSection : "overview");
+  });
+}
+
+setupEmployeeAdminSections();
+
+function normalizeVisibleLayouts() {
+  document.querySelectorAll("#employees .panel[hidden]").forEach((panel) => {
+    panel.hidden = false;
+  });
+
+  document.querySelectorAll(".admin-layout").forEach((layout) => {
+    const visiblePanels = [...layout.children].filter((panel) => {
+      const style = getComputedStyle(panel);
+      return !panel.hidden && style.display !== "none" && style.visibility !== "hidden";
+    });
+    layout.classList.toggle("single-visible", visiblePanels.length === 1);
+  });
+}
+
+window.addEventListener("hashchange", () => setTimeout(normalizeVisibleLayouts, 0));
+window.addEventListener("load", () => setTimeout(normalizeVisibleLayouts, 150));
+new MutationObserver(() => requestAnimationFrame(normalizeVisibleLayouts)).observe(document.body, {
+  childList: true,
+  subtree: true
+});
+
+function buildStructuredSidebar() {
+  const sidebar = document.querySelector(".sidebar");
+  const teamButton = sidebar?.querySelector('.nav-item[data-view="employees"]');
+  if (!sidebar || !teamButton || sidebar.querySelector(".team-navigation")) return;
+
+  const labels = {
+    admin: "Početna",
+    clients: "Klijenti",
+    employees: "Tim",
+    calendar: "Kalendar",
+    reports: "Finansije"
+  };
+  sidebar.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+    if (labels[item.dataset.view]) item.textContent = labels[item.dataset.view];
+  });
+
+  const teamPages = [
+    ["Pregled tima", "employees-overview.html", "overview"],
+    ["Lične karte zaposlenih", "/employee-profile", "profile"],
+    ["Odmori i kalendar", "employees-absences.html", "leave"],
+    ["1:1 sastanci", "employees-recognitions.html", "meetings"],
+    ["Učinak i ciljevi", "employees-ratings.html", "performance"],
+    ["Aktivnosti", "employees-goals.html", "activities"]
+  ];
+  const navigation = document.createElement("nav");
+  navigation.className = "team-navigation";
+  navigation.setAttribute("aria-label", "Sekcije tima");
+  navigation.innerHTML = `<span class="sidebar-section-label">Upravljanje timom</span>${teamPages
+    .map(([label, href, section]) => `<a class="team-navigation-link" data-team-section="${section}" href="${href}">${label}</a>`)
+    .join("")}`;
+  teamButton.insertAdjacentElement("afterend", navigation);
+
+  const workEntryNavigation = document.createElement("nav");
+  workEntryNavigation.className = "work-entry-navigation";
+  workEntryNavigation.setAttribute("aria-label", "Unosi rada");
+  workEntryNavigation.innerHTML = `
+    <span class="work-entry-navigation-title">Unosi rada</span>
+    <a class="work-entry-navigation-link" data-work-entry-link="history" href="employees-hours.html#work/history">Sati zaposlenih</a>
+    <a class="work-entry-navigation-link" data-work-entry-link="absence" href="employees-hours.html#work/absence">Dodaj odsustvo</a>
+    <a class="work-entry-navigation-link" data-work-entry-link="hours" href="employees-hours.html#work/hours">Dodaj sate</a>
+    <a class="work-entry-navigation-link" data-work-entry-link="late" href="employees-hours.html#work/late">Dodaj kašnjenje</a>
+  `;
+  navigation.insertAdjacentElement("afterend", workEntryNavigation);
+
+  const syncActiveLink = () => {
+    const current = location.hash || "#admin";
+    const isWorkEntriesPage = /\/employees-hours(?:\.html)?\/?$/.test(location.pathname);
+    const currentFile = location.pathname.replace(/\/+$/, "").split("/").pop().replace(/\.html$/, "");
+    const fileSections = {
+      "employees-overview": "overview",
+      "employee-profile": "profile",
+      "employees-absences": "leave",
+      "employees-recognitions": "meetings",
+      "employees-ratings": "performance",
+      "employees-goals": "activities",
+      "employees-settings": "settings",
+    };
+    const currentTeamSection = fileSections[currentFile] || (current.startsWith("#employees/") ? current.split("/")[1] : "");
+    navigation.querySelectorAll("a").forEach((link) => {
+      link.classList.toggle("active", link.dataset.teamSection === currentTeamSection ||
+        (current === "#employees" && link.dataset.teamSection === "overview"));
+    });
+    const workSection = location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours";
+    workEntryNavigation.classList.toggle("active", isWorkEntriesPage || current === "#employees/entries");
+    workEntryNavigation.querySelectorAll("[data-work-entry-link]").forEach((link) => {
+      link.classList.toggle("active", isWorkEntriesPage && link.dataset.workEntryLink === workSection);
+    });
+  };
+  window.addEventListener("hashchange", syncActiveLink);
+  syncActiveLink();
+}
+
+buildStructuredSidebar();
+
+function setupWorkEntrySubsections() {
+  if (!/\/employees-hours(?:\.html)?\/?$/.test(location.pathname)) return;
+  const root = document.getElementById("employees");
+  if (!root || root.dataset.workEntrySectionsReady) return;
+  root.dataset.workEntrySectionsReady = "true";
+  const sections = {
+    history: { elementId: "employeeWorkRows", label: "Sati zaposlenih" },
+    absence: { formId: "employeeAbsenceForm", label: "Dodaj odsustvo" },
+    hours: { formId: "employeeWorkForm", label: "Dodaj sate" },
+    late: { formId: "employeeLateForm", label: "Dodaj kašnjenje" },
+  };
+
+  Object.entries(sections).forEach(([key, config]) => {
+    const panel = document.getElementById(config.formId || config.elementId)?.closest(".panel");
+    if (panel) panel.dataset.workEntrySubsection = key;
+  });
+  root.querySelectorAll('.panel[data-employee-sections~="entries"]:not([data-work-entry-subsection])').forEach((panel) => {
+    panel.dataset.workEntrySubsection = "other";
+  });
+
+  const activate = (requestedSection) => {
+    const section = sections[requestedSection] ? requestedSection : "hours";
+    root.dataset.workEntrySubsection = section;
+    root.querySelectorAll("[data-work-entry-subsection]").forEach((panel) => {
+      panel.classList.toggle("work-entry-subsection-hidden", panel.dataset.workEntrySubsection !== section);
+    });
+    root.querySelectorAll(".employee-action-grid").forEach((grid) => {
+      const hasVisiblePanel = [...grid.querySelectorAll(":scope > .panel")].some((panel) =>
+        !panel.classList.contains("employee-section-hidden") && !panel.classList.contains("work-entry-subsection-hidden"));
+      grid.classList.toggle("work-entry-grid-empty", !hasVisiblePanel);
+    });
+    const pageTitle = document.querySelector(".main .topbar h1");
+    if (pageTitle) pageTitle.textContent = sections[section].label;
+    if (!location.hash.startsWith("#work/")) history.replaceState(null, "", `#work/${section}`);
+  };
+
+  const pageTitle = document.querySelector(".main .topbar h1");
+  if (pageTitle) {
+    new MutationObserver(() => {
+      const section = root.dataset.workEntrySubsection || "hours";
+      const expectedTitle = sections[section]?.label || sections.hours.label;
+      if (pageTitle.textContent.trim() !== expectedTitle) pageTitle.textContent = expectedTitle;
+    }).observe(pageTitle, { childList: true, characterData: true, subtree: true });
+  }
+
+  activate(location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours");
+  window.addEventListener("hashchange", () => {
+    if (location.hash.startsWith("#work/")) activate(location.hash.split("/")[1]);
+  });
+}
+
+setupWorkEntrySubsections();
+
+function setupClientCostAnalysis() {
+  const sidebar = document.querySelector(".sidebar .main-nav, .sidebar nav");
+  const main = document.querySelector(".main");
+  if (!sidebar || !main || document.getElementById("clientCosts")) return;
+
+  const button = document.createElement("button");
+  button.className = "nav-item client-cost-nav";
+  button.type = "button";
+  button.textContent = "Trošak klijenata";
+  const financeButton = [...sidebar.querySelectorAll(".nav-item")].find((item) => /Finansije|Računi/.test(item.textContent));
+  sidebar.insertBefore(button, financeButton || null);
+
+  const view = document.createElement("section");
+  view.className = "view client-cost-view";
+  view.id = "clientCosts";
+  view.innerHTML = `
+    <section class="panel client-cost-filters">
+      <div class="panel-head"><div><p class="eyebrow">Filter</p><h2>Period i tim</h2></div><button class="secondary-button" id="clientCostReset" type="button">Reset</button></div>
+      <div class="client-cost-presets"><button type="button" data-cost-period="day">Danas</button><button type="button" data-cost-period="week">Ova nedelja</button><button type="button" data-cost-period="month" class="active">Ovaj mesec</button></div>
+      <div class="client-cost-filter-grid">
+        <label>Od datuma<input id="clientCostFrom" type="date" /></label>
+        <label>Do datuma<input id="clientCostTo" type="date" /></label>
+        <label>Klijent<select id="clientCostClient"><option value="">Svi klijenti</option></select></label>
+        <div class="client-cost-employee-picker"><label>Zaposleni <small>izaberi jednog ili više</small><input id="clientCostEmployeeSearch" type="search" placeholder="Pretraži zaposlene..." /></label><div class="client-cost-picker-actions"><button id="clientCostSelectAll" type="button">Izaberi sve</button><button id="clientCostClearEmployees" type="button">Poništi izbor</button></div><div class="client-cost-employee-list" id="clientCostEmployeeList"></div><select id="clientCostEmployees" multiple hidden></select></div>
+      </div>
+    </section>
+    <section class="client-cost-kpis">
+      <article><span>Ukupno vreme</span><strong id="clientCostHours">0h</strong></article>
+      <article><span>Trošak rada</span><strong id="clientCostAmount">€ 0</strong></article>
+      <article><span>Aktivnosti</span><strong id="clientCostEntries">0</strong></article>
+      <article><span>Zaposlenih</span><strong id="clientCostPeople">0</strong></article>
+    </section>
+    <section class="panel client-cost-results"><div class="panel-head"><div><p class="eyebrow">Analiza</p><h2>Utrošak po klijentu i zaposlenom</h2></div><span id="clientCostRange"></span></div><div id="clientCostRows"></div></section>`;
+  main.append(view);
+
+  const from = view.querySelector("#clientCostFrom");
+  const to = view.querySelector("#clientCostTo");
+  const clientSelect = view.querySelector("#clientCostClient");
+  const employeeSelect = view.querySelector("#clientCostEmployees");
+  const employeeSearch = view.querySelector("#clientCostEmployeeSearch");
+  const employeeList = view.querySelector("#clientCostEmployeeList");
+  const localDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const setPeriod = (period) => {
+    const end = new Date();
+    const start = new Date(end);
+    if (period === "week") start.setDate(end.getDate() - ((end.getDay() + 6) % 7));
+    if (period === "month") start.setDate(1);
+    from.value = localDate(start);
+    to.value = localDate(end);
+    view.querySelectorAll("[data-cost-period]").forEach((item) => item.classList.toggle("active", item.dataset.costPeriod === period));
+  };
+  const employeeName = (id) => (state.employees || []).find((item) => item.id === id)?.name || "Nepoznat zaposleni";
+  const clientName = (log) => log.clientName || (state.clients || []).find((item) => item.id === log.clientId)?.name || "Bez klijenta";
+  const hourlyRate = (employee) => Number(employee?.salary || 0) / Math.max(1, Number(employee?.weeklyHours || 38.5) * 52 / 12);
+  const money = (amount) => `€ ${Math.round(amount).toLocaleString("de-DE")}`;
+  const hours = (minutes) => `${(minutes / 60).toLocaleString("sr-RS", { maximumFractionDigits: 2 })}h`;
+
+  const populate = () => {
+    clientSelect.innerHTML = `<option value="">Svi aktivni klijenti</option>${(state.clients || []).filter((item) => item.status === "Aktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("")}`;
+    employeeSelect.innerHTML = (state.employees || []).filter((item) => item.status !== "Neaktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+    employeeList.innerHTML = [...employeeSelect.options].map((item) => `<label data-employee-name="${item.textContent.toLowerCase()}"><input type="checkbox" value="${item.value}" /><span>${item.textContent}</span></label>`).join("");
+    employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
+      const option = [...employeeSelect.options].find((item) => item.value === checkbox.value);
+      if (option) option.selected = checkbox.checked;
+      render();
+    }));
+  };
+  const render = () => {
+    const selectedEmployees = new Set([...employeeSelect.selectedOptions].map((item) => item.value));
+    const selectedClient = clientSelect.value;
+    const selectedClientName = (state.clients || []).find((item) => item.id === selectedClient)?.name || "";
+    const logs = (state.employeeWorkLogs || state.employeeLogs || []).filter((log) => {
+      const date = String(log.date || "").slice(0, 10);
+      if (!date || date < from.value || date > to.value) return false;
+      if (clientName(log) === "Bez klijenta") return false;
+      if (selectedEmployees.size && !selectedEmployees.has(log.employeeId)) return false;
+      if (selectedClient && log.clientId !== selectedClient && clientName(log) !== selectedClientName) return false;
+      return true;
+    });
+    const groups = new Map();
+    let totalMinutes = 0;
+    let totalCost = 0;
+    logs.forEach((log) => {
+      const minutes = Number(log.minutes || Math.round(Number(log.hours || 0) * 60) || 0);
+      const employee = (state.employees || []).find((item) => item.id === log.employeeId);
+      const cost = minutes / 60 * hourlyRate(employee);
+      const client = clientName(log);
+      const key = `${client}::${log.employeeId}`;
+      const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0, activities: new Set() };
+      group.minutes += minutes; group.cost += cost; group.entries += 1; group.activities.add(log.activityName || "Aktivnost"); groups.set(key, group);
+      totalMinutes += minutes; totalCost += cost;
+    });
+    const rows = [...groups.values()].sort((a,b) => b.cost - a.cost);
+    view.querySelector("#clientCostHours").textContent = hours(totalMinutes);
+    view.querySelector("#clientCostAmount").textContent = money(totalCost);
+    view.querySelector("#clientCostEntries").textContent = logs.length;
+    view.querySelector("#clientCostPeople").textContent = new Set(logs.map((item) => item.employeeId)).size;
+    view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
+    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span class="client-cost-activity-cell" tabindex="0"><b>${row.entries} unosa</b><small class="client-cost-activity-tooltip">${escapeInvoiceText([...row.activities].join(" · "))}</small></span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
+  };
+  const show = (event) => {
+    event?.stopImmediatePropagation();
+    document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.remove("active"));
+    view.classList.add("active"); button.classList.add("active");
+    document.body.dataset.activeView = "clientCosts";
+    setText("pageTitle", "Trošak klijenata");
+    updateContextActions("clientCosts");
+    history.replaceState(null, "", "#client-costs");
+    populate(); render();
+  };
+  button.addEventListener("click", show);
+  view.querySelectorAll("[data-cost-period]").forEach((item) => item.addEventListener("click", () => { setPeriod(item.dataset.costPeriod); render(); }));
+  [from, to, clientSelect, employeeSelect].forEach((item) => item.addEventListener("change", render));
+  employeeSearch.addEventListener("input", () => { const query = employeeSearch.value.trim().toLowerCase(); employeeList.querySelectorAll("label").forEach((item) => item.hidden = Boolean(query) && !item.dataset.employeeName.includes(query)); });
+  view.querySelector("#clientCostSelectAll").addEventListener("click", () => { employeeList.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach((item) => item.checked = true); [...employeeSelect.options].forEach((item) => item.selected = true); render(); });
+  view.querySelector("#clientCostClearEmployees").addEventListener("click", () => { employeeList.querySelectorAll('input[type="checkbox"]').forEach((item) => item.checked = false); [...employeeSelect.options].forEach((item) => item.selected = false); render(); });
+  view.querySelector("#clientCostReset").addEventListener("click", () => { clientSelect.value = ""; employeeSearch.value = ""; employeeList.querySelectorAll("label").forEach((item) => { item.hidden = false; item.querySelector("input").checked = false; }); [...employeeSelect.options].forEach((item) => item.selected = false); setPeriod("month"); render(); });
+  setPeriod("month"); populate();
+  if (location.hash === "#client-costs") show();
+}
+
+setupClientCostAnalysis();
+
+const oneOnOneQuestions = [
+  "Kako si generalno od prošlog 1:1 – u glavi i energiji?",
+  "Da li se nešto privatno dešavalo što utiče na tvoj fokus ili rad?",
+  "Kako je sa klijentima?",
+  "Da li ima nešto što treba da znam kako bismo lakše isplanirali narednih 30 dana?",
+  "Šta ti trenutno najviše uzima energiju u poslu, a ne daje rezultat?",
+  "Šta ti je u poslednjih 30 dana išlo najbolje i zašto?",
+  "Gde najčešće kasnimo ili grešimo i zbog čega se to ponavlja?",
+  "Da možeš jednu stvar da ukloniš iz svog posla – šta bi to bilo?",
+  "Da li su ti očekivanja, rokovi i prioriteti uvek jasni?",
+  "Šta bi pojednostavio ili automatizovao odmah da možeš?",
+  "Gde misliš da trenutno ne daješ maksimum i šta ti tu konkretno fali i šta ćemo da uradimo po tom pitanju?",
+  "Kako ocenjuješ komunikaciju u timu (1–10) i šta bi je podiglo za +2?",
+  "Da li vidiš sebe ovde za 6–12 meseci i u kojoj ulozi?",
+  "Šta ja mogu da radim drugačije da bi ti radio brže, lakše i kvalitetnije?",
+  "Koja je jedna konkretna stvar koju menjamo do sledećeg 1:1?",
+];
+
+function setupStructuredOneOnOneForm() {
+  const form = document.getElementById("employeeOneOnOneForm");
+  if (!form || form.dataset.structuredReady) return;
+  form.dataset.structuredReady = "true";
+  const grid = form.querySelector(".form-grid");
+  const employeeField = form.querySelector("#oneOnOneEmployeeSelect")?.closest("label");
+  const dateField = form.querySelector('input[name="date"]')?.closest("label");
+  const titleField = form.querySelector('input[name="title"]')?.closest("label");
+  const noteField = form.querySelector('textarea[name="note"]')?.closest("label");
+  if (!grid || !employeeField || !dateField || !titleField || !noteField) return;
+  titleField.hidden = true;
+  titleField.querySelector("input").required = false;
+  noteField.remove();
+  grid.prepend(dateField, employeeField);
+  const questions = document.createElement("section");
+  questions.className = "one-on-one-questionnaire span-2";
+  questions.innerHTML = `<h3>Pitanja za 1:1</h3><p>Otvori pitanje i upiši odgovor.</p>${oneOnOneQuestions.map((question, index) => `<details class="one-on-one-question" ${index === 0 ? "open" : ""}><summary><span>${index + 1}.</span>${escapeInvoiceText(question)}</summary><label>Odgovor<textarea name="oneOnOneAnswer${index}" rows="4" required placeholder="Upiši odgovor..."></textarea></label></details>`).join("")}`;
+  grid.append(questions, titleField);
+
+  const history = document.getElementById("employeeOneOnOneRows");
+  if (history) {
+    const historyBlock = document.createElement("section");
+    historyBlock.className = "one-on-one-history span-2";
+    historyBlock.innerHTML = "<h3>Prethodne 1:1 beleške</h3><p>Izaberi zaposlenog iznad, zatim otvori sastanak po datumu.</p>";
+    historyBlock.append(history);
+    form.insertAdjacentElement("afterend", historyBlock);
+  }
+  form.querySelector("#oneOnOneEmployeeSelect")?.addEventListener("change", (event) => {
+    selectedEmployeeId = event.target.value;
+    renderEmployeeOneOnOneRows();
+  });
+}
+
+setupStructuredOneOnOneForm();
+
+function setupEmployeeActivityCategories() {
+  const form = document.getElementById("employeeActivityForm");
+  if (!form || form.dataset.categoriesReady) return;
+  form.dataset.categoriesReady = "true";
+  const submitArea = form.querySelector(".admin-submit") || form.lastElementChild;
+  const field = document.createElement("label");
+  field.className = "activity-category-field";
+  field.innerHTML = `Kategorija aktivnosti
+    <select id="employeeActivityCategory" name="category" required>
+      <option value="">Izaberi kategoriju</option>
+      <option>SMM</option><option>Scenario</option><option>Sastanci</option><option>Snimatelji</option><option>Sales tim</option><option>Editori</option><option>Media Buying</option>
+      <option value="__new__">+ Nova kategorija</option>
+    </select>
+    <input id="employeeActivityNewCategory" name="newCategory" type="text" placeholder="Naziv nove kategorije" hidden />`;
+  form.insertBefore(field, submitArea);
+  const select = field.querySelector("select");
+  const newCategory = field.querySelector("input");
+  const knownCategories = new Set([
+    ...(state.employeeActivities || []).map((activity) => activity.category),
+    ...(state.employeeActivityCategories || []),
+  ]);
+  knownCategories.forEach((category) => {
+    if (!category) return;
+    if ([...select.options].some((option) => option.value === category)) return;
+    select.querySelector('option[value="__new__"]').insertAdjacentHTML("beforebegin", `<option>${category}</option>`);
+  });
+  select.addEventListener("change", () => {
+    const creating = select.value === "__new__";
+    newCategory.hidden = !creating;
+    newCategory.required = creating;
+    if (creating) newCategory.focus();
+  });
+  form.addEventListener("submit", () => {
+    const nameInput = form.querySelector('input[name="name"], input[type="text"]');
+    const name = nameInput?.value.trim();
+    const category = select.value === "__new__" ? newCategory.value.trim() : select.value;
+    if (!name || !category) return;
+    state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
+    state.employeeActivityCategoryMap[name] = category;
+    if (!state.employeeActivityCategories?.includes(category)) {
+      state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+    }
+    saveState();
+  }, true);
+
+}
+
+setupEmployeeActivityCategories();
+
+function setupEmployeeHourDeduction() {
+  const workPanel = document.getElementById("employeeWorkForm")?.closest(".employee-work-panel");
+  if (!workPanel || document.getElementById("employeeHourDeductionForm")) return;
+  const panel = document.createElement("section");
+  panel.className = "panel employee-work-panel hour-deduction-panel";
+  panel.dataset.workEntrySubsection = "hours";
+  const activeWorkEntrySubsection = location.hash.startsWith("#work/")
+    ? location.hash.split("/")[1]
+    : "hours";
+  panel.classList.toggle("work-entry-subsection-hidden", activeWorkEntrySubsection !== "hours");
+  panel.innerHTML = `
+    <div class="panel-head">
+      <div><p class="eyebrow">Korekcija salda</p><h2>Oduzmi minute</h2></div>
+      <span>ne menja postojeće aktivnosti</span>
+    </div>
+    <form id="employeeHourDeductionForm" class="admin-form compact-action-form">
+      <label>Zaposleni<select id="hourDeductionEmployeeSelect" name="employeeId" required></select></label>
+      <label>Datum<input name="date" type="date" required /></label>
+      <label>Minuta za oduzimanje<input name="minutes" type="number" min="1" max="10000" step="1" value="30" required /></label>
+      <label class="span-2">Razlog<input name="reason" required placeholder="npr. korekcija prethodnog salda" /></label>
+      <button class="primary-button deduction-button" type="submit">Oduzmi minute</button>
+    </form>
+    <div class="setup-list hour-deduction-list" id="employeeHourDeductionList"></div>`;
+  workPanel.insertAdjacentElement("afterend", panel);
+  const dateInput = panel.querySelector('input[name="date"]');
+  dateInput.value = currentDateKey();
+  panel.querySelector("form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const employee = (state.employees || []).find((item) => item.id === formData.get("employeeId"));
+    const minutes = Math.max(1, Math.round(parseNumber(formData.get("minutes"), 0)));
+    const reason = String(formData.get("reason") || "").trim();
+    const date = String(formData.get("date") || currentDateKey());
+    if (!employee || !reason || !minutes) return;
+    if (!confirm(`Oduzeti ${minutes} minuta od salda zaposlenog ${employee.name}?\n\nRazlog: ${reason}`)) return;
+    state.employeeHourAdjustments = state.employeeHourAdjustments || [];
+    state.employeeHourAdjustments.unshift({
+      id: crypto.randomUUID(), employeeId: employee.id, date, minutes, reason, createdAt: new Date().toISOString(),
+    });
+    selectedEmployeeId = employee.id;
+    saveState();
+    event.currentTarget.reset();
+    event.currentTarget.elements.date.value = currentDateKey();
+    event.currentTarget.elements.minutes.value = 30;
+    renderAll();
+    showToast("Saldo je korigovan", `${employee.name}: oduzeto ${minutes} minuta.`, "ok");
+  });
+}
+
+function renderEmployeeHourAdjustments() {
+  const target = document.getElementById("employeeHourDeductionList");
+  if (!target) return;
+  const adjustments = (state.employeeHourAdjustments || []).slice().sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date)));
+  target.innerHTML = adjustments.length
+    ? adjustments.slice(0, 20).map((adjustment) => {
+      const employee = (state.employees || []).find((item) => item.id === adjustment.employeeId);
+      return `<div class="setup-item hour-deduction-row"><strong>−${adjustment.minutes} min</strong><span>${employee?.name || "Zaposleni"} · ${formatDate(adjustment.date)}<br />${adjustment.reason}</span><button class="edit-button" data-undo-hour-deduction="${adjustment.id}" type="button">Poništi korekciju</button></div>`;
+    }).join("")
+    : `<div class="empty-state">Još nema korekcija salda.</div>`;
+  target.querySelectorAll("[data-undo-hour-deduction]").forEach((button) => button.addEventListener("click", () => {
+    const adjustment = (state.employeeHourAdjustments || []).find((item) => item.id === button.dataset.undoHourDeduction);
+    if (!adjustment || !confirm(`Poništiti korekciju od ${adjustment.minutes} minuta?`)) return;
+    state.employeeHourAdjustments = state.employeeHourAdjustments.filter((item) => item.id !== adjustment.id);
+    saveState();
+    renderAll();
+    showToast("Korekcija je poništena", "Saldo je vraćen za izabrani broj minuta.", "ok");
+  }));
+}
+
+setupEmployeeHourDeduction();
+
+function setupExistingGoalProgressEditor() {
+  const form = document.getElementById("employeeGoalForm");
+  const employeeSelect = form?.elements?.employeeId;
+  if (!form || !employeeSelect || document.getElementById("existingGoalProgressEditor")) return;
+  const section = document.createElement("section");
+  section.id = "existingGoalProgressEditor";
+  section.className = "existing-goal-editor";
+  form.insertAdjacentElement("afterend", section);
+  const render = () => {
+    const employeeId = employeeSelect.value;
+    const employee = employeeById(employeeId);
+    const goals = (state.employeeGoals || []).filter((goal) => goal.employeeId === employeeId).sort((a,b) => String(b.endDate || "").localeCompare(String(a.endDate || "")));
+    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${employee?.name || "zaposleni"}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${goal.id}"><div><strong>${goal.title}</strong><span>${goal.target || "Bez opisa"} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${goal.title}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
+    section.querySelectorAll("[data-existing-goal-id]").forEach((row) => {
+      const slider = row.querySelector('input[type="range"]');
+      const output = row.querySelector("output");
+      slider.addEventListener("input", () => output.value = `${slider.value}%`);
+      row.querySelector("button").addEventListener("click", () => {
+        const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.existingGoalId);
+        if (!goal) return;
+        goal.progress = Number(slider.value);
+        if (goal.progress >= 100) { goal.status = "Završeno"; goal.completedDate = goal.completedDate || currentDateKey(); }
+        else if (goal.status === "Završeno") { goal.status = "U toku"; goal.completedDate = ""; }
+        saveState();
+        render();
+        showToast("Progres sačuvan", `${employee?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+      });
+    });
+  };
+  employeeSelect.addEventListener("change", () => window.setTimeout(render, 0));
+  new MutationObserver(render).observe(employeeSelect, { childList: true });
+  window.renderExistingGoalProgressEditor = render;
+  render();
+}
+
+setupExistingGoalProgressEditor();
+
+
+function setupCompactClientFilters() {
+  const root = document.getElementById("clients");
+  if (!root || root.dataset.compactFiltersReady) return;
+  root.dataset.compactFiltersReady = "true";
+  const allButtons = [...root.querySelectorAll("button")];
+  const countries = ["Svi", "Austrija", "Nemačka", "Srbija", "Hrvatska"];
+  const statuses = ["Svi statusi", "Aktivni", "Neaktivni", "Arhivirani"];
+  const countryButtons = allButtons.filter((button) => countries.includes(button.textContent.trim()));
+  const statusButtons = allButtons.filter((button) => statuses.includes(button.textContent.trim()));
+  const anchor = countryButtons[0]?.parentElement || statusButtons[0]?.parentElement;
+  if (!anchor) return;
+  [...countryButtons, ...statusButtons].forEach((button) => button.classList.add("legacy-client-filter"));
+  const filters = document.createElement("div");
+  filters.className = "compact-client-filters";
+  filters.innerHTML = `
+    <label><span>Država</span><select id="compactClientCountry">${countries.map((label) => `<option>${label}</option>`).join("")}</select></label>
+    <label><span>Status</span><select id="compactClientStatus">${statuses.map((label) => `<option>${label}</option>`).join("")}</select></label>`;
+  anchor.append(filters);
+  filters.querySelector("#compactClientCountry").addEventListener("change", (event) => countryButtons.find((button) => button.textContent.trim() === event.target.value)?.click());
+  filters.querySelector("#compactClientStatus").addEventListener("change", (event) => statusButtons.find((button) => button.textContent.trim() === event.target.value)?.click());
+}
+
+function hideJsonDownloadAction() {
+  [...document.querySelectorAll(".top-actions button, .topbar button")]
+    .filter((button) => button.textContent.trim() === "⇩")
+    .forEach((button) => {
+      button.hidden = true;
+      button.setAttribute("aria-hidden", "true");
+    });
+}
+
+setupCompactClientFilters();
+hideJsonDownloadAction();
+
+function renderEmployeeOneOnOneRows() {
+  const rows = (state.employeeOneOnOnes || [])
+    .filter(selectedEmployeeFilter)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const target = document.getElementById("employeeOneOnOneRows");
+  if (!target) return;
+  target.querySelectorAll("details[data-one-on-one-id][open]").forEach((details) => {
+    openEmployeeOneOnOneIds.add(details.dataset.oneOnOneId);
+  });
+  target.innerHTML = rows.length
+    ? rows
+        .map((note) => {
+          const employee = employeeById(note.employeeId);
+          const blocks = String(note.note || "").split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
+          return `<details class="setup-item one-on-one-card" data-one-on-one-id="${escapeInvoiceText(note.id)}" ${openEmployeeOneOnOneIds.has(note.id) ? "open" : ""}>
+            <summary><strong>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(note.title || "1:1")}</strong><span>${formatDate(note.date)}</span></summary>
+            <div class="one-on-one-answers">${blocks.map((block) => { const lines = block.split("\n").filter(Boolean); return `<div class="one-on-one-answer"><strong>${escapeInvoiceText(lines[0] || "Beleška")}</strong><p>${escapeInvoiceText(lines.slice(1).join("\n") || "Bez upisanog odgovora.").replace(/\n/g, "<br />")}</p></div>`; }).join("")}</div>
+          </details>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema 1:1 beleški.</div>`;
+  target.querySelectorAll("details[data-one-on-one-id]").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      if (details.open) openEmployeeOneOnOneIds.add(details.dataset.oneOnOneId);
+      else openEmployeeOneOnOneIds.delete(details.dataset.oneOnOneId);
+    });
+  });
+}
+
+function renderCompanyPlanList() {
+  const rows = (state.companyPlans || [])
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 8);
+  const target = document.getElementById("companyPlanList");
+  if (!target) return;
+  target.innerHTML = rows.length
+    ? rows
+        .map(
+          (plan) => `
+          <div class="setup-item">
+            <strong>${formatDate(plan.date).slice(0, 5)}</strong>
+            <span>${plan.type} · ${plan.title}<br />${plan.note}</span>
+          </div>`
+        )
+        .join("")
+    : `<div class="empty-state">Nema unetog plana firme.</div>`;
+}
+
+function renderEmployeeReportRows(monthKey) {
+  const rows = (state.employeeReports || [])
+    .filter((report) => String(report.date || "").startsWith(monthKey))
+    .filter(selectedEmployeeFilter)
+    .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date))
+    .map((report) => {
+      const employee = employeeById(report.employeeId);
+      const recipient = report.recipientId === "admin" || !report.recipientId ? "Admin" : employeeById(report.recipientId)?.name || "Lider";
+      return `
+      <tr>
+        <td>${formatDate(report.date)}</td>
+        <td>${employee?.name || "Zaposleni"}</td>
+        <td>${recipient}</td>
+        <td>${report.positive || ""}</td>
+        <td>${report.negative || ""}</td>
+        <td>${report.note || ""}</td>
+      </tr>`;
+    });
+  setText("employeeOpsCount", `${rows.length} izveštaja`);
+  const reportRows = document.getElementById("employeeReportRows");
+  if (reportRows) reportRows.innerHTML = rows.join("") || `<tr><td colspan="6">Nema izveštaja za ovaj mesec.</td></tr>`;
+}
+
+function approveAbsence(id) {
+  const absence = state.employeeAbsences.find((item) => item.id === id);
+  if (!absence || absence.status !== "Zatraženo") return;
+  const employee = employeeById(absence.employeeId);
+  if (!confirm(`Prihvatiti zahtev za ${absence.type} zaposlenog ${employee?.name || "Zaposleni"}?`)) return;
+  absence.status = "Odobreno";
+  absence.approvedAt = new Date().toISOString();
+  absence.approvedBy = "Admin";
+  state.notifications = (state.notifications || []).filter((item) => item.key !== `absence-request-${absence.id}`);
+  notifyOnce({
+    key: `absence-approved-${absence.id}`,
+    scope: "employee",
+    targetId: absence.employeeId,
+    type: "ok",
+    title: "Odmor je odobren",
+    message: `${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)} je odobren.`,
+  });
+  notifyOnce({
+    key: `absence-approved-admin-${absence.id}`,
+    scope: "admin",
+    type: "ok",
+    title: "Odmor odobren",
+    message: `${employee?.name || "Zaposleni"} ima odobren ${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)}.`,
+  });
+  saveState();
+  renderAll();
+}
+
+function rejectAbsence(id) {
+  const absence = state.employeeAbsences.find((item) => item.id === id);
+  if (!absence || absence.status !== "Zatraženo") return;
+  const employee = employeeById(absence.employeeId);
+  const reason = String(prompt(`Zašto se odbija zahtev zaposlenog ${employee?.name || "Zaposleni"}?`) || "").trim();
+  if (!reason) {
+    alert("Razlog odbijanja je obavezan. Zahtev nije promenjen.");
+    return;
+  }
+  absence.status = "Odbijeno";
+  absence.rejectedAt = new Date().toISOString();
+  absence.rejectedBy = "Admin";
+  absence.rejectionReason = reason;
+  state.notifications = (state.notifications || []).filter((item) => item.key !== `absence-request-${absence.id}`);
+  notifyOnce({
+    key: `absence-rejected-${absence.id}`,
+    scope: "employee",
+    targetId: absence.employeeId,
+    type: "danger",
+    title: "Zahtev za odmor je odbijen",
+    message: `${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)} nije odobren. Razlog: ${reason}`,
+  });
+  saveState();
+  renderAll();
+  showToast("Zahtev je odbijen", `${employee?.name || "Zaposleni"} će videti razlog odbijanja.`, "warn");
+}
+
+function renderEmployeeTeamTimeline(monthKey) {
+  const target = document.getElementById("employeeTeamTimeline");
+  if (!target) return;
+  const plans = (state.companyPlans || [])
+    .filter((plan) => String(plan.date || "").startsWith(monthKey))
+    .map((plan) => ({
+      date: plan.date,
+      type: plan.type,
+      title: plan.title,
+      note: plan.note,
+      className: "ok",
+    }));
+  const absences = (state.employeeAbsences || [])
+    .filter((absence) => absence.status === "Odobreno")
+    .filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
+    .map((absence) => {
+      const employee = employeeById(absence.employeeId);
+      return {
+        date: absence.startDate,
+        type: absence.type,
+        title: employee?.name || "Zaposleni",
+        note: `${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}${absence.note ? ` · ${absence.note}` : ""}`,
+        className: absence.type === "Bolovanje" ? "danger" : "warn",
+      };
+    });
+  const rows = [...plans, ...absences].sort((a, b) => new Date(a.date) - new Date(b.date));
+  target.innerHTML = rows.length
+    ? rows
+        .map(
+          (row) => `
+          <div class="setup-item alert-item ${row.className}">
+            <strong>${formatDate(row.date).slice(0, 5)}</strong>
+            <span>${row.type} · ${row.title}<br />${row.note || ""}</span>
+          </div>`
+        )
+        .join("")
+    : `<div class="empty-state">Nema unetih datuma ili odsustava za ovaj mesec.</div>`;
+}
+
+function calendarAbsences(monthKey, includeRequests = false) {
+  return (state.employeeAbsences || []).filter((absence) => {
+    if (absence.hidden) return false;
+    if (!includeRequests && absence.status === "Zatraženo") return false;
+    return dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey));
+  });
+}
+
+function renderEmployeeCalendar(monthKey, employees, targetId = "employeeCalendar", summaryId = "employeeCalendarSummary", includeRequests = false) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  const days = monthDayKeys(monthKey);
+  const firstDay = parseDate(days[0]).getDay();
+  const offset = firstDay === 0 ? 6 : firstDay - 1;
+  const blanks = Array.from({ length: offset }, () => `<div class="calendar-day empty"></div>`).join("");
+  const monthAbsences = calendarAbsences(monthKey, includeRequests);
+  const monthPlans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(monthKey));
+  setText(summaryId, `${monthLabel(monthKey)} · ${monthAbsences.length} odsustava · ${monthPlans.length} bitnih datuma`);
+  target.innerHTML = `
+    <div class="calendar-weekdays">
+      <span>Pon</span><span>Uto</span><span>Sre</span><span>Čet</span><span>Pet</span><span>Sub</span><span>Ned</span>
+    </div>
+    <div class="calendar-grid">
+      ${blanks}
+      ${days
+        .map((day) => {
+          const holiday = publicHolidayName(day);
+          const companyDay = companySpecialDayName(day);
+          const absences = monthAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(day));
+          const plans = monthPlans.filter((plan) => plan.date === day);
+          const classes = ["calendar-day"];
+          if (isWeekend(day)) classes.push("weekend");
+          if (holiday) classes.push("holiday");
+          if (absences.length) classes.push("has-absence");
+          const absentNames = absences.map((absence) => (employees.find((item) => item.id === absence.employeeId) || employeeById(absence.employeeId))?.name || "Zaposleni");
+          return `
+          <div class="${classes.join(" ")}" data-calendar-date="${day}" role="button" tabindex="0">
+            <strong>${Number(day.slice(-2))}</strong>
+            ${holiday ? `<span class="calendar-note holiday-note">${holiday}</span>` : ""}
+            ${companyDay ? `<span class="calendar-note company-note">${companyDay}</span>` : ""}
+            ${plans.length ? `<span class="calendar-note plan-note">${plans[0].title}${plans.length > 1 ? ` +${plans.length - 1}` : ""}</span>` : ""}
+            ${absentNames.length ? `<span class="calendar-note vacation-note">${absentNames.slice(0, 2).join(", ")}${absentNames.length > 2 ? ` +${absentNames.length - 2}` : ""}</span>` : ""}
+          </div>`;
+        })
+        .join("")}
+    </div>`;
+  target.querySelectorAll("[data-calendar-date]").forEach((cell) => {
+    const showDetails = () => {
+      const day = cell.dataset.calendarDate;
+      const absences = monthAbsences.filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).includes(day));
+      const plans = monthPlans.filter((plan) => plan.date === day);
+      if (!absences.length && !plans.length) return;
+      const lines = [formatDate(day)];
+      plans.forEach((plan) => lines.push(`Bitni datum: ${plan.title}${plan.note ? ` - ${plan.note}` : ""}`));
+      absences.forEach((absence) => lines.push(`${employeeById(absence.employeeId)?.name || "Zaposleni"}: ${absence.type}${absence.status === "Zatraženo" ? " (zahtev)" : ""}`));
+      alert(lines.join("\n"));
+    };
+    cell.addEventListener("click", showDetails);
+    cell.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") showDetails(); });
+  });
+}
+
+function renderAdminTeamCalendar() {
+  const monthInput = document.getElementById("teamCalendarMonth");
+  const statusInput = document.getElementById("teamCalendarStatus");
+  if (!monthInput) return;
+  const monthKey = monthInput.value || employeeMonthKey();
+  if (!monthInput.value) monthInput.value = monthKey;
+  const includeRequests = statusInput?.value === "all";
+  renderEmployeeCalendar(monthKey, state.employees || [], "adminTeamCalendar", "adminTeamCalendarSummary", includeRequests);
+  const absences = calendarAbsences(monthKey, includeRequests).sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  const hiddenAbsences = (state.employeeAbsences || [])
+    .filter((absence) => absence.hidden)
+    .filter((absence) => absence.status === "Odobreno" || (includeRequests && absence.status === "Zatraženo"))
+    .filter((absence) => dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(monthKey)))
+    .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  setText("adminTeamAbsenceCount", `${absences.length} unosa`);
+  const target = document.getElementById("adminTeamAbsenceList");
+  if (!target) return;
+  target.innerHTML = absences.length
+    ? absences
+        .map((absence) => {
+          const employee = employeeById(absence.employeeId);
+          const days = workdayKeysBetween(absence.startDate, absence.endDate).length;
+          return `
+          <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : absence.status === "Zatraženo" ? "warn" : "ok"}">
+            <strong>${days}</strong>
+            <span>${employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)} · ${absence.status || "Odobreno"}${absence.note ? ` · ${absence.note}` : ""}</span>
+            <div class="notification-actions">
+              <button class="mini-action" data-hide-absence="${absence.id}" type="button">Sakrij</button>
+              <button class="mini-action danger-action" data-delete-absence="${absence.id}" type="button">Obriši</button>
+            </div>
+          </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">Nema vidljivih odsustava za izabrani mesec.</div>`;
+  if (hiddenAbsences.length) {
+    target.insertAdjacentHTML("beforeend", `<div class="notification-archive absence-archive">
+      <strong>Sakrivena odsustva (${hiddenAbsences.length})</strong>
+      ${hiddenAbsences.map((absence) => {
+        const employee = employeeById(absence.employeeId);
+        return `<div class="setup-item">
+          <span>${employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}</span>
+          <div class="notification-actions">
+            <button class="mini-action" data-unhide-absence="${absence.id}" type="button">Vrati</button>
+            <button class="mini-action danger-action" data-delete-absence="${absence.id}" type="button">Obriši</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`);
+  }
+  target.querySelectorAll("[data-hide-absence]").forEach((button) => button.addEventListener("click", () => {
+    const absence = state.employeeAbsences.find((item) => item.id === button.dataset.hideAbsence);
+    if (!absence) return;
+    absence.hidden = true;
+    saveState();
+    renderAll();
+    showToast("Sakriveno", "Odsustvo je sklonjeno iz glavnog kalendara.", "info");
+  }));
+  target.querySelectorAll("[data-unhide-absence]").forEach((button) => button.addEventListener("click", () => {
+    const absence = state.employeeAbsences.find((item) => item.id === button.dataset.unhideAbsence);
+    if (!absence) return;
+    absence.hidden = false;
+    saveState();
+    renderAll();
+  }));
+  target.querySelectorAll("[data-delete-absence]").forEach((button) => button.addEventListener("click", () => {
+    const absence = state.employeeAbsences.find((item) => item.id === button.dataset.deleteAbsence);
+    if (!absence || !confirm("Trajno obrisati ovo odsustvo iz evidencije?")) return;
+    state.employeeAbsences = state.employeeAbsences.filter((item) => item.id !== absence.id);
+    saveState();
+    renderAll();
+    showToast("Obrisano", "Odsustvo je uklonjeno iz evidencije.", "ok");
+  }));
+}
+
+function renderClients() {
+  const clients = state.clients.filter(
+    (client) =>
+      bySearch(client) &&
+      (activeFilter === "all" || client.country === activeFilter) &&
+      (activeStatusFilter === "all" || client.status === activeStatusFilter)
+  );
+  setText("clientRowsCount", `${clients.length} klijenata`);
+  document.getElementById("clientCards").innerHTML = clients.length
+    ? clients
+        .map((client) => {
+          const endDate = contractEndDate(client);
+          const daysLeft = endDate ? daysBetween(currentDateKey(), endDate) : null;
+          const contractLabel = endDate ? `do ${formatDate(endDate)}` : "nije unet";
+          const contractDownload = client.contractFileData
+            ? `<a class="document-link client-contract-download" href="${client.contractFileData}" download="${client.contractFileName || "ugovor"}">Preuzmi ugovor</a>`
+            : `<span class="muted">Ugovor nije dodat</span>`;
+          const leadStats = clientLeadStats(client);
+          const leadClass = leadStats.late ? "danger" : leadStats.open ? "warn" : "ok";
+          const archiveLabel = client.status === "Arhiviran" ? "Vrati" : "Arhiva";
+          return `
+          <tr>
+            <td><strong>${client.name}</strong><br /><span>${client.niche} · ${client.country}</span></td>
+            <td><strong>${displayPackage(client.package)}</strong><br /><span>${currency.format(client.revenue || 0)}/mes</span></td>
+            <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
+            <td><span class="status ${statusClass(client)}">${client.status || "Aktivan"}</span></td>
+            <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
+            <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "Nije uneta"}</span></td>
+            <td>${client.contactName || "Nije unet"}<br /><span>${client.contactPhone || client.whatsapp || "Telefon nije unet"}</span></td>
+            <td>
+              <div class="row-actions">
+                <button class="edit-button" data-edit-client="${client.id}" type="button" title="Izmeni klijenta">✎</button>
+                <button class="edit-button" data-archive-client="${client.id}" type="button" title="${archiveLabel}">${client.status === "Arhiviran" ? "↺" : "A"}</button>
+                <button class="edit-button danger-action" data-delete-client="${client.id}" type="button" title="Obriši klijenta">×</button>
+              </div>
+            </td>
+          </tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="8">Nema klijenata za izabrani filter.</td></tr>`;
+  bindEditButtons();
+}
+
+function renderReports() {
+  const clients = visibleClients();
+  const monthKey = selectedMonthKey();
+  if (ensureInvoiceMonthRoster(monthKey)) saveState();
+  const invoiceClients = financeClientsForMonth(clients, monthKey);
+  const revenueByCountry = groupInvoiceSum(invoiceClients, "country", monthKey);
+  const revenueByStatus = groupInvoiceSum(invoiceClients, "status", monthKey);
+  renderBars("countryBars", revenueByCountry, "€");
+  renderBars("revenueBars", revenueByStatus, "€");
+  setText("invoiceMonthLabel", monthLabel(monthKey));
+  renderInvoiceCarryover(clients, monthKey);
+  renderInvoiceSummary(invoiceClients, monthKey);
+  renderMonthlyInvoices(invoiceClients, monthKey);
+}
+
+function selectedPortalClient() {
+  let client = state.clients.find((item) => item.id === selectedPortalClientId);
+  if (!client) {
+    client = state.clients[0];
+    selectedPortalClientId = client?.id || "";
+  }
+  return client;
+}
+
+function portalClientLeads() {
+  const client = selectedPortalClient();
+  if (!client) return [];
+  return state.leads.filter((lead) => lead.client === client.name);
+}
+
+function portalClientTeam() {
+  const client = selectedPortalClient();
+  if (!client) return [];
+  return state.teamMembers.filter((member) => member.client === client.name);
+}
+
+function renderClientPortal() {
+  renderPortalClientOptions();
+  const client = selectedPortalClient();
+  if (!client) return;
+  const leads = portalClientLeads();
+  const team = portalClientTeam();
+  const won = leads.filter((lead) => isWonClientLeadStatus(lead.status));
+  const open = leads.filter((lead) => isOpenClientLeadStatus(lead.status));
+  const conversion = leads.length ? Math.round((won.length / leads.length) * 100) : 0;
+
+  setText("portalClientName", client.name);
+  setText("portalTotalLeads", leads.length);
+  setText("portalWonLeads", won.length);
+  setText("portalOpenLeads", open.length);
+  setText("portalConversion", `${conversion}%`);
+  setText("portalActionCount", `${open.length} otvoreno`);
+  setText("portalTeamCount", `${team.length} osoba`);
+
+  renderBars("portalStatusBars", groupCount(leads, "status"), "");
+  renderBars("portalSourceBars", groupCount(leads, "source"), "");
+  renderPortalActions(open);
+  renderPortalLeads(leads);
+  renderPortalTeam(team);
+  renderPortalResponsibleOptions(team);
+}
+
+function renderPortalClientOptions() {
+  const select = document.getElementById("portalClientSelect");
+  if (!select) return;
+  select.innerHTML = state.clients
+    .map((client) => `<option value="${client.id}" ${client.id === selectedPortalClientId ? "selected" : ""}>${client.name}</option>`)
+    .join("");
+}
+
+function renderPortalResponsibleOptions(team) {
+  const select = document.getElementById("portalLeadResponsible");
+  if (!select) return;
+  const options = team.length ? team.map((member) => member.name) : ["Vlasnik", "Recepcija", "Prodaja"];
+  select.innerHTML = options.map((name) => `<option>${name}</option>`).join("");
+}
+
+function renderPortalActions(leads) {
+  document.getElementById("portalActionList").innerHTML = leads.length
+    ? leads
+        .slice(0, 5)
+        .map(
+          (lead) => `
+          <div class="portal-row">
+            <div><strong>${lead.name}</strong><span>${lead.phone} · ${lead.source || "Izvor nije unet"} · ${lead.nextAction || "Pozvati u roku od 1 radnog dana"}</span></div>
+            <a class="call-button" href="tel:${normalizePhone(lead.phone)}">Pozovi</a>
+          </div>`
+        )
+        .join("")
+    : `<div class="empty-state">Nema otvorenih leadova.</div>`;
+}
+
+function renderPortalLeads(leads) {
+  document.getElementById("portalLeadCards").innerHTML = leads.length
+    ? leads
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .map((lead) => {
+          const phone = normalizePhone(lead.phone);
+          const leadDate = new Date(lead.createdAt).toLocaleDateString("sr-Latn-RS");
+          return `
+          <article class="lead-card portal-lead-card">
+            <header>
+              <div>
+                <h3>${lead.name}</h3>
+                <p>${lead.service || "Tip usluge nije unet"} · ${lead.location || "Lokacija nije uneta"}</p>
+              </div>
+              <span class="status ${portalLeadStatusClass(lead.status)}">${normalizeLeadStatus(lead.status)}</span>
+            </header>
+            <div class="lead-details">
+              <span>ID ${lead.id.slice(0, 8)}</span>
+              <span>${leadDate}</span>
+              <span>${lead.source || "Bez izvora"}</span>
+              <span>${currency.format(Number(lead.estimate || 0))}</span>
+              <span>${lead.responsible || "Nije dodeljeno"}</span>
+            </div>
+            <p>${lead.note || "Bez napomene."}</p>
+            ${lead.lossReason ? `<p><strong>Razlog gubitka:</strong> ${lead.lossReason}</p>` : ""}
+            <div class="lead-actions">
+              <a class="call-button" href="tel:${phone}">Pozovi</a>
+              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Kontaktiran" type="button">Kontaktiran</button>
+              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Zakazan" type="button">Zakazan</button>
+              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Dobijen" type="button">Dobijen</button>
+              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Izgubljen" type="button">Izgubljen</button>
+            </div>
+          </article>`;
+        })
+        .join("")
+    : `<section class="panel empty-state">Još nema leadova za ovog klijenta.</section>`;
+
+  document.querySelectorAll(".portal-lead-status").forEach((button) => {
+    button.addEventListener("click", () => updateLeadStatus(button.dataset.leadId, button.dataset.status));
+  });
+}
+
+function renderPortalTeam(team) {
+  document.getElementById("portalTeamList").innerHTML = team.length
+    ? team
+        .map(
+          (member) => `
+          <div class="setup-item">
+            <strong>${member.name.slice(0, 1).toUpperCase()}</strong>
+            <span>${member.name} · ${member.role}<br />${member.phone || "Telefon nije unet"} ${member.email ? `· ${member.email}` : ""}</span>
+          </div>`
+        )
+        .join("")
+    : `<div class="empty-state">Dodaj prvu osobu koja će zvati leadove.</div>`;
+}
+
+function portalLeadStatusClass(status) {
+  const normalized = normalizeLeadStatus(status);
+  if (normalized === "Dobijen") return "ok";
+  if (normalized === "Novi" || normalized === "Izgubljen") return "danger";
+  return "warn";
+}
+
+function groupCount(items, key) {
+  return items.reduce((acc, item) => {
+    const label = item[key] || "Nije uneto";
+    acc[label] = (acc[label] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function renderLeadCrm() {
+  const leads = state.leads
+    .filter((lead) => isLeadVisibleByFilter(lead) && bySearch(lead))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const newLeads = state.leads.filter((lead) => lead.status === "Novi");
+  const riskyLeads = newLeads.filter((lead) => leadHoursLeft(lead) <= 4);
+  const calledLeads = state.leads.filter((lead) => lead.calledAt);
+  const avgResponse = calledLeads.length
+    ? calledLeads.reduce((sum, lead) => sum + (new Date(lead.calledAt) - new Date(lead.createdAt)) / 36e5, 0) / calledLeads.length
+    : 0;
+
+  setText("newLeadCount", newLeads.length);
+  setText("slaRiskCount", riskyLeads.length);
+  setText("avgResponseTime", `${avgResponse.toFixed(1)}h`);
+
+  document.getElementById("leadCards").innerHTML = leads
+    .map((lead) => {
+      const phone = normalizePhone(lead.phone);
+      const whatsappText = encodeURIComponent(`Novi lead za ${lead.client}: ${lead.name}, ${lead.phone}, usluga: ${lead.service}.`);
+      return `
+      <article class="lead-card">
+        <header>
+          <div>
+            <h3>${lead.name}</h3>
+            <p>${lead.client} · ${lead.service}</p>
+          </div>
+          <span class="status ${leadSlaClass(lead)}">${leadSlaLabel(lead)}</span>
+        </header>
+        <div class="lead-details">
+          <span>${lead.source}</span>
+          <span>${new Date(lead.createdAt).toLocaleString("sr-Latn-RS", { dateStyle: "short", timeStyle: "short" })}</span>
+          <span>${lead.priority} prioritet</span>
+        </div>
+        <p>${lead.note || "Bez napomene."}</p>
+        <div class="lead-actions">
+          <a class="call-button" href="tel:${phone}">Pozovi</a>
+          <a class="whatsapp-button" href="https://wa.me/${phone.replace("+", "")}?text=${whatsappText}" target="_blank" rel="noreferrer">WhatsApp</a>
+          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Kontaktiran" type="button">Kontaktiran</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Zakazan" type="button">Zakazan</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Dobijen" type="button">Dobijen</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Izgubljen" type="button">Izgubljen</button>
+        </div>
+      </article>`;
+    })
+    .join("");
+
+  document.querySelectorAll(".lead-status-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateLeadStatus(button.dataset.leadId, button.dataset.status);
+    });
+  });
+}
+
+function groupSum(items, key, value) {
+  return items.reduce((acc, item) => {
+    acc[item[key]] = (acc[item[key]] || 0) + Number(item[value]);
+    return acc;
+  }, {});
+}
+
+function renderBars(target, data, suffix) {
+  const targetElement = document.getElementById(target);
+  if (!targetElement) return;
+  const entries = Object.entries(data);
+  const max = Math.max(...entries.map(([, value]) => value), 1);
+  targetElement.innerHTML = entries
+    .map(([label, value]) => {
+      const display = suffix === "€" ? currency.format(value) : value;
+      return `
+      <div class="bar-row">
+        <label><span>${label}</span><span>${display}</span></label>
+        <div class="bar-track"><span style="width:${(value / max) * 100}%"></span></div>
+      </div>`;
+    })
+    .join("");
+}
+
+function setText(id, value) {
+  const target = document.getElementById(id);
+  if (target) target.textContent = value;
+}
+
+function renderAll() {
+  const notificationCount = (state.notifications || []).length;
+  generateSystemNotifications();
+  if ((state.notifications || []).length !== notificationCount) saveState();
+  renderAdminPanel();
+  if (document.getElementById("clientCards")) renderClients();
+  if (document.getElementById("leadCards")) renderLeadCrm();
+  if (document.getElementById("employees")) renderEmployees();
+  if (document.getElementById("adminTeamCalendar")) renderAdminTeamCalendar();
+  if (document.getElementById("countryBars")) renderReports();
+  if (document.getElementById("clientPortal")) renderClientPortal();
+  renderLeadClientOptions();
+}
+
+document.querySelectorAll(".nav-item").forEach((button) => {
+  button.addEventListener("click", () => {
+    const viewName = button.dataset.view;
+    const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
+    if (currentFile.startsWith("employees-") && viewName !== "employees") {
+      location.href = `index.html#${viewName}`;
+      return;
+    }
+    setActiveView(viewName, true);
+  });
+});
+
+function setActiveView(viewName, updateUrl = false) {
+  const button = document.querySelector(`.nav-item[data-view="${viewName}"]`);
+  const view = document.getElementById(viewName);
+  if (!button || !view) return;
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
+  document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
+  button.classList.add("active");
+  view.classList.add("active");
+  document.body.dataset.activeView = viewName;
+  if (viewName === "admin") {
+    monthFilter = currentMonthKey();
+    const dashboardMonth = document.getElementById("monthFilter");
+    const invoiceMonth = document.getElementById("invoiceMonthFilter");
+    if (dashboardMonth) dashboardMonth.value = monthFilter;
+    if (invoiceMonth) invoiceMonth.value = monthFilter;
+  }
+  setText("pageTitle", button.textContent);
+  updateContextActions(viewName);
+  if (updateUrl && !location.pathname.split("/").pop().startsWith("employees-")) {
+    history.replaceState(null, "", `#${viewName}`);
+  }
+}
+
+function activateMainRoute() {
+  const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
+  if (currentFile.startsWith("employees-") || currentFile === "employee-profile") {
+    setActiveView("employees");
+    if (currentFile === "employee-profile") setText("pageTitle", "Lična karta");
+    return;
+  }
+  const requested = location.hash.replace(/^#/, "").split("/")[0];
+  const valid = requested && document.getElementById(requested) && document.querySelector(`.nav-item[data-view="${requested}"]`);
+  setActiveView(valid ? requested : "admin");
+}
+
+activateMainRoute();
+window.addEventListener("hashchange", activateMainRoute);
+
+function updateContextActions(view) {
+  const leadButton = document.getElementById("openLeadModal");
+  if (leadButton) leadButton.hidden = view !== "leadCrm";
+}
+
+document.querySelectorAll(".chip").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!button.dataset.filter) return;
+    document.querySelectorAll(".chip[data-filter]").forEach((chip) => chip.classList.remove("active"));
+    button.classList.add("active");
+    activeFilter = button.dataset.filter;
+    renderClients();
+  });
+});
+
+document.querySelectorAll(".chip[data-status-filter]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".chip[data-status-filter]").forEach((chip) => chip.classList.remove("active"));
+    button.classList.add("active");
+    activeStatusFilter = button.dataset.statusFilter || "all";
+    renderClients();
+  });
+});
+
+document.querySelectorAll(".lead-filter").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".lead-filter").forEach((chip) => chip.classList.remove("active"));
+    button.classList.add("active");
+    activeLeadFilter = button.dataset.leadFilter;
+    renderLeadCrm();
+  });
+});
+
+document.querySelectorAll(".portal-tab").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".portal-tab").forEach((tab) => tab.classList.remove("active"));
+    document.querySelectorAll(".portal-view").forEach((view) => view.classList.remove("active"));
+    button.classList.add("active");
+    document.getElementById(button.dataset.portalTab)?.classList.add("active");
+  });
+});
+
+document.getElementById("portalClientSelect")?.addEventListener("change", (event) => {
+  selectedPortalClientId = event.target.value;
+  renderClientPortal();
+});
+
+document.getElementById("togglePortalLeadForm")?.addEventListener("click", () => {
+  const panel = document.getElementById("portalLeadPanel");
+  if (!panel) return;
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) panel.querySelector("input")?.focus();
+});
+
+document.getElementById("searchInput").addEventListener("input", (event) => {
+  searchTerm = event.target.value.trim();
+  renderAll();
+});
+
+document.getElementById("monthFilter")?.addEventListener("input", (event) => {
+  monthFilter = event.target.value;
+  const invoiceMonth = document.getElementById("invoiceMonthFilter");
+  if (invoiceMonth) invoiceMonth.value = monthFilter || currentMonthKey();
+  renderAll();
+});
+
+document.getElementById("dateFromFilter")?.addEventListener("input", (event) => {
+  dateFromFilter = event.target.value;
+  renderAll();
+});
+
+document.getElementById("dateToFilter")?.addEventListener("input", (event) => {
+  dateToFilter = event.target.value;
+  renderAll();
+});
+
+document.getElementById("countryFilter")?.addEventListener("change", (event) => {
+  countryFilter = event.target.value;
+  renderAll();
+});
+
+document.getElementById("resetFiltersBtn")?.addEventListener("click", () => {
+  monthFilter = "";
+  dateFromFilter = "";
+  dateToFilter = "";
+  countryFilter = "all";
+  document.getElementById("monthFilter").value = "";
+  const invoiceMonth = document.getElementById("invoiceMonthFilter");
+  if (invoiceMonth) invoiceMonth.value = currentMonthKey();
+  document.getElementById("dateFromFilter").value = "";
+  document.getElementById("dateToFilter").value = "";
+  document.getElementById("countryFilter").value = "all";
+  renderAll();
+});
+
+document.getElementById("clearDashboardFiltersBtn")?.addEventListener("click", () => {
+  searchTerm = "";
+  monthFilter = "";
+  dateFromFilter = "";
+  dateToFilter = "";
+  countryFilter = "all";
+  document.getElementById("searchInput").value = "";
+  document.getElementById("monthFilter").value = "";
+  document.getElementById("dateFromFilter").value = "";
+  document.getElementById("dateToFilter").value = "";
+  document.getElementById("countryFilter").value = "all";
+  const invoiceMonth = document.getElementById("invoiceMonthFilter");
+  if (invoiceMonth) invoiceMonth.value = currentMonthKey();
+  renderAll();
+});
+
+["monthFilter", "dateFromFilter", "dateToFilter"].forEach((id) => {
+  const input = document.getElementById(id);
+  input?.addEventListener("click", () => input.showPicker?.());
+});
+
+document.querySelectorAll('input[type="date"], input[type="month"]').forEach((input) => {
+  input.addEventListener("click", () => input.showPicker?.());
+});
+
+document.getElementById("employeeForm")?.addEventListener("input", (event) => {
+  if (["weeklyHours", "startDate"].includes(event.target.name)) updateEmployeeMonthlyPreview();
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== "agencyCrmData") return;
+  state = loadState();
+  renderAll();
+});
+
+document.getElementById("employeeMonthFilter")?.addEventListener("input", (event) => {
+  employeeMonthFilter = event.target.value || currentMonthKey();
+  renderAll();
+  updateEmployeeMonthlyPreview();
+});
+
+document.getElementById("employeeStatusFilter")?.addEventListener("change", (event) => {
+  employeeStatusFilter = event.target.value;
+  renderAll();
+});
+
+document.getElementById("employeeWorkPersonFilter")?.addEventListener("change", (event) => {
+  employeeWorkPersonFilter = event.target.value;
+  renderEmployeeWorkRows(employeeMonthKey());
+});
+
+document.getElementById("employeeWorkMonthFilter")?.addEventListener("input", (event) => {
+  employeeWorkMonthFilter = event.target.value || employeeMonthKey();
+  renderEmployeeWorkRows(employeeMonthKey());
+});
+
+document.getElementById("employeeWorkClientFilter")?.addEventListener("change", (event) => {
+  employeeWorkClientFilter = event.target.value;
+  renderEmployeeWorkRows(employeeMonthKey());
+});
+
+document.getElementById("resetEmployeeWorkFilters")?.addEventListener("click", () => {
+  employeeWorkPersonFilter = "all";
+  employeeWorkMonthFilter = employeeMonthKey();
+  employeeWorkClientFilter = "all";
+  renderEmployeeWorkRows(employeeMonthKey());
+});
+
+document.getElementById("teamCalendarMonth")?.addEventListener("input", () => {
+  renderAll();
+});
+
+document.getElementById("teamCalendarStatus")?.addEventListener("change", () => {
+  renderAll();
+});
+
+document.getElementById("newEmployeeBtn")?.addEventListener("click", () => {
+  window.location.hash = "employees/overview";
+  setActiveView("employees");
+  window.setTimeout(() => {
+    showEmployeeProfileForm();
+  }, 0);
+});
+
+document.getElementById("manageSelectedEmployeeBtn")?.addEventListener("click", () => {
+  const employee = selectedEmployee();
+  if (!employee) {
+    alert("Prvo izaberi zaposlenog iz pregleda.");
+    return;
+  }
+  showEmployeeProfileForm(employee);
+});
+
+document.getElementById("editSelectedEmployeeBtn")?.addEventListener("click", () => {
+  const employee = selectedEmployee();
+  if (!employee) return;
+  showEmployeeProfileForm(employee);
+});
+
+document.getElementById("deleteSelectedEmployeeBtn")?.addEventListener("click", () => {
+  const employee = selectedEmployee();
+  if (!employee) return;
+  deleteEmployee(employee.id);
+});
+
+document.getElementById("cancelEmployeeEditBtn")?.addEventListener("click", () => {
+  hideEmployeeProfileForm();
+});
+
+document.querySelectorAll("[data-go-view]").forEach((element) => {
+  element.addEventListener("click", () => setActiveView(element.dataset.goView));
+});
+
+document.addEventListener("click", (event) => {
+  const shortcut = event.target.closest("[data-go-view]");
+  if (!shortcut) return;
+  if (shortcut.dataset.selectShortcutEmployee) selectedEmployeeId = shortcut.dataset.selectShortcutEmployee;
+  setActiveView(shortcut.dataset.goView);
+  renderAll();
+});
+
+document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const name = String(formData.get("name") || "").trim();
+  const id = String(formData.get("id") || "");
+  const payload = {
+    name,
+    email: String(formData.get("email") || `${loginSlug(name)}@marketizo.local`).trim().toLowerCase(),
+    password: String(formData.get("password") || "").trim(),
+    position: formData.get("position"),
+    startDate: formData.get("startDate"),
+    salary: parseNumber(formData.get("salary"), 0),
+    weeklyHours: parseNumber(formData.get("weeklyHours"), 38.5),
+    openingHourBalance: parseNumber(formData.get("openingHourBalance"), 0),
+    openingBalanceMonth: formData.get("openingBalanceMonth") || shiftMonth(currentMonthKey(), -1),
+    isLeader: Boolean(form.elements.isLeader?.checked),
+    leaderId: formData.get("leaderId") || "",
+    vacationDays: parseNumber(formData.get("vacationDays"), 25),
+    openingVacationUsed: parseNumber(formData.get("openingVacationUsed"), 0),
+    giftDays: parseNumber(formData.get("giftDays"), 1),
+    status: ["Aktivan", "Pauza", "Neaktivan"].includes(formData.get("status")) ? formData.get("status") : "Aktivan",
+  };
+  if (payload.leaderId === id) payload.leaderId = "";
+  if (id) {
+    const employee = state.employees.find((item) => item.id === id);
+    if (!employee) return;
+    Object.assign(employee, payload);
+    if (!employee.isLeader) {
+      state.employees.forEach((item) => {
+        if (item.leaderId === employee.id) item.leaderId = "";
+      });
+    }
+    selectedEmployeeId = employee.id;
+  } else {
+    const employee = { id: crypto.randomUUID(), ...payload };
+    state.employees.unshift(employee);
+    selectedEmployeeId = employee.id;
+  }
+  saveState();
+  event.currentTarget.reset();
+  event.currentTarget.elements.id.value = "";
+  event.currentTarget.elements.password.value = "123456";
+  event.currentTarget.elements.weeklyHours.value = 38.5;
+  event.currentTarget.elements.openingHourBalance.value = 0;
+  event.currentTarget.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
+  event.currentTarget.elements.isLeader.checked = false;
+  event.currentTarget.elements.leaderId.value = "";
+  event.currentTarget.elements.vacationDays.value = 25;
+  event.currentTarget.elements.openingVacationUsed.value = 0;
+  event.currentTarget.elements.giftDays.value = 1;
+  hideEmployeeProfileForm();
+  renderAll();
+  showToast("Sačuvano", `${name} je sačuvan u zaposlenima.`, "ok");
+});
+
+document.getElementById("employeeAbsenceForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const startDate = String(formData.get("startDate") || "");
+  const endDate = String(formData.get("endDate") || startDate);
+  const employeeId = formData.get("employeeId");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
+  const absence = {
+    id: crypto.randomUUID(),
+    employeeId,
+    type: formData.get("type"),
+    startDate: startDate <= endDate ? startDate : endDate,
+    endDate: endDate >= startDate ? endDate : startDate,
+    note: formData.get("note"),
+    status: "Odobreno",
+    approvedAt: new Date().toISOString(),
+    approvedBy: "Admin",
+  };
+  state.employeeAbsences.unshift(absence);
+  selectedEmployeeId = employeeId;
+  notifyOnce({
+    key: `absence-admin-added-${absence.id}`,
+    scope: "employee",
+    targetId: employeeId,
+    type: "ok",
+    title: "Odsustvo je upisano",
+    message: `${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)} je upisan u kalendar.`,
+  });
+  saveState();
+  event.currentTarget.reset();
+  renderAll();
+  showToast("Sačuvano", "Odsustvo je upisano i zaposlenom je poslato obaveštenje.", "ok");
+});
+
+document.getElementById("employeeWorkForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const employeeId = formData.get("employeeId");
+  const date = formData.get("date");
+  const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
+  const client = (state.clients || []).find((item) => item.id === formData.get("clientId") && item.status === "Aktivan");
+  const minutes = Math.max(1, parseNumber(formData.get("minutes"), 0));
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
+  if (!activity) {
+    alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
+    return;
+  }
+  if (!client) {
+    alert("Izaberi aktivnog klijenta za ovu aktivnost.");
+    return;
+  }
+  const workLog = {
+    id: crypto.randomUUID(),
+    employeeId,
+    date,
+    hours: Math.round((minutes / 60) * 10000) / 10000,
+    minutes,
+    activityId: activity.id,
+    activityName: activity.name,
+    activityCategory: activity.category || "Ostalo",
+    clientId: client.id,
+    clientName: client.name,
+    type: "Rad",
+    note: formData.get("note"),
+    locked: true,
+    submittedAt: new Date().toISOString(),
+  };
+  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Čuvanje...";
+  }
+  let saveResult = { ok: false, error: "Online čuvanje nije uspelo." };
+  try {
+    const response = await fetch("/api/employee-activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workLog, updateReport: false }),
+    });
+    const data = await response.json().catch(() => ({}));
+    saveResult = { ok: response.ok && data.ok, error: data.error || "" };
+  } catch (error) {
+    saveResult = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
+  }
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Dodaj sate";
+  }
+  if (!saveResult.ok) {
+    alert(saveResult.error || "Aktivnost nije sačuvana. Pokušaj ponovo.");
+    return;
+  }
+  state.employeeWorkLogs.unshift(workLog);
+  selectedEmployeeId = employeeId;
+  saveState({ remote: false });
+  const employee = state.employees.find((item) => item.id === employeeId);
+  const weeklyHours = Number(employee?.weeklyHoursByMonth?.[date.slice(0, 7)] ?? employee?.weeklyHours ?? 0);
+  const dailyTarget = scheduledMinutesForDate(weeklyHours, date);
+  const dailyMinutes = state.employeeWorkLogs
+    .filter((item) => item.employeeId === employeeId && item.date === date)
+    .reduce((sum, item) => sum + Number(item.minutes || Math.round(Number(item.hours || 0) * 60)), 0);
+  if (dailyTarget > 0 && dailyMinutes < dailyTarget) {
+    alert(`Aktivnost je sačuvana. Danas je upisano ${dailyMinutes} min. Nedostaje još ${dailyTarget - dailyMinutes} min aktivnosti do dnevne kvote od ${dailyTarget} min.`);
+  } else if (dailyTarget > 0) {
+    alert(`Aktivnost je sačuvana. Dnevna kvota je ispunjena: ${dailyMinutes}/${dailyTarget} min.`);
+  }
+  event.currentTarget.reset();
+  event.currentTarget.elements.date.value = currentDateKey();
+  event.currentTarget.elements.minutes.value = 60;
+  renderAll();
+  showToast("Sačuvano", "Sati su upisani za izabranog zaposlenog.", "ok");
+});
+
+document.getElementById("employeeActivityForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const name = String(formData.get("activityName") || "").trim();
+  const selectedCategory = String(formData.get("category") || "").trim();
+  const category = selectedCategory === "__new__"
+    ? String(formData.get("newCategory") || "").trim()
+    : selectedCategory;
+  if (!name || !category) return;
+  state.employeeActivities = state.employeeActivities || [];
+  if (state.employeeActivities.some((activity) => activity.name.toLowerCase() === name.toLowerCase())) {
+    alert("Aktivnost sa tim nazivom već postoji.");
+    return;
+  }
+  state.employeeActivities.push({ id: crypto.randomUUID(), name, category, active: true });
+  state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
+  state.employeeActivityCategoryMap[name] = category;
+  if (!state.employeeActivityCategories?.includes(category)) {
+    state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+  }
+  saveState();
+  event.currentTarget.reset();
+  renderAll();
+  showToast("Sačuvano", "Aktivnost je dostupna zaposlenima.", "ok");
+});
+
+document.getElementById("employeeLateForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const employeeId = formData.get("employeeId");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
+  const minutes = parseNumber(formData.get("minutes"), 0);
+  const penaltyMinutes = Math.max(15, minutes);
+  const record = {
+    id: crypto.randomUUID(),
+    employeeId,
+    date: formData.get("date"),
+    minutes,
+    penaltyMinutes,
+    reason: formData.get("reason"),
+    acknowledgedAt: "",
+    createdAt: new Date().toISOString(),
+  };
+  state.employeeLateRecords.unshift(record);
+  selectedEmployeeId = employeeId;
+  notifyOnce({
+    key: `late-record-${record.id}`,
+    scope: "employee",
+    targetId: record.employeeId,
+    type: "warn",
+    title: "Upisano kašnjenje",
+    message: `${record.minutes} minuta · odbija se ${record.penaltyMinutes} minuta · ${formatDate(record.date)} · ${record.reason}.`,
+  });
+  saveState();
+  event.currentTarget.reset();
+  event.currentTarget.elements.date.value = currentDateKey();
+  event.currentTarget.elements.minutes.value = 10;
+  renderAll();
+  showToast("Sačuvano", `Kašnjenje je upisano. Odbija se ${penaltyMinutes} minuta.`, "warn");
+});
+
+document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const employeeId = formData.get("employeeId");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
+  const title = String(formData.get("title") || "").trim();
+  const duplicate = (state.employeeGoals || []).some((item) => item.employeeId === employeeId && String(item.title || "").trim().toLowerCase() === title.toLowerCase() && item.startDate === formData.get("startDate") && item.endDate === formData.get("endDate"));
+  if (duplicate) {
+    showToast("Već postoji", "Isti cilj je već dodat zaposlenom.", "warn");
+    return;
+  }
+  const goal = {
+    id: crypto.randomUUID(),
+    employeeId,
+    title,
+    target: formData.get("target"),
+    startDate: formData.get("startDate"),
+    endDate: formData.get("endDate"),
+    progress: Number(formData.get("progress") || 0),
+    status: formData.get("status"),
+    note: "",
+  };
+  state.employeeGoals.unshift(goal);
+  selectedEmployeeId = employeeId;
+  notifyOnce({
+    key: `goal-created-${goal.id}`,
+    scope: "employee",
+    targetId: goal.employeeId,
+    type: "info",
+    title: "Dodat ti je cilj",
+    message: `${goal.title}: ${goal.target || "bez dodatnog opisa"} · rok ${formatDate(goal.endDate)}.`,
+  });
+  saveState();
+  event.currentTarget.reset();
+  event.currentTarget.elements.startDate.value = currentDateKey();
+  event.currentTarget.elements.endDate.value = currentDateKey();
+  event.currentTarget.elements.progress.value = 0;
+  renderAll();
+  showToast("Sačuvano", "Cilj je dodat zaposlenom.", "ok");
+});
+
+document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const employeeId = formData.get("employeeId");
+  if (!employeeId) {
+    alert("Izaberi zaposlenog za ovaj unos.");
+    return;
+  }
+  const date = String(formData.get("date") || currentDateKey());
+  const structuredAnswers = oneOnOneQuestions.map((question, index) => ({ question, answer: String(formData.get(`oneOnOneAnswer${index}`) || "").trim() }));
+  const note = {
+    id: crypto.randomUUID(),
+    employeeId,
+    date,
+    title: `1:1 · ${formatDate(date)}`,
+    note: structuredAnswers.map(({ question, answer }) => `${question}\n${answer}`).join("\n\n"),
+    createdBy: "Admin",
+    visibleToEmployee: true,
+  };
+  state.employeeOneOnOnes.unshift(note);
+  selectedEmployeeId = employeeId;
+  notifyOnce({
+    key: `one-on-one-${note.id}`,
+    scope: "employee",
+    targetId: note.employeeId,
+    type: "info",
+    title: "Nova 1:1 beleška",
+    message: `${note.title} · ${formatDate(note.date)}`,
+  });
+  saveState();
+  event.currentTarget.reset();
+  event.currentTarget.elements.date.value = currentDateKey();
+  renderAll();
+  showToast("Sačuvano", "1:1 beleška je sačuvana.", "ok");
+});
+
+document.getElementById("companyPlanForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const plan = {
+    id: crypto.randomUUID(),
+    date: formData.get("date"),
+    type: formData.get("type"),
+    title: formData.get("title"),
+    note: formData.get("note"),
+    createdAt: new Date().toISOString(),
+  };
+  state.companyPlans.unshift(plan);
+  state.employees.forEach((employee) => {
+    notifyOnce({
+      key: `company-plan-${plan.id}-${employee.id}`,
+      scope: "employee",
+      targetId: employee.id,
+      type: "info",
+      title: "Novi plan firme",
+      message: `${plan.type}: ${plan.title} · ${formatDate(plan.date)}`,
+    });
+  });
+  saveState();
+  event.currentTarget.reset();
+  event.currentTarget.elements.date.value = currentDateKey();
+  renderAll();
+  showToast("Sačuvano", "Plan firme je dodat i vidljiv zaposlenima.", "ok");
+});
+
+document.getElementById("openClientModal").addEventListener("click", () => {
+  setActiveView("clients");
+  const panel = document.getElementById("clientAddPanel");
+  if (panel) panel.hidden = false;
+  const firstInput = document.querySelector('#adminClientForm input[name="name"]');
+  firstInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+  firstInput?.focus();
+});
+
+document.getElementById("adminClientForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const name = String(formData.get("name") || "").trim();
+  const loginEmail = String(formData.get("loginEmail") || "").trim().toLowerCase();
+  const duplicate = state.clients.some((item) => String(item.name || "").trim().toLowerCase() === name.toLowerCase() || (loginEmail && String(item.loginEmail || "").trim().toLowerCase() === loginEmail));
+  if (duplicate) {
+    showToast("Klijent već postoji", "Proveri naziv ili login email pre novog unosa.", "warn");
+    return;
+  }
+  const submitButton = form.querySelector('[type="submit"]');
+  if (submitButton?.disabled) return;
+  if (submitButton) submitButton.disabled = true;
+  const values = packageValues(formData.get("package"), formData.get("revenue"), formData.get("contractMonths"));
+  const contractFile = formData.get("contractFile");
+  const invoiceStatus = "Nije poslat";
+  const paymentStatus = "Nije plaćeno";
+  const paymentMethod = "Firma";
+  state.clients.unshift({
+    id: crypto.randomUUID(),
+    name,
+    niche: formData.get("niche"),
+    country: formData.get("country"),
+    status: formData.get("status"),
+    revenue: values.revenue,
+    leads: 0,
+    cpl: 0,
+    owner: "Miljan / Ivana",
+    team: "",
+    package: values.package,
+    contactName: formData.get("contactName"),
+    contactPhone: formData.get("contactPhone"),
+    whatsapp: "",
+    loginEmail,
+    loginPassword: formData.get("loginPassword"),
+    billingDay: Number(formData.get("billingDay")),
+    paymentStatus,
+    invoiceStatus,
+    paymentMethod,
+    invoices: {
+      [selectedMonthKey()]: {
+        invoiceStatus,
+        paymentStatus,
+        paymentMethod,
+        sentAt: invoiceStatus === "Poslat" ? new Date().toISOString() : "",
+        paidAt: paymentStatus === "Plaćeno" ? new Date().toISOString() : "",
+      },
+    },
+    contractMonths: values.contractMonths,
+    startDate: formData.get("startDate"),
+    contractFileName: contractFile?.name || "",
+    contractFileData: await readSmallFile(contractFile),
+    contractNote: formData.get("contractNote"),
+    metaPageId: formData.get("metaPageId"),
+    metaFormId: formData.get("metaFormId") || "",
+    websiteService: formData.get("websiteService") || "Ne",
+    websitePrice: Number(formData.get("websitePrice") || 0),
+    hostingProvider: formData.get("hostingProvider") || "",
+    hostingExpiresAt: formData.get("hostingExpiresAt") || "",
+    hostingPrice: Number(formData.get("hostingPrice") || 0),
+    domainName: formData.get("domainName") || "",
+    domainExpiresAt: formData.get("domainExpiresAt") || "",
+    domainPrice: Number(formData.get("domainPrice") || 0),
+  });
+  withLoginDefaults(state.clients[0]);
+  saveState();
+  form.reset();
+  if (submitButton) submitButton.disabled = false;
+  document.getElementById("clientAddPanel")?.setAttribute("hidden", "");
+  renderAll();
+  showToast("Sačuvano", "Klijent je dodat u bazu.", "ok");
+});
+
+const adminPackageSelect = document.querySelector('#adminClientForm select[name="package"]');
+adminPackageSelect?.addEventListener("change", () => {
+  const form = document.getElementById("adminClientForm");
+  const values = packageValues(adminPackageSelect.value);
+  form.elements.revenue.value = values.revenue;
+  form.elements.contractMonths.value = values.contractMonths || 3;
+});
+
+const editClientModal = document.getElementById("editClientModal");
+document.getElementById("closeEditClientModal")?.addEventListener("click", () => editClientModal.close());
+document.getElementById("cancelEditClient")?.addEventListener("click", () => editClientModal.close());
+
+document.getElementById("editClientForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const client = state.clients.find((item) => item.id === formData.get("id"));
+  if (!client) return;
+  const values = packageValues(formData.get("package"), formData.get("revenue"), formData.get("contractMonths"));
+  const contractFile = formData.get("contractFile");
+  const contractFileData = await readSmallFile(contractFile);
+  Object.assign(client, {
+    name: formData.get("name"),
+    niche: formData.get("niche"),
+    country: formData.get("country"),
+    package: values.package,
+    revenue: values.revenue,
+    contractMonths: values.contractMonths,
+    startDate: formData.get("startDate"),
+    status: formData.get("status"),
+    billingDay: Number(formData.get("billingDay")),
+    contactName: formData.get("contactName"),
+    contactPhone: formData.get("contactPhone"),
+    loginEmail: formData.get("loginEmail"),
+    loginPassword: formData.get("loginPassword"),
+    contractNote: formData.get("contractNote"),
+    websiteService: formData.get("websiteService") || "Ne",
+    websitePrice: Number(formData.get("websitePrice") || 0),
+    hostingProvider: formData.get("hostingProvider") || "",
+    hostingExpiresAt: formData.get("hostingExpiresAt") || "",
+    hostingPrice: Number(formData.get("hostingPrice") || 0),
+    domainName: formData.get("domainName") || "",
+    domainExpiresAt: formData.get("domainExpiresAt") || "",
+    domainPrice: Number(formData.get("domainPrice") || 0),
+  });
+  if (formData.has("whatsapp")) client.whatsapp = formData.get("whatsapp");
+  if (contractFile?.name) {
+    client.contractFileName = contractFile.name;
+    client.contractFileData = contractFileData;
+  }
+  client.invoices = client.invoices || {};
+  client.invoices[selectedMonthKey()] = {
+    ...monthlyInvoice(client, selectedMonthKey()),
+    amount: values.revenue,
+  };
+  withLoginDefaults(client);
+  saveState();
+  editClientModal.close();
+  renderAll();
+  showToast("Sačuvano", "Izmene klijenta su sačuvane.", "ok");
+});
+
+document.getElementById("portalLeadForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const client = selectedPortalClient();
+  if (!client) return;
+  const formData = new FormData(event.currentTarget);
+  const lead = {
+    id: crypto.randomUUID(),
+    client: client.name,
+    name: formData.get("name"),
+    phone: formData.get("phone"),
+    email: formData.get("email"),
+    location: formData.get("location"),
+    source: formData.get("source"),
+    service: formData.get("service"),
+    estimate: Number(formData.get("estimate") || 0),
+    responsible: formData.get("responsible"),
+    status: formData.get("status"),
+    priority: "Visok",
+    nextAction: formData.get("nextAction"),
+    note: formData.get("note"),
+    lossReason: formData.get("lossReason"),
+    customFields: {},
+    createdAt: new Date().toISOString(),
+    calledAt: isClientLeadStatusContacted(formData.get("status")) ? new Date().toISOString() : null,
+    lastContact: "",
+    lastStatusChangeAt: isClientLeadStatusContacted(formData.get("status")) ? new Date().toISOString() : "",
+  };
+  state.leads.unshift(lead);
+  client.leads = Number(client.leads || 0) + 1;
+  saveState();
+  event.currentTarget.reset();
+  document.getElementById("portalLeadPanel")?.setAttribute("hidden", "");
+  renderAll();
+  showToast("Sačuvano", "Lead je dodat za izabranog klijenta.", "ok");
+});
+
+document.getElementById("portalTeamForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const client = selectedPortalClient();
+  if (!client) return;
+  const formData = new FormData(event.currentTarget);
+  state.teamMembers.push({
+    id: crypto.randomUUID(),
+    client: client.name,
+    name: formData.get("name"),
+    role: formData.get("role"),
+    phone: formData.get("phone"),
+    email: formData.get("email"),
+  });
+  saveState();
+  event.currentTarget.reset();
+  renderAll();
+  showToast("Sačuvano", "Osoba je dodata u tim klijenta.", "ok");
+});
+
+document.querySelector('#editClientForm select[name="package"]')?.addEventListener("change", (event) => {
+  const form = document.getElementById("editClientForm");
+  const values = packageValues(event.target.value, form.elements.revenue.value, form.elements.contractMonths.value);
+  if (event.target.value !== "Custom") form.elements.revenue.value = values.revenue;
+  form.elements.contractMonths.value = values.contractMonths || 3;
+});
+
+const invoiceMonthFilter = document.getElementById("invoiceMonthFilter");
+if (invoiceMonthFilter) {
+  invoiceMonthFilter.value = monthFilter || currentMonthKey();
+  invoiceMonthFilter.addEventListener("change", (event) => {
+    monthFilter = event.target.value;
+    const dashboardMonth = document.getElementById("monthFilter");
+    if (dashboardMonth) dashboardMonth.value = monthFilter;
+    renderAll();
+  });
+}
+
+const leadModal = document.getElementById("leadModal");
+const leadButton = document.getElementById("openLeadModal");
+if (leadButton && leadModal) leadButton.addEventListener("click", () => leadModal.showModal());
+document.getElementById("closeLeadModal")?.addEventListener("click", () => leadModal?.close());
+document.getElementById("cancelLead")?.addEventListener("click", () => leadModal?.close());
+
+document.getElementById("leadForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  state.leads.unshift({
+    id: crypto.randomUUID(),
+    client: formData.get("client"),
+    name: formData.get("name"),
+    phone: formData.get("phone"),
+    service: formData.get("service"),
+    source: formData.get("source"),
+    status: "Novi",
+    priority: formData.get("priority"),
+    createdAt: new Date().toISOString(),
+    calledAt: null,
+    lastStatusChangeAt: "",
+    customFields: {},
+    note: "Ručno dodat lead.",
+  });
+  const client = state.clients.find((item) => item.name === formData.get("client"));
+  if (client) client.leads = Number(client.leads) + 1;
+  saveState();
+  event.currentTarget.reset();
+  leadModal?.close();
+  renderAll();
+  showToast("Sačuvano", "Lead je ručno dodat.", "ok");
+});
+
+function updateLeadStatus(id, status) {
+  const lead = state.leads.find((item) => item.id === id);
+  if (!lead) return;
+  lead.status = normalizeLeadStatus(status);
+  if (isClientLeadStatusContacted(lead.status) && !lead.calledAt) {
+    lead.calledAt = new Date().toISOString();
+  }
+  lead.lastStatusChangeAt = new Date().toISOString();
+  saveState();
+  renderAll();
+  showToast("Sačuvano", `Lead je prebačen u status ${lead.status}.`, "ok");
+}
+
+function renderLeadClientOptions() {
+  const select = document.getElementById("leadClientSelect");
+  if (!select) return;
+  select.innerHTML = state.clients.map((client) => `<option>${client.name}</option>`).join("");
+}
+
+document.getElementById("addDealBtn")?.addEventListener("click", () => {
+  const name = prompt("Naziv prilike");
+  if (!name) return;
+  state.deals.unshift({
+    id: crypto.randomUUID(),
+    name,
+    country: "Austrija",
+    value: 2500,
+    stage: "Novi lead",
+    note: "Dodato iz CRM-a.",
+  });
+  saveState();
+  renderAll();
+});
+
+document.getElementById("addTaskBtn")?.addEventListener("click", () => {
+  const title = prompt("Naziv zadatka");
+  if (!title) return;
+  state.tasks.unshift({
+    id: crypto.randomUUID(),
+    role: "SMM",
+    client: state.clients[0]?.name || "Novi klijent",
+    title,
+    due: "Danas",
+    priority: "Srednji",
+  });
+  saveState();
+  renderAll();
+});
+
+function downloadBackup(filename = "agency-crm-export.json") {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("exportBtn").addEventListener("click", () => {
+  downloadBackup("agency-crm-export.json");
+});
+
+document.getElementById("backupNowBtn")?.addEventListener("click", () => {
+  state.backup = state.backup || {};
+  state.backup.lastDownloadedAt = new Date().toISOString();
+  saveState();
+  downloadBackup(`marketizo-crm-backup-${currentDateKey()}.json`);
+  renderAll();
+});
+
+setupPasswordToggles();
+hydrateOnlineState().then(() => {
+  renderAll();
+  window.MarketizoRemote?.startPolling((payload) => {
+    state = loadState(payload);
+    renderAll();
+  });
+});
+updateContextActions("admin");
+
+// Compact filters and current-period defaults added for the admin workspace.
+(() => {
+  const currentLocalMonth = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const setHomeCurrentMonth = () => {
+    const home = document.getElementById("admin");
+    const month = document.getElementById("monthFilter");
+    if (!home?.classList.contains("active") || !month) return;
+    month.value = currentLocalMonth();
+    const from = document.getElementById("dateFromFilter");
+    const to = document.getElementById("dateToFilter");
+    if (from) from.value = "";
+    if (to) to.value = "";
+    month.dispatchEvent(new Event("input", { bubbles: true }));
+    month.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  const minutesFromText = (value) => {
+    const text = String(value || "").toLowerCase().replace(/\s+/g, " ");
+    let minutes = 0;
+    const hours = text.match(/([\d.,]+)\s*h/);
+    const mins = text.match(/([\d.,]+)\s*min/);
+    if (mins) minutes = Number(mins[1].replace(",", "."));
+    else if (hours) minutes = Number(hours[1].replace(",", ".")) * 60;
+    if (!hours && !mins) {
+      const number = Number(text.replace(/[^\d,.-]/g, "").replace(",", "."));
+      if (Number.isFinite(number)) minutes = number;
+    }
+    return Number.isFinite(minutes) ? minutes : 0;
+  };
+
+  const enhanceWorkHours = () => {
+    const body = document.getElementById("employeeWorkRows");
+    const count = document.getElementById("employeeWorkRowsCount");
+    if (!body || !count) return;
+    let total = document.getElementById("employeeWorkHoursTotal");
+    if (!total) {
+      const summary = document.createElement("div");
+      summary.className = "worklog-summary";
+      total = document.createElement("strong");
+      total.id = "employeeWorkHoursTotal";
+      const summaryParent = count.parentElement;
+      summary.append(count, total);
+      summaryParent?.append(summary);
+    }
+    const sync = () => {
+      const rows = [...body.querySelectorAll("tr")].filter((row) => getComputedStyle(row).display !== "none");
+      const minutes = rows.reduce((sum, row) => sum + minutesFromText(row.children[2]?.textContent), 0);
+      const hours = minutes / 60;
+      const nextTotal = `Ukupno ${new Intl.NumberFormat("sr-RS", { maximumFractionDigits: 2 }).format(hours)}h`;
+      if (total.textContent !== nextTotal) total.textContent = nextTotal;
+    };
+    if (!body.dataset.totalReady) {
+      body.dataset.totalReady = "true";
+      new MutationObserver(sync).observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+      [document.getElementById("employeeWorkPersonFilter"), document.getElementById("employeeWorkMonthFilter"), document.getElementById("employeeWorkClientFilter"), document.getElementById("resetEmployeeWorkFilters")]
+        .filter(Boolean)
+        .forEach((control) => control.addEventListener("change", () => setTimeout(sync, 0)));
+    }
+    sync();
+  };
+
+  const enhanceClientCostPicker = () => {
+    const picker = document.querySelector(".client-cost-employee-picker");
+    if (!picker || picker.dataset.compactReady) return;
+    picker.dataset.compactReady = "true";
+    const hiddenSelect = document.getElementById("clientCostEmployees");
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "client-cost-picker-trigger";
+    trigger.setAttribute("aria-expanded", "false");
+    const dropdown = document.createElement("div");
+    dropdown.className = "client-cost-picker-dropdown";
+    dropdown.hidden = true;
+    [...picker.children].filter((child) => child !== hiddenSelect).forEach((child) => dropdown.append(child));
+    picker.insertBefore(trigger, hiddenSelect || null);
+    picker.insertBefore(dropdown, hiddenSelect || null);
+
+    const update = () => {
+      const checked = [...picker.querySelectorAll('#clientCostEmployeeList input[type="checkbox"]:checked')];
+      const total = picker.querySelectorAll('#clientCostEmployeeList input[type="checkbox"]').length;
+      trigger.textContent = checked.length ? `${checked.length} zaposlenih izabrano` : `Svi zaposleni (${total})`;
+    };
+    trigger.addEventListener("click", () => {
+      dropdown.hidden = !dropdown.hidden;
+      trigger.setAttribute("aria-expanded", String(!dropdown.hidden));
+      if (!dropdown.hidden) document.getElementById("clientCostEmployeeSearch")?.focus();
+    });
+    picker.addEventListener("change", update);
+    picker.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => setTimeout(update, 0)));
+    document.addEventListener("click", (event) => {
+      if (!picker.contains(event.target)) {
+        dropdown.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+      }
+    });
+    update();
+  };
+
+  const enhance = () => {
+    enhanceWorkHours();
+    enhanceClientCostPicker();
+  };
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      setHomeCurrentMonth();
+      enhance();
+    }, 250);
+  });
+  window.addEventListener("hashchange", () => setTimeout(() => {
+    if (location.hash === "#admin" || location.hash === "" || location.hash === "#") setHomeCurrentMonth();
+    enhance();
+  }, 80));
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest('.nav-item[data-view="admin"], [data-go-view="admin"]')) return;
+    setTimeout(setHomeCurrentMonth, 80);
+  });
+  new MutationObserver(enhance).observe(document.body, { childList: true, subtree: true });
+})();
+// Final opening balances for the official work-time tracking start on 01.09.2026.
+// Historical monthly totals remain visible, but must not be added again to these balances.
+function applySeptember2026OpeningBalancesV1() {
+  state.backup = state.backup || {};
+  if (state.backup.september2026OpeningBalancesV1) return false;
+
+  const normalize = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const resetHistoryAndSetAugustBalance = (name, augustBalance) => {
+    const employee = (state.employees || []).find((item) => normalize(item.name) === normalize(name));
+    if (!employee) return;
+    employee.openingHourBalance = 0;
+    employee.openingBalanceMonth = "2025-12";
+    employee.monthlyBalanceOverrides = {
+      ...(employee.monthlyBalanceOverrides || {}),
+      "2026-01": 0,
+      "2026-02": 0,
+      "2026-03": 0,
+      "2026-04": 0,
+      "2026-05": 0,
+      "2026-06": 0,
+      "2026-07": 0,
+      "2026-08": augustBalance,
+    };
+  };
+
+  resetHistoryAndSetAugustBalance("Dejan Klement", 10 + (20 / 60));
+  resetHistoryAndSetAugustBalance("Nikola Marjanovic", -(21 + (35 / 60)));
+  state.backup.september2026OpeningBalancesV1 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applySeptember2026OpeningBalancesV1()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 4000);
+});
+
+function applyDejanSeptember2026OpeningBalanceV2() {
+  state.backup = state.backup || {};
+  if (state.backup.dejanSeptember2026OpeningBalanceV2) return false;
+  const employee = (state.employees || []).find((item) => String(item.name || "").trim() === "Dejan Klement");
+  if (!employee) return false;
+  employee.openingHourBalance = 0;
+  employee.openingBalanceMonth = "2025-11";
+  employee.monthlyBalanceOverrides = {
+    ...(employee.monthlyBalanceOverrides || {}),
+    "2025-12": 0,
+    "2026-01": 0,
+    "2026-02": 0,
+    "2026-03": 0,
+    "2026-04": 0,
+    "2026-05": 0,
+    "2026-06": 0,
+    "2026-07": 0,
+    "2026-08": 10 + (20 / 60),
+  };
+  state.backup.dejanSeptember2026OpeningBalanceV2 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyDejanSeptember2026OpeningBalanceV2()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 4500);
+});
+// Confirmed opening balances for official tracking from 01.09.2026.
+function applySeptember2026ConfirmedBalancesV2() {
+  state.backup = state.backup || {};
+  if (state.backup.september2026ConfirmedBalancesV2) return false;
+
+  const normalizeConfirmedBalanceName = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const setConfirmedOpeningBalance = (name, balance) => {
+    const employee = (state.employees || []).find((item) =>
+      normalizeConfirmedBalanceName(item.name) === normalizeConfirmedBalanceName(name)
+    );
+    if (!employee) return;
+    employee.openingHourBalance = 0;
+    employee.openingBalanceMonth = "2025-12";
+    employee.monthlyBalanceOverrides = {
+      ...(employee.monthlyBalanceOverrides || {}),
+      "2026-01": 0,
+      "2026-02": 0,
+      "2026-03": 0,
+      "2026-04": 0,
+      "2026-05": 0,
+      "2026-06": 0,
+      "2026-07": 0,
+      "2026-08": balance,
+    };
+  };
+
+  const hazim = (state.employees || []).find((item) =>
+    normalizeConfirmedBalanceName(item.name) === "hazim hadzic"
+  );
+  if (hazim) {
+    hazim.weeklyHours = 30;
+    hazim.weeklyHoursByMonth = {
+      ...(hazim.weeklyHoursByMonth || {}),
+      "2026-06": 30,
+      "2026-07": 30,
+      "2026-08": 30,
+    };
+  }
+  setConfirmedOpeningBalance("Hazim Hadzic", 8);
+  setConfirmedOpeningBalance("Milica Blagojevic", 2);
+  setConfirmedOpeningBalance("Luka Cvorovic", 0);
+  setConfirmedOpeningBalance("Aleksa Damjanovic", 12);
+  setConfirmedOpeningBalance("Vukasin Vojnovic", 5);
+  setConfirmedOpeningBalance("Luka Nikolic", 0);
+  setConfirmedOpeningBalance("Aleksandar Bugarin", 0);
+
+  const vukasin = (state.employees || []).find((item) =>
+    normalizeConfirmedBalanceName(item.name) === "vukasin cvetkovic"
+  );
+  if (vukasin) {
+    vukasin.weeklyHours = 20;
+    vukasin.weeklyHoursByMonth = {
+      ...(vukasin.weeklyHoursByMonth || {}),
+      "2026-08": 20,
+      "2026-09": 20,
+    };
+  }
+  setConfirmedOpeningBalance("Vukasin Cvetkovic", -24.5);
+
+  state.backup.september2026ConfirmedBalancesV2 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applySeptember2026ConfirmedBalancesV2()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 4500);
+});
+
+function applyLukaNikolicAndBugarinAbsencesV3() {
+  state.backup = state.backup || {};
+  if (state.backup.lukaNikolicAndBugarinAbsencesV3) return false;
+  const normalizeAbsenceName = (value) => String(value || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "dj");
+  const confirmed = [
+    ["Luka Nikolic", "2026-06-29", "2026-07-03", 5],
+    ["Luka Nikolic", "2026-07-30", "2026-07-31", 2],
+    ["Luka Nikolic", "2026-08-05", "2026-08-18", 10],
+    ["Aleksandar Bugarin", "2026-05-11", "2026-05-15", 5],
+    ["Aleksandar Bugarin", "2026-06-03", "2026-06-09", 5],
+    ["Aleksandar Bugarin", "2026-07-01", "2026-07-09", 7],
+    ["Aleksandar Bugarin", "2026-08-27", "2026-09-01", 4],
+  ];
+  state.employeeAbsences = state.employeeAbsences || [];
+  const lukaNikolic = (state.employees || []).find((item) =>
+    normalizeAbsenceName(item.name) === "luka nikolic"
+  );
+  if (lukaNikolic) {
+    lukaNikolic.startDate = "2026-03-09";
+    lukaNikolic.weeklyHours = 20;
+  }
+  const aleksandarBugarin = (state.employees || []).find((item) =>
+    normalizeAbsenceName(item.name) === "aleksandar bugarin"
+  );
+  if (aleksandarBugarin) {
+    aleksandarBugarin.startDate = "2026-04-01";
+    aleksandarBugarin.weeklyHours = 20;
+  }
+  confirmed.forEach(([name, startDate, endDate, days]) => {
+    const employee = (state.employees || []).find((item) =>
+      normalizeAbsenceName(item.name) === normalizeAbsenceName(name)
+    );
+    if (!employee) return;
+    state.employeeAbsences = state.employeeAbsences.filter((absence) => !(
+      absence.employeeId === employee.id
+      && absence.type === "Godišnji odmor"
+      && absence.startDate === startDate
+      && absence.endDate === endDate
+    ));
+    state.employeeAbsences.push({
+      id: `confirmed-vacation-${employee.id}-${startDate}`,
+      employeeId: employee.id,
+      type: "Godišnji odmor",
+      startDate,
+      endDate,
+      days,
+      note: "Potvrđen istorijski godišnji odmor",
+      status: "Odobreno",
+    });
+  });
+  state.backup.lukaNikolicAndBugarinAbsencesV3 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyLukaNikolicAndBugarinAbsencesV3()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 5000);
+});
+
+// Normalize every existing full-time profile to the contractual 38.5-hour week.
+function applyFullTime385HoursV1() {
+  state.backup = state.backup || {};
+  if (state.backup.fullTime385HoursV1) return false;
+  (state.employees || []).forEach((employee) => {
+    if (Number(employee.weeklyHours || 0) >= 38) employee.weeklyHours = 38.5;
+    if (!employee.weeklyHoursByMonth) return;
+    Object.keys(employee.weeklyHoursByMonth).forEach((monthKey) => {
+      if (Number(employee.weeklyHoursByMonth[monthKey] || 0) >= 38) {
+        employee.weeklyHoursByMonth[monthKey] = 38.5;
+      }
+    });
+  });
+  state.backup.fullTime385HoursV1 = true;
+  return true;
+}
+
+window.addEventListener("load", () => {
+  window.setTimeout(() => {
+    if (!applyFullTime385HoursV1()) return;
+    saveState();
+    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
+    if (typeof render === "function") render();
+  }, 5500);
+});
