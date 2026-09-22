@@ -157,7 +157,7 @@ function loadState(sourceData = null) {
     position: "",
     startDate: "",
     salary: 0,
-    weeklyHours: 40,
+    weeklyHours: 38.5,
     openingHourBalance: 0,
     openingBalanceMonth: "",
     vacationDays: 25,
@@ -167,7 +167,7 @@ function loadState(sourceData = null) {
     leaderId: "",
     status: "Aktivan",
     ...employee,
-    weeklyHours: parseNumber(employee.weeklyHours || 40, 40),
+    weeklyHours: parseNumber(employee.weeklyHours || 38.5, 38.5),
     openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
     openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
     vacationDays: parseNumber(employee.vacationDays || 25, 26),
@@ -646,7 +646,7 @@ function scheduledMinutesForDate(weeklyHours, date) {
 }
 
 function expectedHours(employee, monthKey) {
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 38.5, 38.5);
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) =>
     (!employee.startDate || day >= employee.startDate) &&
     !(state.employeeAbsences || []).some((absence) => absence.employeeId === employee.id && absence.status === "Odobreno" && day >= absence.startDate && day <= absence.endDate)
@@ -689,7 +689,7 @@ function expectedHoursToDate(employee, monthKey) {
   if (selectedMonth < currentMonth) return expectedHours(employee, monthKey);
   if (selectedMonth > currentMonth) return 0;
 
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 40, 40);
+  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 38.5, 38.5);
   const elapsedWorkdays = elapsedWorkdaysToDate(employee, monthKey);
   return Math.round(elapsedWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
 }
@@ -990,7 +990,7 @@ function renderEmployeePortal() {
   setText("portalStartDate", formatDate(activeEmployee.startDate));
   setText("portalPosition", activeEmployee.position || "-");
   setText("portalSalary", currency.format(Number(activeEmployee.salary || 0)));
-  setText("portalWeeklyHours", `${formatHours(activeEmployee.weeklyHours || 40)}h`);
+  setText("portalWeeklyHours", `${formatHours(activeEmployee.weeklyHours || 38.5)}h`);
 
   const hourDate = document.querySelector('#portalHoursForm input[name="date"]');
   const absenceStart = document.querySelector('#portalAbsenceForm input[name="startDate"]');
