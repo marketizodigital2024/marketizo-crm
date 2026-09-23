@@ -16,6 +16,7 @@ test("serious risks and owner mentions call AI", () => {
 
 test("an open issue remains under AI review", () => {
   assert.equal(needsUrgentAnalysis("Imate li novosti?", { openIssue: { summary: "problem" } }), true);
+  assert.equal(needsUrgentAnalysis("Materijal za sledeću objavu je u folderu", { openIssue: { summary: "stari problem" } }), false);
 });
 
 test("reply tracking uses a local heuristic", () => {

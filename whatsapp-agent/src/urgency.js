@@ -23,7 +23,10 @@ export function hasOwnerMention(value) {
 export function needsUrgentAnalysis(value, context = {}) {
   const text = normalizedText(value);
   if (!text || isAcknowledgement(text)) return false;
-  if (context.openIssue || context.activeCommitment || hasOwnerMention(text)) return true;
+  if (hasOwnerMention(text)) return true;
+
+  const statusChange = /\b(resen\w*|rijesen\w*|popravljen\w*|zavrsen\w*|gotov\w*|nije resen\w*|nije rijesen\w*|ne radi|i dalje|jos uvek|novost\w*|status\w*|sta se desava)\b/i.test(text);
+  if ((context.openIssue || context.activeCommitment) && statusChange) return true;
 
   return /\b(otkaz|raskid|prekid saradnje|refund|povracaj|vratite novac|necu platiti|ne placam|advokat|tuz|polic|prevar|hak|lozink|nalog blokiran|javno|recenzij|medij|bezbednost|sigurnost|hitno|odmah|danas mora|katastrof|skandal|nezadovolj|razocaran|izgubili poverenje|nikad vise|opet isti problem|ponovo isti problem|kasni|probijen rok|nema lead|nema lid|leadovi ne rade|kampanja ne radi|budzet potrosen|garancij|30 lead|30 lid|prodaja pala|racun suspendovan)\b/i.test(text);
 }
