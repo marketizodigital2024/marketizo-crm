@@ -32,11 +32,16 @@ async function readBody(req) {
 }
 
 async function readRow(url, key) {
-  const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
-    headers: headers(key),
-  });
-  if (!response.ok) throw new Error(`Čitanje baze nije uspelo (${response.status}).`);
-  return (await response.json())[0] || null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
+      headers: headers(key),
+    });
+    if (response.ok) return (await response.json())[0] || null;
+    if (response.status < 500 && response.status !== 429) throw new Error(`Čitanje baze nije uspelo (${response.status}).`);
+    if (attempt < 3) await wait(120 * (2 ** attempt) + Math.floor(Math.random() * 80));
+    else throw new Error(`Čitanje baze nije uspelo (${response.status}).`);
+  }
+  return null;
 }
 
 function viennaDateKey(date = new Date()) {
@@ -127,7 +132,13 @@ module.exports = async function handler(req, res) {
         headers: headers(key, "return=representation"),
         body: JSON.stringify({ payload, updated_at: updatedAt }),
       });
-      if (!response.ok) throw new Error(`Upis aktivnosti nije uspeo (${response.status}).`);
+      if (!response.ok) {
+        if ((response.status >= 500 || response.status === 429) && attempt < MAX_WRITE_ATTEMPTS - 1) {
+          await wait(Math.min(1200, 80 * (2 ** attempt)) + Math.floor(Math.random() * 100));
+          continue;
+        }
+        throw new Error(`Upis aktivnosti nije uspeo (${response.status}).`);
+      }
       const updatedRows = await response.json();
       if (updatedRows.length) return json(res, 200, { ok: true, workLogId: workLog.id, updatedAt });
       const backoff = Math.min(800, 45 * (2 ** attempt)) + Math.floor(Math.random() * 80);

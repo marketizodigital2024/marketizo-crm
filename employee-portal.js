@@ -365,6 +365,83 @@ function showToast(title, message = "", type = "ok") {
   window.setTimeout(() => toast.remove(), 4200);
 }
 
+const PENDING_WORK_LOGS_KEY = "marketizoPendingEmployeeWorkLogsV1";
+let pendingWorkLogSyncRunning = false;
+
+function readPendingWorkLogs() {
+  try {
+    const items = JSON.parse(localStorage.getItem(PENDING_WORK_LOGS_KEY) || "[]");
+    return Array.isArray(items) ? items.filter((item) => item?.workLog?.id) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function writePendingWorkLogs(items) {
+  try {
+    localStorage.setItem(PENDING_WORK_LOGS_KEY, JSON.stringify(items));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function queuePendingWorkLog(workLog, recipientId) {
+  const items = readPendingWorkLogs().filter((item) => item.workLog.id !== workLog.id);
+  items.push({ workLog, recipientId, queuedAt: new Date().toISOString() });
+  if (!writePendingWorkLogs(items)) throw new Error("Uređaj nije dozvolio sigurno lokalno čuvanje. Ne zatvaraj formu i pokušaj ponovo.");
+}
+
+function removePendingWorkLog(workLogId) {
+  writePendingWorkLogs(readPendingWorkLogs().filter((item) => item.workLog.id !== workLogId));
+}
+
+async function postEmployeeWorkLog(workLog, recipientId) {
+  try {
+    const response = await fetch("/api/employee-activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workLog, recipientId, updateReport: false }),
+    });
+    const data = await response.json().catch(() => ({}));
+    return { ok: response.ok && data.ok, retryable: response.status === 409 || response.status === 429 || response.status >= 500, error: data.error || "" };
+  } catch (error) {
+    return { ok: false, retryable: true, error: error?.message || "Online čuvanje nije uspelo." };
+  }
+}
+
+async function syncPendingWorkLogs({ notify = false } = {}) {
+  if (pendingWorkLogSyncRunning || !activeEmployee || !navigator.onLine) return;
+  pendingWorkLogSyncRunning = true;
+  let synced = 0;
+  try {
+    const employeeItems = readPendingWorkLogs().filter((item) => item.workLog.employeeId === activeEmployee.id);
+    for (const item of employeeItems) {
+      const result = await postEmployeeWorkLog(item.workLog, item.recipientId);
+      if (!result.ok) {
+        if (!result.retryable) removePendingWorkLog(item.workLog.id);
+        continue;
+      }
+      removePendingWorkLog(item.workLog.id);
+      if (!(state.employeeWorkLogs || []).some((log) => log.id === item.workLog.id)) {
+        state.employeeWorkLogs ||= [];
+        state.employeeWorkLogs.unshift(item.workLog);
+      }
+      synced += 1;
+    }
+    if (synced) {
+      saveState({ remote: false });
+      renderEmployeePortal();
+      if (notify) showToast("Sinhronizovano", `${synced} sačuvan${synced === 1 ? " unos" : "a unosa"} je potvrđeno u bazi.`, "ok");
+    }
+  } finally {
+    pendingWorkLogSyncRunning = false;
+  }
+}
+
+window.addEventListener("online", () => syncPendingWorkLogs({ notify: true }));
+window.setInterval(() => syncPendingWorkLogs({ notify: true }), 30000);
+
 function setupPasswordToggles() {
   document.querySelectorAll("[data-toggle-password]").forEach((button) => {
     if (button.dataset.ready === "true") return;
@@ -1895,23 +1972,27 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     submittedAt: new Date().toISOString(),
   };
   const recipientId = reportRecipientId();
-  let saveResult = { ok: false, error: "Online čuvanje nije uspelo." };
+  let saveResult = { ok: false, retryable: true, error: "Online čuvanje nije uspelo." };
   try {
-    const response = await fetch("/api/employee-activity", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workLog, recipientId, updateReport: false }),
-    });
-    const data = await response.json().catch(() => ({}));
-    saveResult = { ok: response.ok && data.ok, error: data.error || "" };
+    queuePendingWorkLog(workLog, recipientId);
+    saveResult = await postEmployeeWorkLog(workLog, recipientId);
   } catch (error) {
-    saveResult = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
+    saveResult = { ok: false, retryable: false, error: error?.message || "Lokalno čuvanje nije uspelo." };
   }
   if (submitButton) {
     submitButton.disabled = false;
     submitButton.textContent = "Sačuvaj sate";
   }
   if (!saveResult?.ok) {
+    if (saveResult.retryable) {
+      state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
+      state.employeeWorkLogs.unshift(workLog);
+      saveState({ remote: false });
+      renderEmployeePortal();
+      showToast("Sačuvano lokalno", "Unos čeka potvrdu baze i biće automatski sinhronizovan.", "warn");
+      return;
+    }
+    removePendingWorkLog(workLog.id);
     state = previousState;
     activeEmployee = (state.employees || []).find((employee) => employee.id === employeeId) || activeEmployee;
     saveState({ remote: false });
@@ -1920,6 +2001,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     showToast("Nije sačuvano", saveResult?.error || "Online baza nije potvrdila upis. Pokušaj ponovo.", "danger");
     return;
   }
+  removePendingWorkLog(workLog.id);
   state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
   state.employeeWorkLogs.unshift(workLog);
   saveState({ remote: false });
@@ -2155,6 +2237,7 @@ onlineHydrationPromise = hydrateOnlineState();
       new Promise((resolve) => window.setTimeout(resolve, 500)),
     ]).catch(() => null);
     restored = await restoreEmployeeSession();
+    if (restored) syncPendingWorkLogs({ notify: true });
   }
   if (!restored) {
     document.documentElement.classList.remove("employee-session-cached");
