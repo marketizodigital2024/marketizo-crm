@@ -7,6 +7,7 @@ import path from "node:path";
 import OpenAI, { toFile } from "openai";
 import whatsapp from "whatsapp-web.js";
 import { analyzeFollowup, analyzeMessage } from "./analyze.js";
+import { hasOwnerMention, isAcknowledgement, likelyRequiresTeamReply, needsUrgentAnalysis } from "./urgency.js";
 
 const { Client, LocalAuth } = whatsapp;
 const required = ["OPENAI_API_KEY", "ALERT_TO"];
@@ -23,7 +24,7 @@ const openai = new OpenAI({
   maxRetries: Number(process.env.OPENAI_MAX_RETRIES || 2)
 });
 const routineModel = process.env.OPENAI_ROUTINE_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
-const smartModel = process.env.OPENAI_SMART_MODEL || "gpt-6-astra";
+const smartModel = process.env.OPENAI_SMART_MODEL || "gpt-5.6-luna";
 const model = smartModel;
 const reasoningEffort = process.env.OPENAI_REASONING_EFFORT || "xhigh";
 const alertTo = process.env.ALERT_TO;
@@ -40,6 +41,7 @@ const whatsappProtocolTimeoutMs = Number(process.env.WHATSAPP_PROTOCOL_TIMEOUT_M
 const whatsappHealthIntervalMs = Number(process.env.WHATSAPP_HEALTH_INTERVAL_MS || 300000);
 const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LIMIT || 2);
 const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-14-no-owner-tasks-6";
+const reportMode = String(process.env.REPORT_MODE || "weekly").toLowerCase();
 const hybridTrialStartedAt = process.env.HYBRID_TRIAL_STARTED_AT || "2026-09-10";
 const deploymentTestVersion = "2026-09-11-stability-test-1";
 const yesterdayAnalysisTestVersion = "2026-09-11-yesterday-analysis-1";
@@ -877,16 +879,18 @@ function startDailyReportScheduler() {
     const today = viennaDateKey();
     const weekday = parts.weekday !== "Sat" && parts.weekday !== "Sun";
     const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-    if (weekday && minutes >= 9 * 60 && minutes < 12 * 60 && dailyState.lastMorningDate !== today && !morningReportInFlight) {
+    if (reportMode !== "weekly" && weekday && minutes >= 9 * 60 && minutes < 12 * 60 && dailyState.lastMorningDate !== today && !morningReportInFlight) {
       morningReportInFlight = true;
       void sendMorningReport()
         .catch((error) => console.error("Morning report failed:", error))
         .finally(() => { morningReportInFlight = false; });
     }
     const closingReportMissing = dailyState.lastReportDate !== today || dailyState.lastReportVersion !== reportDeliveryVersion;
-    if (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60 && closingReportMissing && !closingReportInFlight) {
+    const weeklyDue = parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today;
+    const closingDue = reportMode !== "weekly" && closingReportMissing;
+    if (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60 && (weeklyDue || closingDue) && !closingReportInFlight) {
       closingReportInFlight = true;
-      if (parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today) {
+      if (weeklyDue) {
         void sendWeeklyReport()
           .catch((error) => console.error("Weekly report failed:", error))
           .finally(() => { closingReportInFlight = false; });
@@ -1345,7 +1349,7 @@ client.on("message_create", async (message) => {
     clearClientWait(message.from, chat.name);
     rememberGroupMessage(message.from, chat.name, senderName, "client", messageText);
 
-    const result = await analyzeMessage(openai, routineModel, smartModel, {
+    const context = {
       group: chat.name,
       sender: contact.pushname || contact.name || contact.number || "Nepoznato",
       message: messageText,
@@ -1353,24 +1357,26 @@ client.on("message_create", async (message) => {
       recentConversation: (groupHistory.get(message.from) || []).slice(-12),
       openIssue: openIssues.get(message.from) || null,
       activeCommitment: commitments.get(message.from) || null
-    });
-    const normalizedAcknowledgement = messageText
-      .toLocaleLowerCase("sr-Latn")
-      .replace(/[^\p{L}\p{N}]+/gu, " ")
-      .trim();
-    const acknowledgementOnly = /^(ok|okej|okay|važi|vazi|super|hvala|hvala puno|dogovoreno|u redu|može|moze|odlično|odlicno|top|jasno)$/.test(normalizedAcknowledgement);
+    };
+    const shouldAnalyze = needsUrgentAnalysis(messageText, context);
+    const acknowledgementOnly = isAcknowledgement(messageText);
     const acknowledgedByTeamReaction = teamAcknowledgedMessageIds.has(serializedId(message.id));
-    if (result.requiresTeamReply && !acknowledgementOnly && !acknowledgedByTeamReaction) {
+    if (likelyRequiresTeamReply(messageText) && !acknowledgementOnly && !acknowledgedByTeamReaction) {
       if (teamMemberIds.size) beginResponseWatch(message, chat, contact, messageText);
       else console.error("Response SLA watch skipped because the team roster is empty.");
     } else {
       clearResponseWatch(message.from, chat.name);
       console.log(`[NO_REPLY_NEEDED] ${chat.name}: acknowledgement, closed message, or team reaction`);
     }
+    if (!shouldAnalyze) {
+      console.log(`[LOCAL_FILTER] ${chat.name}: routine message stored without OpenAI call`);
+      markMessageProcessed(messageId);
+      return;
+    }
+
+    const result = await analyzeMessage(openai, routineModel, smartModel, context);
     await updateFollowups(message, chat, senderName, "client", messageText);
-    const normalizedBody = messageText.toLocaleLowerCase("sr-Latn");
-    const ownerMention = ["miljan", "vlasnik", "gazda", "direktor", "owner", "šef", "sef"]
-      .some((keyword) => normalizedBody.includes(keyword));
+    const ownerMention = hasOwnerMention(messageText);
 
     console.log(`[${result.level}] [${result.judgedBy}] ${chat.name}: ${result.summary}`);
 

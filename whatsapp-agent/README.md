@@ -30,7 +30,9 @@ Example format: `43123456789@c.us`.
 
 - Reads only new group messages.
 - Ignores messages sent by the agent itself.
-- Uses `OPENAI_ROUTINE_MODEL` for the first pass and `OPENAI_SMART_MODEL` for ambiguous, sensitive, or consequential situations and owner reports.
+- Stores routine messages locally without an OpenAI call. It uses `OPENAI_ROUTINE_MODEL` only for locally detected urgent/risky messages, and `OPENAI_SMART_MODEL` for ambiguous or consequential situations and the weekly owner report.
+- Monitors every current and newly joined group when `MONITORED_GROUPS` is empty.
+- `REPORT_MODE=weekly` disables weekday morning/daily AI reports while keeping the Friday weekly report.
 - Uses GREEN, YELLOW, RED, and URGENT as consequence labels, not as a substitute for contextual judgment.
 - Formats owner updates as a bold WhatsApp client name followed by a short, natural Serbian assessment.
 - Persists per-model call and token totals for the 30-day hybrid trial and logs each model decision for cost and quality review.
