@@ -68,6 +68,7 @@
           <button class="nav-item" data-employee-tab="employeeHours" type="button">Vreme</button>
           <button class="nav-item" data-employee-tab="employeeVacations" type="button">Odsustva</button>
           <button class="nav-item" data-employee-tab="employeeCalendarTab" type="button">Kalendar</button>
+          <button class="nav-item" id="leaderMeetingsNav" data-employee-tab="employeeMeetingsTab" type="button" hidden>Sastanci</button>
           <button class="nav-item" id="leaderReportsNav" data-employee-tab="employeeReportsTab" type="button" hidden>Izveštaji</button>
         </nav>
       </aside>
@@ -297,13 +298,38 @@
                 <h3>Odmori i bolovanja</h3>
                 <div class="setup-list" id="leaderTeamAbsenceList"></div>
               </section>
-              <section>
-                <h3>1:1 beleške</h3>
-                <div class="setup-list" id="leaderOneOnOneList"></div>
-              </section>
             </div>
           </section>
 
+        </section>
+
+        <section class="client-tab" id="employeeMeetingsTab">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Lider pregled</p>
+                <h2>1:1 sastanci</h2>
+              </div>
+              <span id="leaderMeetingsUpdated">podaci uživo</span>
+            </div>
+            <p class="muted">Pregled beleški sa 1:1 sastanaka zaposlenih koji su ispod tebe.</p>
+            <div class="leader-activity-filter">
+              <label>Zaposleni
+                <select id="leaderMeetingEmployee"><option value="">Svi zaposleni ispod mene</option></select>
+              </label>
+              <label>Datum sastanka
+                <input id="leaderMeetingDate" type="date" />
+              </label>
+              <button id="leaderMeetingReset" class="secondary-button" type="button">Svi sastanci</button>
+              <strong id="leaderMeetingSummary">0 sastanaka</strong>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div><p class="eyebrow">Istorija razgovora</p><h2 id="leaderMeetingTitle">Svi 1:1 sastanci</h2></div>
+            </div>
+            <div class="setup-list" id="leaderMeetingList"></div>
+          </section>
         </section>
 
         <section class="client-tab" id="employeeReportsTab">
@@ -495,7 +521,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=10"></script>
-    <script src="employee-portal.js?v=89"></script>
+    <script src="employee-portal.js?v=90"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

@@ -1110,6 +1110,7 @@ function renderEmployeePortal() {
   renderPortalLateRecords();
   renderPortalCompanyPlan();
   renderLeaderPanel();
+  renderLeaderMeetingsPage();
   renderLeaderReportsPage();
   showEmployeeNotificationPopups();
   window.refreshDailyMinuteProgress?.();
@@ -1620,23 +1621,6 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema odsustava u ovom mesecu.</div>`;
 
-  const oneOnOnes = (state.employeeOneOnOnes || [])
-    .filter((note) => teamIds.has(note.employeeId) && note.visibleToEmployee !== false)
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 8);
-  document.getElementById("leaderOneOnOneList").innerHTML = oneOnOnes.length
-    ? oneOnOnes
-        .map((note) => {
-          const employee = (state.employees || []).find((item) => item.id === note.employeeId);
-          return `
-          <div class="setup-item activity-log-row">
-            <strong>${formatDate(note.date).slice(0, 5)}</strong>
-            <span>${employee?.name || "Zaposleni"} · ${note.title || "1:1"}<br />${note.note || ""}</span>
-          </div>`;
-        })
-        .join("")
-    : `<div class="empty-state">Nema 1:1 beleški za tim.</div>`;
-
 }
 
 function leaderReportPeople() {
@@ -1646,6 +1630,66 @@ function leaderReportPeople() {
     || activeName.includes("miljan") || activeName.includes("ivana");
   if (isOwnerLeader) return (state.employees || []).filter((employee) => employee.id !== activeEmployee.id && employee.status !== "Neaktivan");
   return (state.employees || []).filter((employee) => employee.leaderId === activeEmployee.id && employee.status !== "Neaktivan");
+}
+
+function renderLeaderMeetingsPage() {
+  const nav = document.getElementById("leaderMeetingsNav");
+  const page = document.getElementById("employeeMeetingsTab");
+  if (nav) nav.hidden = !activeEmployee?.isLeader;
+  if (!page || !activeEmployee?.isLeader) {
+    if (page?.classList.contains("active")) {
+      page.classList.remove("active");
+      document.getElementById("employeeDashboard")?.classList.add("active");
+      document.querySelectorAll("[data-employee-tab]").forEach((item) => item.classList.toggle("active", item.dataset.employeeTab === "employeeDashboard"));
+      setText("employeePageTitle", "Dashboard");
+    }
+    return;
+  }
+
+  const people = leaderReportPeople();
+  const peopleIds = new Set(people.map((employee) => employee.id));
+  const employeeInput = document.getElementById("leaderMeetingEmployee");
+  const previousEmployee = employeeInput?.value || "";
+  if (employeeInput) {
+    employeeInput.innerHTML = `<option value="">Svi zaposleni ispod mene</option>${people.map((employee) => `<option value="${employee.id}">${escapePortalText(employee.name)}</option>`).join("")}`;
+    if (peopleIds.has(previousEmployee)) employeeInput.value = previousEmployee;
+  }
+  const selectedEmployee = employeeInput?.value || "";
+  const selectedDate = document.getElementById("leaderMeetingDate")?.value || "";
+  const meetings = (state.employeeOneOnOnes || [])
+    .filter((note) => peopleIds.has(note.employeeId))
+    .filter((note) => !selectedEmployee || note.employeeId === selectedEmployee)
+    .filter((note) => !selectedDate || note.date === selectedDate)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  setText("leaderMeetingSummary", `${meetings.length} ${meetings.length === 1 ? "sastanak" : "sastanaka"}`);
+  setText("leaderMeetingTitle", selectedDate ? `1:1 sastanci · ${formatDate(selectedDate)}` : "Svi 1:1 sastanci");
+  setText("leaderMeetingsUpdated", `osveženo ${new Intl.DateTimeFormat("sr-RS", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`);
+  const target = document.getElementById("leaderMeetingList");
+  if (!target) return;
+  target.innerHTML = meetings.length
+    ? meetings.map((note) => {
+        const employee = (state.employees || []).find((item) => item.id === note.employeeId);
+        return `<details class="history-record leader-meeting-record">
+          <summary><strong>${escapePortalText(employee?.name || "Zaposleni")} · ${escapePortalText(note.title || "1:1 sastanak")}</strong><span>${formatDate(note.date)}</span></summary>
+          <p>${escapePortalText(note.note || "Bez beleške").replace(/\n/g, "<br />")}</p>
+        </details>`;
+      }).join("")
+    : `<div class="empty-state">Nema 1:1 sastanaka za izabrane filtere.</div>`;
+}
+
+async function refreshLeaderMeetingsFromRemote() {
+  if (!activeEmployee?.isLeader || !window.MarketizoRemote?.load) return;
+  setText("leaderMeetingsUpdated", "osvežavanje...");
+  try {
+    const result = await window.MarketizoRemote.load();
+    if (result?.payload) {
+      const activeId = activeEmployee.id;
+      state = loadState(result.payload);
+      activeEmployee = (state.employees || []).find((employee) => employee.id === activeId) || activeEmployee;
+    }
+  } finally {
+    renderLeaderMeetingsPage();
+  }
 }
 
 function renderLeaderReportsPage() {
@@ -2220,6 +2264,16 @@ document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", (
 document.getElementById("leaderLiveReportEmployee")?.addEventListener("change", renderLeaderReportsPage);
 document.getElementById("leaderLiveReportDate")?.addEventListener("change", renderLeaderReportsPage);
 document.getElementById("leaderReportsNav")?.addEventListener("click", refreshLeaderReportsFromRemote);
+document.getElementById("leaderMeetingEmployee")?.addEventListener("change", renderLeaderMeetingsPage);
+document.getElementById("leaderMeetingDate")?.addEventListener("change", renderLeaderMeetingsPage);
+document.getElementById("leaderMeetingReset")?.addEventListener("click", () => {
+  const employeeInput = document.getElementById("leaderMeetingEmployee");
+  const dateInput = document.getElementById("leaderMeetingDate");
+  if (employeeInput) employeeInput.value = "";
+  if (dateInput) dateInput.value = "";
+  renderLeaderMeetingsPage();
+});
+document.getElementById("leaderMeetingsNav")?.addEventListener("click", refreshLeaderMeetingsFromRemote);
 document.getElementById("leaderLiveReportToday")?.addEventListener("click", () => {
   const dateInput = document.getElementById("leaderLiveReportDate");
   if (dateInput) dateInput.value = currentDateKey();
