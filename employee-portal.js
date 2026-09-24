@@ -1715,6 +1715,21 @@ function renderLeaderReportsPage() {
   });
 }
 
+async function refreshLeaderReportsFromRemote() {
+  if (!activeEmployee?.isLeader || !window.MarketizoRemote?.load) return;
+  setText("leaderLiveReportUpdated", "osvežavanje...");
+  try {
+    const result = await window.MarketizoRemote.load();
+    if (result?.payload) {
+      const activeId = activeEmployee.id;
+      state = loadState(result.payload);
+      activeEmployee = (state.employees || []).find((employee) => employee.id === activeId) || activeEmployee;
+    }
+  } finally {
+    renderLeaderReportsPage();
+  }
+}
+
 function renderLeaderReportInbox(reports) {
   const dialog = document.getElementById("leaderReportsDialog");
   const list = document.getElementById("leaderUnreadReportList");
@@ -2204,6 +2219,7 @@ document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", (
 
 document.getElementById("leaderLiveReportEmployee")?.addEventListener("change", renderLeaderReportsPage);
 document.getElementById("leaderLiveReportDate")?.addEventListener("change", renderLeaderReportsPage);
+document.getElementById("leaderReportsNav")?.addEventListener("click", refreshLeaderReportsFromRemote);
 document.getElementById("leaderLiveReportToday")?.addEventListener("click", () => {
   const dateInput = document.getElementById("leaderLiveReportDate");
   if (dateInput) dateInput.value = currentDateKey();
