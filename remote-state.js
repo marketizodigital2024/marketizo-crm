@@ -11,6 +11,7 @@
   let lastServerPayload = null;
   let pollTimer = null;
   let pollCallback = null;
+  let pollInFlight = false;
   let deferredRemoteState = null;
   const stateChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("marketizo-crm-state-v1") : null;
 
@@ -98,8 +99,10 @@
       online = false;
       return { configured, online, payload: null, localOnly: true };
     }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
     try {
-      const response = await fetch(`/api/state?ts=${Date.now()}`, { cache: "no-store" });
+      const response = await fetch(`/api/state?ts=${Date.now()}`, { cache: "no-store", signal: controller.signal });
       const data = await response.json().catch(() => ({}));
       configured = Boolean(data.configured);
       online = configured && response.ok && !data.error;
@@ -116,6 +119,8 @@
       online = false;
       lastError = error?.message || "Online baza nije dostupna.";
       return { configured, online, payload: null, error: lastError };
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
@@ -182,18 +187,23 @@
     return result;
   }
 
-  function startPolling(onPayload, interval = 5000) {
+  function startPolling(onPayload, interval = 60000) {
     window.clearInterval(pollTimer);
     if (typeof onPayload !== "function" || isLocalFile()) return;
     pollCallback = onPayload;
     pollTimer = window.setInterval(async () => {
-      if (saveInFlight || pendingPayload || document.hidden || userIsEditing()) return;
+      if (pollInFlight || saveInFlight || pendingPayload || document.hidden || userIsEditing()) return;
+      pollInFlight = true;
       const previousUpdatedAt = lastUpdatedAt;
-      const result = await load({ writeLocal: false });
-      if (result.payload && result.updatedAt && result.updatedAt !== previousUpdatedAt) {
-        queueOrApplyRemoteState(result.payload, result.updatedAt);
+      try {
+        const result = await load({ writeLocal: false });
+        if (result.payload && result.updatedAt && result.updatedAt !== previousUpdatedAt) {
+          queueOrApplyRemoteState(result.payload, result.updatedAt);
+        }
+      } finally {
+        pollInFlight = false;
       }
-    }, Math.max(1000, Math.min(2000, Number(interval) || 1500)));
+    }, Math.max(30000, Math.min(300000, Number(interval) || 60000)));
   }
 
   stateChannel?.addEventListener("message", (event) => {
