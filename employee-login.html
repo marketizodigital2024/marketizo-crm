@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=86" />
+    <link rel="stylesheet" href="styles.css?v=87" />
     <style>html.employee-session-cached #employeeLoginScreen { display: none !important; }</style>
     <script>
       try {
@@ -68,6 +68,7 @@
           <button class="nav-item" data-employee-tab="employeeHours" type="button">Vreme</button>
           <button class="nav-item" data-employee-tab="employeeVacations" type="button">Odsustva</button>
           <button class="nav-item" data-employee-tab="employeeCalendarTab" type="button">Kalendar</button>
+          <button class="nav-item" id="leaderReportsNav" data-employee-tab="employeeReportsTab" type="button" hidden>Izveštaji</button>
         </nav>
       </aside>
 
@@ -300,24 +301,39 @@
                 <h3>1:1 beleške</h3>
                 <div class="setup-list" id="leaderOneOnOneList"></div>
               </section>
-              <section class="span-2">
-                <h3>Izveštaji tima</h3>
-                <p class="muted">Automatski dnevni presek stiže u 17:30. Mesec se bira gore, a ovde osoba i dan.</p>
-                <div class="leader-activity-filter">
-                  <label>Zaposleni
-                    <select id="leaderReportEmployeeFilter"><option value="">Svi dostupni izveštaji</option></select>
-                  </label>
-                  <label>Dan u izabranom mesecu
-                    <input id="leaderReportDateFilter" type="date" />
-                  </label>
-                  <button id="leaderReportFilterReset" class="secondary-button" type="button">Ceo mesec</button>
-                  <strong id="leaderReportSummary">0 izveštaja</strong>
-                </div>
-                <div class="setup-list" id="leaderReportList"></div>
-              </section>
             </div>
           </section>
 
+        </section>
+
+        <section class="client-tab" id="employeeReportsTab">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Lider pregled</p>
+                <h2>Izveštaji zaposlenih</h2>
+              </div>
+              <span id="leaderLiveReportUpdated">podaci uživo</span>
+            </div>
+            <p class="muted">Izaberi datum i zaposlenog. Prikazuju se sve aktivnosti koje je zaposleni do tog trenutka sačuvao.</p>
+            <div class="leader-activity-filter">
+              <label>Datum
+                <input id="leaderLiveReportDate" type="date" />
+              </label>
+              <label>Zaposleni
+                <select id="leaderLiveReportEmployee"><option value="">Svi zaposleni ispod mene</option></select>
+              </label>
+              <button id="leaderLiveReportToday" class="secondary-button" type="button">Danas</button>
+              <strong id="leaderLiveReportSummary">0 aktivnosti</strong>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div><p class="eyebrow">Dnevni pregled</p><h2 id="leaderLiveReportTitle">Aktivnosti tima</h2></div>
+              <span id="leaderLiveReportMinutes">0 min</span>
+            </div>
+            <div class="setup-list" id="leaderLiveReportList"></div>
+          </section>
         </section>
 
         <section class="client-tab" id="employeeCalendarTab">
@@ -479,7 +495,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=10"></script>
-    <script src="employee-portal.js?v=87"></script>
+    <script src="employee-portal.js?v=88"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

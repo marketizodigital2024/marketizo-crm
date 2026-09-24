@@ -1110,6 +1110,7 @@ function renderEmployeePortal() {
   renderPortalLateRecords();
   renderPortalCompanyPlan();
   renderLeaderPanel();
+  renderLeaderReportsPage();
   showEmployeeNotificationPopups();
   window.refreshDailyMinuteProgress?.();
 }
@@ -1554,9 +1555,6 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema zaposlenih ispod ovog lidera.</div>`;
   const teamIds = new Set(team.map((employee) => employee.id));
-  const activeName = String(activeEmployee.name || "").trim().toLowerCase();
-  const isOwnerLeader = activeEmployee.id === "emp-miljan" || activeEmployee.id === "emp-ivana"
-    || activeName.includes("miljan") || activeName.includes("ivana");
   const leaderGoalEmployee = document.getElementById("leaderGoalEmployee");
   if (leaderGoalEmployee) {
     const selectedEmployeeId = leaderGoalEmployee.value;
@@ -1639,42 +1637,78 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema 1:1 beleški za tim.</div>`;
 
-  const reportPeople = (state.employees || []).filter((employee) =>
-    isOwnerLeader ? employee.id !== activeEmployee.id : teamIds.has(employee.id)
-  );
-  const reportPeopleIds = new Set(reportPeople.map((employee) => employee.id));
-  const reportEmployeeFilter = document.getElementById("leaderReportEmployeeFilter");
-  const selectedReportEmployee = reportEmployeeFilter?.value || "";
-  if (reportEmployeeFilter) {
-    reportEmployeeFilter.innerHTML = `<option value="">Svi dostupni izveštaji</option>${reportPeople.map((employee) => `<option value="${employee.id}">${escapePortalText(employee.name)}</option>`).join("")}`;
-    if (reportPeopleIds.has(selectedReportEmployee)) reportEmployeeFilter.value = selectedReportEmployee;
+}
+
+function leaderReportPeople() {
+  if (!activeEmployee?.isLeader) return [];
+  const activeName = String(activeEmployee.name || "").trim().toLowerCase();
+  const isOwnerLeader = activeEmployee.id === "emp-miljan" || activeEmployee.id === "emp-ivana"
+    || activeName.includes("miljan") || activeName.includes("ivana");
+  if (isOwnerLeader) return (state.employees || []).filter((employee) => employee.id !== activeEmployee.id && employee.status !== "Neaktivan");
+  return (state.employees || []).filter((employee) => employee.leaderId === activeEmployee.id && employee.status !== "Neaktivan");
+}
+
+function renderLeaderReportsPage() {
+  const nav = document.getElementById("leaderReportsNav");
+  const page = document.getElementById("employeeReportsTab");
+  if (nav) nav.hidden = !activeEmployee?.isLeader;
+  if (!page || !activeEmployee?.isLeader) {
+    if (page?.classList.contains("active")) {
+      page.classList.remove("active");
+      document.getElementById("employeeDashboard")?.classList.add("active");
+      document.querySelectorAll("[data-employee-tab]").forEach((item) => item.classList.toggle("active", item.dataset.employeeTab === "employeeDashboard"));
+      setText("employeePageTitle", "Dashboard");
+    }
+    return;
   }
-  const reportDateFilter = document.getElementById("leaderReportDateFilter");
-  if (reportDateFilter?.value && !reportDateFilter.value.startsWith(portalMonth)) reportDateFilter.value = "";
-  const selectedReportDate = reportDateFilter?.value || "";
-  const reports = (state.employeeReports || [])
-    .filter((report) => report.isFinalDailyReport === true && String(report.date || "").startsWith(portalMonth))
-    .filter((report) => reportPeopleIds.has(report.employeeId) || report.recipientId === activeEmployee.id)
-    .filter((report) => !selectedReportEmployee || report.employeeId === selectedReportEmployee)
-    .filter((report) => !selectedReportDate || report.date === selectedReportDate)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-  setText("leaderReportSummary", `${reports.length} ${reports.length === 1 ? "izveštaj" : "izveštaja"}`);
-  document.getElementById("leaderReportList").innerHTML = reports.length
-    ? reports
-        .map((report) => {
-          const employee = (state.employees || []).find((item) => item.id === report.employeeId);
-          const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
-          const expected = expectedMinutesForDate(employee, report.date);
+
+  const people = leaderReportPeople();
+  const peopleIds = new Set(people.map((employee) => employee.id));
+  const dateInput = document.getElementById("leaderLiveReportDate");
+  const employeeInput = document.getElementById("leaderLiveReportEmployee");
+  if (dateInput && !dateInput.value) dateInput.value = currentDateKey();
+  const selectedDate = dateInput?.value || currentDateKey();
+  const previousEmployee = employeeInput?.value || "";
+  if (employeeInput) {
+    employeeInput.innerHTML = `<option value="">Svi zaposleni ispod mene</option>${people.map((employee) => `<option value="${employee.id}">${escapePortalText(employee.name)}</option>`).join("")}`;
+    if (peopleIds.has(previousEmployee)) employeeInput.value = previousEmployee;
+  }
+  const selectedEmployee = employeeInput?.value || "";
+  const visiblePeople = selectedEmployee ? people.filter((employee) => employee.id === selectedEmployee) : people;
+  const visibleIds = new Set(visiblePeople.map((employee) => employee.id));
+  const logs = (state.employeeWorkLogs || [])
+    .filter((log) => visibleIds.has(log.employeeId) && log.date === selectedDate)
+    .sort((a, b) => String(a.createdAt || a.id || "").localeCompare(String(b.createdAt || b.id || "")));
+  const totalMinutes = logs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+  setText("leaderLiveReportSummary", `${logs.length} ${logs.length === 1 ? "aktivnost" : "aktivnosti"}`);
+  setText("leaderLiveReportMinutes", `${formatNumber(totalMinutes)} min`);
+  setText("leaderLiveReportTitle", `${formatDate(selectedDate)} · ${selectedEmployee ? visiblePeople[0]?.name || "Zaposleni" : "ceo tim"}`);
+  setText("leaderLiveReportUpdated", `osveženo ${new Intl.DateTimeFormat("sr-RS", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`);
+
+  const target = document.getElementById("leaderLiveReportList");
+  if (target) {
+    target.innerHTML = logs.length
+      ? visiblePeople.map((employee) => {
+          const employeeLogs = logs.filter((log) => log.employeeId === employee.id);
+          if (!employeeLogs.length) return "";
+          const minutes = employeeLogs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+          const expected = expectedMinutesForDate(employee, selectedDate);
           const missing = Math.max(0, expected - minutes);
-          return `
-          <div class="setup-item leader-report-card">
-            <strong>${formatNumber(minutes)} min</strong>
-            <span><b>${employee?.name || "Zaposleni"} · ${formatDate(report.date)}</b><br />Upisano ${minutes} od ${expected || 0} min${missing ? ` · nedostaje ${missing} min` : " · kvota ispunjena"}<br />${report.note || "Bez rezimea"}<br />+ ${report.positive || "-"}<br />- ${report.negative || "-"}<br />${report.acknowledgedAt ? `<small>✓ Pročitano ${formatDateTime(report.acknowledgedAt)}</small>` : `<button class="secondary-button leader-report-ack" data-report-id="${report.id}" type="button">Potvrđujem da sam pročitao</button>`}</span>
+          return `<div class="leader-report-day">
+            <div class="panel-head"><div><h3>${escapePortalText(employee.name || "Zaposleni")}</h3><p class="muted">Upisano ${formatNumber(minutes)} od ${formatNumber(expected)} min${missing ? ` · nedostaje ${formatNumber(missing)} min` : " · dnevni fond ispunjen"}</p></div><strong>${formatHours(minutes / 60)}h</strong></div>
+            ${employeeLogs.map((log) => {
+              const logMinutes = Number(log.minutes || Number(log.hours || 0) * 60);
+              return `<div class="setup-item activity-log-row"><strong>${formatNumber(logMinutes)} min</strong><span><b>${escapePortalText(log.activityName || "Aktivnost")}</b><br />Klijent: ${escapePortalText(log.clientName || "Bez klijenta")}${log.note ? `<br />${escapePortalText(log.note)}` : ""}</span></div>`;
+            }).join("")}
           </div>`;
-        })
-        .join("")
-    : `<div class="empty-state">Nema izveštaja za tim.</div>`;
-  const unreadReports = reports.filter((report) => !report.acknowledgedAt);
+        }).join("")
+      : `<div class="empty-state">Za izabrani datum zaposleni još nema sačuvane aktivnosti.</div>`;
+  }
+
+  const unreadReports = (state.employeeReports || [])
+    .filter((report) => report.isFinalDailyReport === true && peopleIds.has(report.employeeId) && !report.acknowledgedAt)
+    .filter((report) => String(report.date || "") < currentDateKey())
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   renderLeaderReportInbox(unreadReports);
   document.querySelectorAll(".leader-report-ack").forEach((button) => {
     button.addEventListener("click", () => acknowledgeLeaderReport(button.dataset.reportId, button));
@@ -1687,7 +1721,8 @@ function renderLeaderReportInbox(reports) {
   if (!dialog || !list) return;
   list.innerHTML = reports.map((report) => {
     const employee = (state.employees || []).find((item) => item.id === report.employeeId);
-    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${employee?.name || "Zaposleni"}</b><br />${report.note || "Bez rezimea"}<br />+ ${report.positive || "-"}<br />- ${report.negative || "-"}<br /><button class="primary-button leader-report-ack" data-report-id="${report.id}" type="button">Potvrđujem da sam pročitao</button></span></div>`;
+    const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
+    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}<br /><button class="primary-button leader-report-ack" data-report-id="${report.id}" type="button">Pročitao/la sam i slažem se</button></span></div>`;
   }).join("");
   if (reports.length && !leaderReportInboxShown) {
     leaderReportInboxShown = true;
@@ -1713,7 +1748,7 @@ async function acknowledgeLeaderReport(reportId, button) {
   }
   if (!result.ok) {
     button.disabled = false;
-    button.textContent = "Potvrđujem da sam pročitao";
+    button.textContent = "Pročitao/la sam i slažem se";
     showToast("Nije potvrđeno", result.error || "Pokušaj ponovo.", "danger");
     return;
   }
@@ -2167,14 +2202,12 @@ document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", (
   document.getElementById("leaderReportsDialog")?.close();
 });
 
-document.getElementById("leaderReportEmployeeFilter")?.addEventListener("change", renderLeaderPanel);
-document.getElementById("leaderReportDateFilter")?.addEventListener("change", renderLeaderPanel);
-document.getElementById("leaderReportFilterReset")?.addEventListener("click", () => {
-  const employeeFilter = document.getElementById("leaderReportEmployeeFilter");
-  const dateFilter = document.getElementById("leaderReportDateFilter");
-  if (employeeFilter) employeeFilter.value = "";
-  if (dateFilter) dateFilter.value = "";
-  renderLeaderPanel();
+document.getElementById("leaderLiveReportEmployee")?.addEventListener("change", renderLeaderReportsPage);
+document.getElementById("leaderLiveReportDate")?.addEventListener("change", renderLeaderReportsPage);
+document.getElementById("leaderLiveReportToday")?.addEventListener("click", () => {
+  const dateInput = document.getElementById("leaderLiveReportDate");
+  if (dateInput) dateInput.value = currentDateKey();
+  renderLeaderReportsPage();
 });
 
 window.addEventListener("beforeinstallprompt", (event) => {
