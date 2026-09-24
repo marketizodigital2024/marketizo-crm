@@ -901,7 +901,7 @@ function setupDailyMinuteProgress() {
   form.dataset.dailyProgressReady = "true";
   const progress = document.createElement("section");
   progress.className = "daily-minute-progress";
-  progress.innerHTML = `<div><span>Današnji učinak</span><strong id="dailyMinuteStatus">0 min</strong></div><div class="daily-minute-track"><span id="dailyMinuteBar"></span></div><p id="dailyMinuteMessage"></p><button id="dailyReportPromptButton" class="secondary-button" type="button" hidden>Popuni izveštaj za lidera</button>`;
+  progress.innerHTML = `<div><span id="dailyMinuteTitle">Učinak za izabrani dan</span><strong id="dailyMinuteStatus">0 min</strong></div><div class="daily-minute-track"><span id="dailyMinuteBar"></span></div><p id="dailyMinuteMessage"></p><button id="dailyReportPromptButton" class="secondary-button" type="button" hidden>Popuni izveštaj za lidera</button>`;
   form.insertAdjacentElement("afterbegin", progress);
   const reportButton = progress.querySelector("#dailyReportPromptButton");
   reportButton.addEventListener("click", () => openDailyReportDialog(dateInput.value || currentDateKey()));
@@ -910,10 +910,14 @@ function setupDailyMinuteProgress() {
     const logged = loggedMinutesForDate(date);
     const expected = expectedMinutesForDate(activeEmployee, date);
     const remaining = Math.max(0, expected - logged);
+    const title = progress.querySelector("#dailyMinuteTitle");
     const status = progress.querySelector("#dailyMinuteStatus");
     const bar = progress.querySelector("#dailyMinuteBar");
     const message = progress.querySelector("#dailyMinuteMessage");
     reportButton.hidden = !expected || logged < expected || hasFinalDailyReport(date);
+    title.textContent = date === currentDateKey()
+      ? `Danas · ${formatDate(date)}`
+      : `Izabrani dan · ${formatDate(date)}`;
     if (!expected) {
       status.textContent = `${logged} min upisano`;
       bar.style.width = logged ? "100%" : "0%";
@@ -1125,7 +1129,7 @@ function renderMissingTimeAlert() {
   alertBox.hidden = !missing;
   if (!missing) return;
   alertBox.innerHTML = `
-    <strong>Nedostaju aktivnosti ili minuti</strong>
+    <strong>Prethodni radni dan · ${formatDate(previousDay)}</strong>
     <span>Za ${formatDate(previousDay)} upisano je ${logged} od očekivanih ${expected} min. Nedostaje ${missingMinutes} min.</span>`;
 }
 
