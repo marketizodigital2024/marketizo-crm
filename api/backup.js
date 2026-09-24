@@ -115,13 +115,23 @@ async function writeIndependentBackup(source, date, now, kpiSource = null) {
     || JSON.stringify(verified.kpi || null) !== JSON.stringify(document.kpi)) {
     throw new Error("Vercel Blob backup nije prošao proveru integriteta.");
   }
-  const inventory = await listBlobBackups();
-  const obsolete = inventory.blobs.slice(30);
-  if (obsolete.length) await blob.del(obsolete.map((item) => item.url));
+  let retained = null;
+  let retentionWarning = "";
+  try {
+    const inventory = await listBlobBackups();
+    const obsolete = inventory.blobs.slice(30);
+    if (obsolete.length) await blob.del(obsolete.map((item) => item.url));
+    retained = Math.min(inventory.blobs.length, 30);
+  } catch (error) {
+    // The uploaded file was already read back and verified above. Inventory
+    // cleanup is useful, but it must not invalidate a confirmed backup.
+    retentionWarning = error?.message || "Backup retention cleanup failed";
+  }
   return {
     pathname: uploaded.pathname,
     size: Buffer.byteLength(body),
-    retained: Math.min(inventory.blobs.length, 30),
+    retained,
+    retentionWarning: retentionWarning || undefined,
     verified: true,
     counts: verifiedCounts,
   };
@@ -136,22 +146,32 @@ module.exports = async function handler(req, res) {
 
   if (String(req.query?.inspect || "") === "1") {
     try {
+      const independent = await listBlobBackups();
+      let rows = [];
+      let recentById = new Map();
+      let databaseWarning = "";
       // Do not download every multi-megabyte backup payload just to list them.
       // That response grows on every run and can make PostgREST return 500.
       const response = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,updated_at,backupDate:payload->>backupDate,sourceUpdatedAt:payload->>sourceUpdatedAt,counts:payload->counts,firstWorkLogDate:payload->>firstWorkLogDate,lastWorkLogDate:payload->>lastWorkLogDate,septemberWorkLogs:payload->septemberWorkLogs,septemberDates:payload->septemberDates&order=updated_at.desc`, {
         headers: headers(key),
       });
-      if (!response.ok) throw new Error(`Backup list failed (${response.status})`);
-      const rows = await response.json();
-      const recentResponse = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,payload,updated_at&order=updated_at.desc&limit=3`, {
-        headers: headers(key),
-      });
-      if (!recentResponse.ok) throw new Error(`Recent backup check failed (${recentResponse.status})`);
-      const recentRows = await recentResponse.json();
-      const recentById = new Map(recentRows.map((row) => [row.id, row]));
-      const independent = await listBlobBackups();
+      if (response.ok) {
+        rows = await response.json();
+        const recentResponse = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,payload,updated_at&order=updated_at.desc&limit=3`, {
+          headers: headers(key),
+        });
+        if (recentResponse.ok) {
+          const recentRows = await recentResponse.json();
+          recentById = new Map(recentRows.map((row) => [row.id, row]));
+        } else {
+          databaseWarning = `Recent backup check failed (${recentResponse.status})`;
+        }
+      } else {
+        databaseWarning = `Backup list failed (${response.status})`;
+      }
       return send(res, 200, {
         ok: true,
+        databaseWarning: databaseWarning || undefined,
         independent: {
           configured: independent.configured,
           count: independent.blobs.length,
@@ -205,6 +225,10 @@ module.exports = async function handler(req, res) {
     const backupId = `backup-daily-${dayNumber % BACKUP_SLOTS}`;
     const workLogs = Array.isArray(source.payload.employeeWorkLogs) ? source.payload.employeeWorkLogs : [];
     const workLogDates = workLogs.map((log) => String(log.date || "")).filter(Boolean).sort();
+    // Create and verify the independent copy first. The rotating database copy
+    // is secondary and must not prevent a recoverable backup from being made.
+    const independent = await writeIndependentBackup(source, date, now, kpiSource);
+
     const backupResponse = await fetch(`${url}/rest/v1/${TABLE}?on_conflict=id`, {
       method: "POST",
       headers: headers(key, "resolution=merge-duplicates,return=minimal"),
@@ -224,9 +248,7 @@ module.exports = async function handler(req, res) {
         updated_at: now.toISOString(),
       }),
     });
-    if (!backupResponse.ok) throw new Error(`Backup write failed (${backupResponse.status})`);
-
-    const independent = await writeIndependentBackup(source, date, now, kpiSource);
+    const databaseWarning = backupResponse.ok ? "" : `Backup write failed (${backupResponse.status})`;
 
     return send(res, 200, {
       ok: true,
@@ -236,6 +258,7 @@ module.exports = async function handler(req, res) {
       clients: Array.isArray(source.payload.clients) ? source.payload.clients.length : 0,
       workLogs: Array.isArray(source.payload.employeeWorkLogs) ? source.payload.employeeWorkLogs.length : 0,
       independent,
+      databaseWarning: databaseWarning || undefined,
     });
   } catch (error) {
     return send(res, 500, { error: error?.message || "Backup failed" });

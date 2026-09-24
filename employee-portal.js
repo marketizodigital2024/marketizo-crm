@@ -108,14 +108,25 @@ function setEmployeeSession(employee, token, expiresAt) {
   }
 }
 
+async function fetchEmployeeAuth(payload, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch("/api/employee-auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 async function restoreEmployeeSession() {
   const session = getEmployeeSession();
   if (!session?.token) return false;
-  const validate = () => fetch("/api/employee-auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "validate", token: session.token }),
-    }).catch(() => null);
+  const validate = () => fetchEmployeeAuth({ action: "validate", token: session.token }).catch(() => null);
   let response = await validate();
   if (!response || response.status >= 500) {
     await new Promise((resolve) => window.setTimeout(resolve, 1200));
@@ -1706,11 +1717,7 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
   let response;
   let result = {};
   try {
-    response = await fetch("/api/employee-auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "login", email, password }),
-    });
+    response = await fetchEmployeeAuth({ action: "login", email, password });
     result = await response.json().catch(() => ({}));
     if (response.ok && result.employee) {
       activeEmployee = state.employees.find((employee) =>
@@ -1723,12 +1730,17 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
         );
       }
     }
-  } catch {
-    result = { error: "Veza sa bazom trenutno nije dostupna. Proveri internet i pokušaj ponovo." };
-  }
-  if (submitButton) {
-    submitButton.disabled = false;
-    submitButton.textContent = "Uloguj se";
+  } catch (error) {
+    result = {
+      error: error?.name === "AbortError"
+        ? "Prijava traje predugo. Pokušaj ponovo za nekoliko sekundi."
+        : "Veza sa bazom trenutno nije dostupna. Proveri internet i pokušaj ponovo.",
+    };
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Uloguj se";
+    }
   }
   if (!activeEmployee || !result.token) {
     if (errorMessage) {
