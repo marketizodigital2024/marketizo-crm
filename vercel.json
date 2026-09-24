@@ -12,7 +12,7 @@
   "crons": [
     { "path": "/api/backup", "schedule": "40 15 * * *" },
     { "path": "/api/backup", "schedule": "40 16 * * *" },
-    { "path": "/api/daily-report-rollup?dryRun=1", "schedule": "30 15 * * *" },
+    { "path": "/api/daily-report-rollup", "schedule": "30 15 * * *" },
     { "path": "/api/daily-report-rollup", "schedule": "30 16 * * *" }
   ]
 }
