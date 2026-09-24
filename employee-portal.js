@@ -1972,44 +1972,46 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     submittedAt: new Date().toISOString(),
   };
   const recipientId = reportRecipientId();
-  let saveResult = { ok: false, retryable: true, error: "Online čuvanje nije uspelo." };
   try {
     queuePendingWorkLog(workLog, recipientId);
-    saveResult = await postEmployeeWorkLog(workLog, recipientId);
   } catch (error) {
-    saveResult = { ok: false, retryable: false, error: error?.message || "Lokalno čuvanje nije uspelo." };
-  }
-  if (submitButton) {
-    submitButton.disabled = false;
-    submitButton.textContent = "Sačuvaj sate";
-  }
-  if (!saveResult?.ok) {
-    if (saveResult.retryable) {
-      state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
-      state.employeeWorkLogs.unshift(workLog);
-      saveState({ remote: false });
-      renderEmployeePortal();
-      showToast("Sačuvano lokalno", "Unos čeka potvrdu baze i biće automatski sinhronizovan.", "warn");
-      return;
-    }
-    removePendingWorkLog(workLog.id);
     state = previousState;
     activeEmployee = (state.employees || []).find((employee) => employee.id === employeeId) || activeEmployee;
     saveState({ remote: false });
     renderEmployeePortal();
     restorePortalHoursForm(form, submittedFormValues);
-    showToast("Nije sačuvano", saveResult?.error || "Online baza nije potvrdila upis. Pokušaj ponovo.", "danger");
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Sačuvaj sate";
+    }
+    showToast("Nije sačuvano", error?.message || "Uređaj nije potvrdio lokalno čuvanje. Pokušaj ponovo.", "danger");
     return;
   }
-  removePendingWorkLog(workLog.id);
+
   state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
   state.employeeWorkLogs.unshift(workLog);
   saveState({ remote: false });
-  renderPortalHourRows(employeeWorkLogs(portalMonth));
-  renderPortalCalendar();
-  window.refreshDailyMinuteProgress?.();
+  renderEmployeePortal();
   clearPortalHoursForm(form);
-  showToast("Sačuvano", "Sati su sačuvani.", "ok");
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Sačuvaj sate";
+  }
+  showToast("Sačuvano lokalno", "Unos je prikazan odmah i sinhronizuje se sa bazom u pozadini.", "warn");
+
+  const saveResult = await postEmployeeWorkLog(workLog, recipientId);
+  if (!saveResult.ok) {
+    if (saveResult.retryable) return;
+    removePendingWorkLog(workLog.id);
+    state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
+    saveState({ remote: false });
+    renderEmployeePortal();
+    restorePortalHoursForm(form, submittedFormValues);
+    showToast("Unos nije prihvaćen", saveResult.error || "Osveži stranicu i pokušaj ponovo.", "danger");
+    return;
+  }
+  removePendingWorkLog(workLog.id);
+  showToast("Sinhronizovano", "Sati su potvrđeni u centralnoj bazi.", "ok");
   const expectedMinutes = expectedMinutesForDate(activeEmployee, date);
   if (expectedMinutes > 0 && loggedMinutesForDate(date) >= expectedMinutes && !hasFinalDailyReport(date)) {
     window.setTimeout(() => openDailyReportDialog(date), 250);
