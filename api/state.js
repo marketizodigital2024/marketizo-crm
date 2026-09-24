@@ -1,6 +1,7 @@
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
 const BACKUP_SLOTS = 30;
+const employeeAuthTable = "agency_crm_employee_auth";
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -123,6 +124,28 @@ function unsafeCollectionShrink(payload, current) {
   return null;
 }
 
+async function syncEmployeeAuth(config, employees = []) {
+  const rows = employees
+    .filter((employee) => employee?.id && String(employee.email || "").trim())
+    .map((employee) => ({
+      id: employee.id,
+      email: String(employee.email).trim().toLowerCase(),
+      password: String(employee.password || ""),
+      employee_data: employee,
+      updated_at: new Date().toISOString(),
+    }));
+  if (!rows.length) return;
+  const response = await fetch(`${config.url}/rest/v1/${employeeAuthTable}?on_conflict=id`, {
+    method: "POST",
+    headers: {
+      ...supabaseHeaders(config.key),
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!response.ok) throw new Error(`Sinhronizacija prijava nije uspela (${response.status}).`);
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,PUT,POST,OPTIONS");
@@ -208,6 +231,10 @@ module.exports = async function handler(req, res) {
           error: await response.text(),
         });
       }
+      // Login remains fast after an employee/email/password change. The main
+      // state write is already committed, so a temporary auth-sync issue must
+      // not roll it back or make the user repeat the business-data save.
+      await syncEmployeeAuth(config, payload.employees).catch(() => null);
       return json(res, 200, { configured: true, ok: true, updatedAt });
     }
 

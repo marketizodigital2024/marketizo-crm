@@ -4,6 +4,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
+const AUTH_TABLE = "agency_crm_employee_auth";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 function send(res, status, payload) {
@@ -43,6 +44,20 @@ async function readEmployees() {
   return Array.isArray(rows[0]?.employees) ? rows[0].employees : [];
 }
 
+async function readFastEmployees({ email = "", id = "" } = {}) {
+  const filters = [];
+  if (email) filters.push(`email=eq.${encodeURIComponent(email)}`);
+  if (id) filters.push(`id=eq.${encodeURIComponent(id)}`);
+  const query = filters.length ? `&${filters.join("&")}` : "";
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${AUTH_TABLE}?select=employee_data${query}&limit=2`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+  });
+  if (response.status === 404) return [];
+  if (!response.ok) throw new Error(`Employee auth fetch failed (${response.status})`);
+  const rows = await response.json();
+  return rows.map((row) => row.employee_data).filter(Boolean);
+}
+
 function publicEmployee(employee) {
   return { id: employee.id, email: employee.email, name: employee.name };
 }
@@ -53,11 +68,11 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    const employees = await readEmployees();
-
     if (body.action === "login") {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
+      let employees = await readFastEmployees({ email }).catch(() => []);
+      if (!employees.length) employees = await readEmployees();
       const employee = employees.find((item) =>
         item.active !== false && String(item.email || "").trim().toLowerCase() === email &&
         String(item.password || "") === password
@@ -71,6 +86,8 @@ module.exports = async function handler(req, res) {
     if (body.action === "validate") {
       const session = verify(body.token);
       if (!session) return send(res, 401, { error: "Sesija je istekla." });
+      let employees = await readFastEmployees({ id: session.employeeId }).catch(() => []);
+      if (!employees.length) employees = await readEmployees();
       const employee = employees.find((item) =>
         item.active !== false && (item.id === session.employeeId || String(item.email || "").toLowerCase() === session.email)
       );
