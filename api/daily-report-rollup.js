@@ -61,7 +61,7 @@ module.exports = async function handler(req, res) {
   const date = String(req.query?.date || `${parts.year}-${parts.month}-${parts.day}`);
   const dryRun = String(req.query?.dryRun || "") === "1";
   const scheduledInvocation = String(req.headers["user-agent"] || "").includes("vercel-cron");
-  if (scheduledInvocation && `${parts.hour}:${parts.minute}` !== "17:30") {
+  if (scheduledInvocation && !dryRun && `${parts.hour}:${parts.minute}` !== "17:30") {
     return send(res, 200, { ok: true, skipped: true, reason: "Not 17:30 in Vienna", localTime: `${parts.hour}:${parts.minute}` });
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return send(res, 400, { error: "Invalid date" });
