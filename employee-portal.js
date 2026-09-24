@@ -901,7 +901,7 @@ function setupDailyMinuteProgress() {
   form.dataset.dailyProgressReady = "true";
   const progress = document.createElement("section");
   progress.className = "daily-minute-progress";
-  progress.innerHTML = `<div><span id="dailyMinuteTitle">Učinak za izabrani dan</span><strong id="dailyMinuteStatus">0 min</strong></div><div class="daily-minute-track"><span id="dailyMinuteBar"></span></div><p id="dailyMinuteMessage"></p><button id="dailyReportPromptButton" class="secondary-button" type="button" hidden>Popuni izveštaj za lidera</button>`;
+  progress.innerHTML = `<div><span id="dailyMinuteTitle">Učinak za izabrani dan</span><strong id="dailyMinuteStatus">0 min</strong></div><div class="daily-minute-track"><span id="dailyMinuteBar"></span></div><p id="dailyMinuteMessage"></p><button id="dailyReportPromptButton" class="secondary-button" type="button" hidden>Pošalji dnevni izveštaj lideru</button>`;
   form.insertAdjacentElement("afterbegin", progress);
   const reportButton = progress.querySelector("#dailyReportPromptButton");
   reportButton.addEventListener("click", () => openDailyReportDialog(dateInput.value || currentDateKey()));
@@ -914,7 +914,7 @@ function setupDailyMinuteProgress() {
     const status = progress.querySelector("#dailyMinuteStatus");
     const bar = progress.querySelector("#dailyMinuteBar");
     const message = progress.querySelector("#dailyMinuteMessage");
-    reportButton.hidden = !expected || logged < expected || hasFinalDailyReport(date);
+    reportButton.hidden = !expected || logged < 1 || hasFinalDailyReport(date);
     title.textContent = date === currentDateKey()
       ? `Danas · ${formatDate(date)}`
       : `Izabrani dan · ${formatDate(date)}`;
@@ -1554,6 +1554,9 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema zaposlenih ispod ovog lidera.</div>`;
   const teamIds = new Set(team.map((employee) => employee.id));
+  const activeName = String(activeEmployee.name || "").trim().toLowerCase();
+  const isOwnerLeader = activeEmployee.id === "emp-miljan" || activeEmployee.id === "emp-ivana"
+    || activeName.includes("miljan") || activeName.includes("ivana");
   const leaderGoalEmployee = document.getElementById("leaderGoalEmployee");
   if (leaderGoalEmployee) {
     const selectedEmployeeId = leaderGoalEmployee.value;
@@ -1636,19 +1639,37 @@ function renderLeaderPanel() {
         .join("")
     : `<div class="empty-state">Nema 1:1 beleški za tim.</div>`;
 
+  const reportPeople = (state.employees || []).filter((employee) =>
+    isOwnerLeader ? employee.id !== activeEmployee.id : teamIds.has(employee.id)
+  );
+  const reportPeopleIds = new Set(reportPeople.map((employee) => employee.id));
+  const reportEmployeeFilter = document.getElementById("leaderReportEmployeeFilter");
+  const selectedReportEmployee = reportEmployeeFilter?.value || "";
+  if (reportEmployeeFilter) {
+    reportEmployeeFilter.innerHTML = `<option value="">Svi dostupni izveštaji</option>${reportPeople.map((employee) => `<option value="${employee.id}">${escapePortalText(employee.name)}</option>`).join("")}`;
+    if (reportPeopleIds.has(selectedReportEmployee)) reportEmployeeFilter.value = selectedReportEmployee;
+  }
+  const reportDateFilter = document.getElementById("leaderReportDateFilter");
+  if (reportDateFilter?.value && !reportDateFilter.value.startsWith(portalMonth)) reportDateFilter.value = "";
+  const selectedReportDate = reportDateFilter?.value || "";
   const reports = (state.employeeReports || [])
-    .filter((report) => report.isFinalDailyReport === true && String(report.date || "").startsWith(portalMonth) && (teamIds.has(report.employeeId) || report.recipientId === activeEmployee.id))
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 8);
+    .filter((report) => report.isFinalDailyReport === true && String(report.date || "").startsWith(portalMonth))
+    .filter((report) => reportPeopleIds.has(report.employeeId) || report.recipientId === activeEmployee.id)
+    .filter((report) => !selectedReportEmployee || report.employeeId === selectedReportEmployee)
+    .filter((report) => !selectedReportDate || report.date === selectedReportDate)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  setText("leaderReportSummary", `${reports.length} ${reports.length === 1 ? "izveštaj" : "izveštaja"}`);
   document.getElementById("leaderReportList").innerHTML = reports.length
     ? reports
         .map((report) => {
           const employee = (state.employees || []).find((item) => item.id === report.employeeId);
           const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
+          const expected = expectedMinutesForDate(employee, report.date);
+          const missing = Math.max(0, expected - minutes);
           return `
           <div class="setup-item leader-report-card">
             <strong>${formatNumber(minutes)} min</strong>
-            <span><b>${employee?.name || "Zaposleni"} · ${formatDate(report.date)}</b><br />${report.note || "Bez rezimea"}<br />+ ${report.positive || "-"}<br />- ${report.negative || "-"}<br />${report.acknowledgedAt ? `<small>✓ Pročitano ${formatDateTime(report.acknowledgedAt)}</small>` : `<button class="secondary-button leader-report-ack" data-report-id="${report.id}" type="button">Potvrđujem da sam pročitao</button>`}</span>
+            <span><b>${employee?.name || "Zaposleni"} · ${formatDate(report.date)}</b><br />Upisano ${minutes} od ${expected || 0} min${missing ? ` · nedostaje ${missing} min` : " · kvota ispunjena"}<br />${report.note || "Bez rezimea"}<br />+ ${report.positive || "-"}<br />- ${report.negative || "-"}<br />${report.acknowledgedAt ? `<small>✓ Pročitano ${formatDateTime(report.acknowledgedAt)}</small>` : `<button class="secondary-button leader-report-ack" data-report-id="${report.id}" type="button">Potvrđujem da sam pročitao</button>`}</span>
           </div>`;
         })
         .join("")
@@ -2144,6 +2165,16 @@ document.getElementById("logoutEmployee")?.addEventListener("click", () => {
 
 document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", () => {
   document.getElementById("leaderReportsDialog")?.close();
+});
+
+document.getElementById("leaderReportEmployeeFilter")?.addEventListener("change", renderLeaderPanel);
+document.getElementById("leaderReportDateFilter")?.addEventListener("change", renderLeaderPanel);
+document.getElementById("leaderReportFilterReset")?.addEventListener("click", () => {
+  const employeeFilter = document.getElementById("leaderReportEmployeeFilter");
+  const dateFilter = document.getElementById("leaderReportDateFilter");
+  if (employeeFilter) employeeFilter.value = "";
+  if (dateFilter) dateFilter.value = "";
+  renderLeaderPanel();
 });
 
 window.addEventListener("beforeinstallprompt", (event) => {

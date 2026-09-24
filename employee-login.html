@@ -302,6 +302,17 @@
               </section>
               <section class="span-2">
                 <h3>Izveštaji tima</h3>
+                <p class="muted">Automatski dnevni presek stiže u 17:30. Mesec se bira gore, a ovde osoba i dan.</p>
+                <div class="leader-activity-filter">
+                  <label>Zaposleni
+                    <select id="leaderReportEmployeeFilter"><option value="">Svi dostupni izveštaji</option></select>
+                  </label>
+                  <label>Dan u izabranom mesecu
+                    <input id="leaderReportDateFilter" type="date" />
+                  </label>
+                  <button id="leaderReportFilterReset" class="secondary-button" type="button">Ceo mesec</button>
+                  <strong id="leaderReportSummary">0 izveštaja</strong>
+                </div>
                 <div class="setup-list" id="leaderReportList"></div>
               </section>
             </div>
@@ -420,7 +431,7 @@
       <form id="dailyReportForm" class="modal-card daily-report-modal">
         <div class="modal-head">
           <div>
-            <p class="eyebrow">Dnevna kvota je ispunjena</p>
+            <p class="eyebrow">Dnevni pregled rada</p>
             <h2>Kratak izveštaj za lidera</h2>
             <p id="dailyReportDateLabel" class="muted"></p>
           </div>
@@ -468,7 +479,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=10"></script>
-    <script src="employee-portal.js?v=86"></script>
+    <script src="employee-portal.js?v=87"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>

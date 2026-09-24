@@ -57,7 +57,9 @@ module.exports = async function handler(req, res) {
         const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.isLeader);
         const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.isFinalDailyReport === true);
         const reportEmployee = (payload.employees || []).find((item) => item.id === report?.employeeId);
-        if (!leader || !report || (report.recipientId !== leaderId && reportEmployee?.leaderId !== leaderId)) {
+        const leaderName = String(leader?.name || "").toLowerCase();
+        const ownerLeader = leader?.id === "emp-miljan" || leader?.id === "emp-ivana" || leaderName.includes("miljan") || leaderName.includes("ivana");
+        if (!leader || !report || (!ownerLeader && report.recipientId !== leaderId && reportEmployee?.leaderId !== leaderId)) {
           return json(res, 403, { ok: false, error: "Ovaj izveštaj nije dodeljen tom lideru." });
         }
         report.acknowledgedAt = new Date().toISOString();
