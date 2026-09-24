@@ -1713,6 +1713,14 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
     submitButton.disabled = true;
     submitButton.textContent = "Prijavljivanje...";
   }
+  const unlockLoginButton = () => {
+    if (!submitButton) return;
+    submitButton.disabled = false;
+    submitButton.textContent = "Uloguj se";
+  };
+  // This watchdog is independent from every network/hydration promise below.
+  // Even an unexpected stalled promise must never leave the login form locked.
+  const loginWatchdog = window.setTimeout(unlockLoginButton, 12500);
   if (errorMessage) errorMessage.hidden = true;
   let response;
   let result = {};
@@ -1724,10 +1732,9 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
         employee.id === result.employee.id || String(employee.email || "").toLowerCase() === result.employee.email
       );
       if (!activeEmployee) {
-        await waitForOnlineHydration();
-        activeEmployee = state.employees.find((employee) =>
-          employee.id === result.employee.id || String(employee.email || "").toLowerCase() === result.employee.email
-        );
+        // Authentication already succeeded. Do not make the employee wait for
+        // the multi-megabyte shared state; hydration continues in background.
+        activeEmployee = { ...result.employee, status: "Aktivan" };
       }
     }
   } catch (error) {
@@ -1737,10 +1744,8 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
         : "Veza sa bazom trenutno nije dostupna. Proveri internet i pokušaj ponovo.",
     };
   } finally {
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.textContent = "Uloguj se";
-    }
+    window.clearTimeout(loginWatchdog);
+    unlockLoginButton();
   }
   if (!activeEmployee || !result.token) {
     if (errorMessage) {
