@@ -4282,6 +4282,12 @@ body.employee-editor-open {
 .leader-report-card button { margin-top: 10px; }
 .leader-report-day { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
 .leader-report-day + .leader-report-day { margin-top: 14px; }
+.weekly-report-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 18px 0; flex-wrap: wrap; }
+.weekly-report-row { align-items: flex-start; }
+.weekly-report-row > strong { min-width: 180px; }
+.weekly-answer-details { margin-top: 10px; }
+.weekly-answer-details summary { cursor: pointer; font-weight: 800; color: var(--primary); }
+.weekly-answer-details p { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); line-height: 1.5; }
 #employeeReportsTab .leader-activity-filter { grid-template-columns: minmax(170px, .7fr) minmax(230px, 1.3fr) auto auto; }
 @media (max-width: 820px) { #employeeReportsTab .leader-activity-filter { grid-template-columns: 1fr; } }
 .leader-goals-section { display: grid; gap: 16px; }

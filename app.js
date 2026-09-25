@@ -1569,6 +1569,7 @@ function migrateState(data) {
     visibleToEmployee: note.visibleToEmployee !== false,
   }));
   const employeeReports = (data.employeeReports || starterData.employeeReports || []).map((report) => ({
+    ...report,
     id: report.id || crypto.randomUUID(),
     employeeId: report.employeeId || employees[0]?.id || "",
     recipientId: report.recipientId || "",

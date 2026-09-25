@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=87" />
+    <link rel="stylesheet" href="styles.css?v=94" />
     <style>html.employee-session-cached #employeeLoginScreen { display: none !important; }</style>
     <script>
       try {
@@ -333,6 +333,21 @@
         </section>
 
         <section class="client-tab" id="employeeReportsTab">
+          <section class="panel weekly-report-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Priprema za petak</p>
+                <h2>Nedeljni izveštaj zaposlenih</h2>
+              </div>
+              <span id="weeklyReportWeekLabel">ova nedelja</span>
+            </div>
+            <p class="muted">Pošalji upitnik u četvrtak. Zaposleni ga popunjavaju do četvrtka uveče, kako bi odgovori bili spremni za sastanak u petak.</p>
+            <div class="weekly-report-actions">
+              <button id="sendWeeklyQuestionnaire" class="primary-button" type="button">Pošalji upitnik zaposlenima</button>
+              <strong id="weeklyReportStatus">Nije poslato</strong>
+            </div>
+            <div class="setup-list" id="leaderWeeklyReportList"></div>
+          </section>
           <section class="panel">
             <div class="panel-head">
               <div>
@@ -506,6 +521,40 @@
         <div id="leaderUnreadReportList" class="setup-list"></div>
       </section>
     </dialog>
+    <dialog id="weeklySendDialog" class="daily-report-dialog">
+      <section class="modal-card daily-report-modal">
+        <div class="modal-head">
+          <div><p class="eyebrow">Četvrtak · priprema za petak</p><h2>Pošalji nedeljni upitnik timu</h2></div>
+          <button id="closeWeeklySendDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
+        </div>
+        <p>Upitnik će biti poslat svim aktivnim zaposlenima koji su dodeljeni tebi. Rok za popunjavanje je večeras.</p>
+        <div class="modal-actions"><button id="confirmSendWeeklyQuestionnaire" class="primary-button" type="button">Pošalji</button></div>
+      </section>
+    </dialog>
+    <dialog id="weeklyQuestionnaireDialog" class="daily-report-dialog">
+      <form id="weeklyQuestionnaireForm" class="modal-card daily-report-modal">
+        <div class="modal-head">
+          <div><p class="eyebrow">Nedeljni izveštaj</p><h2>Popuni do četvrtka uveče</h2><p class="muted">Odgovori pomažu lideru da se pripremi za sastanak u petak.</p></div>
+          <button id="closeWeeklyQuestionnaireDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
+        </div>
+        <label>1. Koji ti je omiljeni klijent ove nedelje i zašto?<textarea name="answer1" rows="3" maxlength="1600" required></textarea></label>
+        <label>2. Koji ti je najneomiljeniji klijent i zašto?<textarea name="answer2" rows="3" maxlength="1600" required></textarea></label>
+        <label>3. Šta te je kočilo ove nedelje?<textarea name="answer3" rows="3" maxlength="1600" required></textarea></label>
+        <label>4. Šta ti je išlo baš dobro, a da si to osvestio/la?<textarea name="answer4" rows="3" maxlength="1600" required></textarea></label>
+        <label>5. Kako ti mogu pomoći da iduća nedelja bude još bolja?<textarea name="answer5" rows="3" maxlength="1600" required></textarea></label>
+        <div class="modal-actions"><button class="primary-button" type="submit">Pošalji lideru</button></div>
+      </form>
+    </dialog>
+    <dialog id="weeklyCompletedDialog" class="daily-report-dialog">
+      <section class="modal-card daily-report-modal">
+        <div class="modal-head">
+          <div><p class="eyebrow">Upitnik je popunjen</p><h2 id="weeklyCompletedTitle">Stigao je novi nedeljni izveštaj</h2></div>
+          <button id="closeWeeklyCompletedDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
+        </div>
+        <div id="weeklyCompletedContent"></div>
+        <div class="modal-actions"><button id="ackWeeklyCompleted" class="primary-button" type="button">OK</button></div>
+      </section>
+    </dialog>
     <dialog id="lateAckDialog">
       <section class="modal-card late-ack-modal">
         <div class="modal-head">
@@ -521,7 +570,7 @@
       </section>
     </dialog>
     <script src="remote-state.js?v=10"></script>
-    <script src="employee-portal.js?v=90"></script>
+    <script src="employee-portal.js?v=91"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>
