@@ -73,11 +73,17 @@ module.exports = async function handler(req, res) {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
       let employees = await readFastEmployees({ email }).catch(() => []);
-      if (!employees.length) employees = await readEmployees();
-      const employee = employees.find((item) =>
+      let employee = employees.find((item) =>
         item.active !== false && String(item.email || "").trim().toLowerCase() === email &&
         String(item.password || "") === password
       );
+      if (!employee) {
+        employees = await readEmployees();
+        employee = employees.find((item) =>
+          item.active !== false && String(item.email || "").trim().toLowerCase() === email &&
+          String(item.password || "") === password
+        );
+      }
       if (!employee) return send(res, 401, { error: "Pogrešan email ili lozinka." });
       if (body.action === "operationalAdminLogin" && employee.isOperationalAdmin !== true) {
         return send(res, 403, { error: "Ovaj nalog nema pristup operativnoj administraciji." });
