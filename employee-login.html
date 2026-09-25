@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Marketizo Tim" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=94" />
+    <link rel="stylesheet" href="styles.css?v=96" />
     <style>html.employee-session-cached #employeeLoginScreen { display: none !important; }</style>
     <script>
       try {
@@ -70,11 +70,7 @@
           <button class="nav-item" data-employee-tab="employeeCalendarTab" type="button">Kalendar</button>
           <button class="nav-item" id="leaderMeetingsNav" data-employee-tab="employeeMeetingsTab" type="button" hidden>Sastanci</button>
           <button class="nav-item" id="leaderReportsNav" data-employee-tab="employeeReportsTab" type="button" hidden>Izveštaji</button>
-          <span class="operational-admin-nav-label" data-operational-admin-nav hidden>Operativna administracija</span>
-          <a class="nav-item" data-operational-admin-nav href="employees-hours.html#work/history" hidden>Aktivnosti i sati</a>
-          <a class="nav-item" data-operational-admin-nav href="employees-hours.html#work/hours" hidden>Dodaj sate</a>
-          <a class="nav-item" data-operational-admin-nav href="employees-hours.html#work/absence" hidden>Dodaj odsustvo</a>
-          <a class="nav-item" data-operational-admin-nav href="employees-hours.html#work/late" hidden>Dodaj kašnjenje</a>
+          <button class="nav-item" id="operationalAdminNav" data-operational-admin-nav data-employee-tab="employeeOperationsTab" type="button" hidden>Administracija</button>
         </nav>
       </aside>
 
@@ -483,6 +479,37 @@
               </div>
               <div class="setup-list" id="portalAbsenceList"></div>
             </section>
+          </div>
+        </section>
+
+        <section class="client-tab" id="employeeOperationsTab" data-operational-admin-nav hidden>
+          <div class="operations-hero">
+            <div>
+              <p class="eyebrow">Operativna administracija</p>
+              <h2>Šta želiš da uradiš?</h2>
+              <p>Klijenti, aktivnosti i evidencija zaposlenih na jednom mestu.</p>
+            </div>
+            <span class="status info">Bez finansija</span>
+          </div>
+          <div class="operations-grid">
+            <a class="operation-card operation-card-primary" href="/">
+              <span class="operation-card-icon">K</span><strong>Klijenti</strong><small>Dodaj klijenta i organizuj tim.</small><b>Otvori →</b>
+            </a>
+            <a class="operation-card" href="employees-goals.html">
+              <span class="operation-card-icon">A</span><strong>Aktivnosti</strong><small>Pregled i unos aktivnosti zaposlenih.</small><b>Otvori →</b>
+            </a>
+            <a class="operation-card" href="employees-hours.html#work/history">
+              <span class="operation-card-icon">S</span><strong>Sati zaposlenih</strong><small>Pregled evidentiranog vremena.</small><b>Otvori →</b>
+            </a>
+            <a class="operation-card" href="employees-hours.html#work/hours">
+              <span class="operation-card-icon">+</span><strong>Dodaj sate</strong><small>Unesi vreme za zaposlenog.</small><b>Otvori →</b>
+            </a>
+            <a class="operation-card" href="employees-hours.html#work/absence">
+              <span class="operation-card-icon">O</span><strong>Dodaj odsustvo</strong><small>Odmor, bolovanje ili slobodan dan.</small><b>Otvori →</b>
+            </a>
+            <a class="operation-card" href="employees-hours.html#work/late">
+              <span class="operation-card-icon">K</span><strong>Dodaj kašnjenje</strong><small>Evidentiraj kašnjenje i napomenu.</small><b>Otvori →</b>
+            </a>
           </div>
         </section>
 

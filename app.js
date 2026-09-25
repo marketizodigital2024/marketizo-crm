@@ -5487,6 +5487,14 @@ function applyOperationalAdminAccess() {
     badge.textContent = "Operativni administrator";
     topActions.prepend(badge);
   }
+  if (topActions && !document.getElementById("backToTeamHub")) {
+    const backLink = document.createElement("a");
+    backLink.id = "backToTeamHub";
+    backLink.className = "secondary-button operational-back-link";
+    backLink.href = "/employee-login.html";
+    backLink.textContent = "← Team Hub";
+    topActions.prepend(backLink);
+  }
   const activeView = document.body.dataset.activeView;
   if (!activeView || activeView === "admin" || activeView === "reports") setActiveView("clients", false);
   setText("pageTitle", document.body.dataset.activeView === "calendar" ? "Kalendar" : document.body.dataset.activeView === "employees" ? "Tim · pregled" : "Klijenti");
