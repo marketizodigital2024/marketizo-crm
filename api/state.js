@@ -83,6 +83,14 @@ function hideEmployeeState(payload, employee) {
       if (owner || item.leaderId === employee.id) visibleEmployeeIds.add(item.id);
     });
   }
+  copy.clients = (copy.clients || []).map((client) => {
+    const safe = { ...client };
+    delete safe.loginEmail;
+    return safe;
+  });
+  copy.employeeWorkLogs = (copy.employeeWorkLogs || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
+  copy.employeeLateRecords = (copy.employeeLateRecords || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
+  copy.employeeHourAdjustments = (copy.employeeHourAdjustments || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
   copy.employeeDocuments = (copy.employeeDocuments || []).filter((item) => item.employeeId === employee.id);
   copy.employeeReports = (copy.employeeReports || []).filter((item) => visibleEmployeeIds.has(item.employeeId) || item.recipientId === employee.id);
   copy.employeeGoals = (copy.employeeGoals || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
