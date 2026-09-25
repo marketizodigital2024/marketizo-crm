@@ -3,6 +3,7 @@ const rowId = process.env.CRM_STATE_ID || "marketizo-main";
 const BACKUP_SLOTS = 30;
 const employeeAuthTable = "agency_crm_employee_auth";
 const crypto = require("node:crypto");
+const FULL_ADMIN_EMPLOYEE_IDS = new Set(["emp-miljan", "emp-ivana"]);
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -34,15 +35,18 @@ function verifyEmployeeToken(token, key) {
   const right = Buffer.from(expected);
   if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
   const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-  return payload.exp > Date.now() && payload.role === "operational-admin" ? payload : null;
+  return payload.exp > Date.now() && ["operational-admin", "full-admin"].includes(payload.role) ? payload : null;
 }
 
-function operationalSession(req, current, key) {
+function adminSession(req, current, key) {
   const token = String(req.headers?.authorization || "").replace(/^Bearer\s+/i, "");
   if (!token) return null;
   const session = verifyEmployeeToken(token, key);
-  const employee = (current?.employees || []).find((item) => item.id === session?.employeeId && item.status !== "Neaktivan" && item.isOperationalAdmin === true);
-  return employee ? { session, employee } : null;
+  const employee = (current?.employees || []).find((item) => item.id === session?.employeeId && item.status !== "Neaktivan");
+  if (!employee) return null;
+  if (session.role === "full-admin" && FULL_ADMIN_EMPLOYEE_IDS.has(employee.id)) return { session, employee, role: "full-admin" };
+  if (session.role === "operational-admin" && employee.isOperationalAdmin === true) return { session, employee, role: "operational-admin" };
+  return null;
 }
 
 const clientFinancialKeys = ["revenue", "cpl", "package", "billingDay", "paymentStatus", "invoiceStatus", "paymentMethod", "invoices", "invoiceStartMonth", "invoiceExcludedMonths", "websitePrice", "hostingPrice", "domainPrice"];
@@ -236,16 +240,16 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === "GET") {
       const row = await readStoredState(config);
-      const access = operationalSession(req, row.payload, config.key);
+      const access = adminSession(req, row.payload, config.key);
       if (/^Bearer\s+/i.test(String(req.headers?.authorization || "")) && !access) {
-        return json(res, 403, { configured: true, error: "Operativna administratorska sesija nije važeća.", payload: null });
+        return json(res, 403, { configured: true, error: "Administratorska sesija nije važeća.", payload: null });
       }
       return json(res, 200, {
         configured: true,
         empty: !row.payload,
-        payload: access ? hideOperationalFinancials(row.payload) : hidePasswords(row.payload || null),
+        payload: access?.role === "operational-admin" ? hideOperationalFinancials(row.payload) : hidePasswords(row.payload || null),
         updatedAt: row.updatedAt || "",
-        accessRole: access ? "operational-admin" : "full-admin",
+        accessRole: access?.role || "legacy-full-admin",
       });
     }
 
@@ -257,8 +261,8 @@ module.exports = async function handler(req, res) {
       }
       const current = await readStoredState(config);
       const hasBearer = /^Bearer\s+/i.test(String(req.headers?.authorization || ""));
-      const access = operationalSession(req, current.payload, config.key);
-      if (hasBearer && !access) return json(res, 403, { configured: true, error: "Operativna administratorska sesija nije važeća." });
+      const access = adminSession(req, current.payload, config.key);
+      if (hasBearer && !access) return json(res, 403, { configured: true, error: "Administratorska sesija nije važeća." });
       const baseUpdatedAt = String(body.baseUpdatedAt || "");
       if (current.updatedAt && baseUpdatedAt !== current.updatedAt) {
         return json(res, 409, {
@@ -279,7 +283,7 @@ module.exports = async function handler(req, res) {
         });
       }
       await preserveDailyPrewriteBackup(config, current);
-      if (access) payload = mergeOperationalPayload(payload, current.payload, access.employee);
+      if (access?.role === "operational-admin") payload = mergeOperationalPayload(payload, current.payload, access.employee);
       payload = preserveCredentials(payload, current.payload);
       const updatedAt = new Date().toISOString();
       const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {

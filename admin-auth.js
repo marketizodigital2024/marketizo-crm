@@ -1,7 +1,3 @@
-const adminUsers = [
-  { email: "office@marketizo.com", password: "Tastatura1.", name: "Marketizo" },
-];
-
 const adminSessionKey = "marketizoAdminSession";
 const adminSessionDuration = 30 * 24 * 60 * 60 * 1000;
 
@@ -15,7 +11,7 @@ function adminLoginPath() {
 
 function getAdminSession() {
   const session = JSON.parse(localStorage.getItem(adminSessionKey) || "null");
-  if (!session || Number(session.expiresAt || 0) < Date.now()) {
+  if (!session || !session.token || Number(session.expiresAt || 0) < Date.now()) {
     localStorage.removeItem(adminSessionKey);
     return null;
   }
@@ -32,7 +28,7 @@ function setAdminSession(user) {
       role: user.role || "full-admin",
       employeeId: user.employeeId || "",
       token: user.token || "",
-      expiresAt: Date.now() + adminSessionDuration,
+      expiresAt: Number(user.expiresAt || (Date.now() + adminSessionDuration)),
     })
   );
 }
@@ -58,19 +54,19 @@ document.getElementById("adminLoginForm")?.addEventListener("submit", async (eve
   const formData = new FormData(event.currentTarget);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
-  const user = adminUsers.find((admin) => admin.email === email && admin.password === password);
-  if (user) {
-    setAdminSession({ ...user, role: "full-admin" });
-    window.location.href = adminHomePath();
-    return;
-  }
   const submit = event.currentTarget.querySelector('button[type="submit"]');
   if (submit) { submit.disabled = true; submit.textContent = "Provera pristupa..."; }
   try {
-    const response = await fetch("/api/employee-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "operationalAdminLogin", email, password }) });
-    const result = await response.json().catch(() => ({}));
+    let response = await fetch("/api/employee-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "fullAdminLogin", email, password }) });
+    let result = await response.json().catch(() => ({}));
+    let role = "full-admin";
+    if (!response.ok) {
+      response = await fetch("/api/employee-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "operationalAdminLogin", email, password }) });
+      result = await response.json().catch(() => ({}));
+      role = "operational-admin";
+    }
     if (!response.ok || !result.ok) throw new Error(result.error || "Login podaci nisu tačni.");
-    setAdminSession({ email, name: result.employee?.name || email, employeeId: result.employee?.id || "", role: "operational-admin", token: result.token });
+    setAdminSession({ email, name: result.employee?.name || email, employeeId: result.employee?.id || "", role, token: result.token, expiresAt: result.expiresAt });
     window.location.href = adminHomePath();
   } catch (error) {
     const message = document.getElementById("adminLoginError");
@@ -79,9 +75,10 @@ document.getElementById("adminLoginForm")?.addEventListener("submit", async (eve
   }
 });
 
-if (document.getElementById("adminLoginForm") && getAdminSession()) {
-  window.location.replace(adminHomePath());
-}
+const adminLoginForm = document.getElementById("adminLoginForm");
+const currentSession = getAdminSession();
+if (adminLoginForm && currentSession) window.location.replace(adminHomePath());
+if (!adminLoginForm && !currentSession) window.location.replace(adminLoginPath());
 
 document.getElementById("adminLogoutBtn")?.addEventListener("click", () => {
   localStorage.removeItem(adminSessionKey);

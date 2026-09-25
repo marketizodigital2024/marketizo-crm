@@ -6,6 +6,7 @@ const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
 const AUTH_TABLE = "agency_crm_employee_auth";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const FULL_ADMIN_EMPLOYEE_IDS = new Set(["emp-miljan", "emp-ivana"]);
 
 function send(res, status, payload) {
   res.statusCode = status;
@@ -68,7 +69,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    if (body.action === "login" || body.action === "operationalAdminLogin") {
+    if (body.action === "login" || body.action === "operationalAdminLogin" || body.action === "fullAdminLogin") {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
       let employees = await readFastEmployees({ email }).catch(() => []);
@@ -81,10 +82,15 @@ module.exports = async function handler(req, res) {
       if (body.action === "operationalAdminLogin" && employee.isOperationalAdmin !== true) {
         return send(res, 403, { error: "Ovaj nalog nema pristup operativnoj administraciji." });
       }
+      if (body.action === "fullAdminLogin" && !FULL_ADMIN_EMPLOYEE_IDS.has(employee.id)) {
+        return send(res, 403, { error: "Ovaj nalog nema pristup glavnoj administraciji." });
+      }
       const expiresAt = Date.now() + SESSION_TTL_MS;
-      const tokenRole = body.action === "operationalAdminLogin" || employee.isOperationalAdmin === true
-        ? "operational-admin"
-        : "employee";
+      const tokenRole = body.action === "fullAdminLogin"
+        ? "full-admin"
+        : body.action === "operationalAdminLogin" || employee.isOperationalAdmin === true
+          ? "operational-admin"
+          : "employee";
       const token = sign({ employeeId: employee.id, email, role: tokenRole, exp: expiresAt });
       return send(res, 200, { ok: true, token, expiresAt, employee: publicEmployee(employee) });
     }

@@ -23,7 +23,7 @@
   function accessHeaders(extra = {}) {
     let session = null;
     try { session = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null"); } catch {}
-    return { ...extra, ...(session?.role === "operational-admin" && session?.token ? { Authorization: `Bearer ${session.token}` } : {}) };
+    return { ...extra, ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}) };
   }
 
   function isLocalFile() {
