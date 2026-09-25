@@ -5478,7 +5478,11 @@ function applyOperationalAdminAccess() {
   }));
   document.querySelectorAll('[data-employee-section="settings"], #employeeForm').forEach((item) => { item.hidden = true; });
   const allowedOperationalForms = new Set(["employeeActivityForm", "employeeWorkForm", "employeeAbsenceForm", "employeeLateForm"]);
-  document.querySelectorAll("#employees form").forEach((form) => { if (!allowedOperationalForms.has(form.id)) form.hidden = true; });
+  document.querySelectorAll("#employees form").forEach((form) => {
+    if (allowedOperationalForms.has(form.id)) return;
+    form.hidden = true;
+    form.closest(".panel")?.classList.add("operational-panel-hidden");
+  });
   const topActions = document.querySelector(".top-actions");
   if (topActions && !document.getElementById("operationalAdminBadge")) {
     const badge = document.createElement("span");
