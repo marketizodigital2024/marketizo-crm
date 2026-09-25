@@ -5468,7 +5468,7 @@ function applyOperationalAdminAccess() {
   if (!isOperationalAdminSession()) return;
   if (/employees-settings/.test(location.pathname)) { location.replace("employees-overview.html"); return; }
   document.body.classList.add("operational-admin-mode");
-  document.querySelectorAll('[data-view="admin"], [data-view="reports"], [href*="employees-settings"], [href*="#work/absence"], [href*="#work/hours"], [href*="#work/late"], #exportBtn, #backupNowBtn, #employeeProfilePanel, #openEmployeeProfileForm, [data-edit-employee], [data-delete-employee], [data-client-delete], [data-delete-client], [data-remove-client], .client-cost-nav').forEach((item) => { item.hidden = true; });
+  document.querySelectorAll('[data-view="admin"], [data-view="reports"], [href*="employees-settings"], #exportBtn, #backupNowBtn, #employeeProfilePanel, #openEmployeeProfileForm, [data-edit-employee], [data-delete-employee], [data-client-delete], [data-delete-client], [data-remove-client], .client-cost-nav').forEach((item) => { item.hidden = true; });
   document.getElementById("selectedEmployeeSalary")?.closest("article, div")?.setAttribute("hidden", "");
   const protectedClientFields = ["package", "revenue", "invoiceStartMonth", "billingDay", "websitePrice", "hostingPrice", "domainPrice"];
   protectedClientFields.forEach((name) => document.querySelectorAll(`[name="${name}"]`).forEach((input) => {
@@ -5476,7 +5476,9 @@ function applyOperationalAdminAccess() {
     if (label) label.hidden = true;
     input.disabled = true;
   }));
-  document.querySelectorAll('[data-employee-section="settings"], #employees form, #employeeForm').forEach((item) => { item.hidden = true; });
+  document.querySelectorAll('[data-employee-section="settings"], #employeeForm').forEach((item) => { item.hidden = true; });
+  const allowedOperationalForms = new Set(["employeeActivityForm", "employeeWorkForm", "employeeAbsenceForm", "employeeLateForm"]);
+  document.querySelectorAll("#employees form").forEach((form) => { if (!allowedOperationalForms.has(form.id)) form.hidden = true; });
   const topActions = document.querySelector(".top-actions");
   if (topActions && !document.getElementById("operationalAdminBadge")) {
     const badge = document.createElement("span");

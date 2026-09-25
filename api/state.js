@@ -74,11 +74,23 @@ function mergeOperationalPayload(submitted, current, actor) {
   });
   const submittedIds = new Set(clients.map((client) => client.id));
   (current.clients || []).forEach((client) => { if (!submittedIds.has(client.id)) clients.push(client); });
+  const mergeCollectionWithoutDelete = (key) => {
+    const previous = Array.isArray(current[key]) ? current[key] : [];
+    const desired = Array.isArray(submitted[key]) ? submitted[key] : previous;
+    const result = desired.map((item) => ({ ...item }));
+    const ids = new Set(result.map((item) => item.id));
+    previous.forEach((item) => { if (!ids.has(item.id)) result.push(item); });
+    return result;
+  };
   return {
     ...current,
     clients,
     companyPlans: Array.isArray(submitted.companyPlans) ? submitted.companyPlans : current.companyPlans,
     clientLeads: Array.isArray(submitted.clientLeads) ? submitted.clientLeads : current.clientLeads,
+    employeeActivities: mergeCollectionWithoutDelete("employeeActivities"),
+    employeeWorkLogs: mergeCollectionWithoutDelete("employeeWorkLogs"),
+    employeeAbsences: mergeCollectionWithoutDelete("employeeAbsences"),
+    employeeLateRecords: mergeCollectionWithoutDelete("employeeLateRecords"),
     operationalAuditLog: [{ id: crypto.randomUUID(), actorId: actor.id, actorName: actor.name, action: "operational-state-save", createdAt: new Date().toISOString() }, ...(current.operationalAuditLog || [])].slice(0, 500),
   };
 }
