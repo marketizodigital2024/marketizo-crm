@@ -135,6 +135,10 @@ function setEmployeeSession(employee, token, expiresAt) {
   }
 }
 
+function employeeApiHeaders() {
+  return { "Content-Type": "application/json", Authorization: `Bearer ${getEmployeeSession()?.token || ""}` };
+}
+
 function syncOperationalAdminAccess() {
   const employeeSession = getEmployeeSession();
   const enabled = activeEmployee?.isOperationalAdmin === true && Boolean(employeeSession?.token);
@@ -464,7 +468,7 @@ async function postEmployeeWorkLog(workLog, recipientId) {
   try {
     const response = await fetch("/api/employee-activity", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${getEmployeeSession()?.token || ""}` },
       body: JSON.stringify({ workLog, recipientId, updateReport: false }),
     });
     const data = await response.json().catch(() => ({}));
@@ -1807,7 +1811,7 @@ async function sendWeeklyQuestionnaires() {
   button.textContent = "Slanje...";
   const windowInfo = currentWeeklyWindow();
   try {
-    const response = await fetch("/api/employee-report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "sendWeeklyQuestionnaire", leaderId: activeEmployee.id, weekKey: windowInfo.weekKey, dueDate: windowInfo.dueDate }) });
+    const response = await fetch("/api/employee-report", { method: "POST", headers: employeeApiHeaders(), body: JSON.stringify({ action: "sendWeeklyQuestionnaire", leaderId: activeEmployee.id, weekKey: windowInfo.weekKey, dueDate: windowInfo.dueDate }) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) throw new Error(result.error || "Upitnik nije poslat.");
     const ids = new Set((result.invitations || []).map((report) => report.id));
@@ -1830,7 +1834,7 @@ async function acknowledgeWeeklyQuestionnaire() {
   const reportId = dialog?.dataset.reportId || "";
   if (!reportId || !activeEmployee?.id) return;
   try {
-    const response = await fetch("/api/employee-report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "acknowledgeWeeklyQuestionnaire", reportId, leaderId: activeEmployee.id }) });
+    const response = await fetch("/api/employee-report", { method: "POST", headers: employeeApiHeaders(), body: JSON.stringify({ action: "acknowledgeWeeklyQuestionnaire", reportId, leaderId: activeEmployee.id }) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) throw new Error(result.error || "Potvrda nije sačuvana.");
     const report = (state.employeeReports || []).find((item) => item.id === reportId);
@@ -1950,7 +1954,7 @@ async function acknowledgeLeaderReport(reportId, button) {
   try {
     const response = await fetch("/api/employee-report", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: employeeApiHeaders(),
       body: JSON.stringify({ action: "acknowledge", reportId, leaderId: activeEmployee.id }),
     });
     result = await response.json().catch(() => ({}));
@@ -2028,6 +2032,8 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
   }
   if (errorMessage) errorMessage.hidden = true;
   setEmployeeSession(activeEmployee, result.token, result.expiresAt);
+  await hydrateOnlineState();
+  activeEmployee = (state.employees || []).find((employee) => employee.id === result.employee.id) || activeEmployee;
   if (window.location.search) window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
   document.getElementById("employeeLoginScreen").hidden = true;
   document.getElementById("employeeApp").hidden = false;
@@ -2097,7 +2103,7 @@ document.getElementById("leaderGoalForm")?.addEventListener("submit", async (eve
   try {
     const response = await fetch("/api/leader-goal", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: employeeApiHeaders(),
       body: JSON.stringify({
         sessionToken: getEmployeeSession()?.token || "",
         leaderId: activeEmployee.id,
@@ -2330,7 +2336,7 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   try {
     const response = await fetch("/api/employee-report", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: employeeApiHeaders(),
       body: JSON.stringify({
         employeeId: activeEmployee.id,
         recipientId: reportRecipientId(),
@@ -2437,7 +2443,7 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
   submitButton.disabled = true;
   submitButton.textContent = "Slanje...";
   try {
-    const response = await fetch("/api/employee-report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "submitWeeklyQuestionnaire", employeeId: activeEmployee.id, reportId: form.dataset.reportId, answers }) });
+    const response = await fetch("/api/employee-report", { method: "POST", headers: employeeApiHeaders(), body: JSON.stringify({ action: "submitWeeklyQuestionnaire", employeeId: activeEmployee.id, reportId: form.dataset.reportId, answers }) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) throw new Error(result.error || "Izveštaj nije poslat.");
     const report = (state.employeeReports || []).find((item) => item.id === result.report.id);

@@ -11,6 +11,7 @@ let clientFilters = {
 };
 let unreadLeadNotifications = 0;
 let deferredInstallPrompt = null;
+const clientSessionKey = "marketizoClientSession";
 const clientLeadStatuses = ["Novi", "Kontaktiran", "Zakazan", "Dobijen", "Izgubljen"];
 const clientLossReasons = ["Nema budžet", "Nije se javio", "Loš broj", "Nije fit", "Konkurencija", "Preskupo", "Nije hitno", "Odloženo", "Ostalo"];
 const legacyLeadStatusMap = {
@@ -55,11 +56,31 @@ function loginSlug(value) {
 
 function ensureLoginData(options = {}) {
   state.clients = state.clients || [];
-  state.clients.forEach((client) => {
-    client.loginEmail = client.loginEmail || `${loginSlug(client.name)}@marketizo.local`;
-    client.loginPassword = client.loginPassword || "123456";
-  });
-  saveState(options);
+  if (options.remote !== false) saveState(options);
+}
+
+function getClientSession() {
+  try {
+    const session = JSON.parse(localStorage.getItem(clientSessionKey) || "null");
+    if (!session?.token || Number(session.expiresAt || 0) < Date.now()) {
+      localStorage.removeItem(clientSessionKey);
+      return null;
+    }
+    return session;
+  } catch {
+    localStorage.removeItem(clientSessionKey);
+    return null;
+  }
+}
+
+function setClientSession(client, token, expiresAt) {
+  localStorage.setItem(clientSessionKey, JSON.stringify({ clientId: client.id, email: client.loginEmail, token, expiresAt }));
+}
+
+async function fetchClientAuth(payload) {
+  const response = await fetch("/api/client-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const data = await response.json().catch(() => ({}));
+  return { response, data };
 }
 
 function renderLoginHint() {
@@ -734,16 +755,19 @@ function openEditLead(id) {
 
 async function handleClientLogin(event) {
   event.preventDefault();
-  await waitForOnlineHydration();
   const form = document.getElementById("clientLoginForm");
   const formData = new FormData(form);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
-  activeClient = (state.clients || []).find((client) => String(client.loginEmail || "").toLowerCase() === email && String(client.loginPassword || "") === password);
-  if (!activeClient) {
+  const { response, data } = await fetchClientAuth({ action: "login", email, password }).catch(() => ({ response: null, data: {} }));
+  if (!response?.ok || !data.client || !data.token) {
     document.getElementById("loginError").hidden = false;
     return;
   }
+  setClientSession(data.client, data.token, data.expiresAt);
+  activeClient = data.client;
+  await hydrateOnlineState();
+  activeClient = (state.clients || []).find((client) => client.id === data.client.id) || data.client;
   document.getElementById("loginScreen").hidden = true;
   document.getElementById("clientApp").hidden = false;
   document.getElementById("settingsServices")?.removeAttribute("data-ready");
@@ -754,7 +778,6 @@ async function handleClientLogin(event) {
 
 const clientLoginForm = document.getElementById("clientLoginForm");
 clientLoginForm.addEventListener("submit", handleClientLogin);
-clientLoginForm.querySelector('button[type="submit"]')?.addEventListener("click", handleClientLogin);
 
 document.querySelectorAll("[data-client-tab]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -967,6 +990,7 @@ document.getElementById("clientTeamForm").addEventListener("submit", (event) => 
 });
 
 document.getElementById("logoutClient").addEventListener("click", () => {
+  localStorage.removeItem(clientSessionKey);
   activeClient = null;
   document.getElementById("clientApp").hidden = true;
   document.getElementById("loginScreen").hidden = false;
@@ -996,4 +1020,21 @@ normalizePortalState();
 ensureLoginData({ remote: false });
 setupPasswordToggles();
 renderLoginHint();
-onlineHydrationPromise = hydrateOnlineState().catch(() => null);
+const initialClientSession = getClientSession();
+onlineHydrationPromise = initialClientSession
+  ? (async () => {
+      const { response, data } = await fetchClientAuth({ action: "validate", token: initialClientSession.token });
+      if (!response.ok || !data.client) throw new Error("Sesija je istekla.");
+      activeClient = data.client;
+      await hydrateOnlineState();
+      activeClient = (state.clients || []).find((client) => client.id === data.client.id) || data.client;
+      document.getElementById("loginScreen").hidden = true;
+      document.getElementById("clientApp").hidden = false;
+      renderClientApp();
+    })().catch(() => {
+      localStorage.removeItem(clientSessionKey);
+      activeClient = null;
+      document.getElementById("clientApp").hidden = true;
+      document.getElementById("loginScreen").hidden = false;
+    })
+  : Promise.resolve();

@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
 const BACKUP_SLOTS = 30;
@@ -8,6 +9,22 @@ function json(res, status, payload) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(payload));
+}
+
+function verifySession(req, secret) {
+  try {
+    const token = String(req.headers?.authorization || "").replace(/^Bearer\s+/i, "");
+    const [encoded, signature] = token.split(".");
+    if (!encoded || !signature) return null;
+    const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+    const left = Buffer.from(signature);
+    const right = Buffer.from(expected);
+    if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    return payload.exp > Date.now() ? payload : null;
+  } catch {
+    return null;
+  }
 }
 
 function headers(key, prefer = "") {
@@ -80,7 +97,7 @@ async function preserveDailyPrewriteBackup(url, key, row) {
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
   if (req.method === "OPTIONS") return json(res, 200, { ok: true });
   if (req.method !== "POST") return json(res, 405, { ok: false, error: "Metod nije podržan." });
 
@@ -91,6 +108,10 @@ module.exports = async function handler(req, res) {
   try {
     const body = await readBody(req);
     const submittedLog = body.workLog;
+    const session = verifySession(req, process.env.EMPLOYEE_SESSION_SECRET || key);
+    if (!session || (session.role === "employee" && session.employeeId !== submittedLog?.employeeId) || !["employee", "operational-admin", "full-admin"].includes(session.role)) {
+      return json(res, 401, { ok: false, error: "Prijava je obavezna." });
+    }
     if (!submittedLog?.id || !submittedLog?.employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(String(submittedLog?.date || "")) || Number(submittedLog?.minutes || 0) < 1) {
       return json(res, 400, { ok: false, error: "Nedostaju obavezni podaci aktivnosti." });
     }

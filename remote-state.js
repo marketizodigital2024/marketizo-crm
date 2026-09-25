@@ -23,6 +23,12 @@
   function accessHeaders(extra = {}) {
     let session = null;
     try { session = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null"); } catch {}
+    if (!session?.token) {
+      try { session = JSON.parse(localStorage.getItem("marketizoEmployeeSession") || "null"); } catch {}
+    }
+    if (!session?.token) {
+      try { session = JSON.parse(localStorage.getItem("marketizoClientSession") || "null"); } catch {}
+    }
     return { ...extra, ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}) };
   }
 

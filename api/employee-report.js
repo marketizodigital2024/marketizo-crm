@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
 
@@ -30,6 +31,22 @@ function cleanAnswer(value) {
   return String(value || "").trim().slice(0, 1600);
 }
 
+function verifySession(req, secret) {
+  try {
+    const token = String(req.headers?.authorization || "").replace(/^Bearer\s+/i, "");
+    const [encoded, signature] = token.split(".");
+    if (!encoded || !signature) return null;
+    const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+    const left = Buffer.from(signature);
+    const right = Buffer.from(expected);
+    if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    return payload.exp > Date.now() && ["employee", "operational-admin", "full-admin"].includes(payload.role) ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") return JSON.parse(req.body || "{}");
@@ -49,7 +66,7 @@ async function readRow(url, key) {
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
   if (req.method === "OPTIONS") return json(res, 200, { ok: true });
   if (req.method !== "POST") return json(res, 405, { ok: false, error: "Metod nije podržan." });
 
@@ -59,6 +76,11 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = await readBody(req);
+    const session = verifySession(req, process.env.EMPLOYEE_SESSION_SECRET || key);
+    const actorId = String(body.leaderId || body.employeeId || "");
+    if (!session || (session.role !== "full-admin" && session.employeeId !== actorId)) {
+      return json(res, 401, { ok: false, error: "Prijava je obavezna." });
+    }
     if (body.action === "sendWeeklyQuestionnaire") {
       const leaderId = String(body.leaderId || "");
       const weekKey = String(body.weekKey || "");

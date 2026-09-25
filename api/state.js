@@ -26,26 +26,36 @@ function supabaseHeaders(key) {
   };
 }
 
-function verifyEmployeeToken(token, key) {
-  const [encoded, signature] = String(token || "").split(".");
-  if (!encoded || !signature) return null;
-  const secret = process.env.EMPLOYEE_SESSION_SECRET || key;
-  const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
-  const left = Buffer.from(signature);
-  const right = Buffer.from(expected);
-  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
-  const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-  return payload.exp > Date.now() && ["operational-admin", "full-admin"].includes(payload.role) ? payload : null;
+function verifyAccessToken(token, key) {
+  try {
+    const [encoded, signature] = String(token || "").split(".");
+    if (!encoded || !signature) return null;
+    const secret = process.env.EMPLOYEE_SESSION_SECRET || key;
+    const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+    const left = Buffer.from(signature);
+    const right = Buffer.from(expected);
+    if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    return payload.exp > Date.now() && ["employee", "operational-admin", "full-admin", "client"].includes(payload.role) ? payload : null;
+  } catch {
+    return null;
+  }
 }
 
-function adminSession(req, current, key) {
+function accessSession(req, current, key) {
   const token = String(req.headers?.authorization || "").replace(/^Bearer\s+/i, "");
   if (!token) return null;
-  const session = verifyEmployeeToken(token, key);
+  const session = verifyAccessToken(token, key);
+  if (!session) return null;
+  if (session.role === "client") {
+    const client = (current?.clients || []).find((item) => item.id === session.clientId && item.status !== "Arhiviran");
+    return client ? { session, client, role: "client" } : null;
+  }
   const employee = (current?.employees || []).find((item) => item.id === session?.employeeId && item.status !== "Neaktivan");
   if (!employee) return null;
   if (session.role === "full-admin" && FULL_ADMIN_EMPLOYEE_IDS.has(employee.id)) return { session, employee, role: "full-admin" };
   if (session.role === "operational-admin" && employee.isOperationalAdmin === true) return { session, employee, role: "operational-admin" };
+  if (session.role === "employee") return { session, employee, role: "employee" };
   return null;
 }
 
@@ -62,6 +72,37 @@ function hideOperationalFinancials(payload) {
   delete copy.packages;
   delete copy.backup;
   return copy;
+}
+
+function hideEmployeeState(payload, employee) {
+  const copy = hideOperationalFinancials(payload);
+  const owner = FULL_ADMIN_EMPLOYEE_IDS.has(employee.id);
+  const visibleEmployeeIds = new Set([employee.id]);
+  if (employee.isLeader) {
+    (copy.employees || []).forEach((item) => {
+      if (owner || item.leaderId === employee.id) visibleEmployeeIds.add(item.id);
+    });
+  }
+  copy.employeeDocuments = (copy.employeeDocuments || []).filter((item) => item.employeeId === employee.id);
+  copy.employeeReports = (copy.employeeReports || []).filter((item) => visibleEmployeeIds.has(item.employeeId) || item.recipientId === employee.id);
+  copy.employeeGoals = (copy.employeeGoals || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
+  copy.employeeRatings = (copy.employeeRatings || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
+  copy.employeeRecognitions = (copy.employeeRecognitions || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
+  copy.employeeOneOnOnes = (copy.employeeOneOnOnes || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
+  copy.notifications = (copy.notifications || []).filter((item) => item.scope === "all" || item.targetId === employee.id || (item.scope === "admin" && employee.isLeader));
+  return copy;
+}
+
+function hideClientState(payload, client) {
+  const safeClient = { ...client };
+  delete safeClient.loginPassword;
+  const financialKeys = ["revenue", "cpl", "paymentStatus", "invoiceStatus", "paymentMethod", "invoices"];
+  financialKeys.forEach((key) => delete safeClient[key]);
+  return {
+    clients: [safeClient],
+    leads: (payload.leads || []).filter((item) => item.client === client.name || item.clientId === client.id),
+    teamMembers: (payload.teamMembers || []).filter((item) => item.client === client.name || item.clientId === client.id),
+  };
 }
 
 function mergeOperationalPayload(submitted, current, actor) {
@@ -97,6 +138,45 @@ function mergeOperationalPayload(submitted, current, actor) {
     employeeLateRecords: mergeCollectionWithoutDelete("employeeLateRecords"),
     operationalAuditLog: [{ id: crypto.randomUUID(), actorId: actor.id, actorName: actor.name, action: "operational-state-save", createdAt: new Date().toISOString() }, ...(current.operationalAuditLog || [])].slice(0, 500),
   };
+}
+
+function mergeEmployeePayload(submitted, current, actor) {
+  const replaceOwned = (key) => {
+    const previous = Array.isArray(current[key]) ? current[key] : [];
+    const desired = Array.isArray(submitted[key]) ? submitted[key] : previous;
+    return [...previous.filter((item) => item.employeeId !== actor.id), ...desired.filter((item) => item.employeeId === actor.id)];
+  };
+  const previousGoals = Array.isArray(current.employeeGoals) ? current.employeeGoals : [];
+  const submittedGoals = new Map((submitted.employeeGoals || []).map((item) => [item.id, item]));
+  const employeeGoals = previousGoals.map((goal) => {
+    if (goal.employeeId !== actor.id || !submittedGoals.has(goal.id)) return goal;
+    const desired = submittedGoals.get(goal.id);
+    return { ...goal, progress: desired.progress, status: desired.status, note: desired.note, completedDate: desired.completedDate };
+  });
+  const previousLate = Array.isArray(current.employeeLateRecords) ? current.employeeLateRecords : [];
+  const submittedLate = new Map((submitted.employeeLateRecords || []).map((item) => [item.id, item]));
+  const employeeLateRecords = previousLate.map((record) => record.employeeId === actor.id && submittedLate.has(record.id)
+    ? { ...record, acknowledgedAt: submittedLate.get(record.id).acknowledgedAt || record.acknowledgedAt }
+    : record);
+  return {
+    ...current,
+    employeeAbsences: replaceOwned("employeeAbsences"),
+    employeeGoals,
+    employeeLateRecords,
+  };
+}
+
+function mergeClientPayload(submitted, current, actor) {
+  const clients = (current.clients || []).map((client) => client.id === actor.id
+    ? { ...client, crmSettings: submitted.clients?.[0]?.crmSettings || client.crmSettings, whatsapp: submitted.clients?.[0]?.whatsapp ?? client.whatsapp, leads: submitted.clients?.[0]?.leads ?? client.leads }
+    : client);
+  const replaceClientRows = (key) => {
+    const previous = Array.isArray(current[key]) ? current[key] : [];
+    const desired = Array.isArray(submitted[key]) ? submitted[key] : [];
+    const belongs = (item) => item.client === actor.name || item.clientId === actor.id;
+    return [...previous.filter((item) => !belongs(item)), ...desired.filter(belongs)];
+  };
+  return { ...current, clients, leads: replaceClientRows("leads"), teamMembers: replaceClientRows("teamMembers") };
 }
 
 function viennaDateKey(date = new Date()) {
@@ -224,7 +304,7 @@ async function syncEmployeeAuth(config, employees = []) {
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,PUT,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
 
   if (req.method === "OPTIONS") return json(res, 200, { ok: true });
 
@@ -240,16 +320,18 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === "GET") {
       const row = await readStoredState(config);
-      const access = adminSession(req, row.payload, config.key);
-      if (/^Bearer\s+/i.test(String(req.headers?.authorization || "")) && !access) {
-        return json(res, 403, { configured: true, error: "Administratorska sesija nije važeća.", payload: null });
-      }
+      const access = accessSession(req, row.payload, config.key);
+      if (!access) return json(res, 401, { configured: true, error: "Prijava je obavezna.", payload: null });
+      const visiblePayload = access.role === "full-admin" ? hidePasswords(row.payload || null)
+        : access.role === "operational-admin" ? hideOperationalFinancials(row.payload)
+          : access.role === "employee" ? hideEmployeeState(row.payload, access.employee)
+            : hideClientState(row.payload, access.client);
       return json(res, 200, {
         configured: true,
         empty: !row.payload,
-        payload: access?.role === "operational-admin" ? hideOperationalFinancials(row.payload) : hidePasswords(row.payload || null),
+        payload: visiblePayload,
         updatedAt: row.updatedAt || "",
-        accessRole: access?.role || "legacy-full-admin",
+        accessRole: access.role,
       });
     }
 
@@ -260,9 +342,8 @@ module.exports = async function handler(req, res) {
         return json(res, 400, { configured: true, error: "Nedostaje payload objekat." });
       }
       const current = await readStoredState(config);
-      const hasBearer = /^Bearer\s+/i.test(String(req.headers?.authorization || ""));
-      const access = adminSession(req, current.payload, config.key);
-      if (hasBearer && !access) return json(res, 403, { configured: true, error: "Administratorska sesija nije važeća." });
+      const access = accessSession(req, current.payload, config.key);
+      if (!access) return json(res, 401, { configured: true, error: "Prijava je obavezna." });
       const baseUpdatedAt = String(body.baseUpdatedAt || "");
       if (current.updatedAt && baseUpdatedAt !== current.updatedAt) {
         return json(res, 409, {
@@ -272,6 +353,9 @@ module.exports = async function handler(req, res) {
           updatedAt: current.updatedAt,
         });
       }
+      if (access.role === "operational-admin") payload = mergeOperationalPayload(payload, current.payload, access.employee);
+      if (access.role === "employee") payload = mergeEmployeePayload(payload, current.payload, access.employee);
+      if (access.role === "client") payload = mergeClientPayload(payload, current.payload, access.client);
       const unsafeShrink = unsafeCollectionShrink(payload, current.payload);
       if (unsafeShrink) {
         return json(res, 409, {
@@ -283,7 +367,6 @@ module.exports = async function handler(req, res) {
         });
       }
       await preserveDailyPrewriteBackup(config, current);
-      if (access?.role === "operational-admin") payload = mergeOperationalPayload(payload, current.payload, access.employee);
       payload = preserveCredentials(payload, current.payload);
       const updatedAt = new Date().toISOString();
       const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
