@@ -7,6 +7,7 @@ import path from "node:path";
 import OpenAI, { toFile } from "openai";
 import whatsapp from "whatsapp-web.js";
 import { analyzeFollowup, analyzeMessage } from "./analyze.js";
+import { buildReasoningOptions } from "./openai-options.js";
 import { hasOwnerMention, isAcknowledgement, likelyRequiresTeamReply, needsUrgentAnalysis } from "./urgency.js";
 
 const { Client, LocalAuth } = whatsapp;
@@ -47,9 +48,7 @@ const deploymentTestVersion = "2026-09-11-stability-test-1";
 const yesterdayAnalysisTestVersion = "2026-09-11-yesterday-analysis-1";
 
 function reasoningOptions() {
-  return String(model).startsWith("gpt-6")
-    ? { reasoning_effort: reasoningEffort }
-    : { temperature: 0 };
+  return buildReasoningOptions(model, reasoningEffort);
 }
 const stateDirectory = process.env.WWEBJS_AUTH_PATH
   ? path.dirname(process.env.WWEBJS_AUTH_PATH)
@@ -772,6 +771,10 @@ async function sendMorningReport() {
 
 async function sendWeeklyReport() {
   const today = viennaDateKey();
+  let delivery = dailyState.weeklyDelivery;
+  if (delivery?.date === today && Array.isArray(delivery.parts)) {
+    console.log(`[WEEKLY_REPORT] Resuming delivery at part ${delivery.nextPartIndex || 0}/${delivery.parts.length}.`);
+  } else {
   const snapshot = ownerActionSnapshot();
   const chats = await client.getChats();
   const groups = chats
@@ -792,7 +795,7 @@ async function sendWeeklyReport() {
   const batchSize = 5;
   const batches = [];
   for (let index = 0; index < groups.length; index += batchSize) batches.push(groups.slice(index, index + batchSize));
-  await sendWhatsappMessage(alertTo, `*NEDELJNI PREGLED — ${today}*\n\nVidim ukupno ${groups.length} klijentskih grupa. Svaki klijent dobija svoj nedeljni status, u ${batches.length} delova po najviše pet klijenata.`, "weekly report heading");
+  const parts = [];
   for (const [batchIndex, batch] of batches.entries()) {
     const names = new Set(batch.map((chat) => chat.name));
     const messages = batch.flatMap((chat) => messagesByGroup.get(chat.name) || []);
@@ -805,12 +808,36 @@ async function sendWeeklyReport() {
       ]
     });
     const part = String(completion.choices[0]?.message?.content || "").trim();
-    await sendWhatsappMessage(alertTo, `*Deo ${batchIndex + 1}/${batches.length}*\n\n${part}`, `weekly report ${batchIndex + 1}/${batches.length}`);
+    parts.push(`*Deo ${batchIndex + 1}/${batches.length}*\n\n${part}`);
+  }
+  delivery = {
+    date: today,
+    heading: `*NEDELJNI PREGLED — ${today}*\n\nVidim ukupno ${groups.length} klijentskih grupa. Svaki klijent dobija svoj nedeljni status, u ${batches.length} delova po najviše pet klijenata.`,
+    headingSent: false,
+    parts,
+    nextPartIndex: 0
+  };
+  dailyState.weeklyDelivery = delivery;
+  saveDailyState();
+  }
+
+  if (!delivery.headingSent) {
+    await sendWhatsappMessage(alertTo, delivery.heading, "weekly report heading");
+    delivery.headingSent = true;
+    saveDailyState();
+  }
+  while (delivery.nextPartIndex < delivery.parts.length) {
+    const index = delivery.nextPartIndex;
+    await sendWhatsappMessage(alertTo, delivery.parts[index], `weekly report ${index + 1}/${delivery.parts.length}`);
+    delivery.nextPartIndex += 1;
+    saveDailyState();
     await new Promise((resolve) => setTimeout(resolve, 750));
   }
   dailyState.lastWeeklyDate = today;
   dailyState.lastReportDate = today;
   dailyState.lastReportVersion = reportDeliveryVersion;
+  dailyState.nextClosingReportAttemptAt = "";
+  delete dailyState.weeklyDelivery;
   saveDailyState();
 }
 
@@ -888,15 +915,25 @@ function startDailyReportScheduler() {
     const closingReportMissing = dailyState.lastReportDate !== today || dailyState.lastReportVersion !== reportDeliveryVersion;
     const weeklyDue = parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today;
     const closingDue = reportMode !== "weekly" && closingReportMissing;
-    if (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60 && (weeklyDue || closingDue) && !closingReportInFlight) {
+    const retryAllowed = !dailyState.nextClosingReportAttemptAt
+      || new Date(dailyState.nextClosingReportAttemptAt).getTime() <= Date.now();
+    if (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60 && (weeklyDue || closingDue) && retryAllowed && !closingReportInFlight) {
       closingReportInFlight = true;
       if (weeklyDue) {
         void sendWeeklyReport()
-          .catch((error) => console.error("Weekly report failed:", error))
+          .catch((error) => {
+            dailyState.nextClosingReportAttemptAt = new Date(Date.now() + 15 * 60000).toISOString();
+            saveDailyState();
+            console.error(`Weekly report failed; next attempt after ${dailyState.nextClosingReportAttemptAt}:`, error);
+          })
           .finally(() => { closingReportInFlight = false; });
       } else {
         void sendDailyReport()
-          .catch((error) => console.error("Daily report failed:", error))
+          .catch((error) => {
+            dailyState.nextClosingReportAttemptAt = new Date(Date.now() + 15 * 60000).toISOString();
+            saveDailyState();
+            console.error(`Daily report failed; next attempt after ${dailyState.nextClosingReportAttemptAt}:`, error);
+          })
           .finally(() => { closingReportInFlight = false; });
       }
     }
