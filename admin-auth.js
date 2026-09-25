@@ -57,16 +57,10 @@ document.getElementById("adminLoginForm")?.addEventListener("submit", async (eve
   const submit = event.currentTarget.querySelector('button[type="submit"]');
   if (submit) { submit.disabled = true; submit.textContent = "Provera pristupa..."; }
   try {
-    let response = await fetch("/api/employee-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "fullAdminLogin", email, password }) });
-    let result = await response.json().catch(() => ({}));
-    let role = "full-admin";
-    if (!response.ok) {
-      response = await fetch("/api/employee-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "operationalAdminLogin", email, password }) });
-      result = await response.json().catch(() => ({}));
-      role = "operational-admin";
-    }
+    const response = await fetch("/api/employee-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "adminLogin", email, password }) });
+    const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) throw new Error(result.error || "Login podaci nisu tačni.");
-    setAdminSession({ email, name: result.employee?.name || email, employeeId: result.employee?.id || "", role, token: result.token, expiresAt: result.expiresAt });
+    setAdminSession({ email, name: result.employee?.name || email, employeeId: result.employee?.id || "", role: result.role, token: result.token, expiresAt: result.expiresAt });
     window.location.href = adminHomePath();
   } catch (error) {
     const message = document.getElementById("adminLoginError");

@@ -69,7 +69,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    if (body.action === "login" || body.action === "operationalAdminLogin" || body.action === "fullAdminLogin") {
+    if (["login", "adminLogin", "operationalAdminLogin", "fullAdminLogin"].includes(body.action)) {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
       let employees = await readFastEmployees({ email }).catch(() => []);
@@ -85,14 +85,17 @@ module.exports = async function handler(req, res) {
       if (body.action === "fullAdminLogin" && !FULL_ADMIN_EMPLOYEE_IDS.has(employee.id)) {
         return send(res, 403, { error: "Ovaj nalog nema pristup glavnoj administraciji." });
       }
+      if (body.action === "adminLogin" && !FULL_ADMIN_EMPLOYEE_IDS.has(employee.id) && employee.isOperationalAdmin !== true) {
+        return send(res, 403, { error: "Ovaj nalog nema administratorski pristup." });
+      }
       const expiresAt = Date.now() + SESSION_TTL_MS;
-      const tokenRole = body.action === "fullAdminLogin"
+      const tokenRole = body.action === "fullAdminLogin" || (body.action === "adminLogin" && FULL_ADMIN_EMPLOYEE_IDS.has(employee.id))
         ? "full-admin"
         : body.action === "operationalAdminLogin" || employee.isOperationalAdmin === true
           ? "operational-admin"
           : "employee";
       const token = sign({ employeeId: employee.id, email, role: tokenRole, exp: expiresAt });
-      return send(res, 200, { ok: true, token, expiresAt, employee: publicEmployee(employee) });
+      return send(res, 200, { ok: true, token, role: tokenRole, expiresAt, employee: publicEmployee(employee) });
     }
 
     if (body.action === "validate") {
