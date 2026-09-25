@@ -4303,6 +4303,16 @@ body.employee-editor-open {
 
 /* KPI navigation and employee profile */
 .sidebar a.nav-item { display: flex; align-items: center; text-decoration: none !important; }
+.operational-admin-nav-label {
+  margin: 12px 14px 2px;
+  color: var(--muted);
+  font: 700 10px/1.3 Montserrat, Inter, sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+@media (max-width: 760px) {
+  #employeeApp .operational-admin-nav-label { grid-column: 1 / -1; margin: 8px 3px 0; text-align: left; }
+}
 .employee-client-ratings { display: grid; gap: 10px; }
 .one-on-one-profile-note { white-space: normal; line-height: 1.6; }
 

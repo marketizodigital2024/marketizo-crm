@@ -135,6 +135,32 @@ function setEmployeeSession(employee, token, expiresAt) {
   }
 }
 
+function syncOperationalAdminAccess() {
+  const employeeSession = getEmployeeSession();
+  const enabled = activeEmployee?.isOperationalAdmin === true && Boolean(employeeSession?.token);
+  document.querySelectorAll("[data-operational-admin-nav]").forEach((item) => {
+    item.hidden = !enabled;
+  });
+
+  try {
+    const existingAdminSession = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null");
+    if (enabled) {
+      localStorage.setItem("marketizoAdminSession", JSON.stringify({
+        email: String(activeEmployee.email || employeeSession.email || "").toLowerCase(),
+        name: activeEmployee.name || "Operativni administrator",
+        role: "operational-admin",
+        employeeId: activeEmployee.id,
+        token: employeeSession.token,
+        expiresAt: Number(employeeSession.expiresAt || 0),
+      }));
+    } else if (existingAdminSession?.role === "operational-admin") {
+      localStorage.removeItem("marketizoAdminSession");
+    }
+  } catch {
+    localStorage.removeItem("marketizoAdminSession");
+  }
+}
+
 async function fetchEmployeeAuth(payload, timeoutMs = 12000) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -1082,6 +1108,7 @@ function renderEmployeePortal() {
   if (!activeEmployee) return;
   state = loadState();
   activeEmployee = state.employees.find((employee) => employee.id === activeEmployee.id) || activeEmployee;
+  syncOperationalAdminAccess();
   const year = Number(portalMonth.slice(0, 4));
   const logs = employeeWorkLogs(portalMonth);
   const hours = employeeMonthHours(activeEmployee, portalMonth);
@@ -2375,6 +2402,12 @@ document.getElementById("ackLateBtn")?.addEventListener("click", () => {
 
 document.getElementById("logoutEmployee")?.addEventListener("click", () => {
   localStorage.removeItem(employeeSessionKey);
+  try {
+    const adminSession = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null");
+    if (adminSession?.role === "operational-admin") localStorage.removeItem("marketizoAdminSession");
+  } catch {
+    localStorage.removeItem("marketizoAdminSession");
+  }
   document.documentElement.classList.remove("employee-session-cached");
   activeEmployee = null;
   leaderReportInboxShown = false;

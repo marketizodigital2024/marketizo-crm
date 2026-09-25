@@ -82,7 +82,10 @@ module.exports = async function handler(req, res) {
         return send(res, 403, { error: "Ovaj nalog nema pristup operativnoj administraciji." });
       }
       const expiresAt = Date.now() + SESSION_TTL_MS;
-      const token = sign({ employeeId: employee.id, email, role: body.action === "operationalAdminLogin" ? "operational-admin" : "employee", exp: expiresAt });
+      const tokenRole = body.action === "operationalAdminLogin" || employee.isOperationalAdmin === true
+        ? "operational-admin"
+        : "employee";
+      const token = sign({ employeeId: employee.id, email, role: tokenRole, exp: expiresAt });
       return send(res, 200, { ok: true, token, expiresAt, employee: publicEmployee(employee) });
     }
 

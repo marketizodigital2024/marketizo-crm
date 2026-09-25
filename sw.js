@@ -1,4 +1,4 @@
-const CACHE_NAME = "marketizo-crm-v121";
+const CACHE_NAME = "marketizo-crm-v122";
 const ASSETS = [
   "index.html",
   "client-login.html",
@@ -14,7 +14,7 @@ const ASSETS = [
   "styles.css?v=95",
   "app.js?v=98",
   "client-portal.js?v=6",
-  "employee-portal.js?v=91",
+  "employee-portal.js?v=92",
   "remote-state.js?v=11",
   "admin-auth.js?v=5",
   "marketizo-logo.png",
