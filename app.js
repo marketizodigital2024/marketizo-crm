@@ -1183,6 +1183,14 @@ const currency = new Intl.NumberFormat("de-AT", {
   maximumFractionDigits: 0,
 });
 
+function currentAdminSession() {
+  try { return JSON.parse(localStorage.getItem("marketizoAdminSession") || "null"); } catch { return null; }
+}
+
+function isOperationalAdminSession() {
+  return currentAdminSession()?.role === "operational-admin";
+}
+
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
@@ -3584,6 +3592,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.openingHourBalance.value = parseNumber(employee.openingHourBalance || 0);
     form.elements.openingBalanceMonth.value = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = Boolean(employee.isLeader);
+    if (form.elements.isOperationalAdmin) form.elements.isOperationalAdmin.checked = Boolean(employee.isOperationalAdmin);
     form.elements.leaderId.value = employee.leaderId || "";
     form.elements.vacationDays.value = Number(employee.vacationDays || 25);
     form.elements.openingVacationUsed.value = parseNumber(employee.openingVacationUsed || 0);
@@ -3598,6 +3607,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.openingHourBalance.value = 0;
     form.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = false;
+    if (form.elements.isOperationalAdmin) form.elements.isOperationalAdmin.checked = false;
     form.elements.leaderId.value = "";
     form.elements.vacationDays.value = 25;
     form.elements.openingVacationUsed.value = 0;
@@ -5443,7 +5453,45 @@ function setText(id, value) {
   if (target) target.textContent = value;
 }
 
+function setupOperationalAdminField() {
+  const form = document.getElementById("employeeForm");
+  if (!form || form.elements.isOperationalAdmin) return;
+  const grid = form.querySelector(".form-grid");
+  if (!grid) return;
+  const label = document.createElement("label");
+  label.className = "checkbox-card span-2";
+  label.innerHTML = '<input name="isOperationalAdmin" type="checkbox" /><span><strong>Operativni administrator</strong><small>Može da vodi klijente, raspodelu tima, KPI linkove i kalendar, bez pristupa finansijama, platama, backupu i podešavanjima.</small></span>';
+  grid.appendChild(label);
+}
+
+function applyOperationalAdminAccess() {
+  if (!isOperationalAdminSession()) return;
+  if (/employees-settings/.test(location.pathname)) { location.replace("employees-overview.html"); return; }
+  document.body.classList.add("operational-admin-mode");
+  document.querySelectorAll('[data-view="admin"], [data-view="reports"], [href*="employees-settings"], [href*="#work/absence"], [href*="#work/hours"], [href*="#work/late"], #exportBtn, #backupNowBtn, #employeeProfilePanel, #openEmployeeProfileForm, [data-edit-employee], [data-delete-employee], [data-client-delete], [data-delete-client], [data-remove-client], .client-cost-nav').forEach((item) => { item.hidden = true; });
+  document.getElementById("selectedEmployeeSalary")?.closest("article, div")?.setAttribute("hidden", "");
+  const protectedClientFields = ["package", "revenue", "invoiceStartMonth", "billingDay", "websitePrice", "hostingPrice", "domainPrice"];
+  protectedClientFields.forEach((name) => document.querySelectorAll(`[name="${name}"]`).forEach((input) => {
+    const label = input.closest("label");
+    if (label) label.hidden = true;
+    input.disabled = true;
+  }));
+  document.querySelectorAll('[data-employee-section="settings"], #employees form, #employeeForm').forEach((item) => { item.hidden = true; });
+  const topActions = document.querySelector(".top-actions");
+  if (topActions && !document.getElementById("operationalAdminBadge")) {
+    const badge = document.createElement("span");
+    badge.id = "operationalAdminBadge";
+    badge.className = "status info";
+    badge.textContent = "Operativni administrator";
+    topActions.prepend(badge);
+  }
+  const activeView = document.body.dataset.activeView;
+  if (!activeView || activeView === "admin" || activeView === "reports") setActiveView("clients", false);
+  setText("pageTitle", document.body.dataset.activeView === "calendar" ? "Kalendar" : document.body.dataset.activeView === "employees" ? "Tim · pregled" : "Klijenti");
+}
+
 function renderAll() {
+  setupOperationalAdminField();
   const notificationCount = (state.notifications || []).length;
   generateSystemNotifications();
   if ((state.notifications || []).length !== notificationCount) saveState();
@@ -5455,6 +5503,7 @@ function renderAll() {
   if (document.getElementById("countryBars")) renderReports();
   if (document.getElementById("clientPortal")) renderClientPortal();
   renderLeadClientOptions();
+  applyOperationalAdminAccess();
 }
 
 document.querySelectorAll(".nav-item").forEach((button) => {
@@ -5740,6 +5789,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
     openingHourBalance: parseNumber(formData.get("openingHourBalance"), 0),
     openingBalanceMonth: formData.get("openingBalanceMonth") || shiftMonth(currentMonthKey(), -1),
     isLeader: Boolean(form.elements.isLeader?.checked),
+    isOperationalAdmin: Boolean(form.elements.isOperationalAdmin?.checked),
     leaderId: formData.get("leaderId") || "",
     vacationDays: parseNumber(formData.get("vacationDays"), 25),
     openingVacationUsed: parseNumber(formData.get("openingVacationUsed"), 0),
@@ -5770,6 +5820,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
   event.currentTarget.elements.openingHourBalance.value = 0;
   event.currentTarget.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
   event.currentTarget.elements.isLeader.checked = false;
+  if (event.currentTarget.elements.isOperationalAdmin) event.currentTarget.elements.isOperationalAdmin.checked = false;
   event.currentTarget.elements.leaderId.value = "";
   event.currentTarget.elements.vacationDays.value = 25;
   event.currentTarget.elements.openingVacationUsed.value = 0;

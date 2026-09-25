@@ -59,7 +59,7 @@ async function readFastEmployees({ email = "", id = "" } = {}) {
 }
 
 function publicEmployee(employee) {
-  return { id: employee.id, email: employee.email, name: employee.name };
+  return { id: employee.id, email: employee.email, name: employee.name, isOperationalAdmin: employee.isOperationalAdmin === true };
 }
 
 module.exports = async function handler(req, res) {
@@ -68,7 +68,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    if (body.action === "login") {
+    if (body.action === "login" || body.action === "operationalAdminLogin") {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
       let employees = await readFastEmployees({ email }).catch(() => []);
@@ -78,8 +78,11 @@ module.exports = async function handler(req, res) {
         String(item.password || "") === password
       );
       if (!employee) return send(res, 401, { error: "Pogrešan email ili lozinka." });
+      if (body.action === "operationalAdminLogin" && employee.isOperationalAdmin !== true) {
+        return send(res, 403, { error: "Ovaj nalog nema pristup operativnoj administraciji." });
+      }
       const expiresAt = Date.now() + SESSION_TTL_MS;
-      const token = sign({ employeeId: employee.id, email, exp: expiresAt });
+      const token = sign({ employeeId: employee.id, email, role: body.action === "operationalAdminLogin" ? "operational-admin" : "employee", exp: expiresAt });
       return send(res, 200, { ok: true, token, expiresAt, employee: publicEmployee(employee) });
     }
 

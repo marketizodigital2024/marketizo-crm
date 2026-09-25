@@ -4288,6 +4288,10 @@ body.employee-editor-open {
 .weekly-answer-details { margin-top: 10px; }
 .weekly-answer-details summary { cursor: pointer; font-weight: 800; color: var(--primary); }
 .weekly-answer-details p { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); line-height: 1.5; }
+.operational-admin-mode [data-finance-only] { display: none !important; }
+#operationalAdminBadge { white-space: nowrap; }
+.operational-admin-mode .client-table th:nth-child(2),
+.operational-admin-mode .client-table td:nth-child(2) { display: none; }
 #employeeReportsTab .leader-activity-filter { grid-template-columns: minmax(170px, .7fr) minmax(230px, 1.3fr) auto auto; }
 @media (max-width: 820px) { #employeeReportsTab .leader-activity-filter { grid-template-columns: 1fr; } }
 .leader-goals-section { display: grid; gap: 16px; }

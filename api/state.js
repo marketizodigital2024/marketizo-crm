@@ -2,6 +2,7 @@ const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
 const BACKUP_SLOTS = 30;
 const employeeAuthTable = "agency_crm_employee_auth";
+const crypto = require("node:crypto");
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -21,6 +22,64 @@ function supabaseHeaders(key) {
     apikey: key,
     Authorization: `Bearer ${key}`,
     "Content-Type": "application/json",
+  };
+}
+
+function verifyEmployeeToken(token, key) {
+  const [encoded, signature] = String(token || "").split(".");
+  if (!encoded || !signature) return null;
+  const secret = process.env.EMPLOYEE_SESSION_SECRET || key;
+  const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+  const left = Buffer.from(signature);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+  const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+  return payload.exp > Date.now() && payload.role === "operational-admin" ? payload : null;
+}
+
+function operationalSession(req, current, key) {
+  const token = String(req.headers?.authorization || "").replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  const session = verifyEmployeeToken(token, key);
+  const employee = (current?.employees || []).find((item) => item.id === session?.employeeId && item.status !== "Neaktivan" && item.isOperationalAdmin === true);
+  return employee ? { session, employee } : null;
+}
+
+const clientFinancialKeys = ["revenue", "cpl", "package", "billingDay", "paymentStatus", "invoiceStatus", "paymentMethod", "invoices", "invoiceStartMonth", "invoiceExcludedMonths", "websitePrice", "hostingPrice", "domainPrice"];
+
+function hideOperationalFinancials(payload) {
+  const copy = hidePasswords(payload);
+  copy.employees = (copy.employees || []).map((employee) => ({ ...employee, salary: undefined, openingHourBalance: undefined }));
+  copy.clients = (copy.clients || []).map((client) => {
+    const safe = { ...client };
+    clientFinancialKeys.forEach((key) => delete safe[key]);
+    return safe;
+  });
+  delete copy.packages;
+  delete copy.backup;
+  return copy;
+}
+
+function mergeOperationalPayload(submitted, current, actor) {
+  const currentClients = new Map((current.clients || []).map((client) => [client.id, client]));
+  const submittedClients = Array.isArray(submitted.clients) ? submitted.clients : current.clients || [];
+  const clients = submittedClients.map((client) => {
+    const previous = currentClients.get(client.id) || {};
+    const merged = { ...previous, ...client };
+    clientFinancialKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(previous, key)) merged[key] = previous[key];
+      else delete merged[key];
+    });
+    return merged;
+  });
+  const submittedIds = new Set(clients.map((client) => client.id));
+  (current.clients || []).forEach((client) => { if (!submittedIds.has(client.id)) clients.push(client); });
+  return {
+    ...current,
+    clients,
+    companyPlans: Array.isArray(submitted.companyPlans) ? submitted.companyPlans : current.companyPlans,
+    clientLeads: Array.isArray(submitted.clientLeads) ? submitted.clientLeads : current.clientLeads,
+    operationalAuditLog: [{ id: crypto.randomUUID(), actorId: actor.id, actorName: actor.name, action: "operational-state-save", createdAt: new Date().toISOString() }, ...(current.operationalAuditLog || [])].slice(0, 500),
   };
 }
 
@@ -164,23 +223,17 @@ module.exports = async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
-      const response = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
-        headers: supabaseHeaders(config.key),
-      });
-      if (!response.ok) {
-        return json(res, response.status, {
-          configured: true,
-          error: await response.text(),
-          payload: null,
-        });
+      const row = await readStoredState(config);
+      const access = operationalSession(req, row.payload, config.key);
+      if (/^Bearer\s+/i.test(String(req.headers?.authorization || "")) && !access) {
+        return json(res, 403, { configured: true, error: "Operativna administratorska sesija nije važeća.", payload: null });
       }
-      const rows = await response.json();
-      const row = rows[0];
       return json(res, 200, {
         configured: true,
-        empty: !row,
-        payload: hidePasswords(row?.payload || null),
-        updatedAt: row?.updated_at || "",
+        empty: !row.payload,
+        payload: access ? hideOperationalFinancials(row.payload) : hidePasswords(row.payload || null),
+        updatedAt: row.updatedAt || "",
+        accessRole: access ? "operational-admin" : "full-admin",
       });
     }
 
@@ -191,6 +244,9 @@ module.exports = async function handler(req, res) {
         return json(res, 400, { configured: true, error: "Nedostaje payload objekat." });
       }
       const current = await readStoredState(config);
+      const hasBearer = /^Bearer\s+/i.test(String(req.headers?.authorization || ""));
+      const access = operationalSession(req, current.payload, config.key);
+      if (hasBearer && !access) return json(res, 403, { configured: true, error: "Operativna administratorska sesija nije važeća." });
       const baseUpdatedAt = String(body.baseUpdatedAt || "");
       if (current.updatedAt && baseUpdatedAt !== current.updatedAt) {
         return json(res, 409, {
@@ -211,6 +267,7 @@ module.exports = async function handler(req, res) {
         });
       }
       await preserveDailyPrewriteBackup(config, current);
+      if (access) payload = mergeOperationalPayload(payload, current.payload, access.employee);
       payload = preserveCredentials(payload, current.payload);
       const updatedAt = new Date().toISOString();
       const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {

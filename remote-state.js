@@ -20,6 +20,12 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  function accessHeaders(extra = {}) {
+    let session = null;
+    try { session = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null"); } catch {}
+    return { ...extra, ...(session?.role === "operational-admin" && session?.token ? { Authorization: `Bearer ${session.token}` } : {}) };
+  }
+
   function isLocalFile() {
     return window.location.protocol === "file:";
   }
@@ -102,7 +108,7 @@
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 12000);
     try {
-      const response = await fetch(`/api/state?ts=${Date.now()}`, { cache: "no-store", signal: controller.signal });
+      const response = await fetch(`/api/state?ts=${Date.now()}`, { cache: "no-store", signal: controller.signal, headers: accessHeaders() });
       const data = await response.json().catch(() => ({}));
       configured = Boolean(data.configured);
       online = configured && response.ok && !data.error;
@@ -138,7 +144,7 @@
       for (let attempt = 0; attempt < 4; attempt += 1) {
         const response = await fetch("/api/state", {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: accessHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ payload, baseUpdatedAt: lastUpdatedAt }),
         });
         const data = await response.json().catch(() => ({}));

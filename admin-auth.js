@@ -23,11 +23,15 @@ function getAdminSession() {
 }
 
 function setAdminSession(user) {
+  if (user.role === "operational-admin") localStorage.removeItem("agencyCrmData");
   localStorage.setItem(
     adminSessionKey,
     JSON.stringify({
       email: user.email,
       name: user.name,
+      role: user.role || "full-admin",
+      employeeId: user.employeeId || "",
+      token: user.token || "",
       expiresAt: Date.now() + adminSessionDuration,
     })
   );
@@ -49,18 +53,30 @@ function setupPasswordToggles() {
   });
 }
 
-document.getElementById("adminLoginForm")?.addEventListener("submit", (event) => {
+document.getElementById("adminLoginForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim();
   const user = adminUsers.find((admin) => admin.email === email && admin.password === password);
-  if (!user) {
-    document.getElementById("adminLoginError").hidden = false;
+  if (user) {
+    setAdminSession({ ...user, role: "full-admin" });
+    window.location.href = adminHomePath();
     return;
   }
-  setAdminSession(user);
-  window.location.href = adminHomePath();
+  const submit = event.currentTarget.querySelector('button[type="submit"]');
+  if (submit) { submit.disabled = true; submit.textContent = "Provera pristupa..."; }
+  try {
+    const response = await fetch("/api/employee-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "operationalAdminLogin", email, password }) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error(result.error || "Login podaci nisu tačni.");
+    setAdminSession({ email, name: result.employee?.name || email, employeeId: result.employee?.id || "", role: "operational-admin", token: result.token });
+    window.location.href = adminHomePath();
+  } catch (error) {
+    const message = document.getElementById("adminLoginError");
+    if (message) { message.textContent = error?.message || "Login podaci nisu tačni."; message.hidden = false; }
+    if (submit) { submit.disabled = false; submit.textContent = "Uloguj se"; }
+  }
 });
 
 if (document.getElementById("adminLoginForm") && getAdminSession()) {
