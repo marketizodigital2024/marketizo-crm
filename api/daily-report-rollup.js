@@ -29,7 +29,8 @@ function expectedMinutes(employee, date) {
   if (day < 1 || day > 5) return 0;
   const month = date.slice(0, 7);
   const weeklyHours = Number(employee.weeklyHoursByMonth?.[month] ?? employee.weeklyHours ?? 38.5);
-  if (weeklyHours >= 38) return day === 5 ? 420 : 510;
+  // Full-time target is 38.5h: 8h Monday-Thursday and 6.5h Friday.
+  if (weeklyHours >= 38) return day === 5 ? 390 : 480;
   return Math.round((weeklyHours * 60) / 5);
 }
 
