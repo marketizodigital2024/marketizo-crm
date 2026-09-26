@@ -2152,8 +2152,16 @@ document.getElementById("portalActivitySearch")?.addEventListener("focus", () =>
 });
 
 document.getElementById("portalActivitySearch")?.addEventListener("input", () => {
+  const activityInput = document.getElementById("portalActivitySearch");
   const activityIdInput = document.getElementById("portalActivityId");
   if (activityIdInput) activityIdInput.value = "";
+  const exactActivity = (state.employeeActivities || []).find((activity) =>
+    activity.active !== false && normalizedActivitySearch(activity.name) === normalizedActivitySearch(activityInput?.value)
+  );
+  if (activityIdInput && exactActivity) {
+    activityIdInput.value = exactActivity.id;
+    activityIdInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
   renderPortalActivityOptions();
   setPortalActivityOptionsOpen(true);
 });
@@ -2224,7 +2232,9 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   const form = event.currentTarget;
   const formData = new FormData(form);
   const date = String(formData.get("date") || "");
-  const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
+  const typedActivityName = normalizedActivitySearch(document.getElementById("portalActivitySearch")?.value);
+  const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"))
+    || (state.employeeActivities || []).find((item) => item.active !== false && normalizedActivitySearch(item.name) === typedActivityName);
   const client = (state.clients || []).find((item) => item.id === formData.get("clientId"));
   const minutes = Math.max(1, parseNumber(formData.get("minutes"), 0));
   if (!activity) {
