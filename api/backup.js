@@ -157,6 +157,17 @@ module.exports = async function handler(req, res) {
       });
       if (response.ok) {
         rows = await response.json();
+      } else {
+        // Older backup rows can contain multi-megabyte payloads and different
+        // metadata shapes. If PostgREST cannot project one of the JSON paths,
+        // fall back to the stable columns instead of losing the whole list.
+        const fallbackResponse = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,updated_at&order=updated_at.desc`, {
+          headers: headers(key),
+        });
+        if (fallbackResponse.ok) rows = await fallbackResponse.json();
+        else databaseWarning = `Backup list failed (${response.status}/${fallbackResponse.status})`;
+      }
+      if (rows.length) {
         const recentResponse = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,payload,updated_at&order=updated_at.desc&limit=3`, {
           headers: headers(key),
         });
@@ -164,10 +175,8 @@ module.exports = async function handler(req, res) {
           const recentRows = await recentResponse.json();
           recentById = new Map(recentRows.map((row) => [row.id, row]));
         } else {
-          databaseWarning = `Recent backup check failed (${recentResponse.status})`;
+          databaseWarning = databaseWarning || `Recent backup check failed (${recentResponse.status})`;
         }
-      } else {
-        databaseWarning = `Backup list failed (${response.status})`;
       }
       return send(res, 200, {
         ok: true,
