@@ -472,7 +472,12 @@ async function postEmployeeWorkLog(workLog, recipientId) {
       body: JSON.stringify({ workLog, recipientId, updateReport: false }),
     });
     const data = await response.json().catch(() => ({}));
-    return { ok: response.ok && data.ok, retryable: response.status === 409 || response.status === 429 || response.status >= 500, error: data.error || "" };
+    return {
+      ok: response.ok && data.ok,
+      retryable: response.status === 401 || response.status === 403 || response.status === 409 || response.status === 429 || response.status >= 500,
+      authRequired: response.status === 401 || response.status === 403,
+      error: data.error || "",
+    };
   } catch (error) {
     return { ok: false, retryable: true, error: error?.message || "Online čuvanje nije uspelo." };
   }
@@ -2040,6 +2045,7 @@ document.getElementById("employeeLoginForm").addEventListener("submit", async (e
   renderEmployeePortal();
   setupDailyMinuteProgress();
   setupPauseActivityEntry();
+  syncPendingWorkLogs({ notify: true });
 });
 
 document.querySelectorAll("[data-employee-tab]").forEach((button) => {
@@ -2296,7 +2302,16 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
 
   const saveResult = await postEmployeeWorkLog(workLog, recipientId);
   if (!saveResult.ok) {
-    if (saveResult.retryable) return;
+    if (saveResult.retryable) {
+      showToast(
+        saveResult.authRequired ? "Unos čeka novu prijavu" : "Unos čeka sinhronizaciju",
+        saveResult.authRequired
+          ? "Sati nisu obrisani. Osveži portal ili se prijavi ponovo i unos će se automatski poslati."
+          : "Sati nisu obrisani i biće poslati čim veza sa bazom ponovo bude dostupna.",
+        "warn"
+      );
+      return;
+    }
     removePendingWorkLog(workLog.id);
     state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
     saveState({ remote: false });
