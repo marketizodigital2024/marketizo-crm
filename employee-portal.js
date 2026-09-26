@@ -1018,12 +1018,16 @@ function setupPauseActivityEntry() {
   const sync = () => {
     const selected = (state.employeeActivities || []).find((activity) => activity.id === activityIdInput.value);
     const isPause = String(selected?.name || "").trim().toLowerCase() === "pauza";
-    clientSelect.required = !isPause;
-    clientSelect.disabled = isPause;
-    note.hidden = !isPause;
-    if (isPause) {
+    const isInternal = String(selected?.category || "").trim().toLowerCase() === "interno";
+    clientSelect.required = !isInternal;
+    clientSelect.disabled = isInternal;
+    note.hidden = !isInternal;
+    note.textContent = isPause
+      ? "Pauza se evidentira u dnevnom prisustvu, ali se ne vezuje za klijenta niti ulazi u trošak klijenta."
+      : "Interna aktivnost se ne vezuje za klijenta i ne ulazi u trošak klijenta.";
+    if (isInternal) {
       clientSelect.value = "";
-      minutesInput.value = "30";
+      if (isPause) minutesInput.value = "30";
     }
   };
   activityIdInput.addEventListener("change", sync);
@@ -2242,7 +2246,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     return;
   }
   const isPause = String(activity.name || "").trim().toLowerCase() === "pauza";
-  if (!isPause && !client) {
+  const isInternal = String(activity.category || "").trim().toLowerCase() === "interno";
+  if (!isInternal && !client) {
     alert("Izaberi klijenta za kog si radio/la ovu aktivnost.");
     return;
   }
@@ -2273,8 +2278,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     activityId: activity.id,
     activityName: activity.name,
     activityCategory: activity.category || "Ostalo",
-    clientId: client?.id || "",
-    clientName: client?.name || "",
+    clientId: isInternal ? "" : (client?.id || ""),
+    clientName: isInternal ? "" : (client?.name || ""),
     type: "Rad",
     note: formData.get("note"),
     positive: "",

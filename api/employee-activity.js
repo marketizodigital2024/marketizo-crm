@@ -129,8 +129,9 @@ module.exports = async function handler(req, res) {
       const activity = (payload.employeeActivities || []).find((item) => item.id === submittedLog.activityId && item.active !== false);
       if (!activity) return json(res, 400, { ok: false, error: "Aktivnost više nije dostupna. Osveži stranicu i izaberi je ponovo." });
       const isPause = String(activity.name || "").trim().toLowerCase() === "pauza";
+      const isInternal = String(activity.category || "").trim().toLowerCase() === "interno";
       const client = (payload.clients || []).find((item) => item.id === submittedLog.clientId);
-      if (!isPause && !client) return json(res, 400, { ok: false, error: "Izabrani klijent nije pronađen. Osveži stranicu i pokušaj ponovo." });
+      if (!isInternal && !client) return json(res, 400, { ok: false, error: "Izabrani klijent nije pronađen. Osveži stranicu i pokušaj ponovo." });
       const minutes = Math.round(Number(submittedLog.minutes));
       const workLog = {
         ...submittedLog,
@@ -140,8 +141,8 @@ module.exports = async function handler(req, res) {
         activityId: activity.id,
         activityName: activity.name,
         activityCategory: activity.category || "Ostalo",
-        clientId: isPause ? "" : client.id,
-        clientName: isPause ? "" : client.name,
+        clientId: isInternal ? "" : client.id,
+        clientName: isInternal ? "" : client.name,
       };
       await preserveDailyPrewriteBackup(url, key, row);
       payload.employeeWorkLogs.unshift(workLog);
