@@ -67,7 +67,7 @@ async function clickupRoster() {
       if(field?.value==null)return '';
       const definition=fieldDefinitions.get(field.id)||field;
       const options=definition.type_config?.options||field.type_config?.options||[];
-      const render=(value)=>{const option=options.find(item=>item.id===value||item.orderindex===value);return option?.name||value?.username||value?.email||value?.name||value;};
+      const render=(value)=>{const option=options.find(item=>item.id===value||item.orderindex===value);return option?.label||option?.name||value?.username||value?.email||value?.name||value;};
       return (Array.isArray(field.value)?field.value:[field.value]).map(render).filter(Boolean).join('; ');
     };
     for(let page=0;page<100;page++){
