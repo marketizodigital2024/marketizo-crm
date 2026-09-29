@@ -2,6 +2,8 @@ const $=id=>document.getElementById(id);
 const roleNames=['Scenarista','Voice Over','Editor','Social Media Manager','Snimatelj','Paid Ads'];
 let data=null,clickup=null;
 let activeView='employees';
+let loadSequence=0;
+let loginPending=false;
 const liveRosters=new Map();
 function node(tag,text,attributes={}) { const n=document.createElement(tag); if(text!=null)n.textContent=text; for(const [k,v] of Object.entries(attributes))n.setAttribute(k,v); return n; }
 function option(value,label){return node('option',label,{value});}
@@ -16,7 +18,7 @@ function roster(clientId){
   return roleNames.flatMap(role=>people(match?.[role]).map(name=>({role,name,employeeId:data.employees.find(e=>norm(e.name)===norm(name))?.id||null})));
 }
 async function api(action,body){const response=await fetch(`/api/kpi?action=${action}`,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',cache:'no-store'});const result=await response.json();if(!response.ok)throw new Error(result.error||'Greška pri čuvanju.');return result;}
-async function load(){try{data=await api('admin');clickup=data.clickup;$('login').hidden=true;$('dashboard').hidden=false;render();message('');}catch(error){$('dashboard').hidden=true;$('login').hidden=false;message(error.message);}}
+async function load(){const sequence=++loadSequence;try{const result=await api('admin');if(sequence!==loadSequence)return;data=result;clickup=data.clickup;$('login').hidden=true;$('dashboard').hidden=false;render();message('');}catch(error){if(sequence!==loadSequence)return;$('dashboard').hidden=true;$('login').hidden=false;message(error.message);}}
 function render(){
   $('clickupStatus').textContent=clickup.live?`ClickUp raspodela učitana uživo: ${new Date(clickup.syncedAt).toLocaleString('sr-Latn-RS')}`:clickup.error;
   renderUnmatched();
@@ -95,7 +97,7 @@ function renderResults(){
   if(!resultRows.length)resultRoot.append(node('p','Nema odgovora za izabrane filtere.',{class:'empty-state'}));
   for(const r of resultRows){const item=node('details',null,{class:'result'}),summary=node('summary'),summaryTitle=node('span'),summaryMeta=node('small',new Date(r.submittedAt).toLocaleDateString('sr-Latn-RS'));summaryTitle.append(node('strong',r.clientName),node('span',r.month));summary.append(summaryTitle,summaryMeta);item.append(summary);const body=node('div',null,{class:'result-body'});body.append(node('div',`Tim: ${r.team.map(x=>`${x.name} (${x.role})`).join(', ')}`,{class:'result-team'}));for(const q of r.questions){if(fr&&q.target!=='team'&&q.target!==fr)continue;if(fe&&q.target!=='team'&&q.targetEmployeeId!==fe)continue;const value=r.answers[q.id];if(value!==''&&value!=null){const answer=node('div',null,{class:'result-answer'});answer.append(node('span',q.text),node('strong',String(value)));body.append(answer);}}const remove=node('button','Obriši odgovor',{type:'button',class:'danger'});remove.onclick=async()=>{if(!confirm(`Trajno obrisati odgovor klijenta ${r.clientName} za ${r.month}?`))return;remove.disabled=true;try{await api('deleteResponse',{responseId:r.id});await load();message('Odgovor je obrisan.');}catch(error){remove.disabled=false;message(error.message);}};body.append(remove);item.append(body);resultRoot.append(item);}
 }
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{await api('login',{password:$('password').value});$('password').value='';await load();}catch(error){message(error.message);}});
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(loginPending)return;loginPending=true;++loadSequence;const button=e.currentTarget.querySelector('button');button.disabled=true;message('Prijavljivanje…');try{await api('login',{password:$('password').value});$('password').value='';await load();}catch(error){message(error.message);$('password').focus();$('password').select();}finally{loginPending=false;button.disabled=false;}});
 $('refresh').onclick=load;
 $('logout').onclick=async()=>{try{await api('logout',{});data=null;$('dashboard').hidden=true;$('login').hidden=false;$('password').focus();message('Odjavljen si. Za novi ulaz unesi lozinku.');}catch(error){message(error.message);}};
 $('employeesTab').onclick=()=>switchView('employees');
