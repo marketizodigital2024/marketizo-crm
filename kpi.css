@@ -165,7 +165,7 @@ button{border:0;background:#e86d21;color:#fff;padding:11px 17px;border-radius:9p
 .question-heading{display:grid;grid-template-columns:auto 1fr auto;gap:13px}
 .question-number{color:var(--orange-dark);font-size:11px;font-weight:800}
 .question-heading legend{padding:0;color:#211f1d;font-size:16px;font-weight:700;line-height:1.5}
-.required-pill{border-radius:999px;background:#fff0df;color:#a75300;padding:5px 8px;font-size:9px;font-weight:800;text-transform:uppercase}
+.required-pill{align-self:start;border-left:2px solid var(--orange);border-radius:2px;background:#fff7ed;color:#a75300;padding:5px 7px;font-size:9px;font-weight:800;line-height:1;text-transform:uppercase}
 
 .feedback-page .ratings{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0 0}
 .role-explainer{margin:8px 0 0 32px;color:#746b62;font-size:12px;line-height:1.5}
@@ -186,16 +186,19 @@ button{border:0;background:#e86d21;color:#fff;padding:11px 17px;border-radius:9p
 .feedback-success>span{display:grid;place-items:center;width:58px;height:58px;margin:0 auto 18px;border-radius:50%;background:var(--orange);font-size:28px;font-weight:800}
 .feedback-footer{text-align:center;margin-top:22px;color:#756c63;font-size:9px;font-weight:800;letter-spacing:.18em}
 
-@media(max-width:640px){.feedback-header{padding:20px 18px 6px}
+@media(max-width:640px){.feedback-header{padding:18px 18px 6px}
 .feedback-badge{display:none}
 .feedback-shell{padding:0 12px 36px}
-.feedback-hero{padding:36px 25px 30px}
-.feedback-hero h1{font-size:37px}
+.feedback-hero{padding:32px 22px 28px}
+.feedback-hero h1{font-size:34px}
 .feedback-scale-note{display:grid}
-.feedback-welcome,#fields{padding-left:22px;padding-right:22px}
+.feedback-welcome,#fields{padding-left:18px;padding-right:18px}
 .feedback-submit{display:grid;padding:24px 22px 28px}
 .feedback-submit button{justify-content:space-between;width:100%}
-.question-heading{grid-template-columns:auto 1fr}
-.required-pill{display:none}
+.question-heading{grid-template-columns:auto 1fr;gap:9px}
+.required-pill{grid-column:2;margin-top:7px;width:max-content}
 .feedback-page .ratings{gap:6px}
+.feedback-page .ratings span{height:48px}
 }
+
+@media(max-width:380px){.feedback-page .ratings{gap:4px}.feedback-page .ratings span{height:44px;border-radius:9px}.feedback-hero h1{font-size:31px}}
