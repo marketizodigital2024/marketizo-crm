@@ -29,8 +29,8 @@ function expectedMinutes(employee, date) {
   if (day < 1 || day > 5) return 0;
   const month = date.slice(0, 7);
   const weeklyHours = Number(employee.weeklyHoursByMonth?.[month] ?? employee.weeklyHours ?? 38.5);
-  // Full-time daily presence includes the 30-minute break: Mon-Thu 8.5h, Friday 7h.
-  if (weeklyHours >= 38) return day === 5 ? 420 : 510;
+  // Full-time schedule: Mon-Thu 8.5h including the break, Friday 6.5h total.
+  if (weeklyHours >= 38) return day === 5 ? 390 : 510;
   return Math.round((weeklyHours * 60) / 5);
 }
 
