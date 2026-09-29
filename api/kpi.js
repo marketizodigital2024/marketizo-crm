@@ -91,6 +91,10 @@ module.exports=async function handler(req,res) {
       res.setHeader('Set-Cookie','marketizoKpi=; HttpOnly; Secure; SameSite=Strict; Path=/api/kpi; Max-Age=0');
       return json(res,200,{ok:true});
     }
+    if(action==='clickupHealth' && req.method==='GET') {
+      const source=await clickupRoster();
+      return json(res,source.live?200:503,{ok:source.live,clientCount:source.rows.length,syncedAt:source.syncedAt,error:source.error});
+    }
     if(action==='form' && req.method==='GET') {
       const token=String(req.query.token||'');
       if(!/^[a-f0-9]{64}$/.test(token)) return json(res,404,{error:'Link nije validan.'});
