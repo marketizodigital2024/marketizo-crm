@@ -77,6 +77,14 @@ async function clickupRoster() {
       for(const task of tasks){const fields=Object.fromEntries((task.custom_fields||[]).map(field=>[field.name,fieldValue(field)]));rows.push({Klijent:String(task.name||'').trim(),Scenarista:fields.Scenarista||'','Voice Over':fields['Voice Over']||'',Editor:fields.Editor||'','Social Media Manager':fields.SMM||fields['Social Media Manager']||'',Snimatelj:fields.Snimatelj||'','Paid Ads':fields['Paid Ads']||''});}
       if(tasks.length<100)break;
     }
+    const relatedIds=[...new Set(rows.flatMap(row=>splitPeople(row.Snimatelj)).filter(value=>/^[a-f0-9-]{24,}$/i.test(value)))];
+    const relatedNames=new Map((await Promise.all(relatedIds.map(async id=>{
+      const response=await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(id)}`,{headers:{Authorization:token},cache:'no-store'});
+      if(!response.ok)return [id,id];
+      const task=await response.json();
+      return [id,String(task.name||id).trim()];
+    }))).filter(([,name])=>name));
+    for(const row of rows)row.Snimatelj=splitPeople(row.Snimatelj).map(value=>relatedNames.get(value)||value).join('; ');
     return {rows:rows.filter(row=>row.Klijent),syncedAt:new Date().toISOString(),live:true,error:null};
   } catch(error) { return {rows:[],syncedAt:null,live:false,error:`ClickUp nije dostupan (${error.message}). Automatska raspodela trenutno nije dostupna.`}; }
 }
