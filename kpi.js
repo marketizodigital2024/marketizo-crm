@@ -115,4 +115,3 @@ $('copy').onclick=async()=>{await navigator.clipboard.writeText($('link').value)
 $('month').value=new Date().toISOString().slice(0,7);
 $('filterMonth').value=new Date().toISOString().slice(0,7);
 switchView(activeView);
-load();
