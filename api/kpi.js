@@ -66,11 +66,11 @@ async function clickupRoster() {
   } catch(error) { return {rows:[],syncedAt:null,live:false,error:`ClickUp nije dostupan (${error.message}). Automatska raspodela trenutno nije dostupna.`}; }
 }
 function roster(client,employees,overrides,source=[],links=[]) {
-  const manual=overrides.find(x=>x.clientId===client.id);
-  if(manual) return manual.roles;
   const linkedName=links.find(x=>x.clientId===client.id)?.clickupName;
   const row=linkedName?source.find(x=>x.Klijent===linkedName):source.find(x=>norm(x.Klijent)===norm(client.name));
-  return roles.flatMap(role=>splitPeople(row?.[role]).map(name=>({role,name,employeeId:employees.find(e=>norm(e.name)===norm(name))?.id||null})));
+  if(row) return roles.flatMap(role=>splitPeople(row[role]).map(name=>({role,name,employeeId:employees.find(e=>norm(e.name)===norm(name))?.id||null})));
+  const manual=overrides.find(x=>x.clientId===client.id);
+  return manual?.roles||[];
 }
 function validQuestion(q) { return q && typeof q.text==='string' && q.text.trim().length>2 && q.text.length<=300 && ['rating','text','choice'].includes(q.type) && (q.target==='team'||roles.includes(q.target)) && (q.type!=='choice'||Array.isArray(q.options)&&q.options.length>=2&&q.options.length<=15&&q.options.every(x=>typeof x==='string'&&x.trim()&&x.length<=100)); }
 function publicInvite(invite) { return { clientName:invite.clientName, month:invite.month, expiresAt:invite.expiresAt, team:invite.team.map(({role,name})=>({role,name})), questions:invite.questions }; }
@@ -120,6 +120,14 @@ module.exports=async function handler(req,res) {
     }
     if(!authenticated(req)) return json(res,401,{error:'Prijava je potrebna.'});
     const row=await read(rowId), data=row.payload;
+    if(req.method==='GET' && action==='roster') {
+      const main=await read(mainId), clients=main.payload.clients||[], employees=main.payload.employees||[];
+      const client=clients.find(item=>item.id===String(req.query.clientId||''));
+      if(!client) return json(res,404,{error:'Klijent nije pronađen.'});
+      const source=await clickupRoster();
+      const team=roster(client,employees,data.assignments,source.rows,data.links||[]);
+      return json(res,200,{team,live:source.live,syncedAt:source.syncedAt,error:source.error});
+    }
     if(req.method==='GET' && action==='admin') {
       const main=await read(mainId), clients=main.payload.clients||[], employees=main.payload.employees||[];
       const source=await clickupRoster();
