@@ -3,20 +3,19 @@ const crypto = require('crypto');
 const table = process.env.SUPABASE_TABLE || 'agency_crm_state';
 const rowId = process.env.VERCEL_ENV === 'preview' ? 'marketizo-kpi-preview-v1' : 'marketizo-kpi-v1';
 const mainId = process.env.CRM_STATE_ID || 'marketizo-main';
-const roles = ['Scenarista', 'Voice Over', 'Editor', 'Checking', 'Social Media Manager', 'Snimatelj', 'Paid Ads'];
+const roles = ['Scenarista', 'Voice Over', 'Editor', 'Social Media Manager', 'Snimatelj', 'Paid Ads'];
 const roleQuestions = {
-  Scenarista: 'Da li su scenariji jasni, zanimljivi i u skladu sa vašim brendom?',
+  Scenarista: 'Da li su scenariji jasni, zanimljivi i u skladu sa vaÅ¡im brendom?',
   'Voice Over': 'Kako ocenjujete kvalitet i ton voice-overa?',
-  Editor: 'Da li ste zadovoljni kvalitetom montaže i isporukom videa?',
-  Checking: 'Da li su sadržaji pažljivo provereni pre objave?',
-  'Social Media Manager': 'Kako ocenjujete komunikaciju, dizajn i organizaciju sadržaja?',
+  Editor: 'Da li ste zadovoljni kvalitetom montaÅ¾e i isporukom videa?',
+  'Social Media Manager': 'Kako ocenjujete komunikaciju, dizajn i organizaciju sadrÅ¾aja?',
   Snimatelj: 'Kako ocenjujete pripremu, komunikaciju i profesionalnost snimatelja?',
-  'Paid Ads': 'Kako ocenjujete vođenje plaćenih reklama i rezultate kampanja?',
+  'Paid Ads': 'Kako ocenjujete voÄ‘enje plaÄ‡enih reklama i rezultate kampanja?',
 };
 const baseQuestions = [
-  { id: 'team', target: 'team', text: 'Kako biste ocenili ukupnu saradnju sa našim timom?', type: 'rating', required: true },
+  { id: 'team', target: 'team', text: 'Kako biste ocenili ukupnu saradnju sa naÅ¡im timom?', type: 'rating', required: true },
   { id: 'communication', target: 'team', text: 'Da li je komunikacija bila jasna i pravovremena?', type: 'rating', required: true },
-  { id: 'comment', target: 'team', text: 'Šta možemo sledećeg meseca da uradimo bolje?', type: 'text', required: false },
+  { id: 'comment', target: 'team', text: 'Å ta moÅ¾emo sledeÄ‡eg meseca da uradimo bolje?', type: 'text', required: false },
   ...roles.map((role) => ({ id: `role-${role.toLowerCase().replace(/[^a-z]+/g, '-')}`, target: role, text: roleQuestions[role], type: 'rating', required: true })),
 ];
 const blank = () => ({ questions: baseQuestions, assignments: [], links: [], invites: [], responses: [] });
@@ -49,7 +48,7 @@ function splitPeople(value) { return String(value||'').split(/\s*;\s*/).map(v=>v
 function parseClickup(markdown) {
   const lines=String(markdown||'').split('\n').filter(line=>line.startsWith('| '));
   const header=lines.shift()?.split('|').slice(1,-1).map(x=>x.trim())||[];
-  if(!header.includes('Klijent')||!header.includes('Editor')) throw new Error('ClickUp tabela nema očekivane kolone.');
+  if(!header.includes('Klijent')||!header.includes('Editor')) throw new Error('ClickUp tabela nema oÄekivane kolone.');
   return lines.filter(line=>!/^\|\s*:?-{2,}/.test(line)).map(line=>{
     const values=line.split('|').slice(1,-1).map(x=>x.trim().replace(/<br\s*\/?>/gi,'; ').replace(/\\[.\-]/g,m=>m.slice(1)).replace(/\s+/g,' '));
     return Object.fromEntries(header.map((key,index)=>[key,values[index]||'']));
@@ -58,12 +57,16 @@ function parseClickup(markdown) {
 async function clickupRoster() {
   const token=process.env.CLICKUP_API_TOKEN;
   const listId=process.env.CLICKUP_CLIENT_LIST_ID;
-  if(!token||!listId) return {rows:[],syncedAt:null,live:false,error:'ClickUp token ili lista klijenata nisu podešeni. Možeš ručno uneti tim, ali automatska raspodela nije dostupna.'};
+  if(!token||!listId) return {rows:[],syncedAt:null,live:false,error:'ClickUp token ili lista klijenata nisu podeÅ¡eni. MoÅ¾eÅ¡ ruÄno uneti tim, ali automatska raspodela nije dostupna.'};
   try {
     const rows=[];
+    const fieldResponse=await fetch(`https://api.clickup.com/api/v2/list/${encodeURIComponent(listId)}/field`,{headers:{Authorization:token},cache:'no-store'});
+    if(!fieldResponse.ok)throw new Error(`ClickUp fields ${fieldResponse.status}`);
+    const fieldDefinitions=new Map(((await fieldResponse.json()).fields||[]).map(field=>[field.id,field]));
     const fieldValue=(field)=>{
       if(field?.value==null)return '';
-      const options=field.type_config?.options||[];
+      const definition=fieldDefinitions.get(field.id)||field;
+      const options=definition.type_config?.options||field.type_config?.options||[];
       const render=(value)=>{const option=options.find(item=>item.id===value||item.orderindex===value);return option?.name||value?.username||value?.email||value?.name||value;};
       return (Array.isArray(field.value)?field.value:[field.value]).map(render).filter(Boolean).join('; ');
     };
@@ -71,7 +74,7 @@ async function clickupRoster() {
       const response=await fetch(`https://api.clickup.com/api/v2/list/${encodeURIComponent(listId)}/task?include_closed=true&subtasks=true&page=${page}`,{headers:{Authorization:token},cache:'no-store'});
       if(!response.ok) throw new Error(`ClickUp ${response.status}`);
       const payload=await response.json(),tasks=Array.isArray(payload.tasks)?payload.tasks:[];
-      for(const task of tasks){const fields=Object.fromEntries((task.custom_fields||[]).map(field=>[field.name,fieldValue(field)]));rows.push({Klijent:String(task.name||'').trim(),Scenarista:fields.Scenarista||'','Voice Over':fields['Voice Over']||'',Editor:fields.Editor||'',Checking:fields.Checking||'','Social Media Manager':fields.SMM||fields['Social Media Manager']||'',Snimatelj:fields.Snimatelj||'','Paid Ads':fields['Paid Ads']||''});}
+      for(const task of tasks){const fields=Object.fromEntries((task.custom_fields||[]).map(field=>[field.name,fieldValue(field)]));rows.push({Klijent:String(task.name||'').trim(),Scenarista:fields.Scenarista||'','Voice Over':fields['Voice Over']||'',Editor:fields.Editor||'','Social Media Manager':fields.SMM||fields['Social Media Manager']||'',Snimatelj:fields.Snimatelj||'','Paid Ads':fields['Paid Ads']||''});}
       if(tasks.length<100)break;
     }
     return {rows:rows.filter(row=>row.Klijent),syncedAt:new Date().toISOString(),live:true,error:null};
@@ -94,7 +97,7 @@ module.exports=async function handler(req,res) {
     if(action==='login' && req.method==='POST') {
       const supplied=String(req.body?.password||'');
       const a=Buffer.from(supplied), b=Buffer.from(secret());
-      if(a.length!==b.length||!crypto.timingSafeEqual(a,b)) return json(res,401,{error:'Pogrešna lozinka.'});
+      if(a.length!==b.length||!crypto.timingSafeEqual(a,b)) return json(res,401,{error:'PogreÅ¡na lozinka.'});
       const expiry=String(Date.now()+8*60*60*1000), mac=crypto.createHmac('sha256',signKey()).update(expiry).digest('hex');
       res.setHeader('Set-Cookie',`marketizoKpi=${expiry}.${mac}; HttpOnly; Secure; SameSite=Strict; Path=/api/kpi`);
       return json(res,200,{ok:true});
@@ -107,28 +110,29 @@ module.exports=async function handler(req,res) {
       const source=await clickupRoster();
       const assignmentCount=source.rows.reduce((total,row)=>total+roles.reduce((sum,role)=>sum+splitPeople(row[role]).length,0),0);
       const assignedClientCount=source.rows.filter(row=>roles.some(role=>splitPeople(row[role]).length)).length;
-      return json(res,source.live?200:503,{ok:source.live,clientCount:source.rows.length,assignedClientCount,assignmentCount,syncedAt:source.syncedAt,error:source.error});
+      const unresolvedAssignmentCount=source.rows.reduce((total,row)=>total+roles.flatMap(role=>splitPeople(row[role])).filter(name=>/^[a-f0-9-]{24,}$/i.test(name)).length,0);
+      return json(res,source.live?200:503,{ok:source.live,clientCount:source.rows.length,assignedClientCount,assignmentCount,unresolvedAssignmentCount,syncedAt:source.syncedAt,error:source.error});
     }
     if(action==='form' && req.method==='GET') {
       const token=String(req.query.token||'');
       if(!/^[a-f0-9]{64}$/.test(token)) return json(res,404,{error:'Link nije validan.'});
       const row=await read(rowId), invite=row.payload.invites.find(i=>i.tokenHash===sha(token));
-      if(!invite||invite.usedAt||Date.parse(invite.expiresAt)<Date.now()) return json(res,404,{error:'Link je istekao ili je već iskorišćen.'});
+      if(!invite||invite.usedAt||Date.parse(invite.expiresAt)<Date.now()) return json(res,404,{error:'Link je istekao ili je veÄ‡ iskoriÅ¡Ä‡en.'});
       return json(res,200,publicInvite(invite));
     }
     if(action==='submit' && req.method==='POST') {
       const token=String(req.body?.token||'');
       if(!/^[a-f0-9]{64}$/.test(token)) return json(res,404,{error:'Link nije validan.'});
       const row=await read(rowId), data=row.payload, invite=data.invites.find(i=>i.tokenHash===sha(token));
-      if(!invite||invite.usedAt||Date.parse(invite.expiresAt)<Date.now()) return json(res,404,{error:'Link je istekao ili je već iskorišćen.'});
+      if(!invite||invite.usedAt||Date.parse(invite.expiresAt)<Date.now()) return json(res,404,{error:'Link je istekao ili je veÄ‡ iskoriÅ¡Ä‡en.'});
       const answers=req.body?.answers||{};
       for(const q of invite.questions) {
         const value=answers[q.id];
         if(q.required && (value===undefined||value===null||value==='')) return json(res,400,{error:`Nedostaje odgovor: ${q.text}`});
         if(value==null||value==='') continue;
         if(q.type==='rating' && ![1,2,3,4,5].includes(Number(value))) return json(res,400,{error:'Ocena mora biti od 1 do 5.'});
-        if(q.type==='choice' && !q.options.includes(String(value))) return json(res,400,{error:'Izaberi ponuđeni odgovor.'});
-        if(String(value).length>2000) return json(res,400,{error:'Odgovor je predugačak.'});
+        if(q.type==='choice' && !q.options.includes(String(value))) return json(res,400,{error:'Izaberi ponuÄ‘eni odgovor.'});
+        if(String(value).length>2000) return json(res,400,{error:'Odgovor je predugaÄak.'});
       }
       const accepted=Object.fromEntries(invite.questions.map(q=>[q.id,answers[q.id]??'']));
       invite.usedAt=new Date().toISOString();
@@ -141,7 +145,7 @@ module.exports=async function handler(req,res) {
     if(req.method==='GET' && action==='roster') {
       const main=await read(mainId), clients=main.payload.clients||[], employees=main.payload.employees||[];
       const client=clients.find(item=>item.id===String(req.query.clientId||''));
-      if(!client) return json(res,404,{error:'Klijent nije pronađen.'});
+      if(!client) return json(res,404,{error:'Klijent nije pronaÄ‘en.'});
       const source=await clickupRoster();
       const team=roster(client,employees,data.assignments,source.rows,data.links||[]);
       return json(res,200,{team,live:source.live,syncedAt:source.syncedAt,error:source.error});
@@ -150,19 +154,19 @@ module.exports=async function handler(req,res) {
       const main=await read(mainId), clients=main.payload.clients||[], employees=main.payload.employees||[];
       const source=await clickupRoster();
       const unmatched=source.rows.filter(row=>!clients.some(client=>norm(client.name)===norm(row.Klijent))&&!(data.links||[]).some(link=>link.clickupName===row.Klijent)).map(row=>row.Klijent);
-      return json(res,200,{clients:clients.map(c=>({id:c.id,name:c.name,status:c.status})),employees:employees.map(e=>({id:e.id,name:e.name})),questions:data.questions,assignments:data.assignments,links:data.links||[],invites:data.invites.map(({tokenHash,...i})=>i),responses:data.responses,clickup:source,unmatched});
+      return json(res,200,{clients:clients.map(c=>({id:c.id,name:c.name,status:c.status})),employees:employees.map(e=>({id:e.id,name:e.name})),questions:data.questions.filter(q=>q.target!=='Checking'),assignments:data.assignments.map(item=>({...item,roles:item.roles.filter(role=>role.role!=='Checking')})),links:data.links||[],invites:data.invites.map(({tokenHash,...i})=>i),responses:data.responses,clickup:source,unmatched});
     }
-    if(req.method!=='POST') return json(res,405,{error:'Metod nije podržan.'});
+    if(req.method!=='POST') return json(res,405,{error:'Metod nije podrÅ¾an.'});
     const body=req.body||{};
     if(action==='deleteResponse') {
       const responseId=String(body.responseId||'');
       const response=data.responses.find(item=>item.id===responseId);
-      if(!response) return json(res,404,{error:'Odgovor nije pronađen.'});
+      if(!response) return json(res,404,{error:'Odgovor nije pronaÄ‘en.'});
       data.responses=data.responses.filter(item=>item.id!==responseId);
       data.invites=data.invites.filter(item=>item.id!==response.inviteId);
     } else if(action==='assignment') {
       const main=await read(mainId), client=(main.payload.clients||[]).find(c=>c.id===body.clientId);
-      if(!client) return json(res,400,{error:'Klijent nije pronađen.'});
+      if(!client) return json(res,400,{error:'Klijent nije pronaÄ‘en.'});
       const employees=main.payload.employees||[];
       if(!Array.isArray(body.roles)||body.roles.length>30||body.roles.some(x=>!roles.includes(x.role)||!x.name||String(x.name).length>100)) return json(res,400,{error:'Neispravna raspodela.'});
       data.assignments=data.assignments.filter(x=>x.clientId!==client.id);
@@ -170,7 +174,7 @@ module.exports=async function handler(req,res) {
     } else if(action==='link') {
       const main=await read(mainId), client=(main.payload.clients||[]).find(c=>c.id===body.clientId);
       const source=await clickupRoster();
-      if(!client||!source.rows.some(x=>x.Klijent===body.clickupName)) return json(res,400,{error:'Klijent ili ClickUp red nije pronađen.'});
+      if(!client||!source.rows.some(x=>x.Klijent===body.clickupName)) return json(res,400,{error:'Klijent ili ClickUp red nije pronaÄ‘en.'});
       data.links=(data.links||[]).filter(x=>x.clientId!==client.id&&x.clickupName!==body.clickupName);
       data.links.push({clientId:client.id,clickupName:body.clickupName});
     } else if(action==='questions') {
@@ -180,9 +184,9 @@ module.exports=async function handler(req,res) {
       const main=await read(mainId), client=(main.payload.clients||[]).find(c=>c.id===body.clientId);
       if(!client||!/^\d{4}-\d{2}$/.test(String(body.month||''))) return json(res,400,{error:'Izaberi klijenta i mesec.'});
       const source=await clickupRoster();
-      if(!source.live && !data.assignments.some(x=>x.clientId===client.id)) return json(res,503,{error:'ClickUp sinhronizacija nije aktivna. Podesi token ili ručno sačuvaj tim pre slanja.'});
+      if(!source.live && !data.assignments.some(x=>x.clientId===client.id)) return json(res,503,{error:'ClickUp sinhronizacija nije aktivna. Podesi token ili ruÄno saÄuvaj tim pre slanja.'});
       const team=roster(client,main.payload.employees||[],data.assignments,source.rows,data.links||[]);
-      if(!team.length) return json(res,400,{error:'Za ovog klijenta prvo odredi članove tima.'});
+      if(!team.length) return json(res,400,{error:'Za ovog klijenta prvo odredi Älanove tima.'});
       const activeRoles=new Set(team.map(x=>x.role));
       const questions=data.questions.filter(q=>q.target==='team'||activeRoles.has(q.target)).flatMap(q=>{
         if(q.target==='team') return [q];
@@ -197,7 +201,7 @@ module.exports=async function handler(req,res) {
     } else return json(res,404,{error:'Nepoznata akcija.'});
     await write(rowId,data,row.updated_at);
     return json(res,200,{ok:true});
-  } catch(error) { return json(res,error.message==='CONFLICT'?409:500,{error:error.message==='CONFLICT'?'Podaci su se promenili. Osveži stranicu.':'KPI servis trenutno nije dostupan.'}); }
+  } catch(error) { return json(res,error.message==='CONFLICT'?409:500,{error:error.message==='CONFLICT'?'Podaci su se promenili. OsveÅ¾i stranicu.':'KPI servis trenutno nije dostupan.'}); }
 };
 
 module.exports._test={norm,roster,validQuestion,publicInvite,parseClickup};
