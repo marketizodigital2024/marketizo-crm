@@ -20,7 +20,7 @@ async function load(){try{data=await api('admin');clickup=data.clickup;$('login'
 function render(){
   $('clickupStatus').textContent=clickup.live?`ClickUp raspodela učitana uživo: ${new Date(clickup.syncedAt).toLocaleString('sr-Latn-RS')}`:clickup.error;
   renderUnmatched();
-  const prior=$('client').value;$('client').replaceChildren(option('','Izaberi klijenta'),...data.clients.sort((a,b)=>a.name.localeCompare(b.name)).map(c=>option(c.id,c.name)));$('client').value=prior||'';
+  renderClientSelect();
   const selectedClient=$('filterClient').value,selectedEmployee=$('filterEmployee').value,selectedRole=$('filterRole').value;
   $('filterClient').replaceChildren(option('','Svi klijenti'),...data.clients.map(c=>option(c.id,c.name)));
   $('filterEmployee').replaceChildren(option('','Svi zaposleni'),...data.employees.map(e=>option(e.id,e.name)));
@@ -28,6 +28,7 @@ function render(){
   $('filterClient').value=selectedClient;$('filterEmployee').value=selectedEmployee;$('filterRole').value=selectedRole;
   renderRoster();renderQuestions();renderResults();
 }
+function renderClientSelect(){const select=$('client'),prior=select.value,query=norm($('clientSearch')?.value);const clients=[...data.clients].sort((a,b)=>a.name.localeCompare(b.name,'sr')).filter(c=>!query||norm(c.name).includes(query));select.replaceChildren(option('','Izaberi klijenta'),...clients.map(c=>option(c.id,c.name)));select.value=clients.some(c=>c.id===prior)?prior:'';}
 function switchView(view){activeView=view;$('employeesPanel').hidden=view!=='employees';$('teamsPanel').hidden=view!=='teams';$('employeesTab').classList.toggle('active',view==='employees');$('teamsTab').classList.toggle('active',view==='teams');}
 function renderUnmatched(){const root=$('unmatched');root.replaceChildren();if(!data.unmatched.length)return;root.append(node('h3','Novi ili nepovezani klijenti iz ClickUp-a'),node('p','Ako klijent već postoji u CRM-u pod drugim imenom, poveži ga. Ako ne postoji, prvo ga dodaj u CRM.'));
   for(const name of data.unmatched){const row=node('div',null,{class:'row'});row.append(node('strong',name));const select=node('select');select.append(option('','Izaberi CRM klijenta'),...data.clients.map(c=>option(c.id,c.name)));const button=node('button','Poveži',{type:'button'});button.onclick=async()=>{try{await api('link',{clickupName:name,clientId:select.value});await load();message('ClickUp klijent je povezan sa CRM-om.');}catch(error){message(error.message);}};row.append(select,button);root.append(row);}}
@@ -100,6 +101,7 @@ $('logout').onclick=async()=>{try{await api('logout',{});data=null;$('dashboard'
 $('employeesTab').onclick=()=>switchView('employees');
 $('teamsTab').onclick=()=>switchView('teams');
 $('client').onchange=refreshSelectedRoster;
+$('clientSearch').oninput=()=>{renderClientSelect();renderRoster();};
 $('editRoster').onclick=()=>{if(!$('client').value)return message('Izaberi klijenta.');renderRoleEditor();};
 $('addRole').onclick=()=>$('roleRows').append(roleRow());
 $('saveRoster').onclick=async()=>{const rows=[...$('roleRows').children];if(!rows.length)return message('Dodaj bar jednu osobu u tim.');const roles=rows.map(row=>{const employeeId=row.children[2].value||null;const employee=data.employees.find(e=>e.id===employeeId);return{role:row.children[0].value,name:employee?.name||row.children[1].value.trim(),employeeId};});const incomplete=roles.findIndex(x=>!x.name);if(incomplete!==-1){message('Za svaki red izaberi zaposlenog iz CRM-a ili upiši ime i prezime.');rows[incomplete].children[2].focus();return;}try{await api('assignment',{clientId:$('client').value,roles});await load();$('rosterEditor').hidden=true;message(`Tim je sačuvan (${roles.length} osoba).`);}catch(error){message(error.message);}};
