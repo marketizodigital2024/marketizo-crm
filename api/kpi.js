@@ -105,7 +105,9 @@ module.exports=async function handler(req,res) {
     }
     if(action==='clickupHealth' && req.method==='GET') {
       const source=await clickupRoster();
-      return json(res,source.live?200:503,{ok:source.live,clientCount:source.rows.length,syncedAt:source.syncedAt,error:source.error});
+      const assignmentCount=source.rows.reduce((total,row)=>total+roles.reduce((sum,role)=>sum+splitPeople(row[role]).length,0),0);
+      const assignedClientCount=source.rows.filter(row=>roles.some(role=>splitPeople(row[role]).length)).length;
+      return json(res,source.live?200:503,{ok:source.live,clientCount:source.rows.length,assignedClientCount,assignmentCount,syncedAt:source.syncedAt,error:source.error});
     }
     if(action==='form' && req.method==='GET') {
       const token=String(req.query.token||'');
