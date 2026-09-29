@@ -2980,8 +2980,8 @@ function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
   const hours = parseNumber(weeklyHours || 0, 0);
-  // Break time is not work time: Mon-Thu 8h, Friday 6.5h (38.5h weekly).
-  if (hours >= 38) return day === 5 ? 390 : 480;
+  // Full-time daily presence includes the 30-minute break: Mon-Thu 8.5h, Friday 7h.
+  if (hours >= 38) return day === 5 ? 420 : 510;
   return Math.round((hours * 60) / 5);
 }
 
