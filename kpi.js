@@ -1,6 +1,7 @@
 const $=id=>document.getElementById(id);
 const roleNames=['Scenarista','Voice Over','Editor','Checking','Social Media Manager','Snimatelj','Paid Ads'];
 let data=null,clickup=null;
+let activeView='employees';
 function node(tag,text,attributes={}) { const n=document.createElement(tag); if(text!=null)n.textContent=text; for(const [k,v] of Object.entries(attributes))n.setAttribute(k,v); return n; }
 function option(value,label){return node('option',label,{value});}
 function message(text){$('message').textContent=text;}
@@ -25,6 +26,7 @@ function render(){
   $('filterClient').value=selectedClient;$('filterEmployee').value=selectedEmployee;$('filterRole').value=selectedRole;
   renderRoster();renderQuestions();renderResults();
 }
+function switchView(view){activeView=view;$('employeesPanel').hidden=view!=='employees';$('teamsPanel').hidden=view!=='teams';$('employeesTab').classList.toggle('active',view==='employees');$('teamsTab').classList.toggle('active',view==='teams');}
 function renderUnmatched(){const root=$('unmatched');root.replaceChildren();if(!data.unmatched.length)return;root.append(node('h3','Novi ili nepovezani klijenti iz ClickUp-a'),node('p','Ako klijent već postoji u CRM-u pod drugim imenom, poveži ga. Ako ne postoji, prvo ga dodaj u CRM.'));
   for(const name of data.unmatched){const row=node('div',null,{class:'row'});row.append(node('strong',name));const select=node('select');select.append(option('','Izaberi CRM klijenta'),...data.clients.map(c=>option(c.id,c.name)));const button=node('button','Poveži',{type:'button'});button.onclick=async()=>{try{await api('link',{clickupName:name,clientId:select.value});await load();message('ClickUp klijent je povezan sa CRM-om.');}catch(error){message(error.message);}};row.append(select,button);root.append(row);}}
 function renderRoster(){const id=$('client').value, container=$('roster');container.replaceChildren();if(!id){container.textContent='Izaberi klijenta da vidiš tim iz ClickUp raspodele.';return;}const entries=roster(id);if(!entries.length){container.textContent='Tim nije pronađen. Dodaj ga ručno pre pravljenja linka.';return;}for(const entry of entries)container.append(node('div',`${entry.role}: ${entry.name}${entry.employeeId?'':' · nije povezan sa zapisom zaposlenog'}`));}
@@ -84,10 +86,16 @@ function renderResults(){
     const card=node('article',null,{class:'kpi-person'}),head=node('div',null,{class:'kpi-card-head'});head.append(node('strong',team.name),node('b',`${average(team.scores)} / 5`,{class:'score-badge'}));card.append(head,node('p',`${countText(team.responses,'odgovor','odgovora')} · ocena celog tima`,{class:'kpi-subline'}));
     const people=node('div',null,{class:'kpi-breakdown'});for(const person of [...team.people.values()].sort((a,b)=>a.name.localeCompare(b.name,'sr')))people.append(node('div',`${person.name} · ${person.role}: ${average(person.scores)} / 5`));card.append(people);teamRoot.append(card);
   }
-  $('results').replaceChildren(...[...rows].sort((a,b)=>b.submittedAt.localeCompare(a.submittedAt)).map(r=>{const item=node('div',null,{class:'result'});item.append(node('strong',`${r.clientName} · ${r.month}`),node('div',`Tim: ${r.team.map(x=>`${x.name} (${x.role})`).join(', ')}`));for(const q of r.questions){if(fr&&q.target!=='team'&&q.target!==fr)continue;if(fe&&q.target!=='team'&&q.targetEmployeeId!==fe)continue;const value=r.answers[q.id];if(value!==''&&value!=null)item.append(node('div',`${q.text} — ${value}`));}item.append(node('small',new Date(r.submittedAt).toLocaleString('sr-Latn-RS')));return item;}));
+  const resultRoot=$('results');resultRoot.replaceChildren();
+  const resultRows=[...rows].sort((a,b)=>b.submittedAt.localeCompare(a.submittedAt));
+  if(!resultRows.length)resultRoot.append(node('p','Nema odgovora za izabrane filtere.',{class:'empty-state'}));
+  for(const r of resultRows){const item=node('details',null,{class:'result'}),summary=node('summary'),summaryTitle=node('span'),summaryMeta=node('small',new Date(r.submittedAt).toLocaleDateString('sr-Latn-RS'));summaryTitle.append(node('strong',r.clientName),node('span',r.month));summary.append(summaryTitle,summaryMeta);item.append(summary);const body=node('div',null,{class:'result-body'});body.append(node('div',`Tim: ${r.team.map(x=>`${x.name} (${x.role})`).join(', ')}`,{class:'result-team'}));for(const q of r.questions){if(fr&&q.target!=='team'&&q.target!==fr)continue;if(fe&&q.target!=='team'&&q.targetEmployeeId!==fe)continue;const value=r.answers[q.id];if(value!==''&&value!=null){const answer=node('div',null,{class:'result-answer'});answer.append(node('span',q.text),node('strong',String(value)));body.append(answer);}}const remove=node('button','Obriši odgovor',{type:'button',class:'danger'});remove.onclick=async()=>{if(!confirm(`Trajno obrisati odgovor klijenta ${r.clientName} za ${r.month}?`))return;remove.disabled=true;try{await api('deleteResponse',{responseId:r.id});await load();message('Odgovor je obrisan.');}catch(error){remove.disabled=false;message(error.message);}};body.append(remove);item.append(body);resultRoot.append(item);}
 }
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{await api('login',{password:$('password').value});$('password').value='';await load();}catch(error){message(error.message);}});
 $('refresh').onclick=load;
+$('logout').onclick=async()=>{try{await api('logout',{});data=null;$('dashboard').hidden=true;$('login').hidden=false;$('password').focus();message('Odjavljen si. Za novi ulaz unesi lozinku.');}catch(error){message(error.message);}};
+$('employeesTab').onclick=()=>switchView('employees');
+$('teamsTab').onclick=()=>switchView('teams');
 $('client').onchange=()=>{renderRoster();$('rosterEditor').hidden=true;$('linkBox').hidden=true;};
 $('editRoster').onclick=()=>{if(!$('client').value)return message('Izaberi klijenta.');renderRoleEditor();};
 $('addRole').onclick=()=>$('roleRows').append(roleRow());
@@ -98,4 +106,6 @@ $('invite').onclick=async()=>{try{const result=await api('invite',{clientId:$('c
 $('copy').onclick=async()=>{await navigator.clipboard.writeText($('link').value);message('Link je kopiran.');};
 ['filterClient','filterEmployee','filterRole','filterMonth'].forEach(id=>$(id).onchange=renderResults);
 $('month').value=new Date().toISOString().slice(0,7);
+$('filterMonth').value=new Date().toISOString().slice(0,7);
+switchView(activeView);
 load();
