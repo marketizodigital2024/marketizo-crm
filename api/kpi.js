@@ -79,7 +79,8 @@ async function clickupRoster() {
     }
     const relatedIds=[...new Set(rows.flatMap(row=>splitPeople(row.Snimatelj)).filter(value=>/^[a-f0-9-]{24,}$/i.test(value)))];
     const relatedNames=new Map((await Promise.all(relatedIds.map(async id=>{
-      const response=await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(id)}`,{headers:{Authorization:token},cache:'no-store'});
+      let response=await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(id)}`,{headers:{Authorization:token},cache:'no-store'});
+      if(!response.ok)response=await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(id)}?custom_task_ids=true&team_id=${encodeURIComponent(process.env.CLICKUP_WORKSPACE_ID||'90151373784')}`,{headers:{Authorization:token},cache:'no-store'});
       if(!response.ok)return [id,id];
       const task=await response.json();
       return [id,String(task.name||id).trim()];
