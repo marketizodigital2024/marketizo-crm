@@ -1,1 +1,43 @@
-<!doctype html><html lang="sr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ocena saradnje · Marketizo</title><link rel="stylesheet" href="kpi.css"></head><body><header><strong>Marketizo Digital</strong><span>Vaše mišljenje nam znači</span></header><main class="feedback"><section class="card"><h1>Ocena saradnje</h1><p id="intro">Učitavanje upitnika…</p><form id="feedbackForm" hidden><div id="fields"></div><button>Pošalji odgovore</button></form><p id="feedbackMessage" role="status"></p></section></main><script src="feedback.js"></script></body></html>
+<!doctype html>
+<html lang="sr-Latn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f48814">
+  <title>Ocena saradnje · Marketizo Digital</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="kpi.css">
+</head>
+<body class="feedback-page">
+  <header class="feedback-header">
+    <div class="feedback-brand">
+      <img src="marketizo-logo.png" alt="Marketizo Digital">
+      <div><strong>Marketizo Digital</strong><span>Vaše mišljenje nam znači.</span></div>
+    </div>
+    <span class="feedback-badge">2–3 minuta</span>
+  </header>
+  <main class="feedback-shell">
+    <section class="feedback-hero">
+      <div class="feedback-eyebrow">MESEČNA OCENA SARADNJE</div>
+      <h1>Pomozite nam da budemo još bolji.</h1>
+      <p id="intro">Učitavanje upitnika…</p>
+      <div class="feedback-scale-note"><span><b>1</b> nisam zadovoljan/na</span><span><b>5</b> izuzetno sam zadovoljan/na</span></div>
+    </section>
+    <form id="feedbackForm" class="feedback-form" hidden>
+      <div class="feedback-welcome">
+        <h2>Pozdrav od Miljana i Ivane 👋</h2>
+        <p>Svaki odgovor lično pregledamo kako bismo unapredili saradnju, kvalitet usluge i rezultate koje dobijate.</p>
+        <p>Budite potpuno iskreni — vaši odgovori služe isključivo tome da sledeći mesec bude još bolji.</p>
+      </div>
+      <div id="fields"></div>
+      <div class="feedback-submit"><p>Hvala vam na izdvojenom vremenu. 🙏</p><button type="submit">Pošalji odgovore <span aria-hidden="true">→</span></button></div>
+    </form>
+    <section id="feedbackSuccess" class="feedback-success" hidden><span aria-hidden="true">✓</span><h2>Hvala na iskrenom odgovoru!</h2><p>Vaša ocena je sačuvana i pomoći će nam da unapredimo saradnju.</p></section>
+    <p id="feedbackMessage" role="status" aria-live="polite"></p>
+    <footer class="feedback-footer">MARKETIZO DIGITAL · VAŠ PARTNER ZA DIGITALNI RAST</footer>
+  </main>
+  <script src="feedback.js"></script>
+</body>
+</html>
