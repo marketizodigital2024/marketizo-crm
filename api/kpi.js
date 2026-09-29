@@ -57,12 +57,24 @@ function parseClickup(markdown) {
 }
 async function clickupRoster() {
   const token=process.env.CLICKUP_API_TOKEN;
-  if(!token) return {rows:[],syncedAt:null,live:false,error:'ClickUp API token nije podešen. Možeš ručno uneti tim, ali automatska raspodela nije dostupna.'};
+  const listId=process.env.CLICKUP_CLIENT_LIST_ID;
+  if(!token||!listId) return {rows:[],syncedAt:null,live:false,error:'ClickUp token ili lista klijenata nisu podešeni. Možeš ručno uneti tim, ali automatska raspodela nije dostupna.'};
   try {
-    const response=await fetch('https://api.clickup.com/api/v3/workspaces/90151373784/docs/2kyq1jyr-40655/pages/2kyq1jyr-39655?content_format=text%2Fmd',{headers:{Authorization:token},cache:'no-store'});
-    if(!response.ok) throw new Error(`ClickUp ${response.status}`);
-    const page=await response.json();
-    return {rows:parseClickup(page.content||page.page?.content||''),syncedAt:new Date().toISOString(),live:true,error:null};
+    const rows=[];
+    const fieldValue=(field)=>{
+      if(field?.value==null)return '';
+      const options=field.type_config?.options||[];
+      const render=(value)=>{const option=options.find(item=>item.id===value||item.orderindex===value);return option?.name||value?.username||value?.email||value?.name||value;};
+      return (Array.isArray(field.value)?field.value:[field.value]).map(render).filter(Boolean).join('; ');
+    };
+    for(let page=0;page<100;page++){
+      const response=await fetch(`https://api.clickup.com/api/v2/list/${encodeURIComponent(listId)}/task?include_closed=true&subtasks=true&page=${page}`,{headers:{Authorization:token},cache:'no-store'});
+      if(!response.ok) throw new Error(`ClickUp ${response.status}`);
+      const payload=await response.json(),tasks=Array.isArray(payload.tasks)?payload.tasks:[];
+      for(const task of tasks){const fields=Object.fromEntries((task.custom_fields||[]).map(field=>[field.name,fieldValue(field)]));rows.push({Klijent:String(task.name||'').trim(),Scenarista:fields.Scenarista||'','Voice Over':fields['Voice Over']||'',Editor:fields.Editor||'',Checking:fields.Checking||'','Social Media Manager':fields.SMM||fields['Social Media Manager']||'',Snimatelj:fields.Snimatelj||'','Paid Ads':fields['Paid Ads']||''});}
+      if(tasks.length<100)break;
+    }
+    return {rows:rows.filter(row=>row.Klijent),syncedAt:new Date().toISOString(),live:true,error:null};
   } catch(error) { return {rows:[],syncedAt:null,live:false,error:`ClickUp nije dostupan (${error.message}). Automatska raspodela trenutno nije dostupna.`}; }
 }
 function roster(client,employees,overrides,source=[],links=[]) {
