@@ -8,6 +8,7 @@ import OpenAI, { toFile } from "openai";
 import whatsapp from "whatsapp-web.js";
 import { analyzeFollowup, analyzeMessage } from "./analyze.js";
 import { buildReasoningOptions } from "./openai-options.js";
+import { fetchClickUpClients, matchClickUpClient } from "./clickup.js";
 import { hasOwnerMention, isAcknowledgement, likelyRequiresTeamReply, needsUrgentAnalysis } from "./urgency.js";
 
 const { Client, LocalAuth } = whatsapp;
@@ -46,6 +47,9 @@ const reportMode = String(process.env.REPORT_MODE || "weekly").toLowerCase();
 const hybridTrialStartedAt = process.env.HYBRID_TRIAL_STARTED_AT || "2026-09-10";
 const deploymentTestVersion = "2026-09-11-stability-test-1";
 const yesterdayAnalysisTestVersion = "2026-09-11-yesterday-analysis-1";
+const clickupToken = process.env.CLICKUP_API_TOKEN || "";
+const clickupListId = process.env.CLICKUP_CLIENT_LIST_ID || "";
+const clickupSyncIntervalMs = Number(process.env.CLICKUP_SYNC_INTERVAL_MS || 900000);
 
 function reasoningOptions() {
   return buildReasoningOptions(model, reasoningEffort);
@@ -118,6 +122,34 @@ let lastHealthCheckAt = 0;
 let lastIncomingMessageAt = 0;
 let lastProcessedMessageAt = 0;
 let fatalExitScheduled = false;
+let clickupClients = [];
+let clickupLastSyncAt = 0;
+let clickupSyncTimer = null;
+
+async function syncClickUpClients() {
+  if (!clickupToken || !clickupListId) return;
+  try {
+    clickupClients = await fetchClickUpClients({ token: clickupToken, listId: clickupListId });
+    clickupLastSyncAt = Date.now();
+    console.log(`[CLICKUP_SYNC] Loaded ${clickupClients.length} client assignment(s) from list ${clickupListId}.`);
+  } catch (error) {
+    console.error("[CLICKUP_SYNC] Failed; keeping the last successful client assignments:", error);
+  }
+}
+
+function clickupContextForGroups(groups) {
+  return groups.map((group) => ({ group, client: matchClickUpClient(group, clickupClients) })).filter((item) => item.client);
+}
+
+function startClickUpSync() {
+  if (!clickupToken || !clickupListId) {
+    console.log("[CLICKUP_SYNC] Disabled: credentials are not configured.");
+    return;
+  }
+  void syncClickUpClients();
+  clickupSyncTimer = setInterval(() => void syncClickUpClients(), clickupSyncIntervalMs);
+  clickupSyncTimer.unref();
+}
 
 const rawCompletionCreate = openai.chat.completions.create.bind(openai.chat.completions);
 openai.chat.completions.create = async (params, options) => {
@@ -646,6 +678,7 @@ async function answerOwnerQuestion(message) {
             role: "user",
             content: JSON.stringify({
               clientGroups: batch.map((chat) => chat.name),
+              clickupAssignments: clickupContextForGroups(batch.map((chat) => chat.name)),
               teamMembers: [...teamMemberNames],
               recentGroupMessages: batchHistory,
               clientsWaitingForTeam: batchWaiting,
@@ -694,7 +727,7 @@ async function answerOwnerQuestion(message) {
       },
       {
         role: "user",
-        content: JSON.stringify({ teamMembers: [...teamMemberNames], recentGroupMessages: history, clientsWaitingForTeam: waitingForReply, silentClients, unresolvedIssues, activeCommitments, question })
+        content: JSON.stringify({ teamMembers: [...teamMemberNames], clickupAssignments: clickupContextForGroups(matchingGroups.map((chat) => chat.name)), recentGroupMessages: history, clientsWaitingForTeam: waitingForReply, silentClients, unresolvedIssues, activeCommitments, question })
       }
     ]
   });
@@ -804,7 +837,7 @@ async function sendWeeklyReport() {
       ...reasoningOptions(),
       messages: [
         { role: "system", content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja, i svakoj daj poseban naslov i makar jednu konkretnu rečenicu. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja, 🟢 Pozitivno ili ⚪ Nema aktivnosti ove nedelje. Crveno, žuto i zeleno koristi samo kada postoje poruke ili operativni podaci koji to dokazuju. Ako nema podataka, napiši da agent nema nove poruke za tog klijenta; nikada ga ne proglašavaj zelenim i ne dodaj zadatak Miljanu. Za mirnog klijenta dovoljna je jedna ili dve rečenice. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Operativni sledeći korak, ako je zaista potreban, dodeli konkretnoj ulozi u timu kao što su account manager, media buyer, SMM, scenarista, editor ili snimatelj. Nikada ne napiši da Miljan ili Ivana treba da odgovaraju klijentu, prikupljaju materijale, proveravaju kampanju, jure rok ili koordiniraju izvršenje. Njih pomenu samo pod *Potrebna odluka vlasnika:* kada bez njihove poslovne odluke tim zaista ne može dalje. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Bez uvoda, zaključka, tabela i korporativnog tona." },
-        { role: "user", content: JSON.stringify({ clientGroups: batch.map((chat) => chat.name), teamMembers: [...teamMemberNames], recentGroupMessages: messages, clientsWaitingForTeam: snapshot.pending.filter((item) => names.has(item.groupName)), silentClients: snapshot.silentClients.filter((item) => names.has(item.groupName)), unresolvedIssues: snapshot.issues.filter((item) => names.has(item.groupName)), activeCommitments: snapshot.activeCommitments.filter((item) => names.has(item.groupName)) }) }
+        { role: "user", content: JSON.stringify({ clientGroups: batch.map((chat) => chat.name), clickupAssignments: clickupContextForGroups(batch.map((chat) => chat.name)), teamMembers: [...teamMemberNames], recentGroupMessages: messages, clientsWaitingForTeam: snapshot.pending.filter((item) => names.has(item.groupName)), silentClients: snapshot.silentClients.filter((item) => names.has(item.groupName)), unresolvedIssues: snapshot.issues.filter((item) => names.has(item.groupName)), activeCommitments: snapshot.activeCommitments.filter((item) => names.has(item.groupName)) }) }
       ]
     });
     const part = String(completion.choices[0]?.message?.content || "").trim();
@@ -1199,7 +1232,9 @@ http.createServer((req, res) => {
       lastHealthCheckAt: lastHealthCheckAt ? new Date(lastHealthCheckAt).toISOString() : "",
       lastIncomingMessageAt: lastIncomingMessageAt ? new Date(lastIncomingMessageAt).toISOString() : "",
       lastProcessedMessageAt: lastProcessedMessageAt ? new Date(lastProcessedMessageAt).toISOString() : "",
-      processingMessages: processingMessageIds.size
+      processingMessages: processingMessageIds.size,
+      clickupClients: clickupClients.length,
+      clickupLastSyncAt: clickupLastSyncAt ? new Date(clickupLastSyncAt).toISOString() : ""
     }));
   }
   if (req.url !== `/pair/${pairingToken}` && req.url !== pairingAlias) {
@@ -1226,6 +1261,7 @@ client.on("qr", async (code) => {
 });
 
 client.on("ready", async () => {
+  startClickUpSync();
   clearTimeout(initializationTimer);
   whatsappReady = true;
   fatalExitScheduled = false;
