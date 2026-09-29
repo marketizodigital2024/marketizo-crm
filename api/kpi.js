@@ -4,11 +4,20 @@ const table = process.env.SUPABASE_TABLE || 'agency_crm_state';
 const rowId = process.env.VERCEL_ENV === 'preview' ? 'marketizo-kpi-preview-v1' : 'marketizo-kpi-v1';
 const mainId = process.env.CRM_STATE_ID || 'marketizo-main';
 const roles = ['Scenarista', 'Voice Over', 'Editor', 'Checking', 'Social Media Manager', 'Snimatelj', 'Paid Ads'];
+const roleQuestions = {
+  Scenarista: 'Da li su scenariji jasni, zanimljivi i u skladu sa vašim brendom?',
+  'Voice Over': 'Kako ocenjujete kvalitet i ton voice-overa?',
+  Editor: 'Da li ste zadovoljni kvalitetom montaže i isporukom videa?',
+  Checking: 'Da li su sadržaji pažljivo provereni pre objave?',
+  'Social Media Manager': 'Kako ocenjujete komunikaciju, dizajn i organizaciju sadržaja?',
+  Snimatelj: 'Kako ocenjujete pripremu, komunikaciju i profesionalnost snimatelja?',
+  'Paid Ads': 'Kako ocenjujete vođenje plaćenih reklama i rezultate kampanja?',
+};
 const baseQuestions = [
-  { id: 'team', target: 'team', text: 'Kako ocenjujete saradnju sa celim timom?', type: 'rating', required: true },
-  { id: 'communication', target: 'team', text: 'Kako ocenjujete komunikaciju i organizaciju?', type: 'rating', required: true },
-  { id: 'comment', target: 'team', text: 'Šta možemo da poboljšamo?', type: 'text', required: false },
-  ...roles.map((role) => ({ id: `role-${role.toLowerCase().replace(/[^a-z]+/g, '-')}`, target: role, text: `Kako ocenjujete rad: ${role}?`, type: 'rating', required: true })),
+  { id: 'team', target: 'team', text: 'Kako biste ocenili ukupnu saradnju sa našim timom?', type: 'rating', required: true },
+  { id: 'communication', target: 'team', text: 'Da li je komunikacija bila jasna i pravovremena?', type: 'rating', required: true },
+  { id: 'comment', target: 'team', text: 'Šta možemo sledećeg meseca da uradimo bolje?', type: 'text', required: false },
+  ...roles.map((role) => ({ id: `role-${role.toLowerCase().replace(/[^a-z]+/g, '-')}`, target: role, text: roleQuestions[role], type: 'rating', required: true })),
 ];
 const blank = () => ({ questions: baseQuestions, assignments: [], links: [], invites: [], responses: [] });
 const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
