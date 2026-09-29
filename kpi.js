@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-const roleNames=['Scenarista','Voice Over','Editor','Checking','Social Media Manager','Snimatelj','Paid Ads'];
+const roleNames=['Scenarista','Voice Over','Editor','Social Media Manager','Snimatelj','Paid Ads'];
 let data=null,clickup=null;
 let activeView='employees';
 const liveRosters=new Map();
