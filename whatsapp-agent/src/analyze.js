@@ -1,9 +1,12 @@
+import { buildReasoningOptions } from "./openai-options.js";
+
 const LEVELS = new Set(["GREEN", "YELLOW", "RED", "URGENT"]);
 
 function reasoningOptions(model) {
-  return String(model).startsWith("gpt-6")
-    ? { reasoning_effort: process.env.OPENAI_REASONING_EFFORT || "xhigh" }
-    : { temperature: 0 };
+  return buildReasoningOptions(
+    model,
+    process.env.OPENAI_REASONING_EFFORT || "xhigh"
+  );
 }
 
 async function requestAnalysis(openai, model, systemPrompt, input) {
