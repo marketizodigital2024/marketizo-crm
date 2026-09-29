@@ -84,7 +84,11 @@ module.exports=async function handler(req,res) {
       const a=Buffer.from(supplied), b=Buffer.from(secret());
       if(a.length!==b.length||!crypto.timingSafeEqual(a,b)) return json(res,401,{error:'Pogrešna lozinka.'});
       const expiry=String(Date.now()+8*60*60*1000), mac=crypto.createHmac('sha256',signKey()).update(expiry).digest('hex');
-      res.setHeader('Set-Cookie',`marketizoKpi=${expiry}.${mac}; HttpOnly; Secure; SameSite=Strict; Path=/api/kpi; Max-Age=28800`);
+      res.setHeader('Set-Cookie',`marketizoKpi=${expiry}.${mac}; HttpOnly; Secure; SameSite=Strict; Path=/api/kpi`);
+      return json(res,200,{ok:true});
+    }
+    if(action==='logout' && req.method==='POST') {
+      res.setHeader('Set-Cookie','marketizoKpi=; HttpOnly; Secure; SameSite=Strict; Path=/api/kpi; Max-Age=0');
       return json(res,200,{ok:true});
     }
     if(action==='form' && req.method==='GET') {
@@ -124,7 +128,13 @@ module.exports=async function handler(req,res) {
     }
     if(req.method!=='POST') return json(res,405,{error:'Metod nije podržan.'});
     const body=req.body||{};
-    if(action==='assignment') {
+    if(action==='deleteResponse') {
+      const responseId=String(body.responseId||'');
+      const response=data.responses.find(item=>item.id===responseId);
+      if(!response) return json(res,404,{error:'Odgovor nije pronađen.'});
+      data.responses=data.responses.filter(item=>item.id!==responseId);
+      data.invites=data.invites.filter(item=>item.id!==response.inviteId);
+    } else if(action==='assignment') {
       const main=await read(mainId), client=(main.payload.clients||[]).find(c=>c.id===body.clientId);
       if(!client) return json(res,400,{error:'Klijent nije pronađen.'});
       const employees=main.payload.employees||[];
