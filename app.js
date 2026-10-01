@@ -2976,7 +2976,7 @@ function employeeLateStatus(employeeId, monthKey) {
   return { count, className: "ok", label: `${count}/3 kašnjenja` };
 }
 
-function employeeWeeklyHoursForMonth(employee, monthKey) {
+function employeeWeeklyHoursForMonth(employee, monthKey, fallback = 38.5) {
   // Dejan moved from 20h to full-time on 2026-10-01.
   // Keep his historical targets independent of the current profile setting.
   const name = String(employee?.name || "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -2984,7 +2984,7 @@ function employeeWeeklyHoursForMonth(employee, monthKey) {
     if (monthKey < "2026-10") return 20;
     if (monthKey === "2026-10") return 38.5;
   }
-  return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? 38.5;
+  return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? fallback;
 }
 
 function scheduledMinutesForDate(weeklyHours, date) {
@@ -3247,7 +3247,7 @@ function generateSystemNotifications() {
           && absence.endDate >= yesterday
         );
         if (hasApprovedAbsence) return;
-        const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, yesterday.slice(0, 7)));
+        const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, yesterday.slice(0, 7), 0));
         const targetMinutes = scheduledMinutesForDate(weeklyHours, yesterday);
         if (targetMinutes <= 0) return;
         const enteredMinutes = (state.employeeWorkLogs || [])
@@ -5957,7 +5957,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
   selectedEmployeeId = employeeId;
   saveState({ remote: false });
   const employee = state.employees.find((item) => item.id === employeeId);
-  const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, date.slice(0, 7)));
+  const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, date.slice(0, 7), 0));
   const dailyTarget = scheduledMinutesForDate(weeklyHours, date);
   const dailyMinutes = state.employeeWorkLogs
     .filter((item) => item.employeeId === employeeId && item.date === date)
