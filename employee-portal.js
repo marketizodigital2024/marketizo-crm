@@ -817,7 +817,7 @@ function elapsedWorkdaysToDate(employee, monthKey) {
   if (selectedMonth < currentMonth) {
     return workdaysInMonth(monthKey).filter((day) =>
       (!employee.startDate || day >= employee.startDate) &&
-    (!employee.endDate || day <= employee.endDate) &&
+      (!employee.endDate || day <= employee.endDate) &&
       !(state.employeeAbsences || []).some((absence) =>
         absence.employeeId === employee.id &&
         absence.status === "Odobreno" &&
