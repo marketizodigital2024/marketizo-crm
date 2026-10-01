@@ -786,7 +786,7 @@ function employeeMonthAbsenceDays(employeeId, monthKey) {
     }, 0);
 }
 
-function employeeWeeklyHoursForMonth(employee, monthKey) {
+function employeeWeeklyHoursForMonth(employee, monthKey, fallback = 38.5) {
   // Dejan moved from 20h to full-time on 2026-10-01.
   // Keep his historical targets independent of the current profile setting.
   const name = String(employee?.name || "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -794,7 +794,7 @@ function employeeWeeklyHoursForMonth(employee, monthKey) {
     if (monthKey < "2026-10") return 20;
     if (monthKey === "2026-10") return 38.5;
   }
-  return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? 38.5;
+  return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? fallback;
 }
 
 function scheduledMinutesForDate(weeklyHours, date) {
@@ -962,7 +962,7 @@ function loggedMinutesForDate(date) {
 function expectedMinutesForDate(employee, date) {
   if (!employee || !isAustrianWorkingDay(date)) return 0;
   const monthKey = String(date || "").slice(0, 7);
-  const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, monthKey));
+  const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, monthKey, 0));
   return scheduledMinutesForDate(weeklyHours, date);
 }
 
