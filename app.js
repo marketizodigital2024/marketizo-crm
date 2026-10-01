@@ -2976,6 +2976,17 @@ function employeeLateStatus(employeeId, monthKey) {
   return { count, className: "ok", label: `${count}/3 kašnjenja` };
 }
 
+function employeeWeeklyHoursForMonth(employee, monthKey) {
+  // Dejan moved from 20h to full-time on 2026-10-01.
+  // Keep his historical targets independent of the current profile setting.
+  const name = String(employee?.name || "").trim().replace(/\s+/g, " ").toLowerCase();
+  if (name === "dejan klement" && /^\d{4}-\d{2}$/.test(monthKey)) {
+    if (monthKey < "2026-10") return 20;
+    if (monthKey === "2026-10") return 38.5;
+  }
+  return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? 38.5;
+}
+
 function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
@@ -2986,7 +2997,7 @@ function scheduledMinutesForDate(weeklyHours, date) {
 }
 
 function employeeExpectedHours(employee, monthKey) {
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 38.5, 38.5);
+  const weeklyHours = parseNumber(employeeWeeklyHoursForMonth(employee, monthKey), 38.5);
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) =>
     (!employee.startDate || day >= employee.startDate) &&
     !(state.employeeAbsences || []).some((absence) => absence.employeeId === employee.id && absence.status === "Odobreno" && day >= absence.startDate && day <= absence.endDate)
@@ -3001,7 +3012,7 @@ function employeeExpectedHoursToDate(employee, monthKey) {
   if (selectedMonth > currentMonth) return 0;
 
   const today = currentDateKey();
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 38.5, 38.5);
+  const weeklyHours = parseNumber(employeeWeeklyHoursForMonth(employee, monthKey), 38.5);
   const elapsedWorkdays = workdaysInMonth(monthKey).filter((day) =>
     day < today &&
     (!employee.startDate || day >= employee.startDate) &&
@@ -3236,7 +3247,7 @@ function generateSystemNotifications() {
           && absence.endDate >= yesterday
         );
         if (hasApprovedAbsence) return;
-        const weeklyHours = Number(employee.weeklyHoursByMonth?.[yesterday.slice(0, 7)] ?? employee.weeklyHours ?? 0);
+        const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, yesterday.slice(0, 7)));
         const targetMinutes = scheduledMinutesForDate(weeklyHours, yesterday);
         if (targetMinutes <= 0) return;
         const enteredMinutes = (state.employeeWorkLogs || [])
@@ -5946,7 +5957,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
   selectedEmployeeId = employeeId;
   saveState({ remote: false });
   const employee = state.employees.find((item) => item.id === employeeId);
-  const weeklyHours = Number(employee?.weeklyHoursByMonth?.[date.slice(0, 7)] ?? employee?.weeklyHours ?? 0);
+  const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, date.slice(0, 7)));
   const dailyTarget = scheduledMinutesForDate(weeklyHours, date);
   const dailyMinutes = state.employeeWorkLogs
     .filter((item) => item.employeeId === employeeId && item.date === date)
