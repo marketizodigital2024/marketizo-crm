@@ -4562,7 +4562,7 @@ function setupClientCostAnalysis() {
 
   const populate = () => {
     clientSelect.innerHTML = `<option value="">Svi aktivni klijenti</option>${(state.clients || []).filter((item) => item.status === "Aktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("")}`;
-    employeeSelect.innerHTML = (state.employees || []).filter((item) => item.status !== "Neaktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+    employeeSelect.innerHTML = (state.employees || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}${item.status === "Neaktivan" ? " (neaktivan)" : ""}</option>`).join("");
     employeeList.innerHTML = [...employeeSelect.options].map((item) => `<label data-employee-name="${item.textContent.toLowerCase()}"><input type="checkbox" value="${item.value}" /><span>${item.textContent}</span></label>`).join("");
     employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
       const option = [...employeeSelect.options].find((item) => item.value === checkbox.value);
