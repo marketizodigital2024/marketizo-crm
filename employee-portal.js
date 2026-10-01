@@ -786,6 +786,17 @@ function employeeMonthAbsenceDays(employeeId, monthKey) {
     }, 0);
 }
 
+function employeeWeeklyHoursForMonth(employee, monthKey) {
+  // Dejan moved from 20h to full-time on 2026-10-01.
+  // Keep his historical targets independent of the current profile setting.
+  const name = String(employee?.name || "").trim().replace(/\s+/g, " ").toLowerCase();
+  if (name === "dejan klement" && /^\d{4}-\d{2}$/.test(monthKey)) {
+    if (monthKey < "2026-10") return 20;
+    if (monthKey === "2026-10") return 38.5;
+  }
+  return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? 38.5;
+}
+
 function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
@@ -796,7 +807,7 @@ function scheduledMinutesForDate(weeklyHours, date) {
 }
 
 function expectedHours(employee, monthKey) {
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 38.5, 38.5);
+  const weeklyHours = parseNumber(employeeWeeklyHoursForMonth(employee, monthKey), 38.5);
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) =>
     (!employee.startDate || day >= employee.startDate) &&
     !(state.employeeAbsences || []).some((absence) => absence.employeeId === employee.id && absence.status === "Odobreno" && day >= absence.startDate && day <= absence.endDate)
@@ -839,7 +850,7 @@ function expectedHoursToDate(employee, monthKey) {
   if (selectedMonth < currentMonth) return expectedHours(employee, monthKey);
   if (selectedMonth > currentMonth) return 0;
 
-  const weeklyHours = parseNumber(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 38.5, 38.5);
+  const weeklyHours = parseNumber(employeeWeeklyHoursForMonth(employee, monthKey), 38.5);
   const elapsedWorkdays = elapsedWorkdaysToDate(employee, monthKey);
   return Math.round(elapsedWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
 }
@@ -951,7 +962,7 @@ function loggedMinutesForDate(date) {
 function expectedMinutesForDate(employee, date) {
   if (!employee || !isAustrianWorkingDay(date)) return 0;
   const monthKey = String(date || "").slice(0, 7);
-  const weeklyHours = Number(employee.weeklyHoursByMonth?.[monthKey] ?? employee.weeklyHours ?? 0);
+  const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, monthKey));
   return scheduledMinutesForDate(weeklyHours, date);
 }
 
