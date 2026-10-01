@@ -787,13 +787,8 @@ function employeeMonthAbsenceDays(employeeId, monthKey) {
 }
 
 function employeeWeeklyHoursForMonth(employee, monthKey, fallback = 38.5) {
-  // Dejan moved from 20h to full-time on 2026-10-01.
-  // Keep his historical targets independent of the current profile setting.
-  const name = String(employee?.name || "").trim().replace(/\s+/g, " ").toLowerCase();
-  if (name === "dejan klement" && /^\d{4}-\d{2}$/.test(monthKey)) {
-    if (monthKey < "2026-10") return 20;
-    if (monthKey === "2026-10") return 38.5;
-  }
+  // Historical month targets must come from the saved employment schedule.
+  if (employee?.endDate && monthKey > employee.endDate.slice(0, 7)) return 0;
   return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? fallback;
 }
 
@@ -801,8 +796,8 @@ function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
   const hours = parseNumber(weeklyHours || 0, 0);
-  // Full-time schedule: Mon-Thu 8.5h including the break, Friday 6.5h total.
-  if (hours >= 38) return day === 5 ? 390 : 510;
+  // Full-time work target: Mon-Thu 8h, Friday 6.5h; breaks are excluded.
+  if (hours >= 38) return day === 5 ? 390 : 480;
   return Math.round((hours * 60) / 5);
 }
 
@@ -810,6 +805,7 @@ function expectedHours(employee, monthKey) {
   const weeklyHours = parseNumber(employeeWeeklyHoursForMonth(employee, monthKey), 38.5);
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) =>
     (!employee.startDate || day >= employee.startDate) &&
+    (!employee.endDate || day <= employee.endDate) &&
     !(state.employeeAbsences || []).some((absence) => absence.employeeId === employee.id && absence.status === "Odobreno" && day >= absence.startDate && day <= absence.endDate)
   );
   return Math.round(eligibleWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
@@ -821,6 +817,7 @@ function elapsedWorkdaysToDate(employee, monthKey) {
   if (selectedMonth < currentMonth) {
     return workdaysInMonth(monthKey).filter((day) =>
       (!employee.startDate || day >= employee.startDate) &&
+    (!employee.endDate || day <= employee.endDate) &&
       !(state.employeeAbsences || []).some((absence) =>
         absence.employeeId === employee.id &&
         absence.status === "Odobreno" &&
@@ -835,6 +832,7 @@ function elapsedWorkdaysToDate(employee, monthKey) {
   return workdaysInMonth(monthKey).filter((day) =>
     day < today &&
     (!employee.startDate || day >= employee.startDate) &&
+    (!employee.endDate || day <= employee.endDate) &&
     !(state.employeeAbsences || []).some((absence) =>
       absence.employeeId === employee.id &&
       absence.status === "Odobreno" &&
@@ -960,7 +958,7 @@ function loggedMinutesForDate(date) {
 }
 
 function expectedMinutesForDate(employee, date) {
-  if (!employee || !isAustrianWorkingDay(date)) return 0;
+  if (!employee || !isAustrianWorkingDay(date) || (employee.endDate && date > employee.endDate)) return 0;
   const monthKey = String(date || "").slice(0, 7);
   const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, monthKey, 0));
   return scheduledMinutesForDate(weeklyHours, date);
