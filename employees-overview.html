@@ -440,7 +440,9 @@
                     </span>
                   </label>
                   <label>Početak rada<input name="startDate" type="date" required /></label>
-                  <label>Trenutna plata (€)<input name="salary" type="number" min="0" step="1" value="0" /></label>
+                  <label>Trenutna plata (€)<input name="salary" type="number" min="0" step="0.01" value="0" /></label>
+                  <label>Važi od meseca<input name="compensationMonth" type="month" required /><small class="field-note">Promena plate i fonda sati važi od ovog meseca.</small></label>
+                  <label>Sati nedeljno za trošak<input name="costWeeklyHours" type="number" min="1" max="60" step="0.5" /><small class="field-note">Može da se razlikuje od prijavljenih sati. Satnica = bruto plata ÷ (sati × 52 ÷ 12).</small></label>
                   <label>Nedeljni sati
                     <input name="weeklyHours" type="number" min="1" max="60" step="0.5" value="40" />
                     <small class="field-note" id="weeklyHoursMonthlyPreview">Mesečno: 0h</small>
@@ -956,7 +958,8 @@
     <script src="admin-auth.js?v=7"></script>
     <div class="toast-stack" id="toastStack" aria-live="polite"></div>
     <script src="remote-state.js?v=13"></script>
-    <script src="app.js?v=101"></script>
+    <script src="cost-calculation.js?v=1"></script>
+    <script src="app.js?v=102"></script>
     <script src="hours-history.js?v=7"></script>
 </body>
 </html>
