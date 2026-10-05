@@ -1,3 +1,4 @@
+const PENDING_WORK_LOGS_KEY = "marketizoPendingEmployeeWorkLogsV1";
 const defaultEmployees = [
   {
     id: "emp-miljan",
@@ -244,7 +245,16 @@ function loadState(sourceData = null) {
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
   }));
   data.employeeAbsences = data.employeeAbsences || [];
-  data.employeeWorkLogs = (data.employeeWorkLogs || []).map((log) => ({
+  // Remote refreshes must retain entries still waiting for server confirmation.
+  data.employeeWorkLogs = data.employeeWorkLogs || [];
+  const knownWorkLogIds = new Set(data.employeeWorkLogs.map((log) => log.id));
+  readPendingWorkLogs().forEach(({ workLog }) => {
+    if (!knownWorkLogIds.has(workLog.id)) {
+      data.employeeWorkLogs.unshift(workLog);
+      knownWorkLogIds.add(workLog.id);
+    }
+  });
+  data.employeeWorkLogs = data.employeeWorkLogs.map((log) => ({
     id: log.id || createId(),
     employeeId: log.employeeId || "",
     date: log.date || currentDateKey(),
@@ -433,7 +443,6 @@ function showToast(title, message = "", type = "ok") {
   window.setTimeout(() => toast.remove(), 4200);
 }
 
-const PENDING_WORK_LOGS_KEY = "marketizoPendingEmployeeWorkLogsV1";
 let pendingWorkLogSyncRunning = false;
 
 function readPendingWorkLogs() {
@@ -465,11 +474,14 @@ function removePendingWorkLog(workLogId) {
 }
 
 async function postEmployeeWorkLog(workLog, recipientId) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch("/api/employee-activity", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${getEmployeeSession()?.token || ""}` },
       body: JSON.stringify({ workLog, recipientId, updateReport: false }),
+      signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
     return {
@@ -480,6 +492,8 @@ async function postEmployeeWorkLog(workLog, recipientId) {
     };
   } catch (error) {
     return { ok: false, retryable: true, error: error?.message || "Online čuvanje nije uspelo." };
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -796,8 +810,8 @@ function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
   const hours = parseNumber(weeklyHours || 0, 0);
-  // Full-time work target: Mon-Thu 8h, Friday 6.5h; breaks are excluded.
-  if (hours >= 38) return day === 5 ? 390 : 480;
+  // Full-time attendance target includes the break: Mon-Thu 510 min, Friday 390 min.
+  if (hours >= 38) return day === 5 ? 390 : 510;
   return Math.round((hours * 60) / 5);
 }
 
