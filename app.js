@@ -3370,8 +3370,8 @@ function renderEmployees() {
   const year = Number(monthKey.slice(0, 4));
   const employees = visibleEmployees();
   const totalSalary = employees
-    .filter((employee) => employee.status === "Aktivan")
-    .reduce((sum, employee) => sum + Number(employee.salary || 0), 0);
+    .filter((employee) => (!employee.startDate || employee.startDate.slice(0, 7) <= monthKey) && (!employee.endDate || employee.endDate.slice(0, 7) >= monthKey) && (employee.status === "Aktivan" || employee.endDate))
+    .reduce((sum, employee) => sum + Number(window.MarketizoCosts.monthlyValue(employee.salaryByMonth, monthKey) ?? employee.salary ?? 0), 0);
   const totalHourBalance = employees.reduce((sum, employee) => sum + employeeHourBalance(employee, monthKey), 0);
   const vacationReserved = year === Number(currentDateKey().slice(0, 4))
     ? employees.reduce((sum, employee) => sum + employeeVacationSnapshot(employee).reserved, 0)
@@ -3460,8 +3460,8 @@ function renderSelectedEmployeeDetail(employee, monthKey, year) {
   setText("selectedEmployeeName", employee.name);
   setText("selectedEmployeePosition", employee.position || "Pozicija nije uneta");
   setText("selectedEmployeeStart", formatDate(employee.startDate));
-  setText("selectedEmployeeSalary", currency.format(Number(employee.salary || 0)));
-  setText("selectedEmployeeWeekly", `${formatHours(employee.weeklyHours || 38.5)}h`);
+  setText("selectedEmployeeSalary", currency.format(Number(window.MarketizoCosts.monthlyValue(employee.salaryByMonth, monthKey) ?? employee.salary ?? 0)));
+  setText("selectedEmployeeWeekly", `${formatHours(employeeWeeklyHoursForMonth(employee, monthKey))}h`);
   setText("selectedEmployeeLeader", employee.isLeader ? "Lider" : employeeLeaderName(employee));
   setText("selectedEmployeeTeamCount", `${team.length} osoba`);
   renderSelectedEmployeeAbsenceList(employee.id, year);
