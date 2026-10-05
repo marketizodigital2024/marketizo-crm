@@ -63,7 +63,7 @@ const clientFinancialKeys = ["revenue", "cpl", "package", "billingDay", "payment
 
 function hideOperationalFinancials(payload) {
   const copy = hidePasswords(payload);
-  copy.employees = (copy.employees || []).map((employee) => ({ ...employee, salary: undefined, openingHourBalance: undefined }));
+  copy.employees = (copy.employees || []).map((employee) => ({ ...employee, salary: undefined, salaryByMonth: undefined, costWeeklyHoursByMonth: undefined, openingHourBalance: undefined }));
   copy.clients = (copy.clients || []).map((client) => {
     const safe = { ...client };
     clientFinancialKeys.forEach((key) => delete safe[key]);
@@ -377,11 +377,14 @@ module.exports = async function handler(req, res) {
       await preserveDailyPrewriteBackup(config, current);
       payload = preserveCredentials(payload, current.payload);
       const updatedAt = new Date().toISOString();
-      const response = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
-        method: "POST",
+      const writeUrl = current.updatedAt
+        ? `${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}`
+        : `${config.url}/rest/v1/${tableName}`;
+      const response = await fetch(writeUrl, {
+        method: current.updatedAt ? "PATCH" : "POST",
         headers: {
           ...supabaseHeaders(config.key),
-          Prefer: "resolution=merge-duplicates,return=minimal",
+          Prefer: "return=representation",
         },
         body: JSON.stringify({
           id: rowId,
@@ -394,6 +397,13 @@ module.exports = async function handler(req, res) {
           configured: true,
           error: await response.text(),
         });
+      }
+      const writtenRows = await response.json();
+      if (!Array.isArray(writtenRows) || writtenRows.length !== 1) {
+        const latest = await readStoredState(config);
+        return json(res, 409, { configured: true, conflict: true,
+          error: "Podaci su u međuvremenu promenjeni. Ponovi izmenu.",
+          updatedAt: latest.updatedAt });
       }
       // Login remains fast after an employee/email/password change. The main
       // state write is already committed, so a temporary auth-sync issue must

@@ -1754,6 +1754,7 @@ async function hydrateOnlineState() {
     saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || mikrohausSeptemberInvoiceAdded || sladjanCorrected || hazimCorrected || nikolaCorrected || confirmedAbsencesAdded || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || qa20260828DataCleanedV2 || activityCatalogAdded });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
+    window.dispatchEvent(new Event("marketizo-cost-data-ready"));
     return;
   }
   if (result.configured && result.empty) {
@@ -2979,7 +2980,7 @@ function employeeLateStatus(employeeId, monthKey) {
 function employeeWeeklyHoursForMonth(employee, monthKey, fallback = 38.5) {
   // Historical month targets must come from the saved employment schedule.
   if (employee?.endDate && monthKey > employee.endDate.slice(0, 7)) return 0;
-  return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? fallback;
+  return window.MarketizoCosts.monthlyValue(employee?.weeklyHoursByMonth, monthKey) ?? employee?.weeklyHours ?? fallback;
 }
 
 function scheduledMinutesForDate(weeklyHours, date) {
@@ -3593,7 +3594,11 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.name.value = employee.name || "";
     form.elements.position.value = employee.position || "";
     form.elements.email.value = employee.email || "";
-    form.elements.password.value = employee.password || "";
+    form.elements.password.value = "";
+    form.elements.password.required = false;
+    form.elements.password.placeholder = "Ostavi prazno da zadržiš lozinku";
+    form.elements.compensationMonth.value = currentMonthKey();
+    form.elements.costWeeklyHours.value = window.MarketizoCosts.terms(employee, currentDateKey()).weeklyHours;
     form.elements.startDate.value = employee.startDate || "";
     form.elements.salary.value = Number(employee.salary || 0);
     form.elements.weeklyHours.value = parseNumber(employee.weeklyHours || 38.5);
@@ -3610,7 +3615,11 @@ function showEmployeeProfileForm(employee = null) {
     setText("employeeProfileMode", "Novi zaposleni");
     form.reset();
     form.elements.id.value = "";
-    form.elements.password.value = "123456";
+    form.elements.password.value = "";
+    form.elements.password.required = true;
+    form.elements.password.placeholder = "Lozinka za novog zaposlenog";
+    form.elements.compensationMonth.value = currentMonthKey();
+    form.elements.costWeeklyHours.value = 38.5;
     form.elements.weeklyHours.value = 38.5;
     form.elements.openingHourBalance.value = 0;
     form.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
@@ -4534,7 +4543,10 @@ function setupClientCostAnalysis() {
       <article><span>Trošak rada</span><strong id="clientCostAmount">€ 0</strong></article>
       <article><span>Aktivnosti</span><strong id="clientCostEntries">0</strong></article>
       <article><span>Zaposlenih</span><strong id="clientCostPeople">0</strong></article>
+      <article><span>Interno / Marketizo</span><strong id="clientCostInternal">€ 0</strong></article>
+      <article><span>Neraspoređeno vreme</span><strong id="clientCostUnassigned">€ 0</strong></article>
     </section>
+    <section class="panel"><p>Trošak prijavljenog rada po bruto plati i prosečnom mesečnom fondu sati. Kirija, softver i drugi troškovi firme nisu uključeni.</p><p id="clientCostWarnings" role="status"></p></section>
     <section class="panel client-cost-results"><div class="panel-head"><div><p class="eyebrow">Analiza</p><h2>Utrošak po klijentu i zaposlenom</h2></div><span id="clientCostRange"></span></div><div id="clientCostRows"></div></section>`;
   main.append(view);
 
@@ -4556,12 +4568,12 @@ function setupClientCostAnalysis() {
   };
   const employeeName = (id) => (state.employees || []).find((item) => item.id === id)?.name || "Nepoznat zaposleni";
   const clientName = (log) => log.clientName || (state.clients || []).find((item) => item.id === log.clientId)?.name || "Bez klijenta";
-  const hourlyRate = (employee) => Number(employee?.salary || 0) / Math.max(1, Number(employee?.weeklyHours || 38.5) * 52 / 12);
-  const money = (amount) => `€ ${Math.round(amount).toLocaleString("de-DE")}`;
+  const costs = window.MarketizoCosts;
+  const money = (amount) => `€ ${amount.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const hours = (minutes) => `${(minutes / 60).toLocaleString("sr-RS", { maximumFractionDigits: 2 })}h`;
 
   const populate = () => {
-    clientSelect.innerHTML = `<option value="">Svi aktivni klijenti</option>${(state.clients || []).filter((item) => item.status === "Aktivan").slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}</option>`).join("")}`;
+    clientSelect.innerHTML = `<option value="">Sve vreme: klijenti, interno i neraspoređeno</option><option value="__unassigned__">Neraspoređeno vreme</option>${(state.clients || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${escapeInvoiceText(item.id)}">${escapeInvoiceText(item.name)}${item.status === "Aktivan" ? "" : " (" + escapeInvoiceText(item.status || "neaktivan") + ")"}</option>`).join("")}`;
     employeeSelect.innerHTML = (state.employees || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}${item.status === "Neaktivan" ? " (neaktivan)" : ""}</option>`).join("");
     employeeList.innerHTML = [...employeeSelect.options].map((item) => `<label data-employee-name="${item.textContent.toLowerCase()}"><input type="checkbox" value="${item.value}" /><span>${item.textContent}</span></label>`).join("");
     employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
@@ -4577,20 +4589,30 @@ function setupClientCostAnalysis() {
     const logs = (state.employeeWorkLogs || state.employeeLogs || []).filter((log) => {
       const date = String(log.date || "").slice(0, 10);
       if (!date || date < from.value || date > to.value) return false;
-      if (clientName(log) === "Bez klijenta") return false;
+      const allocation = costs.bucket(log, state.clients);
       if (selectedEmployees.size && !selectedEmployees.has(log.employeeId)) return false;
-      if (selectedClient && log.clientId !== selectedClient && clientName(log) !== selectedClientName) return false;
+      if (selectedClient === "__unassigned__" && allocation.kind !== "unassigned") return false;
+      if (selectedClient && selectedClient !== "__unassigned__" && allocation.id !== selectedClient) return false;
       return true;
     });
     const groups = new Map();
     let totalMinutes = 0;
     let totalCost = 0;
+    let internalCost = 0;
+    let unassignedCost = 0;
+    const warnings = new Set();
     logs.forEach((log) => {
-      const minutes = Number(log.minutes || Math.round(Number(log.hours || 0) * 60) || 0);
+      const minutes = costs.minutes(log);
       const employee = (state.employees || []).find((item) => item.id === log.employeeId);
-      const cost = minutes / 60 * hourlyRate(employee);
-      const client = clientName(log);
-      const key = `${client}::${log.employeeId}`;
+      const rate = costs.terms(employee, log.date);
+      const cost = minutes / 60 * rate.hourlyRate;
+      const allocation = costs.bucket(log, state.clients);
+      const client = allocation.name;
+      if (!rate.valid) warnings.add(`Nevažeći uslovi za ${employeeName(log.employeeId)} (${String(log.date).slice(0, 7)}) — proveri unos.`);
+      else if (!rate.confirmed) warnings.add(`Nepotvrđena bruto plata: ${employeeName(log.employeeId)} (${String(log.date).slice(0, 7)}). Trošak je procena po trenutnoj plati.`);
+      if (allocation.kind === "internal" || /^marketizo digital/i.test(client)) internalCost += cost;
+      if (allocation.kind === "unassigned") unassignedCost += cost;
+      const key = `${allocation.id}::${log.employeeId}`;
       const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0, activities: new Set() };
       group.minutes += minutes; group.cost += cost; group.entries += 1; group.activities.add(log.activityName || "Aktivnost"); groups.set(key, group);
       totalMinutes += minutes; totalCost += cost;
@@ -4600,8 +4622,11 @@ function setupClientCostAnalysis() {
     view.querySelector("#clientCostAmount").textContent = money(totalCost);
     view.querySelector("#clientCostEntries").textContent = logs.length;
     view.querySelector("#clientCostPeople").textContent = new Set(logs.map((item) => item.employeeId)).size;
+    view.querySelector("#clientCostInternal").textContent = money(internalCost);
+    view.querySelector("#clientCostUnassigned").textContent = money(unassignedCost);
+    view.querySelector("#clientCostWarnings").textContent = [...warnings, ...(unassignedCost > 0 ? ["Neraspoređeno vreme je uključeno u zbir, ali nije pripisano klijentu ili internom Marketizu."] : [])].join(" ");
     view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
-    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${row.client}</strong><span>${row.employee}</span><span class="client-cost-activity-cell" tabindex="0"><b>${row.entries} unosa</b><small class="client-cost-activity-tooltip">${escapeInvoiceText([...row.activities].join(" · "))}</small></span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
+    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${escapeInvoiceText(row.client)}</strong><span>${escapeInvoiceText(row.employee)}</span><span class="client-cost-activity-cell" tabindex="0"><b>${row.entries} unosa</b><small class="client-cost-activity-tooltip">${escapeInvoiceText([...row.activities].join(" · "))}</small></span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
   };
   const show = (event) => {
     event?.stopImmediatePropagation();
@@ -4622,6 +4647,9 @@ function setupClientCostAnalysis() {
   view.querySelector("#clientCostClearEmployees").addEventListener("click", () => { employeeList.querySelectorAll('input[type="checkbox"]').forEach((item) => item.checked = false); [...employeeSelect.options].forEach((item) => item.selected = false); render(); });
   view.querySelector("#clientCostReset").addEventListener("click", () => { clientSelect.value = ""; employeeSearch.value = ""; employeeList.querySelectorAll("label").forEach((item) => { item.hidden = false; item.querySelector("input").checked = false; }); [...employeeSelect.options].forEach((item) => item.selected = false); setPeriod("month"); render(); });
   setPeriod("month"); populate();
+  window.addEventListener("marketizo-cost-data-ready", () => {
+    if (view.classList.contains("active")) { populate(); render(); }
+  });
   if (location.hash === "#client-costs") show();
 }
 
@@ -5794,7 +5822,18 @@ document.addEventListener("click", (event) => {
   renderAll();
 });
 
-document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeForm")?.elements.compensationMonth?.addEventListener("change", (event) => {
+  const form = event.target.form;
+  const employee = state.employees.find((item) => item.id === form.elements.id.value);
+  if (!employee || !event.target.value) return;
+  const rate = window.MarketizoCosts.terms(employee, `${event.target.value}-01`);
+  form.elements.salary.value = rate.salary;
+  form.elements.weeklyHours.value = window.MarketizoCosts.weeklyHours(employee, event.target.value);
+  form.elements.costWeeklyHours.value = rate.weeklyHours;
+  updateEmployeeMonthlyPreview();
+});
+
+document.getElementById("employeeForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const formData = new FormData(form);
@@ -5818,10 +5857,32 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
     giftDays: parseNumber(formData.get("giftDays"), 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(formData.get("status")) ? formData.get("status") : "Aktivan",
   };
+  if (!payload.password) delete payload.password;
+  const effectiveMonth = String(formData.get("compensationMonth") || currentMonthKey());
+  const costWeeklyHours = parseNumber(formData.get("costWeeklyHours"), payload.weeklyHours);
+  if (!/^\d{4}-\d{2}$/.test(effectiveMonth) || costWeeklyHours <= 0) return;
   if (payload.leaderId === id) payload.leaderId = "";
   if (id) {
     const employee = state.employees.find((item) => item.id === id);
     if (!employee) return;
+    const rate = window.MarketizoCosts.terms(employee, `${effectiveMonth}-01`);
+    const changed = payload.salary !== Number(employee.salary || 0) || payload.weeklyHours !== Number(employee.weeklyHours || 38.5) || costWeeklyHours !== rate.weeklyHours || effectiveMonth !== currentMonthKey();
+    if (changed) {
+      employee.salaryByMonth = { ...(employee.salaryByMonth || {}) };
+      employee.weeklyHoursByMonth = { ...(employee.weeklyHoursByMonth || {}) };
+      employee.costWeeklyHoursByMonth = { ...(employee.costWeeklyHoursByMonth || {}) };
+      // Anchor today's terms before a past/future edit so other periods stay stable.
+      if (effectiveMonth !== currentMonthKey()) {
+        employee.salaryByMonth[currentMonthKey()] ??= Number(employee.salary || 0);
+        employee.weeklyHoursByMonth[currentMonthKey()] ??= Number(employee.weeklyHours || 38.5);
+        employee.costWeeklyHoursByMonth[currentMonthKey()] ??= window.MarketizoCosts.terms(employee, currentDateKey()).weeklyHours;
+      }
+      employee.salaryByMonth[effectiveMonth] = payload.salary;
+      employee.weeklyHoursByMonth[effectiveMonth] = payload.weeklyHours;
+      employee.costWeeklyHoursByMonth[effectiveMonth] = costWeeklyHours;
+      payload.salary = window.MarketizoCosts.monthlyValue(employee.salaryByMonth, currentMonthKey()) ?? employee.salary;
+      payload.weeklyHours = window.MarketizoCosts.weeklyHours(employee, currentMonthKey());
+    }
     Object.assign(employee, payload);
     if (!employee.isLeader) {
       state.employees.forEach((item) => {
@@ -5830,23 +5891,27 @@ document.getElementById("employeeForm")?.addEventListener("submit", (event) => {
     }
     selectedEmployeeId = employee.id;
   } else {
-    const employee = { id: crypto.randomUUID(), ...payload };
+    const employee = { id: crypto.randomUUID(), ...payload, salaryByMonth: { [effectiveMonth]: payload.salary }, weeklyHoursByMonth: { [effectiveMonth]: payload.weeklyHours }, costWeeklyHoursByMonth: { [effectiveMonth]: costWeeklyHours } };
     state.employees.unshift(employee);
     selectedEmployeeId = employee.id;
   }
-  saveState();
-  event.currentTarget.reset();
-  event.currentTarget.elements.id.value = "";
-  event.currentTarget.elements.password.value = "123456";
-  event.currentTarget.elements.weeklyHours.value = 38.5;
-  event.currentTarget.elements.openingHourBalance.value = 0;
-  event.currentTarget.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
-  event.currentTarget.elements.isLeader.checked = false;
-  if (event.currentTarget.elements.isOperationalAdmin) event.currentTarget.elements.isOperationalAdmin.checked = false;
-  event.currentTarget.elements.leaderId.value = "";
-  event.currentTarget.elements.vacationDays.value = 25;
-  event.currentTarget.elements.openingVacationUsed.value = 0;
-  event.currentTarget.elements.giftDays.value = 1;
+  const saved = await saveState();
+  if (!saved?.ok) {
+    showToast("Nije sačuvano u online bazu", saved?.error || "Pokušaj ponovo kada je veza dostupna.", "warn");
+    return;
+  }
+  form.reset();
+  form.elements.id.value = "";
+  form.elements.password.value = "";
+  form.elements.weeklyHours.value = 38.5;
+  form.elements.openingHourBalance.value = 0;
+  form.elements.openingBalanceMonth.value = shiftMonth(currentMonthKey(), -1);
+  form.elements.isLeader.checked = false;
+  if (form.elements.isOperationalAdmin) form.elements.isOperationalAdmin.checked = false;
+  form.elements.leaderId.value = "";
+  form.elements.vacationDays.value = 25;
+  form.elements.openingVacationUsed.value = 0;
+  form.elements.giftDays.value = 1;
   hideEmployeeProfileForm();
   renderAll();
   showToast("Sačuvano", `${name} je sačuvan u zaposlenima.`, "ok");
