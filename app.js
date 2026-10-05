@@ -2987,8 +2987,8 @@ function scheduledMinutesForDate(weeklyHours, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   if (day < 1 || day > 5) return 0;
   const hours = parseNumber(weeklyHours || 0, 0);
-  // Full-time work target: Mon-Thu 8h, Friday 6.5h; breaks are excluded.
-  if (hours >= 38) return day === 5 ? 390 : 480;
+  // Full-time attendance target includes the break: Mon-Thu 510 min, Friday 390 min.
+  if (hours >= 38) return day === 5 ? 390 : 510;
   return Math.round((hours * 60) / 5);
 }
 
