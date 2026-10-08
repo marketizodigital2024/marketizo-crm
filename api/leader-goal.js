@@ -48,10 +48,7 @@ function viennaDateKey(date = new Date()) {
 }
 
 function isDirectReport(leader, employee) {
-  if (employee.leaderId === leader.id) return true;
-  const leaderName = String(leader.name || "").toLowerCase();
-  const employeeName = String(employee.name || "").toLowerCase();
-  return leaderName.includes("sladjan") && employeeName.includes("milica blagojevic");
+  return employee.leaderId === leader.id;
 }
 
 async function preserveDailyPrewriteBackup(url, key, row) {
@@ -131,3 +128,4 @@ module.exports = async function handler(req, res) {
     return json(res, 500, { ok: false, error: error?.message || "Čuvanje cilja nije uspelo." });
   }
 };
+

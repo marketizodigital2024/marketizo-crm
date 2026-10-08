@@ -1,6 +1,7 @@
 let state = loadClientState();
 let activeClient = null;
 let onlineHydrationPromise = null;
+let clientSaveInFlight = false;
 let clientFilters = {
   startDate: "",
   endDate: "",
@@ -41,7 +42,8 @@ function loadClientState(sourceData = null) {
 
 function saveState(options = {}) {
   localStorage.setItem("agencyCrmData", JSON.stringify(state));
-  if (options.remote !== false) window.MarketizoRemote?.save(state);
+  if (options.remote !== false) return window.MarketizoRemote?.save(state) || Promise.resolve({ ok: false, error: "Online čuvanje nije dostupno." });
+  return Promise.resolve({ ok: true, localOnly: true });
 }
 
 function loginSlug(value) {
@@ -671,11 +673,25 @@ function renderLeadList(leads) {
     : `<section class="panel empty-state">Još nema leadova.</section>`;
 
   document.querySelectorAll(".lead-status-select").forEach((select) => {
-    select.addEventListener("change", () => {
+    select.addEventListener("change", async () => {
       const lead = state.leads.find((item) => item.id === select.dataset.id);
       if (!lead) return;
+      if (clientSaveInFlight) return;
+      const previous = structuredClone(state);
       updateLeadStatus(lead, select.value);
-      saveState();
+      clientSaveInFlight = true;
+  const saved = await saveState();
+  clientSaveInFlight = false;
+  if (!saved?.ok) {
+    state = previous;
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
+  }
+  if (saved.payload) {
+    state = loadClientState(saved.payload);
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+  }
       renderClientApp();
     });
   });
@@ -699,12 +715,26 @@ function renderTeam(team) {
         .join("")
     : `<div class="empty-state">Dodaj prvu osobu koja će zvati leadove.</div>`;
   document.querySelectorAll(".delete-team-member").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       const member = state.teamMembers.find((item) => item.id === button.dataset.id);
       if (!member) return;
       if (!confirm(`Obrisati osobu iz sales tima: ${member.name}?`)) return;
+      if (clientSaveInFlight) return;
+      const previous = structuredClone(state);
       state.teamMembers = state.teamMembers.filter((item) => item.id !== member.id);
-      saveState();
+      clientSaveInFlight = true;
+  const saved = await saveState();
+  clientSaveInFlight = false;
+  if (!saved?.ok) {
+    state = previous;
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
+  }
+  if (saved.payload) {
+    state = loadClientState(saved.payload);
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+  }
       renderClientApp();
       showToast("Sačuvano", "Osoba je obrisana iz sales tima.", "ok");
     });
@@ -885,9 +915,12 @@ document.getElementById("enableNotifications")?.addEventListener("click", async 
   }
 });
 
-document.getElementById("clientLeadForm").addEventListener("submit", (event) => {
+document.getElementById("clientLeadForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  if (clientSaveInFlight) return;
+  const previous = structuredClone(state);
   state.leads = state.leads || [];
   const status = normalizeLeadStatus(formData.get("status"));
   const reactedAt = isContactedStatus(status) ? new Date().toISOString() : "";
@@ -915,19 +948,34 @@ document.getElementById("clientLeadForm").addEventListener("submit", (event) => 
   };
   state.leads.unshift(newLead);
   activeClient.leads = Number(activeClient.leads || 0) + 1;
-  saveState();
-  event.currentTarget.reset();
+  clientSaveInFlight = true;
+  const saved = await saveState();
+  clientSaveInFlight = false;
+  if (!saved?.ok) {
+    state = previous;
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
+  }
+  if (saved.payload) {
+    state = loadClientState(saved.payload);
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+  }
+  form.reset();
   document.getElementById("leadFormPanel").hidden = true;
   renderClientApp();
   showLeadNotification(newLead);
   showToast("Sačuvano", "Lead je dodat u CRM.", "ok");
 });
 
-document.getElementById("editLeadForm")?.addEventListener("submit", (event) => {
+document.getElementById("editLeadForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
   const lead = state.leads.find((item) => item.id === formData.get("id"));
   if (!lead) return;
+  if (clientSaveInFlight) return;
+  const previous = structuredClone(state);
   lead.name = formData.get("name");
   lead.phone = formData.get("phone");
   lead.email = formData.get("email");
@@ -941,14 +989,28 @@ document.getElementById("editLeadForm")?.addEventListener("submit", (event) => {
   lead.nextAction = formData.get("nextAction");
   lead.note = formData.get("note");
   lead.lossReason = formData.get("lossReason");
-  saveState();
+  clientSaveInFlight = true;
+  const saved = await saveState();
+  clientSaveInFlight = false;
+  if (!saved?.ok) {
+    state = previous;
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
+  }
+  if (saved.payload) {
+    state = loadClientState(saved.payload);
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+  }
   document.getElementById("editLeadModal").close();
   renderClientApp();
   showToast("Sačuvano", "Izmene na leadu su sačuvane.", "ok");
 });
 
-document.getElementById("clientSettingsForm")?.addEventListener("submit", (event) => {
+document.getElementById("clientSettingsForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (clientSaveInFlight) return;
+  const previous = structuredClone(state);
   const defaults = defaultClientSettings();
   activeClient.crmSettings = {
     pipelines: parseLines(document.getElementById("settingsPipelines")?.value, defaults.pipelines),
@@ -958,7 +1020,19 @@ document.getElementById("clientSettingsForm")?.addEventListener("submit", (event
   clientFilters.source = "all";
   clientFilters.pipeline = "all";
   clientFilters.status = "all";
-  saveState();
+  clientSaveInFlight = true;
+  const saved = await saveState();
+  clientSaveInFlight = false;
+  if (!saved?.ok) {
+    state = previous;
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
+  }
+  if (saved.payload) {
+    state = loadClientState(saved.payload);
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+  }
   renderClientApp();
   showToast("Sačuvano", "Podešavanja CRM-a su sačuvana.", "ok");
 });
@@ -971,9 +1045,12 @@ document.getElementById("cancelEditLead")?.addEventListener("click", () => {
   document.getElementById("editLeadModal").close();
 });
 
-document.getElementById("clientTeamForm").addEventListener("submit", (event) => {
+document.getElementById("clientTeamForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  if (clientSaveInFlight) return;
+  const previous = structuredClone(state);
   state.teamMembers = state.teamMembers || [];
   state.teamMembers.push({
     id: crypto.randomUUID(),
@@ -983,8 +1060,20 @@ document.getElementById("clientTeamForm").addEventListener("submit", (event) => 
     phone: formData.get("phone"),
     email: formData.get("email"),
   });
-  saveState();
-  event.currentTarget.reset();
+  clientSaveInFlight = true;
+  const saved = await saveState();
+  clientSaveInFlight = false;
+  if (!saved?.ok) {
+    state = previous;
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
+  }
+  if (saved.payload) {
+    state = loadClientState(saved.payload);
+    activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
+  }
+  form.reset();
   renderClientApp();
   showToast("Sačuvano", "Član tima je dodat.", "ok");
 });
@@ -1038,3 +1127,4 @@ onlineHydrationPromise = initialClientSession
       document.getElementById("loginScreen").hidden = false;
     })
   : Promise.resolve();
+

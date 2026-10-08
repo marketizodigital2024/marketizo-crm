@@ -723,12 +723,7 @@ function unhideNotification(id) {
 
 function leaderTeam() {
   if (!activeEmployee?.isLeader) return [];
-  const activeName = String(activeEmployee.name || "").toLowerCase();
-  return (state.employees || []).filter((employee) => {
-    if (employee.leaderId === activeEmployee.id) return true;
-    const employeeName = String(employee.name || "").toLowerCase();
-    return activeName.includes("sladjan") && employeeName.includes("milica blagojevic");
-  });
+  return (state.employees || []).filter((employee) => employee.leaderId === activeEmployee.id);
 }
 
 function reportRecipientId() {
@@ -803,7 +798,7 @@ function employeeMonthAbsenceDays(employeeId, monthKey) {
 function employeeWeeklyHoursForMonth(employee, monthKey, fallback = 38.5) {
   // Historical month targets must come from the saved employment schedule.
   if (employee?.endDate && monthKey > employee.endDate.slice(0, 7)) return 0;
-  return employee?.weeklyHoursByMonth?.[monthKey] ?? employee?.weeklyHours ?? fallback;
+  return window.MarketizoCosts.weeklyHours(employee, monthKey);
 }
 
 function scheduledMinutesForDate(weeklyHours, date) {
@@ -908,7 +903,7 @@ function employeeMonthHasActivity(employeeId, monthKey) {
 
 function monthBalance(employee, monthKey) {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
-    return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
+    return Math.round((parseNumber(employee.monthlyBalanceOverrides[monthKey]) - (state.employeeHourAdjustments || []).filter((item) => item.employeeId === employee.id && String(item.date || "").startsWith(monthKey)).reduce((sum, item) => sum + Number(item.minutes || 0) / 60, 0)) * 100) / 100;
   }
   let completedHours = employeeMonthHours(employee, monthKey);
   if (monthKey === currentMonthKey()) {
@@ -925,8 +920,16 @@ function carryoverBalance(employee, monthKey) {
   const openingMonth = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
   const openingBalance = parseNumber(employee.openingHourBalance || 0);
   let total = monthIndex(monthKey) > monthIndex(openingMonth) ? openingBalance : 0;
-  for (let index = 11; index >= 1; index -= 1) {
-    const key = shiftMonth(monthKey, -index);
+  const availableMonths = Object.keys(employee.monthlyBalanceOverrides || {});
+  if (typeof state !== "undefined") {
+    [state.employeeWorkLogs, state.employeeHourAdjustments, state.employeeLateRecords, state.employeeAbsences].forEach((items) => (items || []).forEach((item) => {
+      if (item.employeeId === employee.id) availableMonths.push(String(item.date || item.startDate || "").slice(0, 7));
+    }));
+  }
+  const earliest = availableMonths.filter((key) => /^\d{4}-\d{2}$/.test(key)).sort()[0] || openingMonth;
+  const startMonth = employee.openingBalanceMonth ? shiftMonth(openingMonth, 1) : earliest;
+  for (let offset = monthIndex(startMonth) - monthIndex(monthKey); offset < 0; offset += 1) {
+    const key = shiftMonth(monthKey, offset);
     if (!employeeMonthHasActivity(employee.id, key)) continue;
     total += monthBalance(employee, key);
   }
@@ -1615,7 +1618,7 @@ function renderLeaderPanel() {
           <div class="setup-item leader-assignment-row">
             <strong>${assigned ? "✓" : "+"}</strong>
             <span>${employee.name}<br />${employee.position || "Pozicija nije uneta"}${employee.leaderId && !assigned ? " · ima drugog lidera" : ""}</span>
-            <button class="secondary-button leader-assign-btn" data-employee-id="${employee.id}" type="button">${assigned ? "Ukloni" : "Dodaj"}</button>
+            <span>Tim dodeljuje administrator</span>
           </div>`;
         })
         .join("")

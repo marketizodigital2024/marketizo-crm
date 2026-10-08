@@ -51,7 +51,7 @@ function accessSession(req, current, key) {
     const client = (current?.clients || []).find((item) => item.id === session.clientId && item.status !== "Arhiviran");
     return client ? { session, client, role: "client" } : null;
   }
-  const employee = (current?.employees || []).find((item) => item.id === session?.employeeId && item.status !== "Neaktivan");
+  const employee = (current?.employees || []).find((item) => item.id === session?.employeeId && item.status !== "Neaktivan" && item.active !== false);
   if (!employee) return null;
   if (session.role === "full-admin" && FULL_ADMIN_EMPLOYEE_IDS.has(employee.id)) return { session, employee, role: "full-admin" };
   if (session.role === "operational-admin" && employee.isOperationalAdmin === true) return { session, employee, role: "operational-admin" };
@@ -63,7 +63,7 @@ const clientFinancialKeys = ["revenue", "cpl", "package", "billingDay", "payment
 
 function hideOperationalFinancials(payload) {
   const copy = hidePasswords(payload);
-  copy.employees = (copy.employees || []).map((employee) => ({ ...employee, salary: undefined, salaryByMonth: undefined, costWeeklyHoursByMonth: undefined, openingHourBalance: undefined }));
+  copy.employees = (copy.employees || []).map((employee) => ({ ...employee, salary: undefined, salaryByMonth: undefined, costWeeklyHoursByMonth: undefined }));
   copy.clients = (copy.clients || []).map((client) => {
     const safe = { ...client };
     clientFinancialKeys.forEach((key) => delete safe[key]);
@@ -83,11 +83,16 @@ function hideEmployeeState(payload, employee) {
       if (owner || item.leaderId === employee.id) visibleEmployeeIds.add(item.id);
     });
   }
-  copy.clients = (copy.clients || []).map((client) => {
-    const safe = { ...client };
-    delete safe.loginEmail;
-    return safe;
-  });
+  copy.employeeDirectory = (copy.employees || []).map(({ id, name, leaderId }) => ({ id, name, leaderId }));
+  copy.employees = (copy.employees || []).filter((item) => visibleEmployeeIds.has(item.id));
+  copy.employeeAbsences = (copy.employeeAbsences || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
+  copy.clients = (copy.clients || []).map(({ id, name, status }) => ({ id, name, status }));
+  copy.leads = [];
+  copy.clientLeads = [];
+  copy.teamMembers = [];
+  delete copy.operationalAuditLog;
+  delete copy.employeeAuditLog;
+  delete copy.hourAdjustmentAudit;
   copy.employeeWorkLogs = (copy.employeeWorkLogs || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
   copy.employeeLateRecords = (copy.employeeLateRecords || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
   copy.employeeHourAdjustments = (copy.employeeHourAdjustments || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
@@ -96,7 +101,7 @@ function hideEmployeeState(payload, employee) {
   copy.employeeGoals = (copy.employeeGoals || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
   copy.employeeRatings = (copy.employeeRatings || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
   copy.employeeRecognitions = (copy.employeeRecognitions || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
-  copy.employeeOneOnOnes = (copy.employeeOneOnOnes || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
+  copy.employeeOneOnOnes = (copy.employeeOneOnOnes || []).filter((item) => visibleEmployeeIds.has(item.employeeId) && (item.visibleToEmployee !== false || owner || (employee.isLeader && item.employeeId !== employee.id)));
   copy.notifications = (copy.notifications || []).filter((item) => item.scope === "all" || item.targetId === employee.id || (item.scope === "admin" && employee.isLeader));
   return copy;
 }
@@ -144,6 +149,8 @@ function mergeOperationalPayload(submitted, current, actor) {
     employeeWorkLogs: mergeCollectionWithoutDelete("employeeWorkLogs"),
     employeeAbsences: mergeCollectionWithoutDelete("employeeAbsences"),
     employeeLateRecords: mergeCollectionWithoutDelete("employeeLateRecords"),
+    employeeHourAdjustments: submitted.employeeHourAdjustments || current.employeeHourAdjustments || [],
+    hourAdjustmentAudit: submitted.hourAdjustmentAudit || current.hourAdjustmentAudit || [],
     operationalAuditLog: [{ id: crypto.randomUUID(), actorId: actor.id, actorName: actor.name, action: "operational-state-save", createdAt: new Date().toISOString() }, ...(current.operationalAuditLog || [])].slice(0, 500),
   };
 }
@@ -361,6 +368,29 @@ module.exports = async function handler(req, res) {
           updatedAt: current.updatedAt,
         });
       }
+      if (["full-admin", "operational-admin"].includes(access.role)) {
+        const adjustments = payload.employeeHourAdjustments || current.payload.employeeHourAdjustments || [];
+        if (Array.isArray(adjustments) && new Set(adjustments.map((item) => item.id)).size !== adjustments.length) return json(res, 400, { configured: true, error: "Duplirana korekcija salda." });
+        if (!Array.isArray(adjustments) || adjustments.some((item) => !item.id || !current.payload.employees.some((employee) => employee.id === item.employeeId) || !Number.isInteger(Number(item.minutes)) || Number(item.minutes) < 1 || Number(item.minutes) > 10000 || !/^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")) || !Number.isFinite(Date.parse(item.date + "T12:00:00Z")) || new Date(item.date + "T12:00:00Z").toISOString().slice(0, 10) !== item.date || !String(item.reason || "").trim())) {
+          return json(res, 400, { configured: true, error: "Neispravna korekcija salda." });
+        }
+        const previous = new Map((current.payload.employeeHourAdjustments || []).map((item) => [item.id, item]));
+        const desired = new Map(adjustments.map((item) => [item.id, item]));
+        payload.employeeHourAdjustments = adjustments.map((item) => previous.get(item.id) || { ...item, minutes: Number(item.minutes), actorId: access.employee.id, createdAt: new Date().toISOString() });
+        payload.hourAdjustmentAudit = [...(current.payload.hourAdjustmentAudit || []),
+          ...adjustments.filter((item) => !previous.has(item.id)).map((item) => ({ ...item, action: "deduct", actorId: access.employee.id, recordedAt: new Date().toISOString() })),
+          ...[...previous.values()].filter((item) => !desired.has(item.id)).map((item) => ({ ...item, action: "void", actorId: access.employee.id, recordedAt: new Date().toISOString() }))];
+      }
+      if (access.role === "employee") {
+        const existing = new Map((current.payload.employeeAbsences || []).map((item) => [item.id, item]));
+        const desired = payload.employeeAbsences || current.payload.employeeAbsences || [];
+        const protectedChange = desired.some((item) => item.employeeId === access.employee.id && (existing.has(item.id)
+          ? JSON.stringify(item) !== JSON.stringify(existing.get(item.id)) && existing.get(item.id).status === "Odobreno"
+            || item.status !== existing.get(item.id).status
+          : !["Zatraženo", "Na čekanju", "Na cekanju", "Pending"].includes(item.status)));
+        const removedApproved = [...existing.values()].some((item) => item.employeeId === access.employee.id && item.status === "Odobreno" && !desired.some((next) => next.id === item.id));
+        if (protectedChange || removedApproved) return json(res, 403, { configured: true, error: "Odobrenje odsustva može da menja samo administrator." });
+      }
       if (access.role === "operational-admin") payload = mergeOperationalPayload(payload, current.payload, access.employee);
       if (access.role === "employee") payload = mergeEmployeePayload(payload, current.payload, access.employee);
       if (access.role === "client") payload = mergeClientPayload(payload, current.payload, access.client);
@@ -408,8 +438,9 @@ module.exports = async function handler(req, res) {
       // Login remains fast after an employee/email/password change. The main
       // state write is already committed, so a temporary auth-sync issue must
       // not roll it back or make the user repeat the business-data save.
-      await syncEmployeeAuth(config, payload.employees).catch(() => null);
-      return json(res, 200, { configured: true, ok: true, updatedAt });
+      // Employee authentication is synchronized by the database trigger in this transaction.
+      const canonical = access.role === "full-admin" ? hidePasswords(payload) : access.role === "operational-admin" ? hideOperationalFinancials(payload) : access.role === "employee" ? hideEmployeeState(payload, access.employee) : hideClientState(payload, access.client);
+      return json(res, 200, { configured: true, ok: true, updatedAt, payload: canonical });
     }
 
     return json(res, 405, { configured: true, error: "Metod nije podržan." });
@@ -420,3 +451,6 @@ module.exports = async function handler(req, res) {
     });
   }
 };
+
+
+module.exports.helpers = { accessSession, readStoredState, supabaseConfig, supabaseHeaders };

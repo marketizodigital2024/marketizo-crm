@@ -111,6 +111,7 @@ async function writeIndependentBackup(source, date, now, kpiSource = null) {
     activities: Array.isArray(verified.state?.employeeActivities) ? verified.state.employeeActivities.length : 0,
   };
   if (verified.format !== "marketizo-crm-backup-v1" || verified.sourceUpdatedAt !== document.sourceUpdatedAt
+    || JSON.stringify(verified.state) !== JSON.stringify(document.state)
     || JSON.stringify(verifiedCounts) !== JSON.stringify(expectedCounts)
     || JSON.stringify(verified.kpi || null) !== JSON.stringify(document.kpi)) {
     throw new Error("Vercel Blob backup nije prošao proveru integriteta.");
@@ -146,6 +147,9 @@ module.exports = async function handler(req, res) {
 
   if (String(req.query?.inspect || "") === "1") {
     try {
+      const { accessSession, readStoredState } = require("./state.js").helpers;
+      const row = await readStoredState({ url, key });
+      if (accessSession(req, row.payload, key)?.role !== "full-admin") return send(res, 401, { error: "Unauthorized" });
       const independent = await listBlobBackups();
       let rows = [];
       let recentById = new Map();
@@ -273,3 +277,4 @@ module.exports = async function handler(req, res) {
     return send(res, 500, { error: error?.message || "Backup failed" });
   }
 };
+

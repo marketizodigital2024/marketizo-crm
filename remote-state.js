@@ -166,6 +166,7 @@
         }
         if (response.ok && data.updatedAt) {
           lastUpdatedAt = data.updatedAt;
+          payload = data.payload || payload;
           lastServerPayload = clone(payload);
           setLocal(payload);
           stateChannel?.postMessage({ type: "saved", payload: clone(payload), updatedAt: lastUpdatedAt });
@@ -221,7 +222,10 @@
   stateChannel?.addEventListener("message", (event) => {
     const message = event.data || {};
     if (message.type !== "saved" || !message.payload || message.updatedAt === lastUpdatedAt) return;
-    queueOrApplyRemoteState(message.payload, message.updatedAt);
+    // Reload using this tab's access role; another tab may have broader permissions.
+    load({ writeLocal: false }).then((result) => {
+      if (result.payload) queueOrApplyRemoteState(result.payload, result.updatedAt);
+    }).catch(() => {});
   });
 
   document.addEventListener("focusout", () => {
@@ -242,3 +246,4 @@
     },
   };
 })();
+

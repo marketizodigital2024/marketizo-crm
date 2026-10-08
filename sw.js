@@ -1,4 +1,4 @@
-const CACHE_NAME = "marketizo-crm-v134";
+const CACHE_NAME = "marketizo-crm-20261008-repair";
 const ASSETS = [
   "index.html",
   "client-login.html",
@@ -12,11 +12,11 @@ const ASSETS = [
   "employees-goals.html",
   "employees-settings.html",
   "styles.css?v=97",
-  "app.js?v=103",
-  "cost-calculation.js?v=1",
-  "client-portal.js?v=7",
-  "employee-portal.js?v=98",
-  "remote-state.js?v=13",
+  "app.js?v=20261008-repair",
+  "cost-calculation.js?v=20261008-repair",
+  "client-portal.js?v=20261008-repair",
+  "employee-portal.js?v=20261008-repair",
+  "remote-state.js?v=20261008-repair",
   "admin-auth.js?v=7",
   "marketizo-logo.png",
   "manifest.webmanifest",
@@ -78,3 +78,4 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+

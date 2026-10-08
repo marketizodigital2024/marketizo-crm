@@ -73,6 +73,9 @@ module.exports = async function handler(req, res) {
     });
     if (!sourceResponse.ok) throw new Error(`State fetch failed (${sourceResponse.status})`);
     const current = (await sourceResponse.json())[0];
+    const kpiResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.marketizo-kpi-v1&select=payload,updated_at`, { headers: supabaseHeaders(key) });
+    if (!kpiResponse.ok) throw new Error(`KPI fetch failed (${kpiResponse.status})`);
+    const currentKpi = (await kpiResponse.json())[0];
     const result = {
       ok: true,
       dryRun: body.confirm !== "RESTORE_MARKETIZO_BACKUP",
@@ -81,6 +84,8 @@ module.exports = async function handler(req, res) {
       sourceUpdatedAt: document.sourceUpdatedAt || "",
       backupCounts: counts(document.state),
       currentCounts: counts(current?.payload),
+      includesKpi: document.kpi != null,
+      includesEmployeeAuth: true,
     };
     if (result.dryRun) return send(res, 200, result);
     if (!current?.payload || !current.updated_at) throw new Error("Trenutno live stanje nije pronađeno.");
@@ -93,19 +98,20 @@ module.exports = async function handler(req, res) {
       createdAt: now.toISOString(),
       sourceUpdatedAt: current.updated_at,
       state: current.payload,
+      kpi: currentKpi?.payload || null,
     }), { access: "private", contentType: "application/json", addRandomSuffix: false });
 
-    const updatedAt = new Date().toISOString();
-    const restoreResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&updated_at=eq.${encodeURIComponent(current.updated_at)}&select=updated_at`, {
-      method: "PATCH",
-      headers: supabaseHeaders(key, "return=representation"),
-      body: JSON.stringify({ payload: document.state, updated_at: updatedAt }),
+    const restoreResponse = await fetch(`${url}/rest/v1/rpc/marketizo_restore_backup`, {
+      method: "POST",
+      headers: supabaseHeaders(key),
+      body: JSON.stringify({ p_state: document.state, p_kpi: document.kpi || null, p_expected_state_at: current.updated_at, p_expected_kpi_at: currentKpi?.updated_at || null }),
     });
     if (!restoreResponse.ok) throw new Error(`Restore failed (${restoreResponse.status})`);
-    const restoredRows = await restoreResponse.json();
-    if (!restoredRows.length) return send(res, 409, { ok: false, error: "Live podaci su se promenili tokom vraćanja. Restore je zaustavljen." });
-    return send(res, 200, { ...result, dryRun: false, restoredAt: updatedAt, emergencyBackup: emergencyPath });
+    const restored = await restoreResponse.json();
+    if (!restored.ok) return send(res, 409, { ok: false, error: "Live podaci su se promenili tokom vraćanja. Restore je zaustavljen." });
+    return send(res, 200, { ...result, ...restored, dryRun: false, emergencyBackup: emergencyPath });
   } catch (error) {
     return send(res, 500, { ok: false, error: error?.message || "Restore failed" });
   }
 };
+

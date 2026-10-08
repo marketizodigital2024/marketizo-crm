@@ -112,7 +112,7 @@ module.exports = async function handler(req, res) {
     if (!session || (session.role === "employee" && session.employeeId !== submittedLog?.employeeId) || !["employee", "operational-admin", "full-admin"].includes(session.role)) {
       return json(res, 401, { ok: false, error: "Prijava je obavezna." });
     }
-    if (!submittedLog?.id || !submittedLog?.employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(String(submittedLog?.date || "")) || Number(submittedLog?.minutes || 0) < 1) {
+    if (!submittedLog?.id || !submittedLog?.employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(String(submittedLog?.date || "")) || (!Number.isInteger(Number(submittedLog?.minutes)) || Number(submittedLog?.minutes) < 1 || Number(submittedLog?.minutes) > 1440 || !Number.isFinite(Date.parse(submittedLog?.date + "T12:00:00Z")) || new Date(submittedLog.date + "T12:00:00Z").toISOString().slice(0, 10) !== submittedLog.date)) {
       return json(res, 400, { ok: false, error: "Nedostaju obavezni podaci aktivnosti." });
     }
 
@@ -124,6 +124,8 @@ module.exports = async function handler(req, res) {
       if (payload.employeeWorkLogs.some((item) => item.id === submittedLog.id)) {
         return json(res, 200, { ok: true, duplicate: true, workLogId: submittedLog.id });
       }
+      const actor = (payload.employees || []).find((item) => item.id === session.employeeId && item.status !== "Neaktivan" && item.active !== false);
+      if (!actor || (session.role === "operational-admin" && actor.isOperationalAdmin !== true) || (session.role === "full-admin" && !["emp-miljan", "emp-ivana"].includes(actor.id))) return json(res, 401, { ok: false, error: "Nalog nije aktivan." });
       const employee = (payload.employees || []).find((item) => item.id === submittedLog.employeeId && item.status !== "Neaktivan");
       if (!employee) return json(res, 400, { ok: false, error: "Zaposleni nije pronađen ili nalog nije aktivan." });
       const activity = (payload.employeeActivities || []).find((item) => item.id === submittedLog.activityId && item.active !== false);
@@ -171,3 +173,4 @@ module.exports = async function handler(req, res) {
     return json(res, 500, { ok: false, error: error?.message || "Upis aktivnosti nije uspeo." });
   }
 };
+
