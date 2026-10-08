@@ -74,13 +74,13 @@ module.exports = async function handler(req, res) {
       const password = String(body.password || "");
       let employees = await readFastEmployees({ email }).catch(() => []);
       let employee = employees.find((item) =>
-        item.active !== false && String(item.email || "").trim().toLowerCase() === email &&
+        item.active !== false && item.status !== "Neaktivan" && String(item.email || "").trim().toLowerCase() === email &&
         String(item.password || "") === password
       );
       if (!employee) {
         employees = await readEmployees();
         employee = employees.find((item) =>
-          item.active !== false && String(item.email || "").trim().toLowerCase() === email &&
+          item.active !== false && item.status !== "Neaktivan" && String(item.email || "").trim().toLowerCase() === email &&
           String(item.password || "") === password
         );
       }
@@ -110,7 +110,7 @@ module.exports = async function handler(req, res) {
       let employees = await readFastEmployees({ id: session.employeeId }).catch(() => []);
       if (!employees.length) employees = await readEmployees();
       const employee = employees.find((item) =>
-        item.active !== false && (item.id === session.employeeId || String(item.email || "").toLowerCase() === session.email)
+        item.active !== false && item.status !== "Neaktivan" && (item.id === session.employeeId || String(item.email || "").toLowerCase() === session.email)
       );
       if (!employee) return send(res, 401, { error: "Nalog nije aktivan." });
       return send(res, 200, { ok: true, expiresAt: session.exp, employee: publicEmployee(employee) });
@@ -121,3 +121,4 @@ module.exports = async function handler(req, res) {
     return send(res, 500, { error: error.message || "Auth failed" });
   }
 }
+

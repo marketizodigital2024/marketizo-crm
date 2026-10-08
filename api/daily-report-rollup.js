@@ -28,7 +28,7 @@ function expectedMinutes(employee, date) {
   const day = new Date(`${date}T12:00:00Z`).getUTCDay();
   if (day < 1 || day > 5) return 0;
   const month = date.slice(0, 7);
-  const weeklyHours = Number(employee.weeklyHoursByMonth?.[month] ?? employee.weeklyHours ?? 38.5);
+  const weeklyHours = require("../cost-calculation.js").weeklyHours(employee, month);
   // Full-time schedule: Mon-Thu 8.5h including the break, Friday 6.5h total.
   if (weeklyHours >= 38) return day === 5 ? 390 : 510;
   return Math.round((weeklyHours * 60) / 5);
@@ -140,3 +140,4 @@ module.exports = async function handler(req, res) {
     return send(res, 500, { error: error?.message || "Daily rollup failed" });
   }
 };
+

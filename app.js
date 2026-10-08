@@ -1338,9 +1338,8 @@ function financeClientsForMonth(clients, monthKey) {
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
   const invoice = monthlyInvoice(client, monthKey);
   const clientRevenue = Number(client.revenue || 0);
-  if (monthKey === currentDateKey().slice(0, 7) && clientRevenue > 0) return clientRevenue;
-  const storedAmount = Number(invoice.amount || 0);
-  if (storedAmount > 0) return storedAmount;
+  const storedAmount = Number(invoice.amount);
+  if (invoice.amount !== undefined && invoice.amount !== null && invoice.amount !== "" && Number.isFinite(storedAmount) && storedAmount >= 0) return storedAmount;
   if (clientRevenue > 0) return clientRevenue;
   return Number(packageConfig[normalizePackage(client.package)]?.price || 0);
 }
@@ -2980,7 +2979,7 @@ function employeeLateStatus(employeeId, monthKey) {
 function employeeWeeklyHoursForMonth(employee, monthKey, fallback = 38.5) {
   // Historical month targets must come from the saved employment schedule.
   if (employee?.endDate && monthKey > employee.endDate.slice(0, 7)) return 0;
-  return window.MarketizoCosts.monthlyValue(employee?.weeklyHoursByMonth, monthKey) ?? employee?.weeklyHours ?? fallback;
+  return window.MarketizoCosts.weeklyHours(employee, monthKey);
 }
 
 function scheduledMinutesForDate(weeklyHours, date) {
@@ -3057,7 +3056,7 @@ function employeeMonthHasActivity(employeeId, monthKey) {
 
 function employeeMonthBalance(employee, monthKey) {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
-    return parseNumber(employee.monthlyBalanceOverrides[monthKey]);
+    return Math.round((parseNumber(employee.monthlyBalanceOverrides[monthKey]) - (state.employeeHourAdjustments || []).filter((item) => item.employeeId === employee.id && String(item.date || "").startsWith(monthKey)).reduce((sum, item) => sum + Number(item.minutes || 0) / 60, 0)) * 100) / 100;
   }
   let completedHours = employeeMonthHours(employee.id, monthKey);
   if (monthKey === currentMonthKey()) {
@@ -3074,8 +3073,16 @@ function employeeCarryoverBalance(employee, monthKey) {
   const openingMonth = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
   const openingBalance = parseNumber(employee.openingHourBalance || 0);
   let total = monthIndex(monthKey) > monthIndex(openingMonth) ? openingBalance : 0;
-  for (let index = 11; index >= 1; index -= 1) {
-    const key = shiftMonth(monthKey, -index);
+  const availableMonths = Object.keys(employee.monthlyBalanceOverrides || {});
+  if (typeof state !== "undefined") {
+    [state.employeeWorkLogs, state.employeeHourAdjustments, state.employeeLateRecords, state.employeeAbsences].forEach((items) => (items || []).forEach((item) => {
+      if (item.employeeId === employee.id) availableMonths.push(String(item.date || item.startDate || "").slice(0, 7));
+    }));
+  }
+  const earliest = availableMonths.filter((key) => /^\d{4}-\d{2}$/.test(key)).sort()[0] || openingMonth;
+  const startMonth = employee.openingBalanceMonth ? shiftMonth(openingMonth, 1) : earliest;
+  for (let offset = monthIndex(startMonth) - monthIndex(monthKey); offset < 0; offset += 1) {
+    const key = shiftMonth(monthKey, offset);
     if (!employeeMonthHasActivity(employee.id, key)) continue;
     total += employeeMonthBalance(employee, key);
   }
@@ -4783,7 +4790,9 @@ function setupEmployeeHourDeduction() {
   workPanel.insertAdjacentElement("afterend", panel);
   const dateInput = panel.querySelector('input[name="date"]');
   dateInput.value = currentDateKey();
-  panel.querySelector("form").addEventListener("submit", (event) => {
+  panel.querySelector("form").addEventListener("submit", async (event) => {
+    const form = event.currentTarget;
+    if (form.dataset.saving) { event.preventDefault(); return; }
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const employee = (state.employees || []).find((item) => item.id === formData.get("employeeId"));
@@ -4793,14 +4802,21 @@ function setupEmployeeHourDeduction() {
     if (!employee || !reason || !minutes) return;
     if (!confirm(`Oduzeti ${minutes} minuta od salda zaposlenog ${employee.name}?\n\nRazlog: ${reason}`)) return;
     state.employeeHourAdjustments = state.employeeHourAdjustments || [];
-    state.employeeHourAdjustments.unshift({
-      id: crypto.randomUUID(), employeeId: employee.id, date, minutes, reason, createdAt: new Date().toISOString(),
-    });
+    const adjustment = { id: crypto.randomUUID(), employeeId: employee.id, date, minutes, reason, createdAt: new Date().toISOString() };
+    state.employeeHourAdjustments.unshift(adjustment);
     selectedEmployeeId = employee.id;
-    saveState();
-    event.currentTarget.reset();
-    event.currentTarget.elements.date.value = currentDateKey();
-    event.currentTarget.elements.minutes.value = 30;
+    form.dataset.saving = "true";
+    const result = onlineHydrationComplete && window.MarketizoRemote ? await saveState() : { ok: false, error: "Sačekaj da se učitaju online podaci." };
+    delete form.dataset.saving;
+    if (!result?.ok) {
+      state.employeeHourAdjustments = state.employeeHourAdjustments.filter((item) => item.id !== adjustment.id);
+      localStorage.setItem("agencyCrmData", JSON.stringify(state));
+      showToast("Korekcija nije sačuvana", result?.error || "Pokušaj ponovo.", "warn");
+      return;
+    }
+    form.reset();
+    form.elements.date.value = currentDateKey();
+    form.elements.minutes.value = 30;
     renderAll();
     showToast("Saldo je korigovan", `${employee.name}: oduzeto ${minutes} minuta.`, "ok");
   });
@@ -4816,11 +4832,20 @@ function renderEmployeeHourAdjustments() {
       return `<div class="setup-item hour-deduction-row"><strong>−${adjustment.minutes} min</strong><span>${employee?.name || "Zaposleni"} · ${formatDate(adjustment.date)}<br />${adjustment.reason}</span><button class="edit-button" data-undo-hour-deduction="${adjustment.id}" type="button">Poništi korekciju</button></div>`;
     }).join("")
     : `<div class="empty-state">Još nema korekcija salda.</div>`;
-  target.querySelectorAll("[data-undo-hour-deduction]").forEach((button) => button.addEventListener("click", () => {
+  target.querySelectorAll("[data-undo-hour-deduction]").forEach((button) => button.addEventListener("click", async () => {
     const adjustment = (state.employeeHourAdjustments || []).find((item) => item.id === button.dataset.undoHourDeduction);
     if (!adjustment || !confirm(`Poništiti korekciju od ${adjustment.minutes} minuta?`)) return;
+    if (button.disabled) return;
+    button.disabled = true;
     state.employeeHourAdjustments = state.employeeHourAdjustments.filter((item) => item.id !== adjustment.id);
-    saveState();
+    const result = await saveState();
+    button.disabled = false;
+    if (!result?.ok) {
+      state.employeeHourAdjustments.push(adjustment);
+      localStorage.setItem("agencyCrmData", JSON.stringify(state));
+      showToast("Poništavanje nije sačuvano", result?.error || "Pokušaj ponovo.", "warn");
+      return;
+    }
     renderAll();
     showToast("Korekcija je poništena", "Saldo je vraćen za izabrani broj minuta.", "ok");
   }));
@@ -6924,3 +6949,4 @@ window.addEventListener("load", () => {
     if (typeof render === "function") render();
   }, 6000);
 });
+

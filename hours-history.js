@@ -23,7 +23,7 @@
     const rule = (rules[email] || []).find(
       (item) => monthKey >= item.from && (!item.to || monthKey <= item.to),
     );
-    return rule ? rule.hours : Number(employee?.weeklyHours || 40);
+    return window.MarketizoCosts?.weeklyHours(employee, monthKey) ?? (rule ? rule.hours : Number(employee?.weeklyHours || 38.5));
   }
 
   if (typeof expectedHours === "function") {
@@ -48,3 +48,4 @@
 
   window.marketizoWeeklyHoursForMonth = weeklyHoursForMonth;
 })();
+

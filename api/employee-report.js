@@ -20,7 +20,7 @@ function headers(key, prefer = "") {
 
 function isOwnerLeader(employee) {
   const name = String(employee?.name || "").toLowerCase();
-  return employee?.id === "emp-miljan" || employee?.id === "emp-ivana" || name.includes("miljan") || name.includes("ivana");
+  return employee?.id === "emp-miljan" || employee?.id === "emp-ivana";
 }
 
 function canLead(leader, employee) {
@@ -263,3 +263,4 @@ module.exports = async function handler(req, res) {
     return json(res, 500, { ok: false, error: error?.message || "Čuvanje izveštaja nije uspelo." });
   }
 };
+

@@ -6,7 +6,17 @@
   }
   function weeklyHours(employee, month) {
     if (employee?.endDate && month > employee.endDate.slice(0, 7)) return 0;
-    return Number(monthlyValue(employee?.weeklyHoursByMonth, month) ?? employee?.weeklyHours ?? 38.5);
+    const saved = monthlyValue(employee?.weeklyHoursByMonth, month);
+    if (saved !== undefined) return Number(saved);
+    const email = String(employee?.email || "").trim().toLowerCase();
+    const history = {
+      "sladjan_simic@hotmail.com": [["2025-10", "2026-03", 30], ["2026-04", "9999-12", 38.5]],
+      "hadzichazim@hotmail.com": [["2026-01", "2026-06", 20], ["2026-07", "9999-12", 30]],
+      "vukasin.marketizo@gmail.com": [["2026-06", "2026-07", 20], ["2026-08", "9999-12", 30]],
+      "aleksad.marketizo@gmail.com": [["2026-01", "2026-07", 20], ["2026-08", "9999-12", 38.5]],
+    };
+    const rule = (history[email] || []).find(([from, to]) => month >= from && month <= to);
+    return Number(rule?.[2] ?? employee?.weeklyHours ?? 38.5);
   }
   function terms(employee, date) {
     const month = String(date || "").slice(0, 7);
