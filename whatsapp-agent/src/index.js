@@ -54,6 +54,27 @@ const clickupSyncIntervalMs = Number(process.env.CLICKUP_SYNC_INTERVAL_MS || 900
 function reasoningOptions() {
   return buildReasoningOptions(model, reasoningEffort);
 }
+
+async function verifyConfiguredModels() {
+  const models = [...new Set([routineModel, smartModel])];
+  const key = `${models.join(",")}:${reasoningEffort}`;
+  if (dailyState.verifiedModels === key) return;
+  for (const targetModel of models) {
+    const response = await openai.chat.completions.create({
+      model: targetModel,
+      ...buildReasoningOptions(targetModel, reasoningEffort),
+      response_format: { type: "json_object" },
+      max_completion_tokens: 4096,
+      messages: [{ role: "user", content: 'Return only this JSON object: {"ok":true}' }]
+    });
+    if (JSON.parse(response.choices[0]?.message?.content || "{}").ok !== true) {
+      throw new Error(`${targetModel}: model verification returned no valid JSON`);
+    }
+    console.log(`[MODEL_VERIFIED] ${targetModel}: JSON analysis supported; reasoning=${reasoningEffort}`);
+  }
+  dailyState.verifiedModels = key;
+  saveDailyState();
+}
 const stateDirectory = process.env.WWEBJS_AUTH_PATH
   ? path.dirname(process.env.WWEBJS_AUTH_PATH)
   : process.cwd();
@@ -246,10 +267,33 @@ async function withTimeout(promise, label, timeoutMs = whatsappOperationTimeoutM
   }
 }
 
+async function resolveWhatsappRecipient(to) {
+  if (!String(to).endsWith("@c.us") || typeof client.getContactLidAndPhone !== "function") return to;
+  try {
+    const contacts = await withTimeout(client.getContactLidAndPhone([to]), "Resolve WhatsApp recipient");
+    const contact = contacts.find((item) => item.pn === to && String(item.lid || "").endsWith("@lid"));
+    return contact?.lid || to;
+  } catch (error) {
+    console.warn(`[WHATSAPP_RECIPIENT] LID lookup failed; retaining configured recipient: ${error.message}`);
+    return to;
+  }
+}
+
+const outgoingMessages = new Map();
 async function sendWhatsappMessage(to, body, label = "WhatsApp send") {
   try {
     const safeBody = String(body || "").slice(0, 3500);
-    const result = await withTimeout(client.sendMessage(to, safeBody), label);
+    const recipient = await resolveWhatsappRecipient(to);
+    // Phone-number chats can lose their LID mapping after WhatsApp Web updates.
+    // Resolve the same contact's LID and skip the unrelated mark-as-read action.
+    const result = await withTimeout(client.sendMessage(recipient, safeBody, {
+      sendSeen: false,
+      waitUntilMsgSent: true
+    }), label);
+    if (!result?.id?._serialized) throw new Error(`${label}: WhatsApp returned no sent message`);
+    outgoingMessages.set(result.id._serialized, label);
+    if (outgoingMessages.size > 200) outgoingMessages.delete(outgoingMessages.keys().next().value);
+    console.log(`[WHATSAPP_SENT] ${label}: ack=${result.ack ?? "unknown"}`);
     consecutiveHealthFailures = 0;
     lastHealthCheckAt = Date.now();
     return result;
@@ -805,7 +849,7 @@ async function sendMorningReport() {
 async function sendWeeklyReport() {
   const today = viennaDateKey();
   let delivery = dailyState.weeklyDelivery;
-  if (delivery?.date === today && Array.isArray(delivery.parts)) {
+  if (delivery?.date && Array.isArray(delivery.parts)) {
     console.log(`[WEEKLY_REPORT] Resuming delivery at part ${delivery.nextPartIndex || 0}/${delivery.parts.length}.`);
   } else {
   const snapshot = ownerActionSnapshot();
@@ -866,12 +910,13 @@ async function sendWeeklyReport() {
     saveDailyState();
     await new Promise((resolve) => setTimeout(resolve, 750));
   }
-  dailyState.lastWeeklyDate = today;
-  dailyState.lastReportDate = today;
+  dailyState.lastWeeklyDate = delivery.date;
+  dailyState.lastReportDate = delivery.date;
   dailyState.lastReportVersion = reportDeliveryVersion;
   dailyState.nextClosingReportAttemptAt = "";
   delete dailyState.weeklyDelivery;
   saveDailyState();
+  console.log(`[WEEKLY_REPORT] ${delivery.date}: all ${delivery.parts.length} parts sent`);
 }
 
 async function sendDailyReport() {
@@ -946,11 +991,13 @@ function startDailyReportScheduler() {
         .finally(() => { morningReportInFlight = false; });
     }
     const closingReportMissing = dailyState.lastReportDate !== today || dailyState.lastReportVersion !== reportDeliveryVersion;
-    const weeklyDue = parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today;
+    const pendingWeeklyDelivery = Boolean(dailyState.weeklyDelivery?.date && Array.isArray(dailyState.weeklyDelivery.parts));
+    const weeklyDue = pendingWeeklyDelivery || (parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today);
     const closingDue = reportMode !== "weekly" && closingReportMissing;
     const retryAllowed = !dailyState.nextClosingReportAttemptAt
       || new Date(dailyState.nextClosingReportAttemptAt).getTime() <= Date.now();
-    if (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60 && (weeklyDue || closingDue) && retryAllowed && !closingReportInFlight) {
+    const deliveryWindow = pendingWeeklyDelivery || (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60);
+    if (whatsappReady && deliveryWindow && (weeklyDue || closingDue) && retryAllowed && !closingReportInFlight) {
       closingReportInFlight = true;
       if (weeklyDue) {
         void sendWeeklyReport()
@@ -1285,6 +1332,14 @@ client.on("ready", async () => {
   }
 });
 
+client.on("message_ack", (message, ack) => {
+  const label = outgoingMessages.get(message.id?._serialized);
+  if (label && ack >= 2) {
+    console.log(`[WHATSAPP_DELIVERED] ${label}: ack=${ack}`);
+    outgoingMessages.delete(message.id._serialized);
+  }
+});
+
 client.on("auth_failure", (message) => {
   whatsappReady = false;
   clearInterval(healthTimer);
@@ -1536,4 +1591,7 @@ initializationTimer = setTimeout(() => {
 }, 180000);
 initializationTimer.unref();
 
+loadDailyState();
+console.log(`[MODEL_CONFIG] routine=${routineModel} smart=${smartModel} reasoning=${reasoningEffort}`);
+void verifyConfiguredModels().catch((error) => console.error("[MODEL_VERIFICATION_FAILED]", error));
 client.initialize().catch((error) => scheduleProcessRecovery("WhatsApp initialization failed", error));
