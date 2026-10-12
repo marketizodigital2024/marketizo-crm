@@ -4747,18 +4747,7 @@ function setupEmployeeActivityCategories() {
     newCategory.required = creating;
     if (creating) newCategory.focus();
   });
-  form.addEventListener("submit", () => {
-    const nameInput = form.querySelector('input[name="name"], input[type="text"]');
-    const name = nameInput?.value.trim();
-    const category = select.value === "__new__" ? newCategory.value.trim() : select.value;
-    if (!name || !category) return;
-    state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
-    state.employeeActivityCategoryMap[name] = category;
-    if (!state.employeeActivityCategories?.includes(category)) {
-      state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
-    }
-    saveState();
-  }, true);
+
 
 }
 
@@ -6061,30 +6050,66 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
   showToast("Sačuvano", "Sati su upisani za izabranog zaposlenog.", "ok");
 });
 
-document.getElementById("employeeActivityForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeActivityForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  if (form.dataset.saving) return;
+  const formData = new FormData(form);
   const name = String(formData.get("activityName") || "").trim();
   const selectedCategory = String(formData.get("category") || "").trim();
   const category = selectedCategory === "__new__"
     ? String(formData.get("newCategory") || "").trim()
     : selectedCategory;
   if (!name || !category) return;
+  if (!onlineHydrationComplete || !window.MarketizoRemote) {
+    showToast("Nije sačuvano", "Sačekaj učitavanje online baze i pokušaj ponovo.", "warn");
+    return;
+  }
   state.employeeActivities = state.employeeActivities || [];
-  if (state.employeeActivities.some((activity) => activity.name.toLowerCase() === name.toLowerCase())) {
+  if (state.employeeActivities.some((activity) => String(activity.name || "").trim().toLowerCase() === name.toLowerCase())) {
     alert("Aktivnost sa tim nazivom već postoji.");
     return;
   }
-  state.employeeActivities.push({ id: crypto.randomUUID(), name, category, active: true });
+  const activity = { id: form.dataset.pendingActivityId || crypto.randomUUID(), name, category, active: true };
+  // Reuse the ID after an uncertain response so a retry cannot create a second record.
+  form.dataset.pendingActivityId = activity.id;
+  const previousCategory = state.employeeActivityCategoryMap?.[name];
+  const hadCategory = Object.prototype.hasOwnProperty.call(state.employeeActivityCategoryMap || {}, name);
+  const categoryExisted = (state.employeeActivityCategories || []).includes(category);
+  state.employeeActivities.push(activity);
   state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
   state.employeeActivityCategoryMap[name] = category;
-  if (!state.employeeActivityCategories?.includes(category)) {
-    state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+  if (!categoryExisted) state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+  form.dataset.saving = "true";
+  const submitButton = form.querySelector('[type="submit"]');
+  if (submitButton) submitButton.disabled = true;
+  try {
+    const result = await saveState();
+    if (!result?.ok || result.localOnly) throw new Error(result?.error || "Online čuvanje nije potvrđeno.");
+    if (result.payload) state = loadState(result.payload);
+    delete form.dataset.pendingActivityId;
+    form.reset();
+    const newCategoryInput = form.querySelector('[name="newCategory"]');
+    if (newCategoryInput) { newCategoryInput.hidden = true; newCategoryInput.required = false; }
+    renderAll();
+    showToast("Sačuvano", "Aktivnost je dostupna zaposlenima.", "ok");
+  } catch (error) {
+    // Undo only this provisional catalog entry; never restore an older employee-state snapshot.
+    state.employeeActivities = (state.employeeActivities || []).filter((item) => item.id !== activity.id);
+    if (state.employeeActivityCategoryMap?.[name] === category) {
+      if (hadCategory) state.employeeActivityCategoryMap[name] = previousCategory;
+      else delete state.employeeActivityCategoryMap[name];
+    }
+    if (!categoryExisted && !(state.employeeActivities || []).some((item) => item.category === category)) {
+      state.employeeActivityCategories = (state.employeeActivityCategories || []).filter((item) => item !== category);
+    }
+    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    renderAll();
+    showToast("Nije sačuvano", error?.message || "Pokušaj ponovo. Unos je zadržan.", "warn");
+  } finally {
+    delete form.dataset.saving;
+    if (submitButton) submitButton.disabled = false;
   }
-  saveState();
-  event.currentTarget.reset();
-  renderAll();
-  showToast("Sačuvano", "Aktivnost je dostupna zaposlenima.", "ok");
 });
 
 document.getElementById("employeeLateForm")?.addEventListener("submit", (event) => {

@@ -4,6 +4,6 @@
     "@vercel/blob": "2.8.0"
   },
   "scripts": {
-    "test": "node tests/crm-regression.cjs && node tests/hour-adjustment.cjs && node tests/confirmed-save.cjs"
+    "test": "node tests/crm-regression.cjs && node tests/hour-adjustment.cjs && node tests/confirmed-save.cjs && node tests/activity-catalog-save.cjs"
   }
 }
