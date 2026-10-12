@@ -2,52 +2,46 @@ const fs = require("node:fs"), vm = require("node:vm"), assert = require("node:a
 const app = fs.readFileSync(__dirname + "/../app.js", "utf8");
 const start = app.indexOf('document.getElementById("employeeActivityForm")?.addEventListener');
 const end = app.indexOf('document.getElementById("employeeLateForm")', start);
-let handler, sequence = 0, saves = 0, resets = 0, successes = 0, failed = true, resolveSave;
-const values = { activityName: "Nova aktivnost", category: "__new__", newCategory: "Nova kategorija" };
+let handler, sequence = 0, saves = 0, resets = 0, successes = 0, resolveSave;
+const values = { activityName: "Team Building", category: "Interno" };
 const button = { disabled: false }, categoryInput = { hidden: false, required: true };
 const form = { dataset: {}, querySelector(selector) { return selector.includes("submit") ? button : categoryInput; }, reset() { resets++; } };
-const initialLog = { id: "existing-log", minutes: 90 };
-const concurrentLog = { id: "concurrent-log", minutes: 60 };
+const initialLog = { id: "existing-log", minutes: 90 }, concurrentLog = { id: "concurrent-log", minutes: 60 };
+let submitted;
 const ctx = {
   state: { employeeActivities: [], employeeActivityCategories: [], employeeWorkLogs: [initialLog] },
-  onlineHydrationComplete: true, window: { MarketizoRemote: {} },
+  window: { MarketizoRemote: { addActivity(activity) { submitted = activity; saves++; return new Promise(resolve => { resolveSave = resolve; }); } } },
   document: { getElementById() { return { addEventListener(type, fn) { handler = fn; } }; } },
   FormData: class { get(key) { return values[key]; } },
   crypto: { randomUUID() { return "catalog-" + ++sequence; } },
-  localStorage: { setItem() {} }, loadState(value) { return value; },
-  alert() {}, renderAll() {}, showToast(title, message, kind) { if (kind === "ok") successes++; },
-  saveState() { saves++; return new Promise(resolve => { resolveSave = resolve; }); }
+  saveState(options) { assert.equal(options.remote, false); },
+  renderAll() {}, showToast(title, message, kind) { if (kind === "ok") successes++; }
 };
 vm.createContext(ctx); vm.runInContext(app.slice(start, end), ctx);
 const event = { currentTarget: form, preventDefault() {} };
 (async () => {
   const first = handler(event);
-  assert.equal(button.disabled, true);
-  assert.equal(successes, 0); assert.equal(resets, 0);
+  assert.equal(button.disabled, true); assert.equal(successes, 0); assert.equal(resets, 0);
+  assert.equal(ctx.state.employeeActivities.length, 0); // Nothing provisional enters shared local state.
   await handler(event); assert.equal(saves, 1);
-  const pendingId = ctx.state.employeeActivities[0].id;
-  // A coworker's work entry arrives while this save fails.
+  const pendingId = submitted.id;
   ctx.state.employeeWorkLogs.push(concurrentLog);
   resolveSave({ ok: false, error: "fixture write failure" }); await first;
-  assert.equal(ctx.state.employeeActivities.length, 0);
-  assert.equal(resets, 0); assert.equal(successes, 0);
-  assert.equal(button.disabled, false);
+  assert.equal(resets, 0); assert.equal(successes, 0); assert.equal(button.disabled, false);
   assert.deepEqual(ctx.state.employeeWorkLogs, [initialLog, concurrentLog]);
-  assert.equal(values.activityName, "Nova aktivnost");
-  const retry = handler(event);
-  assert.equal(ctx.state.employeeActivities[0].id, pendingId);
-  const canonical = structuredClone(ctx.state);
-  canonical.employeeWorkLogs.push({ id: "newest-log", minutes: 30 });
-  resolveSave({ ok: true, payload: canonical }); await retry;
+  const retry = handler(event); assert.equal(submitted.id, pendingId);
+  resolveSave({ ok: true, activity: submitted, activities: [submitted] }); await retry;
   assert.equal(ctx.state.employeeActivities.length, 1);
-  assert.equal(ctx.state.employeeWorkLogs.length, 3);
+  assert.deepEqual(ctx.state.employeeWorkLogs, [initialLog, concurrentLog]);
   assert.equal(resets, 1); assert.equal(successes, 1);
   assert.equal(categoryInput.hidden, true); assert.equal(categoryInput.required, false);
   assert.equal(form.dataset.saving, undefined);
-  ctx.onlineHydrationComplete = false;
-  await handler(event); assert.equal(saves, 2);
-  // Category initialization must not launch another full-state save on submit.
-  const setup = app.slice(app.indexOf("function setupEmployeeActivityCategories()"), app.indexOf("setupEmployeeActivityCategories();"));
-  assert.ok(!setup.includes('form.addEventListener("submit"'));
-  console.log("PASS: catalog confirmation, failure retention, retry ID, double click, canonical coworker logs, hydration guard, single submit save.");
+  values.activityName = "Another activity";
+  const changed = handler(event); assert.notEqual(submitted.id, pendingId);
+  resolveSave({ ok: false }); await changed;
+  const changedId = submitted.id;
+  values.activityName = "Changed after failure";
+  const changedAgain = handler(event); assert.notEqual(submitted.id, changedId);
+  resolveSave({ ok: false }); await changedAgain;
+  console.log("PASS: compact catalog save, failure retention, stable retry ID, changed-input ID, double click, coworker logs and confirmed reset.");
 })().catch(error => { console.error(error); process.exitCode = 1; });

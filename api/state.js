@@ -453,4 +453,4 @@ module.exports = async function handler(req, res) {
 };
 
 
-module.exports.helpers = { accessSession, readStoredState, supabaseConfig, supabaseHeaders };
+module.exports.helpers = { accessSession, readStoredState, supabaseConfig, supabaseHeaders, preserveDailyPrewriteBackup };
