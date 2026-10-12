@@ -200,6 +200,23 @@
     return result;
   }
 
+  async function addActivity(activity) {
+    try {
+      const response = await fetch("/api/activity-catalog", {
+        method: "POST",
+        headers: accessHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ activity: { id: activity.id, name: activity.name, category: activity.category } }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) return { ok: false, error: data.error || `Upis aktivnosti nije uspeo (${response.status}).` };
+      // Do not advance the whole-state revision from a catalog-only response.
+      // A later full-state save must rebase against the latest coworker entries.
+      return data;
+    } catch (error) {
+      return { ok: false, error: error?.message || "Upis aktivnosti nije uspeo." };
+    }
+  }
+
   function startPolling(onPayload, interval = 60000) {
     window.clearInterval(pollTimer);
     if (typeof onPayload !== "function" || isLocalFile()) return;
@@ -241,6 +258,7 @@
     load,
     save,
     startPolling,
+    addActivity,
     status() {
       return { configured, online, error: lastError };
     },
