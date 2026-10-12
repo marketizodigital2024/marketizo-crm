@@ -6061,50 +6061,37 @@ document.getElementById("employeeActivityForm")?.addEventListener("submit", asyn
     ? String(formData.get("newCategory") || "").trim()
     : selectedCategory;
   if (!name || !category) return;
-  if (!onlineHydrationComplete || !window.MarketizoRemote) {
-    showToast("Nije sačuvano", "Sačekaj učitavanje online baze i pokušaj ponovo.", "warn");
+  if (!window.MarketizoRemote?.addActivity) {
+    showToast("Nije sačuvano", "Osveži stranicu da se učita nova verzija forme.", "warn");
     return;
   }
-  state.employeeActivities = state.employeeActivities || [];
-  if (state.employeeActivities.some((activity) => String(activity.name || "").trim().toLowerCase() === name.toLowerCase())) {
-    alert("Aktivnost sa tim nazivom već postoji.");
-    return;
+  const fingerprint = JSON.stringify([name, category]);
+  if (form.dataset.pendingActivityFingerprint !== fingerprint) {
+    form.dataset.pendingActivityId = crypto.randomUUID();
+    form.dataset.pendingActivityFingerprint = fingerprint;
   }
-  const activity = { id: form.dataset.pendingActivityId || crypto.randomUUID(), name, category, active: true };
-  // Reuse the ID after an uncertain response so a retry cannot create a second record.
-  form.dataset.pendingActivityId = activity.id;
-  const previousCategory = state.employeeActivityCategoryMap?.[name];
-  const hadCategory = Object.prototype.hasOwnProperty.call(state.employeeActivityCategoryMap || {}, name);
-  const categoryExisted = (state.employeeActivityCategories || []).includes(category);
-  state.employeeActivities.push(activity);
-  state.employeeActivityCategoryMap = state.employeeActivityCategoryMap || {};
-  state.employeeActivityCategoryMap[name] = category;
-  if (!categoryExisted) state.employeeActivityCategories = [...(state.employeeActivityCategories || []), category];
+  const activity = { id: form.dataset.pendingActivityId, name, category };
   form.dataset.saving = "true";
   const submitButton = form.querySelector('[type="submit"]');
   if (submitButton) submitButton.disabled = true;
   try {
-    const result = await saveState();
-    if (!result?.ok || result.localOnly) throw new Error(result?.error || "Online čuvanje nije potvrđeno.");
-    if (result.payload) state = loadState(result.payload);
+    const result = await window.MarketizoRemote.addActivity(activity);
+    if (!result?.ok || !result.activity?.id || !Array.isArray(result.activities)) {
+      throw new Error(result?.error || "Online čuvanje nije potvrđeno.");
+    }
+    // Only the catalog changes locally. Employee hours and balances never roll back.
+    state.employeeActivities = result.activities;
+    state.employeeActivityCategoryMap = { ...(state.employeeActivityCategoryMap || {}), [result.activity.name]: result.activity.category };
+    state.employeeActivityCategories = [...new Set([...(state.employeeActivityCategories || []), result.activity.category])];
+    saveState({ remote: false });
     delete form.dataset.pendingActivityId;
+    delete form.dataset.pendingActivityFingerprint;
     form.reset();
     const newCategoryInput = form.querySelector('[name="newCategory"]');
     if (newCategoryInput) { newCategoryInput.hidden = true; newCategoryInput.required = false; }
     renderAll();
     showToast("Sačuvano", "Aktivnost je dostupna zaposlenima.", "ok");
   } catch (error) {
-    // Undo only this provisional catalog entry; never restore an older employee-state snapshot.
-    state.employeeActivities = (state.employeeActivities || []).filter((item) => item.id !== activity.id);
-    if (state.employeeActivityCategoryMap?.[name] === category) {
-      if (hadCategory) state.employeeActivityCategoryMap[name] = previousCategory;
-      else delete state.employeeActivityCategoryMap[name];
-    }
-    if (!categoryExisted && !(state.employeeActivities || []).some((item) => item.category === category)) {
-      state.employeeActivityCategories = (state.employeeActivityCategories || []).filter((item) => item !== category);
-    }
-    localStorage.setItem("agencyCrmData", JSON.stringify(state));
-    renderAll();
     showToast("Nije sačuvano", error?.message || "Pokušaj ponovo. Unos je zadržan.", "warn");
   } finally {
     delete form.dataset.saving;
