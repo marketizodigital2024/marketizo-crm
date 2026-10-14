@@ -1423,7 +1423,7 @@ async function handleOwnerClientRead(req, res) {
       source:isKnownTeamId(message.author || message.from) || message.fromMe ? "team" : "client",
       text:String(message.body || "").trim() || (message.hasMedia ? "[Prilog: sadržaj nije pročitan]" : "[Bez teksta]")
     }));
-    const stored = (conversationState.messages || []).filter(message=>message.groupName === chat.name).slice(-150);
+    const stored = (groupHistory.get(serializedId(chat.id)) || []).slice(-100);
     const checkedAt = new Date().toISOString();
     const response = await openai.chat.completions.create({
       model, ...reasoningOptions(), response_format:{type:"json_object"},
