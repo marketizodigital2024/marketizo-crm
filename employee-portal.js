@@ -691,22 +691,42 @@ function isNotificationHidden(notification) {
   return notification.hiddenUntil && new Date(notification.hiddenUntil).getTime() > Date.now();
 }
 
-function hideNotification(id) {
-  const notification = (state.notifications || []).find((item) => item.id === id);
-  if (!notification) return;
-  notification.hiddenUntil = addDays(currentDateKey(), 7);
-  saveState();
-  renderEmployeePortal();
-  showToast("Sakriveno", "Obaveštenje je sklonjeno na 7 dana.", "info");
+let employeePreferenceSaveInFlight = false;
+async function confirmEmployeeFieldChange(record, key, value) {
+  if (employeePreferenceSaveInFlight) return false;
+  employeePreferenceSaveInFlight = true;
+  const previous = record[key];
+  record[key] = value;
+  try {
+    let result;
+    try { result = await saveState(); }
+    catch (error) { result = { ok: false, error: error?.message }; }
+    if (!result?.ok) {
+      record[key] = previous;
+      saveState({ remote: false });
+      renderEmployeePortal();
+      showToast("Nije potvrđeno", result?.error || "Pokušaj ponovo.", "danger");
+      return false;
+    }
+    renderEmployeePortal();
+    return true;
+  } finally { employeePreferenceSaveInFlight = false; }
 }
 
-function unhideNotification(id) {
-  const notification = (state.notifications || []).find((item) => item.id === id);
+async function hideNotification(id) {
+  const notification = (state.notifications || []).find(item => item.id === id && item.scope === "employee" && item.targetId === activeEmployee.id);
   if (!notification) return;
-  notification.hiddenUntil = "";
-  saveState();
-  renderEmployeePortal();
-  showToast("Vraćeno", "Obaveštenje je ponovo aktivno.", "ok");
+  if (await confirmEmployeeFieldChange(notification, "hiddenUntil", addDays(currentDateKey(), 7))) {
+    showToast("Sakriveno", "Obaveštenje je sklonjeno na 7 dana.", "info");
+  }
+}
+
+async function unhideNotification(id) {
+  const notification = (state.notifications || []).find(item => item.id === id && item.scope === "employee" && item.targetId === activeEmployee.id);
+  if (!notification) return;
+  if (await confirmEmployeeFieldChange(notification, "hiddenUntil", "")) {
+    showToast("Vraćeno", "Obaveštenje je ponovo aktivno.", "ok");
+  }
 }
 
 function leaderTeam() {
@@ -2462,13 +2482,11 @@ document.getElementById("portalAbsenceForm")?.addEventListener("submit", async (
   }
 });
 
-document.getElementById("ackLateBtn")?.addEventListener("click", () => {
-  const record = (state.employeeLateRecords || []).find((item) => item.id === document.getElementById("ackLateBtn").dataset.lateId);
+document.getElementById("ackLateBtn")?.addEventListener("click", async () => {
+  const record = (state.employeeLateRecords || []).find(item => item.id === document.getElementById("ackLateBtn").dataset.lateId && item.employeeId === activeEmployee.id);
   if (!record) return;
-  record.acknowledgedAt = new Date().toISOString();
-  saveState();
+  if (!(await confirmEmployeeFieldChange(record, "acknowledgedAt", record.acknowledgedAt || new Date().toISOString()))) return;
   document.getElementById("lateAckDialog")?.close();
-  renderEmployeePortal();
   showToast("Potvrđeno", "Kašnjenje je potvrđeno.", "ok");
 });
 
