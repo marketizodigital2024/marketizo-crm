@@ -1311,7 +1311,7 @@ function invoiceRemainingAmount(client, monthKey = selectedMonthKey()) {
 }
 
 function escapeInvoiceText(value) {
-  return String(value || "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 }
 
 function clientsForInvoiceMonth(clients, monthKey) {
@@ -1793,7 +1793,7 @@ function showToast(title, message = "", type = "ok") {
   const toast = document.createElement("div");
   toast.className = `toast-message ${notificationClass(type)}`;
   toast.dataset.signature = signature;
-  toast.innerHTML = `<strong>${title}</strong>${message ? `<span>${message}</span>` : ""}`;
+  toast.innerHTML = `<strong>${escapeInvoiceText(title)}</strong>${message ? `<span>${escapeInvoiceText(message)}</span>` : ""}`;
   stack.appendChild(toast);
   window.setTimeout(() => {
     toast.remove();
@@ -2189,11 +2189,11 @@ function renderAdminNotifications() {
           (notification) => `
           <div class="setup-item alert-item ${notificationClass(notification.type)}">
             <strong>!</strong>
-            <span>${notification.title}<br />${notification.message}</span>
+            <span>${escapeInvoiceText(notification.title)}<br />${escapeInvoiceText(notification.message)}</span>
             <div class="notification-actions">
               ${String(notification.key || "").startsWith("absence-request-")
                 ? `<button class="mini-action approve-absence" data-absence-id="${String(notification.key).slice("absence-request-".length)}" type="button">Prihvati</button><button class="mini-action danger-action reject-absence" data-absence-id="${String(notification.key).slice("absence-request-".length)}" type="button">Odbij</button>`
-                : `<button class="mini-action" data-hide-notification="${notification.id}" type="button">Sakrij 7 dana</button><button class="mini-action danger-action" data-delete-notification="${notification.id}" type="button">Obriši</button>`}
+                : `<button class="mini-action" data-hide-notification="${escapeInvoiceText(notification.id)}" type="button">Sakrij 7 dana</button><button class="mini-action danger-action" data-delete-notification="${escapeInvoiceText(notification.id)}" type="button">Obriši</button>`}
             </div>
           </div>`
         )
@@ -2205,10 +2205,10 @@ function renderAdminNotifications() {
             .map(
               (notification) => `
               <div class="setup-item">
-                <span>${notification.title}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
+                <span>${escapeInvoiceText(notification.title)}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
                 <div class="notification-actions">
-                  <button class="mini-action" data-unhide-notification="${notification.id}" type="button">Vrati</button>
-                  <button class="mini-action danger-action" data-delete-notification="${notification.id}" type="button">Obriši</button>
+                  <button class="mini-action" data-unhide-notification="${escapeInvoiceText(notification.id)}" type="button">Vrati</button>
+                  <button class="mini-action danger-action" data-delete-notification="${escapeInvoiceText(notification.id)}" type="button">Obriši</button>
                 </div>
               </div>`
             )
@@ -2223,10 +2223,10 @@ function renderAdminNotifications() {
             .map(
               (notification) => `
               <div class="setup-item">
-                <span>${notification.title}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
+                <span>${escapeInvoiceText(notification.title)}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
                 <div class="notification-actions">
-                  <button class="mini-action" data-unhide-notification="${notification.id}" type="button">Vrati</button>
-                  <button class="mini-action danger-action" data-delete-notification="${notification.id}" type="button">Obriši</button>
+                  <button class="mini-action" data-unhide-notification="${escapeInvoiceText(notification.id)}" type="button">Vrati</button>
+                  <button class="mini-action danger-action" data-delete-notification="${escapeInvoiceText(notification.id)}" type="button">Obriši</button>
                 </div>
               </div>`
             )
@@ -2273,7 +2273,7 @@ function renderAdminClientSnapshot(clients) {
           return `
           <div class="setup-item alert-item clickable-item ${status}" data-go-view="clients">
             <strong>${stats.open}</strong>
-            <span>${client.name}<br />${stats.contacted}/${stats.total} kontaktirano · ${stats.late} kasni · ${invoice.paymentStatus || "Nije plaćeno"}</span>
+            <span>${escapeInvoiceText(client.name)}<br />${stats.contacted}/${stats.total} kontaktirano · ${stats.late} kasni · ${invoice.paymentStatus || "Nije plaćeno"}</span>
           </div>`;
         })
         .join("")
@@ -2301,10 +2301,10 @@ function renderAdminEmployeeRisk(monthKey) {
           const lateStatus = employeeLateStatus(employee.id, monthKey);
           const status = balance < 0 || lateStatus.count > 3 ? "danger" : hours > expected || lateStatus.count === 3 ? "warn" : "ok";
           return `
-          <div class="setup-item alert-item clickable-item employee-hours-row ${status}" data-go-view="employees" data-select-shortcut-employee="${employee.id}">
+          <div class="setup-item alert-item clickable-item employee-hours-row ${status}" data-go-view="employees" data-select-shortcut-employee="${escapeInvoiceText(employee.id)}">
             <strong>${formatHourBalance(balance)}</strong>
-            <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours ?? 38.5)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
-            <button class="mini-action" data-view-employee-activities="${employee.id}" type="button">Vidi aktivnosti</button>
+            <span>${escapeInvoiceText(employee.name)}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours ?? 38.5)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
+            <button class="mini-action" data-view-employee-activities="${escapeInvoiceText(employee.id)}" type="button">Vidi aktivnosti</button>
           </div>`;
         })
         .join("")
@@ -2332,9 +2332,9 @@ function openEmployeeActivitiesDialog(employeeId, monthKey = currentMonthKey()) 
   }
   const totalMinutes = logs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
   dialog.innerHTML = `<div class="employee-activities-dialog-card">
-    <div class="panel-head"><div><p class="eyebrow">${monthLabel(monthKey)}</p><h2>${employee.name} · aktivnosti</h2></div><button class="icon-button" data-close-employee-activities type="button">×</button></div>
+    <div class="panel-head"><div><p class="eyebrow">${monthLabel(monthKey)}</p><h2>${escapeInvoiceText(employee.name)} · aktivnosti</h2></div><button class="icon-button" data-close-employee-activities type="button">×</button></div>
     <div class="employee-activities-summary"><strong>${logs.length}</strong><span>aktivnosti</span><strong>${totalMinutes} min</strong><span>ukupno</span></div>
-    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${log.activityName || "Rad"}</strong><span>${log.activityCategory || "Ostalo"} · ${formatDate(log.date)}</span></div><b>${window.MarketizoCosts.minutes(log)} min</b><p>${log.clientName || "Bez klijenta"}${log.note ? ` · ${log.note}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
+    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${escapeInvoiceText(log.activityName || "Rad")}</strong><span>${escapeInvoiceText(log.activityCategory || "Ostalo")} · ${formatDate(log.date)}</span></div><b>${window.MarketizoCosts.minutes(log)} min</b><p>${escapeInvoiceText(log.clientName || "Bez klijenta")}${log.note ? ` · ${escapeInvoiceText(log.note)}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
   </div>`;
   dialog.querySelector("[data-close-employee-activities]").addEventListener("click", () => dialog.close());
   dialog.showModal();
@@ -2386,8 +2386,8 @@ function renderContractExpiryList() {
           return `
           <div class="setup-item alert-item warn">
             <strong>${daysBetween(today, endDate)}</strong>
-            <span>${client.name} · ističe ${formatDate(endDate)}<br />${fileLabel}${client.contractNote ? ` · ${client.contractNote}` : ""}</span>
-            <button class="mini-action" type="button" data-dismiss-contract="${client.id}" data-contract-end="${endDate}" aria-label="Ukloni upozorenje za ${escapeInvoiceText(client.name)}">Ukloni</button>
+            <span>${escapeInvoiceText(client.name)} · ističe ${formatDate(endDate)}<br />${escapeInvoiceText(fileLabel)}${client.contractNote ? ` · ${escapeInvoiceText(client.contractNote)}` : ""}</span>
+            <button class="mini-action" type="button" data-dismiss-contract="${escapeInvoiceText(client.id)}" data-contract-end="${endDate}" aria-label="Ukloni upozorenje za ${escapeInvoiceText(client.name)}">Ukloni</button>
           </div>`;
         })
         .join("")
@@ -2424,16 +2424,16 @@ function renderMonthlyInvoices(clients, monthKey) {
       const remainingAmount = invoiceRemainingAmount(client, monthKey);
       const payments = invoicePaymentEntries(invoice);
       return `<div class="invoice-compact-row">
-        <div class="invoice-compact-client"><strong>${client.name}</strong><span>${client.country} · naplata ${client.billingDay || 1}.</span></div>
+        <div class="invoice-compact-client"><strong>${escapeInvoiceText(client.name)}</strong><span>${escapeInvoiceText(client.country)} · naplata ${client.billingDay || 1}.</span></div>
         <strong class="invoice-compact-amount">${currency.format(invoiceAmount(client, monthKey))}</strong>
         <label>Račun
-          <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="invoiceStatus">
+          <select class="table-select" data-invoice-client="${escapeInvoiceText(client.id)}" data-invoice-field="invoiceStatus">
             ${option("Nije poslat", invoice.invoiceStatus)}
             ${option("Poslat", invoice.invoiceStatus)}
           </select>
         </label>
         <label>Plaćanje
-          <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="paymentStatus">
+          <select class="table-select" data-invoice-client="${escapeInvoiceText(client.id)}" data-invoice-field="paymentStatus">
             ${option("Nije plaćeno", invoice.paymentStatus)}
             ${option("Delimično", invoice.paymentStatus)}
             ${option("Plaćeno", invoice.paymentStatus)}
@@ -2441,20 +2441,20 @@ function renderMonthlyInvoices(clients, monthKey) {
           </select>
         </label>
         <label>Način
-          <select class="table-select" data-invoice-client="${client.id}" data-invoice-field="paymentMethod">
+          <select class="table-select" data-invoice-client="${escapeInvoiceText(client.id)}" data-invoice-field="paymentMethod">
             ${option("Firma", invoice.paymentMethod)}
             ${option("Keš", invoice.paymentMethod)}
           </select>
         </label>
         <div class="invoice-payment-balance"><strong>Uplaćeno ${currency.format(paidAmount)}</strong><span>Preostalo ${currency.format(remainingAmount)}</span></div>
-        <form class="invoice-payment-form" data-invoice-payment-form="${client.id}">
+        <form class="invoice-payment-form" data-invoice-payment-form="${escapeInvoiceText(client.id)}">
           <label>Datum<input name="date" type="date" value="${currentDateKey()}" required /></label>
           <label>Iznos<input name="amount" type="number" min="0.01" step="0.01" max="${remainingAmount || invoiceAmount(client, monthKey)}" required /></label>
           <label>Komentar<input name="note" type="text" maxlength="160" placeholder="Npr. prva rata" /></label>
           <button class="secondary-button" type="submit">Dodaj uplatu</button>
         </form>
-        <div class="invoice-payment-history">${payments.length ? payments.map((payment) => `<div><span>${formatDate(payment.date)} · ${currency.format(Number(payment.amount || 0))}${payment.note ? ` · ${escapeInvoiceText(payment.note)}` : ""}</span><button type="button" data-delete-invoice-payment="${payment.id}" data-invoice-client="${client.id}">Obriši</button></div>`).join("") : `<small>Nema pojedinačnih uplata.</small>`}</div>
-        <button class="invoice-month-remove danger-action" type="button" data-remove-invoice-client="${client.id}" data-invoice-month="${monthKey}">Ukloni iz meseca</button>
+        <div class="invoice-payment-history">${payments.length ? payments.map((payment) => `<div><span>${formatDate(payment.date)} · ${currency.format(Number(payment.amount || 0))}${payment.note ? ` · ${escapeInvoiceText(payment.note)}` : ""}</span><button type="button" data-delete-invoice-payment="${escapeInvoiceText(payment.id)}" data-invoice-client="${escapeInvoiceText(client.id)}">Obriši</button></div>`).join("") : `<small>Nema pojedinačnih uplata.</small>`}</div>
+        <button class="invoice-month-remove danger-action" type="button" data-remove-invoice-client="${escapeInvoiceText(client.id)}" data-invoice-month="${monthKey}">Ukloni iz meseca</button>
       </div>`;
   };
   const sorted = [...clients].sort((a, b) => invoiceAmount(b, monthKey) - invoiceAmount(a, monthKey));
@@ -2464,7 +2464,7 @@ function renderMonthlyInvoices(clients, monthKey) {
       const entries = sorted.filter((client) => statusFor(client) === key);
       const total = entries.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
       return `<details class="invoice-status-group invoice-status-${key}" data-invoice-group="${key}" ${openInvoiceGroups.has(key) ? "open" : ""}>
-        <summary><span class="invoice-status-dot"></span><strong>${label}</strong><span>${entries.length} klijenata</span><b>${currency.format(total)}</b><em>${badge}</em></summary>
+        <summary><span class="invoice-status-dot"></span><strong>${escapeInvoiceText(label)}</strong><span>${entries.length} klijenata</span><b>${currency.format(total)}</b><em>${badge}</em></summary>
         <div class="invoice-status-list">${entries.length ? entries.map(renderClient).join("") : `<div class="empty-state">Nema klijenata u ovoj grupi.</div>`}</div>
       </details>`;
     }).join("");
@@ -2614,12 +2614,12 @@ function renderInvoiceCarryover(clients, monthKey) {
   const sent = open.filter((client) => monthlyInvoice(client, previousMonth).invoiceStatus === "Poslat");
   const notSent = open.filter((client) => monthlyInvoice(client, previousMonth).invoiceStatus !== "Poslat");
   const carryoverGroup = (items, key, label) => `<details class="invoice-status-group invoice-status-${key}">
-    <summary><span class="invoice-status-dot"></span><strong>${label}</strong><span>${items.length} klijenata</span><b>${currency.format(items.reduce((sum, client) => sum + invoiceAmount(client, previousMonth), 0))}</b></summary>
+    <summary><span class="invoice-status-dot"></span><strong>${escapeInvoiceText(label)}</strong><span>${items.length} klijenata</span><b>${currency.format(items.reduce((sum, client) => sum + invoiceAmount(client, previousMonth), 0))}</b></summary>
     <div class="invoice-status-list">${items.map((client) => {
         const invoice = monthlyInvoice(client, previousMonth);
         return `<div class="setup-item carryover-item invoice-carryover-compact">
           <strong>${currency.format(invoiceAmount(client, previousMonth))}</strong>
-          <span>${client.name}<br />${monthLabel(previousMonth)} · ${invoice.invoiceStatus} · ${invoice.paymentStatus}</span>
+          <span>${escapeInvoiceText(client.name)}<br />${monthLabel(previousMonth)} · ${invoice.invoiceStatus} · ${invoice.paymentStatus}</span>
         </div>`;
       }).join("") || `<div class="empty-state">Nema klijenata u ovoj grupi.</div>`}</div></details>`;
   target.innerHTML = open.length
@@ -2628,11 +2628,11 @@ function renderInvoiceCarryover(clients, monthKey) {
 }
 
 function option(value, selected, label = value) {
-  return `<option value="${value}" ${String(value) === String(selected) ? "selected" : ""}>${label}</option>`;
+  return `<option value="${escapeInvoiceText(value)}" ${String(value) === String(selected) ? "selected" : ""}>${escapeInvoiceText(label)}</option>`;
 }
 
 function packageOption(value, selected) {
-  return `<option value="${value}" ${normalizePackage(selected) === value ? "selected" : ""}>${displayPackage(value)}</option>`;
+  return `<option value="${escapeInvoiceText(value)}" ${normalizePackage(selected) === value ? "selected" : ""}>${displayPackage(value)}</option>`;
 }
 
 function bindEditButtons() {
@@ -2720,7 +2720,7 @@ function openEditClient(id) {
                   return `
                     <div class="setup-item alert-item ${late ? "danger" : contacted ? "ok" : "warn"}">
                       <strong>${contacted ? "Zvao" : "Nije"}</strong>
-                      <span>${lead.name || "Lead"} · ${lead.phone || "telefon nije unet"}<br />${normalizeLeadStatus(lead.status)} · stigao ${lead.createdAt ? formatDate(lead.createdAt) : "nije uneto"}${lead.calledAt ? ` · pozvan ${formatDate(lead.calledAt)}` : ""}${lead.customFields && Object.keys(lead.customFields).length ? `<br />Forma: ${Object.entries(lead.customFields).map(([key, value]) => `${key}: ${value}`).join(" · ")}` : ""}</span>
+                      <span>${escapeInvoiceText(lead.name || "Lead")} · ${escapeInvoiceText(lead.phone || "telefon nije unet")}<br />${normalizeLeadStatus(lead.status)} · stigao ${lead.createdAt ? formatDate(lead.createdAt) : "nije uneto"}${lead.calledAt ? ` · pozvan ${formatDate(lead.calledAt)}` : ""}${lead.customFields && Object.keys(lead.customFields).length ? `<br />Forma: ${Object.entries(lead.customFields).map(([key, value]) => `${escapeInvoiceText(key)}: ${escapeInvoiceText(value)}`).join(" · ")}` : ""}</span>
                     </div>`;
                 })
                 .join("")
@@ -3366,7 +3366,7 @@ function renderEmployeeOptions() {
     if (!select) return;
     const selected = select.value || selectedEmployeeId;
     select.innerHTML = employees.length
-      ? employees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")
+      ? employees.map((employee) => `<option value="${escapeInvoiceText(employee.id)}">${escapeInvoiceText(employee.name)}</option>`).join("")
       : `<option value="">Nema zaposlenih</option>`;
     if (employees.some((employee) => employee.id === selected)) select.value = selected;
   });
@@ -3375,7 +3375,7 @@ function renderEmployeeOptions() {
     const selected = activitySelect.value;
     const activities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
     activitySelect.innerHTML = activities.length
-      ? activities.map((activity) => `<option value="${activity.id}">${activity.category || "Ostalo"} · ${activity.name}</option>`).join("")
+      ? activities.map((activity) => `<option value="${escapeInvoiceText(activity.id)}">${escapeInvoiceText(activity.category || "Ostalo")} · ${escapeInvoiceText(activity.name)}</option>`).join("")
       : `<option value="">Admin prvo dodaje aktivnost</option>`;
     if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
   }
@@ -3385,7 +3385,7 @@ function renderEmployeeOptions() {
     const clients = (state.clients || [])
       .filter((client) => client.status === "Aktivan")
       .sort((a, b) => a.name.localeCompare(b.name));
-    workClientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${client.id}">${client.name}</option>`).join("")}`;
+    workClientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${escapeInvoiceText(client.id)}">${escapeInvoiceText(client.name)}</option>`).join("")}`;
     if (clients.some((client) => client.id === selected)) workClientSelect.value = selected;
   }
   syncAdminWorkClientRequirement();
@@ -3393,7 +3393,7 @@ function renderEmployeeOptions() {
   if (leaderSelect) {
     const selected = leaderSelect.value;
     const leaders = employees.filter((employee) => employee.isLeader);
-    leaderSelect.innerHTML = `<option value="">Nema lidera</option>${leaders.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")}`;
+    leaderSelect.innerHTML = `<option value="">Nema lidera</option>${leaders.map((employee) => `<option value="${escapeInvoiceText(employee.id)}">${escapeInvoiceText(employee.name)}</option>`).join("")}`;
     if (leaders.some((employee) => employee.id === selected)) leaderSelect.value = selected;
   }
 }
@@ -3486,15 +3486,15 @@ function renderEmployeeRows(employees, monthKey, year) {
           const lateStatus = employeeLateStatus(employee.id, monthKey);
           const rowClass = employee.id === selectedEmployeeId ? "selected-row" : "";
           return `
-          <tr class="${rowClass}" data-select-employee="${employee.id}">
-            <td><strong>${employee.name}</strong><br /><span>${employee.position || "Pozicija nije uneta"} · ${employee.email}</span></td>
+          <tr class="${rowClass}" data-select-employee="${escapeInvoiceText(employee.id)}">
+            <td><strong>${escapeInvoiceText(employee.name)}</strong><br /><span>${escapeInvoiceText(employee.position || "Pozicija nije uneta")} · ${escapeInvoiceText(employee.email)}</span></td>
             <td>${employee.isLeader ? `<span class="status ok">Lider</span>` : `<span>${employeeLeaderName(employee)}</span>`}</td>
             <td><strong>${formatHours(hours)}h</strong><br /><span>od ${formatHours(expected)}h · ${lateStatus.label}</span></td>
             <td><span class="status ${balanceClass(balance)}">${formatHourBalance(balance)}</span><br /><span>${employeeCarryoverLabel(employee, monthKey)}</span></td>
-            <td><span class="status ${employee.status === "Aktivan" ? "ok" : employee.status === "Pauza" ? "warn" : "danger"}">${employee.status || "Aktivan"}</span></td>
+            <td><span class="status ${employee.status === "Aktivan" ? "ok" : employee.status === "Pauza" ? "warn" : "danger"}">${escapeInvoiceText(employee.status || "Aktivan")}</span></td>
             <td>
-              <button class="edit-button" data-edit-employee="${employee.id}" type="button" title="Izmeni">✎</button>
-              <button class="edit-button danger-action" data-delete-employee="${employee.id}" type="button" title="Obriši">×</button>
+              <button class="edit-button" data-edit-employee="${escapeInvoiceText(employee.id)}" type="button" title="Izmeni">✎</button>
+              <button class="edit-button danger-action" data-delete-employee="${escapeInvoiceText(employee.id)}" type="button" title="Obriši">×</button>
             </td>
           </tr>`;
         })
@@ -3571,7 +3571,7 @@ function renderSelectedEmployeeAbsenceList(employeeId, year) {
               (absence) => `
               <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : "warn"}">
                 <strong>${workdayKeysBetween(absence.startDate, absence.endDate).length}</strong>
-                <span>${absence.type} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br />${absence.status || ""} ${absence.note ? `· ${absence.note}` : ""}</span>
+                <span>${escapeInvoiceText(absence.type)} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br />${escapeInvoiceText(absence.status || "")} ${absence.note ? `· ${escapeInvoiceText(absence.note)}` : ""}</span>
               </div>`
             )
             .join("")
@@ -3594,8 +3594,8 @@ function renderLeaderAssignment(employee) {
           return `
           <div class="setup-item leader-assignment-row">
             <strong>${isAssigned ? "✓" : "+"}</strong>
-            <span>${item.name}<br />${item.position || "Pozicija nije uneta"} ${item.leaderId && !isAssigned ? `· trenutno: ${employeeLeaderName(item)}` : ""}</span>
-            <button class="secondary-button" data-assign-leader="${employee.id}" data-employee-id="${item.id}" type="button">${isAssigned ? "Ukloni" : "Dodaj"}</button>
+            <span>${escapeInvoiceText(item.name)}<br />${escapeInvoiceText(item.position || "Pozicija nije uneta")} ${item.leaderId && !isAssigned ? `· trenutno: ${employeeLeaderName(item)}` : ""}</span>
+            <button class="secondary-button" data-assign-leader="${escapeInvoiceText(employee.id)}" data-employee-id="${escapeInvoiceText(item.id)}" type="button">${isAssigned ? "Ukloni" : "Dodaj"}</button>
           </div>`;
         })
         .join("")
@@ -3751,7 +3751,7 @@ function renderEmployeeWorkRows(monthKey) {
   if (personFilter) {
     const selectedValue = employeeWorkPersonFilter;
     personFilter.innerHTML = `<option value="all">Svi zaposleni</option>${state.employees
-      .map((employee) => `<option value="${employee.id}">${employee.name}</option>`)
+      .map((employee) => `<option value="${escapeInvoiceText(employee.id)}">${escapeInvoiceText(employee.name)}</option>`)
       .join("")}`;
     personFilter.value = state.employees.some((employee) => employee.id === selectedValue) ? selectedValue : "all";
     employeeWorkPersonFilter = personFilter.value;
@@ -3763,7 +3763,7 @@ function renderEmployeeWorkRows(monthKey) {
       .filter((client) => client.status === "Aktivan")
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((client) => `<option value="${client.id}">${client.name}</option>`)
+      .map((client) => `<option value="${escapeInvoiceText(client.id)}">${escapeInvoiceText(client.name)}</option>`)
       .join("")}`;
     clientFilter.value = state.clients.some((client) => client.id === selectedValue && client.status === "Aktivan") ? selectedValue : "all";
     employeeWorkClientFilter = clientFilter.value;
@@ -3789,12 +3789,12 @@ function renderEmployeeWorkRows(monthKey) {
       return `
       <tr>
         <td>${formatDate(log.date)}</td>
-        <td>${employee?.name || "Obrisan zaposleni"}</td>
+        <td>${escapeInvoiceText(employee?.name || "Obrisan zaposleni")}</td>
         <td>${window.MarketizoCosts.minutes(log)} min<br /><span>${formatHours(log.hours || 0)}h</span></td>
-        <td><strong>${log.activityName || "Rad"}</strong>${log.note ? `<br /><span>${log.note}</span>` : ""}</td>
-        <td>${log.clientName || "Bez klijenta"}</td>
+        <td><strong>${escapeInvoiceText(log.activityName || "Rad")}</strong>${log.note ? `<br /><span>${escapeInvoiceText(log.note)}</span>` : ""}</td>
+        <td>${escapeInvoiceText(log.clientName || "Bez klijenta")}</td>
         <td><strong>+</strong> ${log.positive || "-"}<br /><strong>-</strong> ${log.negative || "-"}</td>
-        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button" data-edit-work-log="${log.id}" type="button">Izmeni</button> <button class="edit-button danger-action" data-delete-work-log="${log.id}" type="button">Obriši</button></td>
+        <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button" data-edit-work-log="${escapeInvoiceText(log.id)}" type="button">Izmeni</button> <button class="edit-button danger-action" data-delete-work-log="${escapeInvoiceText(log.id)}" type="button">Obriši</button></td>
       </tr>`;
     });
   setText("employeeWorkRowsCount", `${rows.length} unosa`);
@@ -3824,17 +3824,17 @@ function openWorkLogEditor(id) {
     document.body.append(dialog);
   }
   const activityOptions = (state.employeeActivities || []).filter((item) => item.active !== false)
-    .map((item) => `<option value="${item.id}" ${item.id === log.activityId ? "selected" : ""}>${item.category || "Ostalo"} · ${item.name}</option>`).join("");
+    .map((item) => `<option value="${escapeInvoiceText(item.id)}" ${item.id === log.activityId ? "selected" : ""}>${escapeInvoiceText(item.category || "Ostalo")} · ${escapeInvoiceText(item.name)}</option>`).join("");
   const clientOptions = (state.clients || []).filter((item) => item.status === "Aktivan")
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map((item) => `<option value="${item.id}" ${item.id === log.clientId ? "selected" : ""}>${item.name}</option>`).join("");
+    .map((item) => `<option value="${escapeInvoiceText(item.id)}" ${item.id === log.clientId ? "selected" : ""}>${escapeInvoiceText(item.name)}</option>`).join("");
   dialog.innerHTML = `<form method="dialog" class="work-log-editor-form">
     <div class="panel-head"><div><p class="eyebrow">Evidencija rada</p><h2>Izmeni unos</h2></div><button class="icon-button" value="cancel" type="submit">×</button></div>
     <label>Datum<input name="date" type="date" value="${log.date}" required /></label>
     <label>Minuta<input name="minutes" type="number" min="1" value="${window.MarketizoCosts.minutes(log)}" required /></label>
     <label>Aktivnost<select name="activityId" required>${activityOptions}</select></label>
     <label>Klijent<select name="clientId"><option value="">Bez klijenta</option>${clientOptions}</select></label>
-    <label class="wide">Napomena<textarea name="note" rows="3">${log.note || ""}</textarea></label>
+    <label class="wide">Napomena<textarea name="note" rows="3">${escapeInvoiceText(log.note || "")}</textarea></label>
     <div class="dialog-actions wide"><button class="secondary-button" value="cancel" type="submit">Otkaži</button><button class="primary-button" value="save" type="submit">Sačuvaj izmenu</button></div>
   </form>`;
   dialog.addEventListener("close", async () => {
@@ -3880,7 +3880,7 @@ function renderEmployeeActivities() {
     ...activities.map((activity) => activity.category),
   ].filter(Boolean))];
   target.innerHTML = activities.length
-    ? activities.map((activity) => `<div class="setup-item activity-category-row"><strong>${activity.name}</strong><label class="activity-category-control"><span>Kategorija</span><select data-activity-category="${activity.id}" aria-label="Kategorija za ${activity.name}">${categoryChoices.map((category) => `<option value="${category}" ${category === (activity.category || "Ostalo") ? "selected" : ""}>${category}</option>`).join("")}</select></label><button class="edit-button danger-action" data-delete-activity="${activity.id}" type="button">Obriši</button></div>`).join("")
+    ? activities.map((activity) => `<div class="setup-item activity-category-row"><strong>${escapeInvoiceText(activity.name)}</strong><label class="activity-category-control"><span>Kategorija</span><select data-activity-category="${escapeInvoiceText(activity.id)}" aria-label="Kategorija za ${escapeInvoiceText(activity.name)}">${categoryChoices.map((category) => `<option value="${escapeInvoiceText(category)}" ${category === (activity.category || "Ostalo") ? "selected" : ""}>${escapeInvoiceText(category)}</option>`).join("")}</select></label><button class="edit-button danger-action" data-delete-activity="${escapeInvoiceText(activity.id)}" type="button">Obriši</button></div>`).join("")
     : `<div class="empty-state">Dodaj prvu aktivnost koju zaposleni mogu da izaberu.</div>`;
   target.querySelectorAll("[data-activity-category]").forEach((select) => select.addEventListener("change", async () => {
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
@@ -3929,11 +3929,11 @@ function renderEmployeeAbsenceRequests() {
           const employee = employeeById(absence.employeeId);
           return `
           <tr>
-            <td><strong>${employee?.name || "Zaposleni"}</strong></td>
-            <td>${absence.type}</td>
+            <td><strong>${escapeInvoiceText(employee?.name || "Zaposleni")}</strong></td>
+            <td>${escapeInvoiceText(absence.type)}</td>
             <td>${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}</td>
-            <td>${absence.note || ""}</td>
-            <td><div class="absence-request-actions"><button class="secondary-button approve-absence" data-absence-id="${absence.id}" type="button">Prihvati</button><button class="secondary-button danger-action reject-absence" data-absence-id="${absence.id}" type="button">Odbij</button></div></td>
+            <td>${escapeInvoiceText(absence.note || "")}</td>
+            <td><div class="absence-request-actions"><button class="secondary-button approve-absence" data-absence-id="${escapeInvoiceText(absence.id)}" type="button">Prihvati</button><button class="secondary-button danger-action reject-absence" data-absence-id="${escapeInvoiceText(absence.id)}" type="button">Odbij</button></div></td>
           </tr>`;
         })
         .join("")
@@ -3970,7 +3970,7 @@ function renderEmployeeLateRows(monthKey) {
           return `
           <div class="setup-item alert-item warn">
             <strong>${record.minutes}m</strong>
-            <span>${employee?.name || "Zaposleni"} · ${formatDate(record.date)}<br />Odbija se ${penalty} min · ${record.acknowledgedAt ? "potvrđeno" : "čeka potvrdu"}${record.reason ? ` · ${record.reason}` : ""}</span>
+            <span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${formatDate(record.date)}<br />Odbija se ${penalty} min · ${record.acknowledgedAt ? "potvrđeno" : "čeka potvrdu"}${record.reason ? ` · ${escapeInvoiceText(record.reason)}` : ""}</span>
           </div>`;
         })
         .join("")
@@ -4020,7 +4020,7 @@ function renderEmployeePerformanceOverview() {
   if (isEmployeeProfilePage && urlEmployeeId && (state.employees || []).some((item) => item.id === urlEmployeeId)) selectedEmployeeId = urlEmployeeId;
   const availableEmployees = (state.employees || []).filter((employee) => employee.status !== "Arhiviran");
   if (profileSelect) {
-    profileSelect.innerHTML = `${isEmployeeProfilePage ? "" : `<option value="all">Svi zaposleni</option>`}${availableEmployees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")}`;
+    profileSelect.innerHTML = `${isEmployeeProfilePage ? "" : `<option value="all">Svi zaposleni</option>`}${availableEmployees.map((employee) => `<option value="${escapeInvoiceText(employee.id)}">${escapeInvoiceText(employee.name)}</option>`).join("")}`;
     profileSelect.value = isEmployeeProfilePage ? selectedEmployeeId : employeeOverviewFilter;
     if (!profileSelect.dataset.bound) {
       profileSelect.dataset.bound = "true";
@@ -4058,16 +4058,16 @@ function renderEmployeePerformanceOverview() {
           .sort((a, b) => String(b.month).localeCompare(String(a.month)) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
         const recognition = recognitions[0];
         const history = ratings.length
-          ? ratings.map((item) => `${item.month}: ${Number(item.score || 0).toLocaleString("sr-RS")}/5 · ${item.source || "Ocena"}${item.reviewer ? ` · ${item.reviewer}` : ""}`).join("<br />")
+          ? ratings.map((item) => `${item.month}: ${Number(item.score || 0).toLocaleString("sr-RS")}/5 · ${escapeInvoiceText(item.source || "Ocena")}${item.reviewer ? ` · ${escapeInvoiceText(item.reviewer)}` : ""}`).join("<br />")
           : "Nema ranijih ocena.";
         const recognitionHistory = recognitions.length
-          ? recognitions.map((item) => `${item.month}: ${item.type} · ${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}`).join("<hr />")
+          ? recognitions.map((item) => `${item.month}: ${escapeInvoiceText(item.type)} · ${item.author || "Admin"}<br />${escapeInvoiceText(item.text || item.message || "Bez poruke")}`).join("<hr />")
           : "Nema pohvala ili fokusa.";
-        return `<tr class="performance-employee-row ${employee.id === selectedEmployeeId ? "selected-row" : ""}" data-performance-employee="${employee.id}" tabindex="0" role="button" aria-label="Otvori dosije za ${employee.name}">
-          <td><strong>${employee.name}</strong><br /><span class="muted">${employee.position || "Zaposleni"}</span><br /><a class="employee-profile-inline-link" href="/employee-profile?employee=${encodeURIComponent(employee.id)}">Otvori ličnu kartu →</a></td>
+        return `<tr class="performance-employee-row ${employee.id === selectedEmployeeId ? "selected-row" : ""}" data-performance-employee="${escapeInvoiceText(employee.id)}" tabindex="0" role="button" aria-label="Otvori dosije za ${escapeInvoiceText(employee.name)}">
+          <td><strong>${escapeInvoiceText(employee.name)}</strong><br /><span class="muted">${escapeInvoiceText(employee.position || "Zaposleni")}</span><br /><a class="employee-profile-inline-link" href="/employee-profile?employee=${encodeURIComponent(employee.id)}">Otvori ličnu kartu →</a></td>
           <td><strong>${score === null ? "Bez ocene" : `${score.toFixed(1).replace(".", ",")}/5`}</strong><br /><span class="muted">${monthlyRatings.length} ${monthlyRatings.length === 1 ? "ocena" : "ocena"} za mesec</span></td>
           <td><strong>${progress === null ? "Nema aktivnog cilja" : `${progress}%`}</strong><br /><span class="muted">${goals.length} aktivnih ciljeva</span></td>
-          <td>${recognition ? `<strong>${recognition.type}</strong><br /><span class="muted">${recognition.text || recognition.message || "Bez poruke"}</span><details><summary class="history-link">Sve poruke (${recognitions.length})</summary><div class="employee-rating-history">${recognitionHistory}</div></details>` : `<span class="muted">Nema poruke</span>`}</td>
+          <td>${recognition ? `<strong>${escapeInvoiceText(recognition.type)}</strong><br /><span class="muted">${escapeInvoiceText(recognition.text || recognition.message || "Bez poruke")}</span><details><summary class="history-link">Sve poruke (${recognitions.length})</summary><div class="employee-rating-history">${recognitionHistory}</div></details>` : `<span class="muted">Nema poruke</span>`}</td>
           <td><details><summary class="secondary-button compact-button">Istorija ocena (${ratings.length})</summary><div class="employee-rating-history">${history}</div></details></td>
         </tr>`;
       }).join("")
@@ -4108,8 +4108,8 @@ function renderEmployeePerformanceOverview() {
     const list = (items, empty, render) => items.length ? items.map(render).join("") : `<div class="empty-state">${empty}</div>`;
     profileTarget.innerHTML = `
       <section class="employee-profile-hero">
-        <div><p class="eyebrow">Dosije zaposlenog</p><h2>${employee.name}</h2><p>${employee.position || "Zaposleni"} · ${employee.status || "Aktivan"}</p></div>
-        <div class="profile-header-actions"><label>Mesec<input id="employeeProfileMonth" type="month" value="${month}" /></label><div class="profile-quick-actions"><a class="secondary-button" href="/employees-ratings?employee=${employee.id}">Dodaj ocenu</a><a class="secondary-button" href="/employees-goals?employee=${employee.id}">Dodaj cilj</a><a class="secondary-button" href="/employees-recognitions?employee=${employee.id}">Dodaj pohvalu</a></div></div>
+        <div><p class="eyebrow">Dosije zaposlenog</p><h2>${escapeInvoiceText(employee.name)}</h2><p>${escapeInvoiceText(employee.position || "Zaposleni")} · ${escapeInvoiceText(employee.status || "Aktivan")}</p></div>
+        <div class="profile-header-actions"><label>Mesec<input id="employeeProfileMonth" type="month" value="${month}" /></label><div class="profile-quick-actions"><a class="secondary-button" href="/employees-ratings?employee=${escapeInvoiceText(employee.id)}">Dodaj ocenu</a><a class="secondary-button" href="/employees-goals?employee=${escapeInvoiceText(employee.id)}">Dodaj cilj</a><a class="secondary-button" href="/employees-recognitions?employee=${escapeInvoiceText(employee.id)}">Dodaj pohvalu</a></div></div>
       </section>
       <nav class="employee-profile-tabs" aria-label="Sekcije dosijea"><button data-profile-tab="summary" type="button">Sažetak</button><button data-profile-tab="performance" type="button">Učinak</button><button data-profile-tab="clients" type="button">Klijenti i ocene</button><button data-profile-tab="meetings" type="button">1:1</button><button data-profile-tab="time" type="button">Sati</button><button data-profile-tab="absence" type="button">Odsustva</button><button data-profile-tab="admin" type="button">Admin beleške</button></nav>
       <section class="employee-summary-grid profile-panel" data-profile-panel="summary">
@@ -4121,14 +4121,14 @@ function renderEmployeePerformanceOverview() {
         <section class="employee-summary-grid profile-panel" data-profile-panel="summary"><article><span>Ocena klijenata</span><strong id="employeeClientScore">Učitavam...</strong><small>lična ocena iz KPI upitnika</small></article><article><span>Poslednji 1:1</span><strong>${oneOnOnes.length ? formatDate(oneOnOnes[0].date) : "Nije održan"}</strong><small>${oneOnOnes.length} ${oneOnOnes.length === 1 ? "sastanak" : "sastanaka"} u dosijeu</small></article><article><span>U toku</span><strong>${activeGoals.length} ${activeGoals.length === 1 ? "cilj" : "ciljeva"}</strong><small>${activeGoals[0]?.endDate ? `Sledeći rok ${formatDate(activeGoals[0].endDate)}` : "Bez roka"}</small></article><article><span>U timu od</span><strong>${employee.startDate ? formatDate(employee.startDate) : "—"}</strong><small>${escapeInvoiceText(employee.position || "Zaposleni")}</small></article></section>
       <section class="employee-alerts profile-panel ${alerts.length ? "has-alerts" : "all-clear"}" data-profile-panel="summary"><div><p class="eyebrow">Pažnja</p><h3>${alerts.length ? "Potrebna reakcija" : "Sve je uredno"}</h3></div>${alerts.length ? `<ul>${alerts.map((item) => `<li>${item}</li>`).join("")}</ul>` : `<p>Nema aktivnih upozorenja za izabrani mesec.</p>`}</section>
       <section class="employee-history-section employee-trend profile-panel" data-profile-panel="summary"><div class="panel-head"><div><p class="eyebrow">Trend</p><h3>Ocene poslednjih 6 meseci</h3></div></div><div class="score-trend">${trend.length ? trend.map((item) => `<div><span style="height:${Math.max(8, Number(item.value || 0) * 20)}%"></span><strong>${item.value?.toFixed(1).replace(".", ",")}</strong><small>${item.key.slice(5)}</small></div>`).join("") : `<div class="empty-state">Nema dovoljno ocena za grafikon.</div>`}</div></section>
-      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Ocene</p><h3>Istorija ocena</h3></div><span>${ratings.length} unosa</span></div>${list(ratings, "Nema ocena.", (item) => `<div class="history-record"><strong>${item.score}/5 · ${item.month}</strong><span>${item.source || "Ocena"}${item.reviewer ? ` · ${item.reviewer}` : ""}<br />${item.note || "Bez komentara"}</span></div>`)}</section>
-      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Razvoj</p><h3>Ciljevi</h3></div><span>${goals.length} ciljeva</span></div>${list(goals, "Nema ciljeva.", (item) => `<div class="history-record"><strong>${item.progress || 0}% · ${item.status || "U toku"}</strong><span>${item.title}<br />${item.target || ""} · rok ${formatDate(item.endDate)}</span></div>`)}</section>
-      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Motivacija</p><h3>Pohvale i fokus</h3></div><span>${recognitions.length} poruka</span></div>${list(recognitions, "Nema pohvala ili fokusa.", (item) => `<div class="history-record"><strong>${item.type} · ${item.month}</strong><span>${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Ocene</p><h3>Istorija ocena</h3></div><span>${ratings.length} unosa</span></div>${list(ratings, "Nema ocena.", (item) => `<div class="history-record"><strong>${item.score}/5 · ${item.month}</strong><span>${escapeInvoiceText(item.source || "Ocena")}${item.reviewer ? ` · ${escapeInvoiceText(item.reviewer)}` : ""}<br />${escapeInvoiceText(item.note || "Bez komentara")}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Razvoj</p><h3>Ciljevi</h3></div><span>${goals.length} ciljeva</span></div>${list(goals, "Nema ciljeva.", (item) => `<div class="history-record"><strong>${item.progress || 0}% · ${escapeInvoiceText(item.status || "U toku")}</strong><span>${escapeInvoiceText(item.title)}<br />${escapeInvoiceText(item.target || "")} · rok ${formatDate(item.endDate)}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="performance"><div class="panel-head"><div><p class="eyebrow">Motivacija</p><h3>Pohvale i fokus</h3></div><span>${recognitions.length} poruka</span></div>${list(recognitions, "Nema pohvala ili fokusa.", (item) => `<div class="history-record"><strong>${escapeInvoiceText(item.type)} · ${item.month}</strong><span>${item.author || "Admin"}<br />${escapeInvoiceText(item.text || item.message || "Bez poruke")}</span></div>`)}</section>
       <section class="employee-history-section profile-panel profile-panel-wide" data-profile-panel="clients"><div class="panel-head"><div><p class="eyebrow">Povratne informacije</p><h3>Ocene klijenata i timova</h3></div></div><div id="employeeClientRatings" class="employee-client-ratings">Učitavam ocene...</div></section>
       <section class="employee-history-section profile-panel profile-panel-wide" data-profile-panel="meetings"><div class="panel-head"><div><p class="eyebrow">Razgovori</p><h3>1:1 sastanci</h3></div><a class="secondary-button" href="/employees-recognitions?employee=${encodeURIComponent(employee.id)}">Dodaj 1:1</a></div>${list(oneOnOnes, "Nema 1:1 beleški.", (item) => `<details class="history-record"><summary><strong>${escapeInvoiceText(item.title || "1:1 sastanak")} · ${formatDate(item.date)}</strong></summary><p class="one-on-one-profile-note">${escapeInvoiceText(item.note || "Bez beleške").replace(/\n/g, "<br />")}</p></details>`)}</section>
-      <section class="employee-history-section profile-panel profile-panel-wide" data-profile-panel="time"><div class="panel-head"><div><p class="eyebrow">Evidencija</p><h3>Sati i aktivnosti za ${month}</h3></div><span>${monthLogs.length} unosa</span></div>${list(monthLogs.slice(0, 20), "Nema upisanih aktivnosti za izabrani mesec.", (item) => `<div class="history-record"><strong>${formatDate(item.date)} · ${item.minutes || Math.round(Number(item.hours || 0) * 60)} min</strong><span>${item.activityName || "Rad"}${item.clientName ? ` · ${item.clientName}` : ""}<br />${item.note || "Bez napomene"}</span></div>`)}</section>
-      <section class="employee-history-section profile-panel" data-profile-panel="absence"><div class="panel-head"><div><p class="eyebrow">Odsustva</p><h3>Odmori i bolovanja</h3></div><span>${absences.length} unosa</span></div>${list(absences, "Nema odsustava.", (item) => `<div class="history-record"><strong>${item.type}</strong><span>${formatDate(item.startDate)} – ${formatDate(item.endDate)} · ${item.status || "Upisano"}<br />${item.note || ""}</span></div>`)}</section>
-      <section class="employee-history-section profile-panel" data-profile-panel="absence"><div class="panel-head"><div><p class="eyebrow">Kašnjenja</p><h3>Evidencija</h3></div><span>${lateRecords.length} unosa</span></div>${list(lateRecords, "Nema kašnjenja.", (item) => `<div class="history-record"><strong>${formatDate(item.date)} · ${item.minutes} min</strong><span>${item.reason || "Bez napomene"}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel profile-panel-wide" data-profile-panel="time"><div class="panel-head"><div><p class="eyebrow">Evidencija</p><h3>Sati i aktivnosti za ${month}</h3></div><span>${monthLogs.length} unosa</span></div>${list(monthLogs.slice(0, 20), "Nema upisanih aktivnosti za izabrani mesec.", (item) => `<div class="history-record"><strong>${formatDate(item.date)} · ${item.minutes || Math.round(Number(item.hours || 0) * 60)} min</strong><span>${escapeInvoiceText(item.activityName || "Rad")}${item.clientName ? ` · ${escapeInvoiceText(item.clientName)}` : ""}<br />${escapeInvoiceText(item.note || "Bez napomene")}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="absence"><div class="panel-head"><div><p class="eyebrow">Odsustva</p><h3>Odmori i bolovanja</h3></div><span>${absences.length} unosa</span></div>${list(absences, "Nema odsustava.", (item) => `<div class="history-record"><strong>${escapeInvoiceText(item.type)}</strong><span>${formatDate(item.startDate)} – ${formatDate(item.endDate)} · ${escapeInvoiceText(item.status || "Upisano")}<br />${escapeInvoiceText(item.note || "")}</span></div>`)}</section>
+      <section class="employee-history-section profile-panel" data-profile-panel="absence"><div class="panel-head"><div><p class="eyebrow">Kašnjenja</p><h3>Evidencija</h3></div><span>${lateRecords.length} unosa</span></div>${list(lateRecords, "Nema kašnjenja.", (item) => `<div class="history-record"><strong>${formatDate(item.date)} · ${item.minutes} min</strong><span>${escapeInvoiceText(item.reason || "Bez napomene")}</span></div>`)}</section>
       <section class="employee-history-section employee-internal-note profile-panel profile-panel-wide" data-profile-panel="admin"><div class="panel-head"><div><p class="eyebrow">Samo za vlasnike</p><h3>Interna napomena</h3></div><span>nije vidljivo zaposlenom</span></div><textarea id="employeeInternalNote" rows="5" placeholder="Interna zapažanja o zaposlenom...">${notes[employee.id] || ""}</textarea><button class="primary-button" id="saveEmployeeInternalNote" type="button">Sačuvaj napomenu</button></section>`;
     const activateProfileTab = () => {
       profileTarget.querySelectorAll("[data-profile-panel]").forEach((panel) => panel.hidden = panel.dataset.profilePanel !== employeeProfileTab);
@@ -4219,14 +4219,14 @@ function renderEmployeeGoalRows() {
             ? `Završeno ${formatDate(goal.completedDate)}`
             : isLate ? `Kasni ${Math.abs(daysLeft)} dana` : isNear ? `Rok za ${daysLeft} dana` : `Rok ${formatDate(goal.endDate)}`;
           return `
-          <div class="setup-item alert-item ${status}" data-admin-goal-id="${goal.id}">
+          <div class="setup-item alert-item ${status}" data-admin-goal-id="${escapeInvoiceText(goal.id)}">
             <strong>${goal.progress || 0}%</strong>
-            <span>${employee?.name || "Zaposleni"} · ${goal.category || "Razvoj"} · ${goal.title}<br />${goal.target || ""} · ${deadline}</span>
-            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${goal.title}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div>
+            <span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(goal.category || "Razvoj")} · ${escapeInvoiceText(goal.title)}<br />${escapeInvoiceText(goal.target || "")} · ${deadline}</span>
+            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div>
           </div>`;
         })
         .join("")
-    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih ciljeva.` : "Nema ciljeva."}</div>`;
+    : `<div class="empty-state">${selectedEmployee ? `${escapeInvoiceText(selectedEmployee.name)} trenutno nema unetih ciljeva.` : "Nema ciljeva."}</div>`;
 
   target.querySelectorAll("[data-admin-goal-id]").forEach((row) => {
     const slider = row.querySelector('input[type="range"]');
@@ -4259,8 +4259,8 @@ function renderEmployeeGoalRows() {
     .sort((a, b) => String(b.month).localeCompare(String(a.month)))
     .slice(0, 12);
   ratingTarget.innerHTML = ratings.length
-    ? ratings.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${rating.month} · ${rating.source}${rating.reviewer ? ` · ${rating.reviewer}` : ""}<br />${rating.note || "Bez komentara"}</span></div>`).join("")
-    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema mesečnih ocena.` : "Nema mesečnih ocena."}</div>`;
+    ? ratings.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${rating.month} · ${escapeInvoiceText(rating.source)}${rating.reviewer ? ` · ${escapeInvoiceText(rating.reviewer)}` : ""}<br />${escapeInvoiceText(rating.note || "Bez komentara")}</span></div>`).join("")
+    : `<div class="empty-state">${selectedEmployee ? `${escapeInvoiceText(selectedEmployee.name)} trenutno nema mesečnih ocena.` : "Nema mesečnih ocena."}</div>`;
 
   const recognitionTarget = document.getElementById("employeeRecognitionRows");
   if (!recognitionTarget) return;
@@ -4269,8 +4269,8 @@ function renderEmployeeGoalRows() {
     .sort((a, b) => String(b.month).localeCompare(String(a.month)))
     .slice(0, 10);
   recognitionTarget.innerHTML = recognitions.length
-    ? recognitions.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span>${item.month} · ${item.type} · ${item.author || "Admin"}<br />${item.text || item.message || "Bez poruke"}</span></div>`).join("")
-    : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih pohvala ili fokusa.` : "Nema unetih pohvala ili fokusa."}</div>`;
+    ? recognitions.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span>${item.month} · ${escapeInvoiceText(item.type)} · ${item.author || "Admin"}<br />${escapeInvoiceText(item.text || item.message || "Bez poruke")}</span></div>`).join("")
+    : `<div class="empty-state">${selectedEmployee ? `${escapeInvoiceText(selectedEmployee.name)} trenutno nema unetih pohvala ili fokusa.` : "Nema unetih pohvala ili fokusa."}</div>`;
 }
 
 document.getElementById("employeeRatingForm")?.addEventListener("submit", async (event) => {
@@ -4500,7 +4500,7 @@ function buildStructuredSidebar() {
   navigation.className = "team-navigation";
   navigation.setAttribute("aria-label", "Sekcije tima");
   navigation.innerHTML = `<span class="sidebar-section-label">Upravljanje timom</span>${teamPages
-    .map(([label, href, section]) => `<a class="team-navigation-link" data-team-section="${section}" href="${href}">${label}</a>`)
+    .map(([label, href, section]) => `<a class="team-navigation-link" data-team-section="${section}" href="${href}">${escapeInvoiceText(label)}</a>`)
     .join("")}`;
   teamButton.insertAdjacentElement("afterend", navigation);
 
@@ -4661,7 +4661,7 @@ function setupClientCostAnalysis() {
 
   const populate = () => {
     clientSelect.innerHTML = `<option value="">Sve vreme: klijenti, interno i neraspoređeno</option><option value="__unassigned__">Neraspoređeno vreme</option>${(state.clients || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${escapeInvoiceText(item.id)}">${escapeInvoiceText(item.name)}${item.status === "Aktivan" ? "" : " (" + escapeInvoiceText(item.status || "neaktivan") + ")"}</option>`).join("")}`;
-    employeeSelect.innerHTML = (state.employees || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${item.id}">${item.name}${item.status === "Neaktivan" ? " (neaktivan)" : ""}</option>`).join("");
+    employeeSelect.innerHTML = (state.employees || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${escapeInvoiceText(item.id)}">${escapeInvoiceText(item.name)}${item.status === "Neaktivan" ? " (neaktivan)" : ""}</option>`).join("");
     employeeList.innerHTML = [...employeeSelect.options].map((item) => `<label data-employee-name="${item.textContent.toLowerCase()}"><input type="checkbox" value="${item.value}" /><span>${item.textContent}</span></label>`).join("");
     employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
       const option = [...employeeSelect.options].find((item) => item.value === checkbox.value);
@@ -4819,7 +4819,7 @@ function setupEmployeeActivityCategories() {
   knownCategories.forEach((category) => {
     if (!category) return;
     if ([...select.options].some((option) => option.value === category)) return;
-    select.querySelector('option[value="__new__"]').insertAdjacentHTML("beforebegin", `<option>${category}</option>`);
+    select.querySelector('option[value="__new__"]').insertAdjacentHTML("beforebegin", `<option>${escapeInvoiceText(category)}</option>`);
   });
   select.addEventListener("change", () => {
     const creating = select.value === "__new__";
@@ -4898,7 +4898,7 @@ function renderEmployeeHourAdjustments() {
   target.innerHTML = adjustments.length
     ? adjustments.slice(0, 20).map((adjustment) => {
       const employee = (state.employees || []).find((item) => item.id === adjustment.employeeId);
-      return `<div class="setup-item hour-deduction-row"><strong>−${adjustment.minutes} min</strong><span>${employee?.name || "Zaposleni"} · ${formatDate(adjustment.date)}<br />${adjustment.reason}</span><button class="edit-button" data-undo-hour-deduction="${adjustment.id}" type="button">Poništi korekciju</button></div>`;
+      return `<div class="setup-item hour-deduction-row"><strong>−${adjustment.minutes} min</strong><span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${formatDate(adjustment.date)}<br />${escapeInvoiceText(adjustment.reason)}</span><button class="edit-button" data-undo-hour-deduction="${escapeInvoiceText(adjustment.id)}" type="button">Poništi korekciju</button></div>`;
     }).join("")
     : `<div class="empty-state">Još nema korekcija salda.</div>`;
   target.querySelectorAll("[data-undo-hour-deduction]").forEach((button) => button.addEventListener("click", async () => {
@@ -4934,7 +4934,7 @@ function setupExistingGoalProgressEditor() {
     const employeeId = employeeSelect.value;
     const employee = employeeById(employeeId);
     const goals = (state.employeeGoals || []).filter((goal) => goal.employeeId === employeeId).sort((a,b) => String(b.endDate || "").localeCompare(String(a.endDate || "")));
-    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${employee?.name || "zaposleni"}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${goal.id}"><div><strong>${goal.title}</strong><span>${goal.target || "Bez opisa"} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${goal.title}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
+    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${escapeInvoiceText(employee?.name || "zaposleni")}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${escapeInvoiceText(goal.id)}"><div><strong>${escapeInvoiceText(goal.title)}</strong><span>${escapeInvoiceText(goal.target || "Bez opisa")} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
     section.querySelectorAll("[data-existing-goal-id]").forEach((row) => {
       const slider = row.querySelector('input[type="range"]');
       const output = row.querySelector("output");
@@ -4978,8 +4978,8 @@ function setupCompactClientFilters() {
   const filters = document.createElement("div");
   filters.className = "compact-client-filters";
   filters.innerHTML = `
-    <label><span>Država</span><select id="compactClientCountry">${countries.map((label) => `<option>${label}</option>`).join("")}</select></label>
-    <label><span>Status</span><select id="compactClientStatus">${statuses.map((label) => `<option>${label}</option>`).join("")}</select></label>`;
+    <label><span>Država</span><select id="compactClientCountry">${countries.map((label) => `<option>${escapeInvoiceText(label)}</option>`).join("")}</select></label>
+    <label><span>Status</span><select id="compactClientStatus">${statuses.map((label) => `<option>${escapeInvoiceText(label)}</option>`).join("")}</select></label>`;
   anchor.append(filters);
   filters.querySelector("#compactClientCountry").addEventListener("change", (event) => countryButtons.find((button) => button.textContent.trim() === event.target.value)?.click());
   filters.querySelector("#compactClientStatus").addEventListener("change", (event) => statusButtons.find((button) => button.textContent.trim() === event.target.value)?.click());
@@ -5038,7 +5038,7 @@ function renderCompanyPlanList() {
           (plan) => `
           <div class="setup-item">
             <strong>${formatDate(plan.date).slice(0, 5)}</strong>
-            <span>${plan.type} · ${plan.title}<br />${plan.note}</span>
+            <span>${escapeInvoiceText(plan.type)} · ${escapeInvoiceText(plan.title)}<br />${escapeInvoiceText(plan.note)}</span>
           </div>`
         )
         .join("")
@@ -5056,11 +5056,11 @@ function renderEmployeeReportRows(monthKey) {
       return `
       <tr>
         <td>${formatDate(report.date)}</td>
-        <td>${employee?.name || "Zaposleni"}</td>
+        <td>${escapeInvoiceText(employee?.name || "Zaposleni")}</td>
         <td>${recipient}</td>
         <td>${report.positive || ""}</td>
         <td>${report.negative || ""}</td>
-        <td>${report.note || ""}</td>
+        <td>${escapeInvoiceText(report.note || "")}</td>
       </tr>`;
     });
   setText("employeeOpsCount", `${rows.length} izveštaja`);
@@ -5161,7 +5161,7 @@ function renderEmployeeTeamTimeline(monthKey) {
           (row) => `
           <div class="setup-item alert-item ${row.className}">
             <strong>${formatDate(row.date).slice(0, 5)}</strong>
-            <span>${row.type} · ${row.title}<br />${row.note || ""}</span>
+            <span>${escapeInvoiceText(row.type)} · ${escapeInvoiceText(row.title)}<br />${escapeInvoiceText(row.note || "")}</span>
           </div>`
         )
         .join("")
@@ -5208,8 +5208,8 @@ function renderEmployeeCalendar(monthKey, employees, targetId = "employeeCalenda
             <strong>${Number(day.slice(-2))}</strong>
             ${holiday ? `<span class="calendar-note holiday-note">${holiday}</span>` : ""}
             ${companyDay ? `<span class="calendar-note company-note">${companyDay}</span>` : ""}
-            ${plans.length ? `<span class="calendar-note plan-note">${plans[0].title}${plans.length > 1 ? ` +${plans.length - 1}` : ""}</span>` : ""}
-            ${absentNames.length ? `<span class="calendar-note vacation-note">${absentNames.slice(0, 2).join(", ")}${absentNames.length > 2 ? ` +${absentNames.length - 2}` : ""}</span>` : ""}
+            ${plans.length ? `<span class="calendar-note plan-note">${escapeInvoiceText(plans[0].title)}${plans.length > 1 ? ` +${plans.length - 1}` : ""}</span>` : ""}
+            ${absentNames.length ? `<span class="calendar-note vacation-note">${escapeInvoiceText(absentNames.slice(0, 2).join(", "))}${absentNames.length > 2 ? ` +${absentNames.length - 2}` : ""}</span>` : ""}
           </div>`;
         })
         .join("")}
@@ -5255,10 +5255,10 @@ function renderAdminTeamCalendar() {
           return `
           <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : absence.status === "Zatraženo" ? "warn" : "ok"}">
             <strong>${days}</strong>
-            <span>${employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)} · ${absence.status || "Odobreno"}${absence.note ? ` · ${absence.note}` : ""}</span>
+            <span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(absence.type)}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)} · ${escapeInvoiceText(absence.status || "Odobreno")}${absence.note ? ` · ${escapeInvoiceText(absence.note)}` : ""}</span>
             <div class="notification-actions">
-              <button class="mini-action" data-hide-absence="${absence.id}" type="button">Sakrij</button>
-              <button class="mini-action danger-action" data-delete-absence="${absence.id}" type="button">Obriši</button>
+              <button class="mini-action" data-hide-absence="${escapeInvoiceText(absence.id)}" type="button">Sakrij</button>
+              <button class="mini-action danger-action" data-delete-absence="${escapeInvoiceText(absence.id)}" type="button">Obriši</button>
             </div>
           </div>`;
         })
@@ -5270,10 +5270,10 @@ function renderAdminTeamCalendar() {
       ${hiddenAbsences.map((absence) => {
         const employee = employeeById(absence.employeeId);
         return `<div class="setup-item">
-          <span>${employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}</span>
+          <span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(absence.type)}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}</span>
           <div class="notification-actions">
-            <button class="mini-action" data-unhide-absence="${absence.id}" type="button">Vrati</button>
-            <button class="mini-action danger-action" data-delete-absence="${absence.id}" type="button">Obriši</button>
+            <button class="mini-action" data-unhide-absence="${escapeInvoiceText(absence.id)}" type="button">Vrati</button>
+            <button class="mini-action danger-action" data-delete-absence="${escapeInvoiceText(absence.id)}" type="button">Obriši</button>
           </div>
         </div>`;
       }).join("")}
@@ -5335,18 +5335,18 @@ function renderClients() {
           const archiveLabel = client.status === "Arhiviran" ? "Vrati" : "Arhiva";
           return `
           <tr>
-            <td><strong>${client.name}</strong><br /><span>${client.niche} · ${client.country}</span></td>
+            <td><strong>${escapeInvoiceText(client.name)}</strong><br /><span>${escapeInvoiceText(client.niche)} · ${escapeInvoiceText(client.country)}</span></td>
             <td><strong>${displayPackage(client.package)}</strong><br /><span>${currency.format(client.revenue || 0)}/mes</span></td>
             <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
-            <td><span class="status ${statusClass(client)}">${client.status || "Aktivan"}</span></td>
+            <td><span class="status ${statusClass(client)}">${escapeInvoiceText(client.status || "Aktivan")}</span></td>
             <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
             <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "Nije uneta"}</span></td>
-            <td>${client.contactName || "Nije unet"}<br /><span>${client.contactPhone || client.whatsapp || "Telefon nije unet"}</span></td>
+            <td>${escapeInvoiceText(client.contactName || "Nije unet")}<br /><span>${escapeInvoiceText(client.contactPhone || client.whatsapp || "Telefon nije unet")}</span></td>
             <td>
               <div class="row-actions">
-                <button class="edit-button" data-edit-client="${client.id}" type="button" title="Izmeni klijenta">✎</button>
-                <button class="edit-button" data-archive-client="${client.id}" type="button" title="${archiveLabel}">${client.status === "Arhiviran" ? "↺" : "A"}</button>
-                <button class="edit-button danger-action" data-delete-client="${client.id}" type="button" title="Obriši klijenta">×</button>
+                <button class="edit-button" data-edit-client="${escapeInvoiceText(client.id)}" type="button" title="Izmeni klijenta">✎</button>
+                <button class="edit-button" data-archive-client="${escapeInvoiceText(client.id)}" type="button" title="${archiveLabel}">${client.status === "Arhiviran" ? "↺" : "A"}</button>
+                <button class="edit-button danger-action" data-delete-client="${escapeInvoiceText(client.id)}" type="button" title="Obriši klijenta">×</button>
               </div>
             </td>
           </tr>`;
@@ -5422,7 +5422,7 @@ function renderPortalClientOptions() {
   const select = document.getElementById("portalClientSelect");
   if (!select) return;
   select.innerHTML = state.clients
-    .map((client) => `<option value="${client.id}" ${client.id === selectedPortalClientId ? "selected" : ""}>${client.name}</option>`)
+    .map((client) => `<option value="${escapeInvoiceText(client.id)}" ${client.id === selectedPortalClientId ? "selected" : ""}>${escapeInvoiceText(client.name)}</option>`)
     .join("");
 }
 
@@ -5430,7 +5430,7 @@ function renderPortalResponsibleOptions(team) {
   const select = document.getElementById("portalLeadResponsible");
   if (!select) return;
   const options = team.length ? team.map((member) => member.name) : ["Vlasnik", "Recepcija", "Prodaja"];
-  select.innerHTML = options.map((name) => `<option>${name}</option>`).join("");
+  select.innerHTML = options.map((name) => `<option>${escapeInvoiceText(name)}</option>`).join("");
 }
 
 function renderPortalActions(leads) {
@@ -5440,7 +5440,7 @@ function renderPortalActions(leads) {
         .map(
           (lead) => `
           <div class="portal-row">
-            <div><strong>${lead.name}</strong><span>${lead.phone} · ${lead.source || "Izvor nije unet"} · ${lead.nextAction || "Pozvati u roku od 1 radnog dana"}</span></div>
+            <div><strong>${escapeInvoiceText(lead.name)}</strong><span>${escapeInvoiceText(lead.phone)} · ${escapeInvoiceText(lead.source || "Izvor nije unet")} · ${escapeInvoiceText(lead.nextAction || "Pozvati u roku od 1 radnog dana")}</span></div>
             <a class="call-button" href="tel:${normalizePhone(lead.phone)}">Pozovi</a>
           </div>`
         )
@@ -5459,26 +5459,26 @@ function renderPortalLeads(leads) {
           <article class="lead-card portal-lead-card">
             <header>
               <div>
-                <h3>${lead.name}</h3>
-                <p>${lead.service || "Tip usluge nije unet"} · ${lead.location || "Lokacija nije uneta"}</p>
+                <h3>${escapeInvoiceText(lead.name)}</h3>
+                <p>${escapeInvoiceText(lead.service || "Tip usluge nije unet")} · ${escapeInvoiceText(lead.location || "Lokacija nije uneta")}</p>
               </div>
               <span class="status ${portalLeadStatusClass(lead.status)}">${normalizeLeadStatus(lead.status)}</span>
             </header>
             <div class="lead-details">
               <span>ID ${lead.id.slice(0, 8)}</span>
               <span>${leadDate}</span>
-              <span>${lead.source || "Bez izvora"}</span>
+              <span>${escapeInvoiceText(lead.source || "Bez izvora")}</span>
               <span>${currency.format(Number(lead.estimate || 0))}</span>
-              <span>${lead.responsible || "Nije dodeljeno"}</span>
+              <span>${escapeInvoiceText(lead.responsible || "Nije dodeljeno")}</span>
             </div>
-            <p>${lead.note || "Bez napomene."}</p>
-            ${lead.lossReason ? `<p><strong>Razlog gubitka:</strong> ${lead.lossReason}</p>` : ""}
+            <p>${escapeInvoiceText(lead.note || "Bez napomene.")}</p>
+            ${lead.lossReason ? `<p><strong>Razlog gubitka:</strong> ${escapeInvoiceText(lead.lossReason)}</p>` : ""}
             <div class="lead-actions">
               <a class="call-button" href="tel:${phone}">Pozovi</a>
-              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Kontaktiran" type="button">Kontaktiran</button>
-              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Zakazan" type="button">Zakazan</button>
-              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Dobijen" type="button">Dobijen</button>
-              <button class="secondary-button portal-lead-status" data-lead-id="${lead.id}" data-status="Izgubljen" type="button">Izgubljen</button>
+              <button class="secondary-button portal-lead-status" data-lead-id="${escapeInvoiceText(lead.id)}" data-status="Kontaktiran" type="button">Kontaktiran</button>
+              <button class="secondary-button portal-lead-status" data-lead-id="${escapeInvoiceText(lead.id)}" data-status="Zakazan" type="button">Zakazan</button>
+              <button class="secondary-button portal-lead-status" data-lead-id="${escapeInvoiceText(lead.id)}" data-status="Dobijen" type="button">Dobijen</button>
+              <button class="secondary-button portal-lead-status" data-lead-id="${escapeInvoiceText(lead.id)}" data-status="Izgubljen" type="button">Izgubljen</button>
             </div>
           </article>`;
         })
@@ -5496,8 +5496,8 @@ function renderPortalTeam(team) {
         .map(
           (member) => `
           <div class="setup-item">
-            <strong>${member.name.slice(0, 1).toUpperCase()}</strong>
-            <span>${member.name} · ${member.role}<br />${member.phone || "Telefon nije unet"} ${member.email ? `· ${member.email}` : ""}</span>
+            <strong>${escapeInvoiceText(member.name.slice(0, 1).toUpperCase())}</strong>
+            <span>${escapeInvoiceText(member.name)} · ${escapeInvoiceText(member.role)}<br />${escapeInvoiceText(member.phone || "Telefon nije unet")} ${member.email ? `· ${escapeInvoiceText(member.email)}` : ""}</span>
           </div>`
         )
         .join("")
@@ -5542,24 +5542,24 @@ function renderLeadCrm() {
       <article class="lead-card">
         <header>
           <div>
-            <h3>${lead.name}</h3>
-            <p>${lead.client} · ${lead.service}</p>
+            <h3>${escapeInvoiceText(lead.name)}</h3>
+            <p>${lead.client} · ${escapeInvoiceText(lead.service)}</p>
           </div>
           <span class="status ${leadSlaClass(lead)}">${leadSlaLabel(lead)}</span>
         </header>
         <div class="lead-details">
-          <span>${lead.source}</span>
+          <span>${escapeInvoiceText(lead.source)}</span>
           <span>${new Date(lead.createdAt).toLocaleString("sr-Latn-RS", { dateStyle: "short", timeStyle: "short" })}</span>
           <span>${lead.priority} prioritet</span>
         </div>
-        <p>${lead.note || "Bez napomene."}</p>
+        <p>${escapeInvoiceText(lead.note || "Bez napomene.")}</p>
         <div class="lead-actions">
           <a class="call-button" href="tel:${phone}">Pozovi</a>
           <a class="whatsapp-button" href="https://wa.me/${phone.replace("+", "")}?text=${whatsappText}" target="_blank" rel="noreferrer">WhatsApp</a>
-          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Kontaktiran" type="button">Kontaktiran</button>
-          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Zakazan" type="button">Zakazan</button>
-          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Dobijen" type="button">Dobijen</button>
-          <button class="secondary-button lead-status-btn" data-lead-id="${lead.id}" data-status="Izgubljen" type="button">Izgubljen</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${escapeInvoiceText(lead.id)}" data-status="Kontaktiran" type="button">Kontaktiran</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${escapeInvoiceText(lead.id)}" data-status="Zakazan" type="button">Zakazan</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${escapeInvoiceText(lead.id)}" data-status="Dobijen" type="button">Dobijen</button>
+          <button class="secondary-button lead-status-btn" data-lead-id="${escapeInvoiceText(lead.id)}" data-status="Izgubljen" type="button">Izgubljen</button>
         </div>
       </article>`;
     })
@@ -5589,7 +5589,7 @@ function renderBars(target, data, suffix) {
       const display = suffix === "€" ? currency.format(value) : value;
       return `
       <div class="bar-row">
-        <label><span>${label}</span><span>${display}</span></label>
+        <label><span>${escapeInvoiceText(label)}</span><span>${display}</span></label>
         <div class="bar-track"><span style="width:${(value / max) * 100}%"></span></div>
       </div>`;
     })
@@ -6730,7 +6730,7 @@ async function updateLeadStatus(id, status) {
 function renderLeadClientOptions() {
   const select = document.getElementById("leadClientSelect");
   if (!select) return;
-  select.innerHTML = state.clients.map((client) => `<option>${client.name}</option>`).join("");
+  select.innerHTML = state.clients.map((client) => `<option>${escapeInvoiceText(client.name)}</option>`).join("");
 }
 
 document.getElementById("addDealBtn")?.addEventListener("click", async () => {

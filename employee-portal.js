@@ -351,7 +351,7 @@ function parseNumber(value, fallback = 0) {
 }
 
 function escapePortalText(value) {
-  return String(value || "").replace(/[&<>"']/g, (character) => ({
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[character]);
 }
@@ -390,7 +390,7 @@ function renderPortalActivityOptions() {
     return result;
   }, {});
   activityOptions.innerHTML = activities.length
-    ? Object.entries(groups).map(([category, items]) => `<span class="activity-option-group">${category}</span>${items.map((activity) => `<button type="button" class="activity-option" role="option" data-activity-id="${activity.id}">${activity.name}</button>`).join("")}`).join("")
+    ? Object.entries(groups).map(([category, items]) => `<span class="activity-option-group">${escapePortalText(category)}</span>${items.map((activity) => `<button type="button" class="activity-option" role="option" data-activity-id="${escapePortalText(activity.id)}">${escapePortalText(activity.name)}</button>`).join("")}`).join("")
     : `<span class="activity-option-empty">${activeActivities.length ? "Nema rezultata za ovu pretragu" : "Admin još nije dodao aktivnosti"}</span>`;
 }
 
@@ -421,7 +421,7 @@ function showToast(title, message = "", type = "ok") {
   const className = type === "danger" ? "danger" : type === "warn" ? "warn" : "ok";
   toast.className = `toast-message ${className}`;
   toast.dataset.signature = signature;
-  toast.innerHTML = `<strong>${title}</strong>${message ? `<span>${message}</span>` : ""}`;
+  toast.innerHTML = `<strong>${escapePortalText(title)}</strong>${message ? `<span>${escapePortalText(message)}</span>` : ""}`;
   stack.appendChild(toast);
   window.setTimeout(() => toast.remove(), 4200);
 }
@@ -1198,7 +1198,7 @@ function renderEmployeePortal() {
   if (clientSelect) {
     const selected = clientSelect.value;
     const clients = (state.clients || []).filter((client) => client.status === "Aktivan").sort((a, b) => a.name.localeCompare(b.name, "sr"));
-    clientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${client.id}">${client.name}</option>`).join("")}`;
+    clientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${escapePortalText(client.id)}">${escapePortalText(client.name)}</option>`).join("")}`;
     if (clients.some((client) => client.id === selected)) clientSelect.value = selected;
   }
   if (absenceStart && !absenceStart.value) absenceStart.value = currentDateKey();
@@ -1275,12 +1275,12 @@ function renderPortalCalendar() {
             <strong>${Number(day.slice(-2))}</strong>
             ${holiday ? `<span class="calendar-note holiday-note">${holiday}</span>` : ""}
             ${companyDay ? `<span class="calendar-note company-note">${companyDay}</span>` : ""}
-            ${dayPlans.map((plan) => `<span class="calendar-note plan-note">${plan.type}: ${plan.title}</span>`).join("")}
+            ${dayPlans.map((plan) => `<span class="calendar-note plan-note">${escapePortalText(plan.type)}: ${escapePortalText(plan.title)}</span>`).join("")}
             ${dayAbsences
               .map((absence) => {
                 const employee = (state.employees || []).find((item) => item.id === absence.employeeId);
                 const label = absence.employeeId === activeEmployee.id ? absence.type : `${employee?.name || "Zaposleni"} · ${absence.type}`;
-                return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${label}</span>`;
+                return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${escapePortalText(label)}</span>`;
               })
               .join("")}
             ${dayLogs.length ? `<span class="calendar-note hours-note">${formatHours(dayLogs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0))}h</span>` : ""}
@@ -1300,7 +1300,7 @@ function renderPortalCalendar() {
           return `
           <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : "warn"}">
             <strong>${days}</strong>
-            <span>${absence.employeeId === activeEmployee.id ? "Ti" : employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}${absence.note ? ` · ${absence.note}` : ""}</span>
+            <span>${escapePortalText(absence.employeeId === activeEmployee.id ? "Ti" : employee?.name || "Zaposleni")} · ${escapePortalText(absence.type)}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}${absence.note ? ` · ${escapePortalText(absence.note)}` : ""}</span>
           </div>`;
         })
         .join("")
@@ -1339,7 +1339,7 @@ function renderPortalTeamTimeline() {
           (row) => `
           <div class="setup-item alert-item ${row.className}">
             <strong>${formatDate(row.date).slice(0, 5)}</strong>
-            <span>${row.type} · ${row.title}<br />${row.note || ""}</span>
+            <span>${escapePortalText(row.type)} · ${escapePortalText(row.title)}<br />${escapePortalText(row.note || "")}</span>
           </div>`
         )
         .join("")
@@ -1361,9 +1361,9 @@ function renderPortalHourRows(logs) {
             <span>${window.MarketizoCosts.minutes(log)} min · ${log.locked === false ? "Otključano" : "Zaključano"}</span>
           </div>
         </header>
-        <p><b>Aktivnost:</b> ${log.activityCategory || "Ostalo"} · ${log.activityName || "Rad"}</p>
-        <p><b>Klijent:</b> ${log.clientName || "Nije naveden"}</p>
-        <p><b>Napomena:</b> ${log.note || "-"}</p>
+        <p><b>Aktivnost:</b> ${escapePortalText(log.activityCategory || "Ostalo")} · ${escapePortalText(log.activityName || "Rad")}</p>
+        <p><b>Klijent:</b> ${escapePortalText(log.clientName || "Nije naveden")}</p>
+        <p><b>Napomena:</b> ${escapePortalText(log.note || "-")}</p>
         <div class="work-log-feedback">
           <span><b>Pozitivno:</b> ${log.positive || "-"}</span>
           <span><b>Negativno:</b> ${log.negative || "-"}</span>
@@ -1384,7 +1384,7 @@ function renderPortalAbsences() {
           return `
           <div class="setup-item">
             <strong>${days}</strong>
-            <span>${absence.type} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br /><b>${absence.status || "Odobreno"}</b>${absence.note ? ` · ${absence.note}` : ""}</span>
+            <span>${escapePortalText(absence.type)} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br /><b>${escapePortalText(absence.status || "Odobreno")}</b>${absence.note ? ` · ${escapePortalText(absence.note)}` : ""}</span>
           </div>`;
         })
         .join("")
@@ -1401,8 +1401,8 @@ function renderPortalNotifications() {
           (notification) => `
           <div class="setup-item alert-item ${notification.type === "danger" ? "danger" : notification.type === "warn" ? "warn" : "ok"}">
             <strong>!</strong>
-            <span>${notification.title}<br />${String(notification.message || "").replace(/\s*Potvrdi u dashboardu\.?\s*$/i, "")}</span>
-            <button class="mini-action" data-hide-notification="${notification.id}" type="button">Sakrij 7 dana</button>
+            <span>${escapePortalText(notification.title)}<br />${escapePortalText(String(notification.message || "").replace(/\s*Potvrdi u dashboardu\.?\s*$/i, ""))}</span>
+            <button class="mini-action" data-hide-notification="${escapePortalText(notification.id)}" type="button">Sakrij 7 dana</button>
           </div>`
         )
         .join("") +
@@ -1413,8 +1413,8 @@ function renderPortalNotifications() {
             .map(
               (notification) => `
               <div class="setup-item">
-                <span>${notification.title}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
-                <button class="mini-action" data-unhide-notification="${notification.id}" type="button">Vrati</button>
+                <span>${escapePortalText(notification.title)}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
+                <button class="mini-action" data-unhide-notification="${escapePortalText(notification.id)}" type="button">Vrati</button>
               </div>`
             )
             .join("")}
@@ -1428,8 +1428,8 @@ function renderPortalNotifications() {
             .map(
               (notification) => `
               <div class="setup-item">
-                <span>${notification.title}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
-                <button class="mini-action" data-unhide-notification="${notification.id}" type="button">Vrati</button>
+                <span>${escapePortalText(notification.title)}<br />Sakriveno do ${formatDate(notification.hiddenUntil)}</span>
+                <button class="mini-action" data-unhide-notification="${escapePortalText(notification.id)}" type="button">Vrati</button>
               </div>`
             )
             .join("")}
@@ -1474,7 +1474,7 @@ function renderLateAcknowledgement() {
   content.innerHTML = `
     <div class="setup-item alert-item warn">
       <strong>${record.minutes}m</strong>
-      <span>${formatDate(record.date)}<br />Odbija se ${penalty} min · ${record.reason || "Bez razloga"}</span>
+      <span>${formatDate(record.date)}<br />Odbija se ${penalty} min · ${escapePortalText(record.reason || "Bez razloga")}</span>
     </div>`;
   button.dataset.lateId = record.id;
   if (!dialog.open) dialog.showModal();
@@ -1494,9 +1494,9 @@ function renderPortalGoals() {
             ? `Završeno ${formatDate(goal.completedDate)}`
             : isLate ? `Kasni ${Math.abs(daysLeft)} dana` : isNear ? `Rok za ${daysLeft} dana` : `Rok ${formatDate(goal.endDate)}`;
           return `
-          <div class="setup-item alert-item ${status} goal-progress-row" data-employee-goal-id="${goal.id}">
+          <div class="setup-item alert-item ${status} goal-progress-row" data-employee-goal-id="${escapePortalText(goal.id)}">
             <strong>${goal.progress || 0}%</strong>
-            <span>${goal.category || "Razvoj"} · ${goal.title}<br />${goal.target || ""} · ${deadline}</span>
+            <span>${escapePortalText(goal.category || "Razvoj")} · ${escapePortalText(goal.title)}<br />${escapePortalText(goal.target || "")} · ${deadline}</span>
             <div class="employee-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapePortalText(goal.title)}" /><output>${goal.progress || 0}%</output><button class="secondary-button" type="button">Sačuvaj progres</button></div>
           </div>`;
         })
@@ -1542,7 +1542,7 @@ function renderPortalRatings() {
     : `<div class="empty-state">Ocene će se prikazivati iz meseca u mesec.</div>`;
   const list = document.getElementById("portalRatingList");
   if (list) list.innerHTML = current.length
-    ? current.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${rating.source}${rating.reviewer ? ` · ${rating.reviewer}` : ""}<br />${rating.note || "Bez komentara"}</span></div>`).join("")
+    ? current.map((rating) => `<div class="setup-item rating-row"><strong>${rating.score}/5</strong><span>${escapePortalText(rating.source)}${rating.reviewer ? ` · ${escapePortalText(rating.reviewer)}` : ""}<br />${escapePortalText(rating.note || "Bez komentara")}</span></div>`).join("")
     : "";
   renderPortalRecognitions();
 }
@@ -1555,7 +1555,7 @@ function renderPortalRecognitions() {
   const target = document.getElementById("portalRecognitionList");
   if (!target) return;
   target.innerHTML = rows.length
-    ? rows.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span><b>${item.type}</b> · ${item.author}<br />${item.text}</span></div>`).join("")
+    ? rows.map((item) => `<div class="setup-item recognition-row ${item.type === "Pohvala" ? "ok" : "warn"}"><strong>${item.type === "Pohvala" ? "+" : "→"}</strong><span><b>${escapePortalText(item.type)}</b> · ${item.author}<br />${item.text}</span></div>`).join("")
     : `<div class="empty-state">Nema poruke za ovaj mesec.</div>`;
 }
 
@@ -1588,7 +1588,7 @@ function renderPortalLateRecords() {
             return `
           <div class="setup-item alert-item warn">
             <strong>${record.minutes}m</strong>
-            <span>${formatDate(record.date)}<br />Odbija se ${penalty} min · ${record.acknowledgedAt ? "potvrđeno" : "čeka potvrdu"}${record.reason ? ` · ${record.reason}` : ""}</span>
+            <span>${formatDate(record.date)}<br />Odbija se ${penalty} min · ${record.acknowledgedAt ? "potvrđeno" : "čeka potvrdu"}${record.reason ? ` · ${escapePortalText(record.reason)}` : ""}</span>
           </div>`;
           }
         )
@@ -1607,7 +1607,7 @@ function renderPortalCompanyPlan() {
           (plan) => `
           <div class="setup-item">
             <strong>${formatDate(plan.date).slice(0, 5)}</strong>
-            <span>${plan.type}: ${plan.title}<br />${plan.note}</span>
+            <span>${escapePortalText(plan.type)}: ${escapePortalText(plan.title)}<br />${escapePortalText(plan.note)}</span>
           </div>`
         )
         .join("")
@@ -1629,7 +1629,7 @@ function renderLeaderPanel() {
           return `
           <div class="setup-item leader-assignment-row">
             <strong>${assigned ? "✓" : "+"}</strong>
-            <span>${employee.name}<br />${employee.position || "Pozicija nije uneta"}${employee.leaderId && !assigned ? " · ima drugog lidera" : ""}</span>
+            <span>${escapePortalText(employee.name)}<br />${escapePortalText(employee.position || "Pozicija nije uneta")}${employee.leaderId && !assigned ? " · ima drugog lidera" : ""}</span>
             <span>Tim dodeljuje administrator</span>
           </div>`;
         })
@@ -1656,7 +1656,7 @@ function renderLeaderPanel() {
           return `
           <div class="setup-item alert-item employee-hours-row ${balance < 0 || lateStatus.count > 3 ? "danger" : lateStatus.count === 3 ? "warn" : "ok"}">
             <strong>${formatHourBalance(balance)}</strong>
-            <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${lateStatus.label}<br />${carryoverLabel(employee, portalMonth)}</span>
+            <span>${escapePortalText(employee.name)}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${lateStatus.label}<br />${carryoverLabel(employee, portalMonth)}</span>
           </div>`;
         })
         .join("")
@@ -1665,7 +1665,7 @@ function renderLeaderPanel() {
   const leaderGoalEmployee = document.getElementById("leaderGoalEmployee");
   if (leaderGoalEmployee) {
     const selectedEmployeeId = leaderGoalEmployee.value;
-    leaderGoalEmployee.innerHTML = `<option value="">Izaberi zaposlenog</option>${team.map((employee) => `<option value="${employee.id}">${escapePortalText(employee.name)}</option>`).join("")}`;
+    leaderGoalEmployee.innerHTML = `<option value="">Izaberi zaposlenog</option>${team.map((employee) => `<option value="${escapePortalText(employee.id)}">${escapePortalText(employee.name)}</option>`).join("")}`;
     if (teamIds.has(selectedEmployeeId)) leaderGoalEmployee.value = selectedEmployeeId;
   }
   const leaderGoalForm = document.getElementById("leaderGoalForm");
@@ -1705,7 +1705,7 @@ function renderLeaderPanel() {
           return `
           <div class="setup-item activity-log-row">
             <strong>${formatNumber(minutes)} min</strong>
-            <span>${employee?.name || "Zaposleni"} · ${log.activityName || "Aktivnost"}<br /><b>Klijent: ${log.clientName || "Bez klijenta"}</b> · ${formatDate(log.date)}${log.note ? ` · ${log.note}` : ""}</span>
+            <span>${escapePortalText(employee?.name || "Zaposleni")} · ${escapePortalText(log.activityName || "Aktivnost")}<br /><b>Klijent: ${escapePortalText(log.clientName || "Bez klijenta")}</b> · ${formatDate(log.date)}${log.note ? ` · ${escapePortalText(log.note)}` : ""}</span>
           </div>`;
         })
         .join("")
@@ -1721,7 +1721,7 @@ function renderLeaderPanel() {
           return `
           <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : "warn"}">
             <strong>${formatDate(absence.startDate).slice(0, 5)}</strong>
-            <span>${employee?.name || "Zaposleni"} · ${absence.type}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)} · ${absence.status || ""}</span>
+            <span>${escapePortalText(employee?.name || "Zaposleni")} · ${escapePortalText(absence.type)}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)} · ${escapePortalText(absence.status || "")}</span>
           </div>`;
         })
         .join("")
@@ -1757,7 +1757,7 @@ function renderLeaderMeetingsPage() {
   const employeeInput = document.getElementById("leaderMeetingEmployee");
   const previousEmployee = employeeInput?.value || "";
   if (employeeInput) {
-    employeeInput.innerHTML = `<option value="">Svi zaposleni ispod mene</option>${people.map((employee) => `<option value="${employee.id}">${escapePortalText(employee.name)}</option>`).join("")}`;
+    employeeInput.innerHTML = `<option value="">Svi zaposleni ispod mene</option>${people.map((employee) => `<option value="${escapePortalText(employee.id)}">${escapePortalText(employee.name)}</option>`).join("")}`;
     if (peopleIds.has(previousEmployee)) employeeInput.value = previousEmployee;
   }
   const selectedEmployee = employeeInput?.value || "";
@@ -1917,7 +1917,7 @@ function renderLeaderReportsPage() {
   const selectedDate = dateInput?.value || currentDateKey();
   const previousEmployee = employeeInput?.value || "";
   if (employeeInput) {
-    employeeInput.innerHTML = `<option value="">Svi zaposleni ispod mene</option>${people.map((employee) => `<option value="${employee.id}">${escapePortalText(employee.name)}</option>`).join("")}`;
+    employeeInput.innerHTML = `<option value="">Svi zaposleni ispod mene</option>${people.map((employee) => `<option value="${escapePortalText(employee.id)}">${escapePortalText(employee.name)}</option>`).join("")}`;
     if (peopleIds.has(previousEmployee)) employeeInput.value = previousEmployee;
   }
   const selectedEmployee = employeeInput?.value || "";
@@ -1985,7 +1985,7 @@ function renderLeaderReportInbox(reports) {
   list.innerHTML = reports.map((report) => {
     const employee = (state.employees || []).find((item) => item.id === report.employeeId);
     const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
-    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}<br /><button class="primary-button leader-report-ack" data-report-id="${report.id}" type="button">Pročitao/la sam i slažem se</button></span></div>`;
+    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}<br /><button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam i slažem se</button></span></div>`;
   }).join("");
   if (reports.length && !leaderReportInboxShown) {
     leaderReportInboxShown = true;
