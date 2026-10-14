@@ -71,6 +71,7 @@
   "regions": [
     "dub1"
   ],
-  "buildCommand": "pnpm test",
-  "installCommand": "pnpm install --frozen-lockfile --prod=false"
+  "buildCommand": "pnpm test && node scripts/build-static.cjs",
+  "installCommand": "pnpm install --frozen-lockfile --prod=false",
+  "outputDirectory": "public"
 }
