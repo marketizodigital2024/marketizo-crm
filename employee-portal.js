@@ -2415,13 +2415,21 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   showToast("Izveštaj poslat", "Dnevni izveštaj je sada vidljiv lideru.", "ok");
 });
 
-document.getElementById("portalAbsenceForm")?.addEventListener("submit", (event) => {
+document.getElementById("portalAbsenceForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  if (form.dataset.saving === "true") return;
+  const formData = new FormData(form);
+  const fingerprint = JSON.stringify([activeEmployee.id, ...formData.entries()]);
+  if (form.dataset.retryFingerprint !== fingerprint) {
+    form.dataset.retryFingerprint = fingerprint;
+    form.dataset.retryId = createId();
+  }
   const startDate = String(formData.get("startDate") || "");
   const endDate = String(formData.get("endDate") || startDate);
-  const absence = {
-    id: createId(),
+  const existing = state.employeeAbsences.find(item => item.id === form.dataset.retryId);
+  const absence = existing || {
+    id: form.dataset.retryId,
     employeeId: activeEmployee.id,
     type: formData.get("type"),
     startDate: startDate <= endDate ? startDate : endDate,
@@ -2430,18 +2438,28 @@ document.getElementById("portalAbsenceForm")?.addEventListener("submit", (event)
     status: "Zatraženo",
     requestedAt: new Date().toISOString(),
   };
-  state.employeeAbsences.unshift(absence);
-  notifyOnce({
-    key: `absence-request-${absence.id}`,
-    scope: "admin",
-    type: "warn",
-    title: "Zahtev za odmor",
-    message: `${activeEmployee.name} traži ${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)}.`,
-  });
-  saveState();
-  event.currentTarget.reset();
-  renderEmployeePortal();
-  showToast("Zahtev poslat", "Admin će videti zahtev za odmor.", "warn");
+  if (!existing) state.employeeAbsences.unshift(absence);
+  const button = form.querySelector('button[type="submit"]');
+  form.dataset.saving = "true";
+  if (button) button.disabled = true;
+  try {
+    let result;
+    try { result = await saveState(); }
+    catch (error) { result = { ok: false, error: error?.message }; }
+    if (!result?.ok) {
+      if (!existing) state.employeeAbsences = state.employeeAbsences.filter(item => item !== absence);
+      saveState({ remote: false });
+      return showToast("Zahtev nije potvrđen", result?.error || "Forma je zadržana. Pokušaj ponovo.", "danger");
+    }
+    delete form.dataset.retryId;
+    delete form.dataset.retryFingerprint;
+    form.reset();
+    renderEmployeePortal();
+    showToast("Zahtev poslat", "Admin će videti zahtev za odmor.", "warn");
+  } finally {
+    delete form.dataset.saving;
+    if (button) button.disabled = false;
+  }
 });
 
 document.getElementById("ackLateBtn")?.addEventListener("click", () => {
