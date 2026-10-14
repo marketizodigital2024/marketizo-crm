@@ -5,6 +5,7 @@ const fixture=()=>({employees:[{id:'emp-miljan',name:'Test owner',email:'owner@e
 let current={payload:fixture(),updated_at:'2026-10-05T00:00:00.000Z'};
 let raced=false;
 async function fakeFetch(input,options={}){const u=new URL(input);if(u.hostname!=='fixture.invalid')throw Error('External call forbidden');const table=u.pathname.split('/').pop(),method=options.method||'GET';let rows=[];
+ if(table==='marketizo_allow_login_attempt')return {ok:true,status:200,json:async()=>true,text:async()=>'true'};
  if(table==='marketizo_append_work_log')return {ok:false,status:404,json:async()=>({}),text:async()=>''};
  if(table==='marketizo_read_session_state'||table==='marketizo_read_session_state_compact')return {ok:true,status:200,json:async()=>structuredClone(current),text:async()=>''};
  if(table==='agency_crm_employee_auth'){rows=current.payload.employees.filter(e=>(!u.searchParams.has('email')||e.email===u.searchParams.get('email').slice(3))&&(!u.searchParams.has('id')||e.id===u.searchParams.get('id').slice(3))).map(e=>({employee_data:e}));}
@@ -15,7 +16,7 @@ async function fakeFetch(input,options={}){const u=new URL(input);if(u.hostname!
 function load(file,append=''){const localRequire=(id)=>id==='./state.js'?load('api/state.js'):require(require.resolve(id,{paths:[path.dirname(path.join(root,file))]}));const ctx={require:localRequire,module:{exports:{}},process:{env},Buffer,Date,Intl,URL,Response,crypto,fetch:fakeFetch,console,setTimeout};vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(root,file),'utf8')+'\n'+append,ctx,{filename:file});return ctx.module.exports;}
 const state=load('api/state.js'),auth=load('api/employee-auth.js'),activity=load('api/employee-activity.js');
 function token(id,role='employee'){const enc=Buffer.from(JSON.stringify({employeeId:id,clientId:id,role,exp:Date.now()+3600000})).toString('base64url');return enc+'.'+crypto.createHmac('sha256',env.EMPLOYEE_SESSION_SECRET).update(enc).digest('base64url');}
-async function call(handler,method,body,tok,query={}){let output;const res={statusCode:200,setHeader(){},end(s){output={status:this.statusCode,body:JSON.parse(s)}},status(n){this.statusCode=n;return this;},json(o){output={status:this.statusCode,body:o}}};await handler({method,body,query,headers:{authorization:tok?'Bearer '+tok:''}},res);return output;}
+async function call(handler,method,body,tok,query={}){let output;const res={statusCode:200,setHeader(){},end(s){output={status:this.statusCode,body:JSON.parse(s)}},status(n){this.statusCode=n;return this;},json(o){output={status:this.statusCode,body:o}}};await handler({method,body,query,headers:{authorization:tok?'Bearer '+tok:'','x-forwarded-for':'192.0.2.1'}},res);return output;}
 function record(name,expected,observed,detail){results.push({name,status:expected===observed?'PASS':'FAIL',expected,observed,detail});}
 if(require.main===module)(async()=>{
  let r=await call(state,'GET',{},'');record('State requires authentication',401,r.status);

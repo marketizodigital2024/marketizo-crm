@@ -42,7 +42,7 @@ function summarizeLogs(logs) {
     const activity = String(log.activityName || "Aktivnost");
     const client = String(log.clientName || "Bez klijenta");
     const key = `${activity} · ${client}`;
-    grouped.set(key, (grouped.get(key) || 0) + Number(log.minutes || Number(log.hours || 0) * 60));
+    grouped.set(key, (grouped.get(key) || 0) + require("../cost-calculation.js").minutes(log));
   });
   return [...grouped.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -88,7 +88,7 @@ module.exports = async function handler(req, res) {
         );
         if (absent) continue;
         const logs = (payload.employeeWorkLogs || []).filter((log) => log.employeeId === employee.id && log.date === date);
-        const minutes = Math.round(logs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0));
+        const minutes = Math.round(logs.reduce((sum, log) => sum + require("../cost-calculation.js").minutes(log), 0));
         const autoNote = summarizeLogs(logs);
         const existing = payload.employeeReports.find((report) => report.employeeId === employee.id && report.date === date && report.isFinalDailyReport === true);
         const recipientId = employee.isLeader ? "admin" : (employee.leaderId || "admin");
