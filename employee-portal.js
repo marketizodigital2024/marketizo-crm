@@ -987,7 +987,7 @@ function loggedMinutesForDate(date) {
 }
 
 function expectedMinutesForDate(employee, date) {
-  if (!employee || !isAustrianWorkingDay(date) || (employee.endDate && date > employee.endDate)) return 0;
+  if (!employee || !isAustrianWorkingDay(date) || (employee.startDate && date < employee.startDate) || (employee.endDate && date > employee.endDate)) return 0;
   const monthKey = String(date || "").slice(0, 7);
   const weeklyHours = Number(employeeWeeklyHoursForMonth(employee, monthKey, 0));
   return scheduledMinutesForDate(weeklyHours, date);
@@ -2269,9 +2269,29 @@ function restorePortalHoursForm(form, values) {
   }
 }
 
+function workLogIntentFingerprint(log) {
+  return JSON.stringify([log.employeeId, String(log.date || ""), Number(log.minutes), log.activityId, String(log.clientId || ""), String(log.note || "")]);
+}
+
+function portalWorkLogRetryId(form, intent) {
+  const fingerprint = workLogIntentFingerprint(intent);
+  if (form.dataset.retryWorkFingerprint !== fingerprint) {
+    const pending = readPendingWorkLogs().find(item => item.workLog.employeeId === intent.employeeId && workLogIntentFingerprint(item.workLog) === fingerprint);
+    form.dataset.retryWorkId = pending?.workLog.id || createId();
+    form.dataset.retryWorkFingerprint = fingerprint;
+  }
+  return form.dataset.retryWorkId;
+}
+
+function clearPortalWorkRetryId(form) {
+  delete form.dataset.retryWorkId;
+  delete form.dataset.retryWorkFingerprint;
+}
+
 document.getElementById("portalHoursForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  if (form.dataset.workSaving === "true") return;
   const formData = new FormData(form);
   const date = String(formData.get("date") || "");
   const typedActivityName = normalizedActivitySearch(document.getElementById("portalActivitySearch")?.value);
@@ -2306,9 +2326,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     submitButton.disabled = true;
     submitButton.textContent = "Čuvanje...";
   }
-  clearPortalHoursForm(form);
   const workLog = {
-    id: createId(),
+    id: portalWorkLogRetryId(form, { employeeId: activeEmployee.id, date, minutes, activityId: activity.id, clientId: isInternal ? "" : (client?.id || ""), note: formData.get("note") }),
     employeeId: activeEmployee.id,
     date,
     hours: Math.round((minutes / 60) * 10000) / 10000,
@@ -2326,6 +2345,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     submittedAt: new Date().toISOString(),
   };
   const recipientId = reportRecipientId();
+  form.dataset.workSaving = "true";
   try {
     queuePendingWorkLog(workLog, recipientId);
   } catch (error) {
@@ -2334,6 +2354,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     saveState({ remote: false });
     renderEmployeePortal();
     restorePortalHoursForm(form, submittedFormValues);
+    delete form.dataset.workSaving;
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = "Sačuvaj sate";
@@ -2346,16 +2367,25 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   state.employeeWorkLogs.unshift(workLog);
   saveState({ remote: false });
   renderEmployeePortal();
-  clearPortalHoursForm(form);
-  if (submitButton) {
-    submitButton.disabled = false;
-    submitButton.textContent = "Sačuvaj sate";
-  }
+  restorePortalHoursForm(form, submittedFormValues);
   showToast("Sačuvano lokalno", "Unos je prikazan odmah i sinhronizuje se sa bazom u pozadini.", "warn");
 
-  const saveResult = await postEmployeeWorkLog(workLog, recipientId);
+  form.inert = true;
+  let saveResult;
+  try { saveResult = await postEmployeeWorkLog(workLog, recipientId); }
+  catch (error) { saveResult = { ok: false, retryable: true, error: error?.message }; }
+  finally {
+    form.inert = false;
+    delete form.dataset.workSaving;
+    if (submitButton) { submitButton.disabled = false; submitButton.textContent = "Sačuvaj sate"; }
+  }
+  if (activeEmployee?.id !== employeeId) {
+    if (saveResult.ok) removePendingWorkLog(workLog.id);
+    return;
+  }
   if (!saveResult.ok) {
     if (saveResult.retryable) {
+      restorePortalHoursForm(form, submittedFormValues);
       showToast(
         saveResult.authRequired ? "Unos čeka novu prijavu" : "Unos čeka sinhronizaciju",
         saveResult.authRequired
@@ -2374,6 +2404,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     return;
   }
   removePendingWorkLog(workLog.id);
+  clearPortalWorkRetryId(form);
+  clearPortalHoursForm(form);
   showToast("Sinhronizovano", "Sati su potvrđeni u centralnoj bazi.", "ok");
   const expectedMinutes = expectedMinutesForDate(activeEmployee, date);
   if (expectedMinutes > 0 && loggedMinutesForDate(date) >= expectedMinutes && !hasFinalDailyReport(date)) {
