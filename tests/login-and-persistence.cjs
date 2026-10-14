@@ -1,11 +1,11 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const read=p=>fs.readFileSync(__dirname+'/../'+p,'utf8');
 const reply=(status,body)=>({ok:status<300,status,json:async()=>body,text:async()=>JSON.stringify(body)});
-async function call(handler,body){let result;const res={setHeader(){},end(s){result={status:this.statusCode,body:JSON.parse(s)}}};await handler({method:'POST',body,headers:{}},res);return result;}
+async function call(handler,body){let result;const res={setHeader(){},end(s){result={status:this.statusCode,body:JSON.parse(s)}}};await handler({method:'POST',body,headers:{'x-forwarded-for':'192.0.2.1'}},res);return result;}
 (async()=>{
   let slowReads=0,mode='ok';const employee={id:'emp-ivana',email:'owner@example.test',password:'fixture',status:'Aktivan'};
   const env={SUPABASE_URL:'https://fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture',EMPLOYEE_SESSION_SECRET:'fixture'};
-  const context={module:{exports:{}},require,process:{env},Buffer,Date,console,fetch:async(input)=>{const url=new URL(input);assert.equal(url.hostname,'fixture.invalid');if(!url.pathname.endsWith('agency_crm_employee_auth')){slowReads++;return reply(200,[{employees:[employee]}]);}return mode==='missing'?reply(404,[]):mode==='failure'?reply(500,[]):reply(200,[{employee_data:employee}]);}};
+  const context={module:{exports:{}},require,process:{env},Buffer,Date,console,fetch:async(input)=>{const url=new URL(input);assert.equal(url.hostname,'fixture.invalid');if(url.pathname.endsWith('marketizo_allow_login_attempt'))return reply(200,true);if(!url.pathname.endsWith('agency_crm_employee_auth')){slowReads++;return reply(200,[{employees:[employee]}]);}return mode==='missing'?reply(404,[]):mode==='failure'?reply(500,[]):reply(200,[{employee_data:employee}]);}};
   vm.createContext(context);vm.runInContext(read('api/employee-auth.js'),context);
   assert.equal((await call(context.module.exports,{action:'adminLogin',email:employee.email,password:'fixture'})).status,200);
   assert.equal((await call(context.module.exports,{action:'login',email:employee.email,password:'wrong'})).status,401);assert.equal(slowReads,0);
