@@ -3312,6 +3312,18 @@ function setSelectedEmployeeOnForms(employeeId) {
   });
 }
 
+function syncAdminWorkClientRequirement() {
+  const activitySelect = document.getElementById("workActivitySelect");
+  const clientSelect = document.getElementById("workClientSelect");
+  if (!activitySelect || !clientSelect) return;
+  const activity = (state.employeeActivities || []).find(item => item.id === activitySelect.value);
+  const internal = String(activity?.category || "").trim().toLowerCase() === "interno";
+  clientSelect.required = !internal;
+  clientSelect.disabled = internal;
+  if (internal) clientSelect.value = "";
+}
+document.getElementById("workActivitySelect")?.addEventListener("change", syncAdminWorkClientRequirement);
+
 function renderEmployeeOptions() {
   const employees = state.employees || [];
   ["absenceEmployeeSelect", "workEmployeeSelect", "hourDeductionEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
@@ -3341,6 +3353,7 @@ function renderEmployeeOptions() {
     workClientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${client.id}">${client.name}</option>`).join("")}`;
     if (clients.some((client) => client.id === selected)) workClientSelect.value = selected;
   }
+  syncAdminWorkClientRequirement();
   const leaderSelect = document.getElementById("employeeLeaderSelect");
   if (leaderSelect) {
     const selected = leaderSelect.value;
@@ -5615,6 +5628,18 @@ function applyOperationalAdminAccess() {
   setText("pageTitle", document.body.dataset.activeView === "calendar" ? "Kalendar" : document.body.dataset.activeView === "employees" ? "Tim · pregled" : "Klijenti");
 }
 
+// Keep hash-based forms in the same document on clean-URL deployments.
+// Local file demos retain their .html links.
+document.addEventListener("click", (event) => {
+  if (!/^https?:$/.test(location.protocol)) return;
+  const anchor = event.target?.closest?.("a[href]");
+  if (!anchor) return;
+  const target = new URL(anchor.href, location.href);
+  if (target.origin !== location.origin || !target.pathname.endsWith(".html")) return;
+  target.pathname = target.pathname === "/index.html" ? "/" : target.pathname.slice(0, -5);
+  anchor.href = target.href;
+}, true);
+
 function renderAll() {
   setupOperationalAdminField();
   const notificationCount = (state.notifications || []).length;
@@ -6035,7 +6060,9 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", async
 
 document.getElementById("employeeWorkForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  if (form.dataset.saving) return;
+  const formData = new FormData(form);
   const employeeId = formData.get("employeeId");
   const date = formData.get("date");
   const activity = (state.employeeActivities || []).find((item) => item.id === formData.get("activityId"));
@@ -6049,12 +6076,18 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
     alert("Izaberi aktivnost. Admin mora prvo da doda ponuđene aktivnosti.");
     return;
   }
-  if (!client) {
+  const isInternal = String(activity.category || "").trim().toLowerCase() === "interno";
+  if (!isInternal && !client) {
     alert("Izaberi aktivnog klijenta za ovu aktivnost.");
     return;
   }
+  const fingerprint = JSON.stringify([employeeId,date,activity.id,client?.id || "",minutes,formData.get("note")]);
+  if (form.dataset.pendingWorkFingerprint !== fingerprint) {
+    form.dataset.pendingWorkId = crypto.randomUUID();
+    form.dataset.pendingWorkFingerprint = fingerprint;
+  }
   const workLog = {
-    id: crypto.randomUUID(),
+    id: form.dataset.pendingWorkId,
     employeeId,
     date,
     hours: Math.round((minutes / 60) * 10000) / 10000,
@@ -6062,30 +6095,26 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
     activityId: activity.id,
     activityName: activity.name,
     activityCategory: activity.category || "Ostalo",
-    clientId: client.id,
-    clientName: client.name,
+    clientId: isInternal ? "" : client.id,
+    clientName: isInternal ? "" : client.name,
     type: "Rad",
     note: formData.get("note"),
     locked: true,
     submittedAt: new Date().toISOString(),
   };
-  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  form.dataset.saving = "true";
+  const submitButton = form.querySelector('button[type="submit"]');
   if (submitButton) {
     submitButton.disabled = true;
     submitButton.textContent = "Čuvanje...";
   }
   let saveResult = { ok: false, error: "Online čuvanje nije uspelo." };
   try {
-    const response = await fetch("/api/employee-activity", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workLog, updateReport: false }),
-    });
-    const data = await response.json().catch(() => ({}));
-    saveResult = { ok: response.ok && data.ok, error: data.error || "" };
+    saveResult = await window.MarketizoRemote.postWorkLog(workLog);
   } catch (error) {
     saveResult = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
   }
+  delete form.dataset.saving;
   if (submitButton) {
     submitButton.disabled = false;
     submitButton.textContent = "Dodaj sate";
@@ -6094,7 +6123,9 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
     alert(saveResult.error || "Aktivnost nije sačuvana. Pokušaj ponovo.");
     return;
   }
-  state.employeeWorkLogs.unshift(workLog);
+  if (!state.employeeWorkLogs.some(item => item.id === workLog.id)) state.employeeWorkLogs.unshift(workLog);
+  delete form.dataset.pendingWorkId;
+  delete form.dataset.pendingWorkFingerprint;
   selectedEmployeeId = employeeId;
   saveState({ remote: false });
   const employee = state.employees.find((item) => item.id === employeeId);
@@ -6108,9 +6139,9 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
   } else if (dailyTarget > 0) {
     alert(`Aktivnost je sačuvana. Dnevna kvota je ispunjena: ${dailyMinutes}/${dailyTarget} min.`);
   }
-  event.currentTarget.reset();
-  event.currentTarget.elements.date.value = currentDateKey();
-  event.currentTarget.elements.minutes.value = 60;
+  form.reset();
+  form.elements.date.value = currentDateKey();
+  form.elements.minutes.value = 60;
   renderAll();
   showToast("Sačuvano", "Sati su upisani za izabranog zaposlenog.", "ok");
 });

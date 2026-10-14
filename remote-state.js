@@ -248,6 +248,20 @@
     }
   }
 
+  async function postWorkLog(workLog) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch("/api/employee-activity", {
+        method: "POST", headers: accessHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ workLog, updateReport: false }), signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({}));
+      return { ...data, ok: response.ok && data.ok === true, error: data.error || (response.ok ? "" : "Upis sati nije potvrđen. Pokušaj ponovo; unos je zadržan.") };
+    } catch (error) { return { ok: false, error: error?.name === "AbortError" ? "Čuvanje nije potvrđeno na vreme. Pokušaj ponovo; isti unos neće biti dupliran." : error?.message || "Čuvanje nije potvrđeno." }; }
+    finally { window.clearTimeout(timer); }
+  }
+
   function startPolling(onPayload, interval = 60000) {
     window.clearInterval(pollTimer);
     if (typeof onPayload !== "function" || isLocalFile()) return;
@@ -295,6 +309,7 @@
     save,
     startPolling,
     addActivity,
+    postWorkLog,
     status() {
       return { configured, online, error: lastError };
     },
