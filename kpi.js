@@ -17,7 +17,20 @@ function roster(clientId){
   const match=linked?clickup.rows.find(x=>x.Klijent===linked):clickup.rows.find(x=>norm(x.Klijent)===norm(client?.name));
   return roleNames.flatMap(role=>people(match?.[role]).map(name=>({role,name,employeeId:data.employees.find(e=>norm(e.name)===norm(name))?.id||null})));
 }
-async function api(action,body){const response=await fetch(`/api/kpi?action=${action}`,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',cache:'no-store'});const result=await response.json();if(!response.ok)throw new Error(result.error||'Greška pri čuvanju.');return result;}
+async function api(action,body){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),20000);
+  try {
+    const response=await fetch(`/api/kpi?action=${action}`,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',cache:'no-store',signal:controller.signal});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error||'Greška pri čuvanju.');
+    return result;
+  } catch(error) {
+    if(error?.name==='AbortError')throw new Error('KPI učitavanje traje predugo. Pokušaj ponovo.');
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+
 async function load(){const sequence=++loadSequence;try{const result=await api('admin');if(sequence!==loadSequence)return;data=result;clickup=data.clickup;$('login').hidden=true;$('dashboard').hidden=false;render();message('');}catch(error){if(sequence!==loadSequence)return;$('dashboard').hidden=true;$('login').hidden=false;message(error.message);}}
 function render(){
   $('clickupStatus').textContent=clickup.live?`ClickUp raspodela učitana uživo: ${new Date(clickup.syncedAt).toLocaleString('sr-Latn-RS')}`:clickup.error;
