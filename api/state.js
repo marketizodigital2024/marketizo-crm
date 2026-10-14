@@ -175,11 +175,21 @@ function mergeEmployeePayload(submitted, current, actor) {
   const employeeLateRecords = previousLate.map((record) => record.employeeId === actor.id && submittedLate.has(record.id)
     ? { ...record, acknowledgedAt: submittedLate.get(record.id).acknowledgedAt || record.acknowledgedAt }
     : record);
+  const submittedNotifications = new Map((submitted.notifications || []).map(item => [item.id, item]));
+  const notifications = (current.notifications || []).map(notification => {
+    if (notification.scope !== "employee" || notification.targetId !== actor.id) return notification;
+    const desired = submittedNotifications.get(notification.id);
+    if (!desired) return notification;
+    const hiddenUntil = desired.hiddenUntil;
+    if (hiddenUntil !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(String(hiddenUntil || ""))) return notification;
+    return { ...notification, hiddenUntil };
+  });
   return {
     ...current,
     employeeAbsences: replaceOwned("employeeAbsences"),
     employeeGoals,
     employeeLateRecords,
+    notifications,
   };
 }
 
