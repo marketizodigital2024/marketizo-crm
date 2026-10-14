@@ -17,6 +17,7 @@
   let pendingWaiters = [];
   let lastUpdatedAt = "";
   let lastServerPayload = null;
+  let lastViewPayload = null;
   let pollTimer = null;
   let pollCallback = null;
   let pollInFlight = false;
@@ -69,12 +70,14 @@
 
   function userIsEditing() {
     const active = document.activeElement;
-    return Boolean(active && active.matches?.("input, textarea, select, [contenteditable='true']"));
+    return Boolean(active && active.matches?.("input, textarea, select, [contenteditable='true']"))
+      || Boolean(document.querySelector?.("dialog[open], form[data-saving='true'], body.employee-editor-open"));
   }
 
   function applyRemoteState(payload, updatedAt) {
     lastUpdatedAt = updatedAt || lastUpdatedAt;
     lastServerPayload = clone(payload);
+    lastViewPayload = clone(payload);
     setLocal(payload);
     pollCallback?.(clone(payload), lastUpdatedAt);
   }
@@ -149,7 +152,7 @@
       if (data.payload && typeof data.payload === "object") {
         lastUpdatedAt = data.updatedAt || lastUpdatedAt;
         lastServerPayload = clone(data.payload);
-        if (options.writeLocal !== false) setLocal(data.payload);
+        if (options.writeLocal !== false) { lastViewPayload = clone(data.payload); setLocal(data.payload); }
         return { configured, online, payload: clone(data.payload), updatedAt: data.updatedAt || "" };
       }
       return { configured, empty: Boolean(data.empty), online, payload: null, error: lastError };
@@ -168,7 +171,7 @@
     if (saveInFlight) return;
     saveInFlight = true;
     let basePayload = clone(lastServerPayload || {});
-    let payload = mergeChanges(pendingBasePayload || basePayload, pendingPayload, basePayload);
+    let payload = clone(mergeChanges(pendingBasePayload || basePayload, pendingPayload, basePayload));
     const waiters = pendingWaiters;
     pendingPayload = null;
     pendingBasePayload = null;
@@ -193,7 +196,7 @@
         if (response.status === 409 && data.conflict && attempt < 3) {
           const latest = await load({ writeLocal: false });
           if (!latest.payload) break;
-          payload = mergeChanges(basePayload, payload, latest.payload);
+          payload = clone(mergeChanges(basePayload, payload, latest.payload));
           basePayload = clone(latest.payload);
           continue;
         }
@@ -201,8 +204,9 @@
           lastUpdatedAt = data.updatedAt;
           payload = data.payload || payload;
           lastServerPayload = clone(payload);
+          lastViewPayload = clone(payload);
           setLocal(payload);
-          stateChannel?.postMessage({ type: "saved", payload: clone(payload), updatedAt: lastUpdatedAt });
+          stateChannel?.postMessage({ type: "saved", updatedAt: lastUpdatedAt });
           result = { ok: true, error: "", updatedAt: lastUpdatedAt, payload: clone(payload) };
         } else {
           const latest = response.status === 409 ? await load({ writeLocal: false }) : { payload: null };
@@ -226,7 +230,7 @@
   function save(payload) {
     setLocal(payload);
     if (isLocalFile()) return Promise.resolve({ ok: true, localOnly: true });
-    if (!pendingPayload) pendingBasePayload = clone(lastServerPayload || {});
+    if (!pendingPayload) pendingBasePayload = clone(lastViewPayload || lastServerPayload || {});
     pendingPayload = clone(payload);
     window.clearTimeout(saveTimer);
     const result = new Promise((resolve) => pendingWaiters.push(resolve));
@@ -313,11 +317,12 @@
 
   stateChannel?.addEventListener("message", (event) => {
     const message = event.data || {};
-    if (message.type !== "saved" || !message.payload || message.updatedAt === lastUpdatedAt) return;
+    if (message.type !== "saved" || !message.updatedAt || message.updatedAt === lastUpdatedAt || pollInFlight) return;
     // Reload using this tab's access role; another tab may have broader permissions.
+    pollInFlight = true;
     load({ writeLocal: false }).then((result) => {
       if (result.payload) queueOrApplyRemoteState(result.payload, result.updatedAt);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => { pollInFlight = false; });
   });
 
   document.addEventListener("focusout", () => {
@@ -333,7 +338,7 @@
     storageKey,
     cache: setLocal,
     adoptBaseline(payload) {
-      if (!saveInFlight && !pendingPayload) lastServerPayload = clone(payload);
+      if (!saveInFlight && !pendingPayload) { lastServerPayload = clone(payload); lastViewPayload = clone(payload); }
     },
     load,
     save,
