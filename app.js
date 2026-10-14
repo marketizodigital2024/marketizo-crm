@@ -1713,6 +1713,7 @@ function setAdminLoadStatus(ready, message = "Učitavanje online podataka…") {
   }
   notice.hidden = ready;
   notice.querySelector("[data-load-message]").textContent = message;
+  notice.querySelector("button").hidden = ready || message === "Učitavanje online podataka…";
 }
 
 async function hydrateOnlineState() {
@@ -2336,6 +2337,24 @@ function renderBackupStatus() {
     </div>`;
 }
 
+function contractDownloadLink(client, label, className = "document-link") {
+  const filename = client.contractFileName || "ugovor";
+  if (client.contractFileAvailable) return `<a class="${className}" href="#contract-${encodeURIComponent(client.id)}" data-contract-client-id="${escapeInvoiceText(client.id)}" data-contract-filename="${escapeInvoiceText(filename)}">${escapeInvoiceText(label || filename)}</a>`;
+  if (/^data:[a-zA-Z0-9.+/-]+;base64,/.test(client.contractFileData || "")) return `<a class="${className}" href="${escapeInvoiceText(client.contractFileData)}" download="${escapeInvoiceText(filename)}">${escapeInvoiceText(label || filename)}</a>`;
+  return escapeInvoiceText(client.contractFileName || "Ugovor nije uploadovan");
+}
+document.addEventListener("click", async (event) => {
+  const anchor = event.target?.closest?.("[data-contract-client-id]");
+  if (!anchor) return;
+  event.preventDefault();
+  if (anchor.dataset.downloading) return;
+  anchor.dataset.downloading = "true";
+  try {
+    const result = await window.MarketizoRemote.downloadContract(anchor.dataset.contractClientId, anchor.dataset.contractFilename);
+    if (!result.ok) showToast("Ugovor nije preuzet", result.error, "warn");
+  } finally { delete anchor.dataset.downloading; }
+});
+
 function renderContractExpiryList() {
   const target = document.getElementById("contractExpiryList");
   if (!target) return;
@@ -2344,9 +2363,7 @@ function renderContractExpiryList() {
   target.innerHTML = rows.length
     ? rows
         .map(({ client, endDate }) => {
-          const fileLabel = client.contractFileData
-            ? `<a class="document-link" href="${client.contractFileData}" download="${client.contractFileName || "ugovor"}">${client.contractFileName || "Preuzmi ugovor"}</a>`
-            : client.contractFileName || "Ugovor nije uploadovan";
+          const fileLabel = contractDownloadLink(client);
           return `
           <div class="setup-item alert-item warn">
             <strong>${daysBetween(today, endDate)}</strong>
@@ -2471,6 +2488,7 @@ function bindInvoiceControls() {
   });
   document.querySelectorAll("[data-invoice-payment-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
 
@@ -4239,6 +4257,7 @@ function renderEmployeeGoalRows() {
 }
 
 document.getElementById("employeeRatingForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -4281,6 +4300,7 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) 
 });
 
 document.getElementById("employeeRecognitionForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -5303,8 +5323,8 @@ function renderClients() {
           const endDate = contractEndDate(client);
           const daysLeft = endDate ? daysBetween(currentDateKey(), endDate) : null;
           const contractLabel = endDate ? `do ${formatDate(endDate)}` : "nije unet";
-          const contractDownload = client.contractFileData
-            ? `<a class="document-link client-contract-download" href="${client.contractFileData}" download="${client.contractFileName || "ugovor"}">Preuzmi ugovor</a>`
+          const contractDownload = client.contractFileData || client.contractFileAvailable
+            ? contractDownloadLink(client, "Preuzmi ugovor", "document-link client-contract-download")
             : `<span class="muted">Ugovor nije dodat</span>`;
           const leadStats = clientLeadStats(client);
           const leadClass = leadStats.late ? "danger" : leadStats.open ? "warn" : "ok";
@@ -5935,6 +5955,8 @@ document.getElementById("employeeForm")?.elements.compensationMonth?.addEventLis
 
 document.getElementById("employeeForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
   const form = event.currentTarget;
   const formData = new FormData(form);
   const name = String(formData.get("name") || "").trim();
@@ -5991,15 +6013,15 @@ document.getElementById("employeeForm")?.addEventListener("submit", async (event
     }
     selectedEmployeeId = employee.id;
   } else {
-    const employee = { id: crypto.randomUUID(), ...payload, salaryByMonth: { [effectiveMonth]: payload.salary }, weeklyHoursByMonth: { [effectiveMonth]: payload.weeklyHours }, costWeeklyHoursByMonth: { [effectiveMonth]: costWeeklyHours } };
+    const fingerprint = JSON.stringify([payload,effectiveMonth,costWeeklyHours]);
+    if (form.dataset.pendingEmployeeFingerprint !== fingerprint) { form.dataset.pendingEmployeeId = crypto.randomUUID(); form.dataset.pendingEmployeeFingerprint = fingerprint; }
+    const employee = { id: form.dataset.pendingEmployeeId, ...payload, salaryByMonth: { [effectiveMonth]: payload.salary }, weeklyHoursByMonth: { [effectiveMonth]: payload.weeklyHours }, costWeeklyHoursByMonth: { [effectiveMonth]: costWeeklyHours } };
     state.employees.unshift(employee);
     selectedEmployeeId = employee.id;
   }
-  const saved = await saveState();
-  if (!saved?.ok) {
-    showToast("Nije sačuvano u online bazu", saved?.error || "Pokušaj ponovo kada je veza dostupna.", "warn");
-    return;
-  }
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  delete form.dataset.pendingEmployeeId;
+  delete form.dataset.pendingEmployeeFingerprint;
   form.reset();
   form.elements.id.value = "";
   form.elements.password.value = "";
@@ -6018,6 +6040,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", async (event
 });
 
 document.getElementById("employeeAbsenceForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6196,6 +6219,7 @@ document.getElementById("employeeActivityForm")?.addEventListener("submit", asyn
 });
 
 document.getElementById("employeeLateForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6238,6 +6262,7 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", async (e
 });
 
 document.getElementById("employeeGoalForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6286,6 +6311,7 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", async (e
 });
 
 document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6326,6 +6352,7 @@ document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", asyn
 });
 
 document.getElementById("companyPlanForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6368,6 +6395,7 @@ document.getElementById("openClientModal").addEventListener("click", () => {
 });
 
 document.getElementById("adminClientForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6461,6 +6489,7 @@ document.getElementById("closeEditClientModal")?.addEventListener("click", () =>
 document.getElementById("cancelEditClient")?.addEventListener("click", () => editClientModal.close());
 
 document.getElementById("editClientForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6517,6 +6546,7 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
 });
 
 document.getElementById("portalLeadForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6557,6 +6587,7 @@ document.getElementById("portalLeadForm")?.addEventListener("submit", async (eve
 });
 
 document.getElementById("portalTeamForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6604,6 +6635,7 @@ document.getElementById("closeLeadModal")?.addEventListener("click", () => leadM
 document.getElementById("cancelLead")?.addEventListener("click", () => leadModal?.close());
 
 document.getElementById("leadForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
   const _confirmedTarget = event.currentTarget;
@@ -6692,14 +6724,21 @@ document.getElementById("addTaskBtn")?.addEventListener("click", async () => {
   renderAll();
 });
 
-function downloadBackup(filename = "agency-crm-export.json") {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+async function downloadBackup(filename = "agency-crm-export.json") {
+  let payload = state;
+  if (window.location.protocol !== "file:") {
+    const result = await window.MarketizoRemote.exportSnapshot();
+    if (!result.ok) { showToast("Izvoz nije preuzet", result.error, "warn"); return false; }
+    payload = result.payload;
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
 }
 
 document.getElementById("exportBtn").addEventListener("click", () => {

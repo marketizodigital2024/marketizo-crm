@@ -56,7 +56,10 @@
     // Cached state is optional; durable pending work entries use a separate queue.
     // Never evict legacy caches or pending entries to make room.
     try {
-      localStorage.setItem(storageKey(), JSON.stringify(payload || {}));
+      const safe = { ...(payload || {}) };
+      if (Array.isArray(safe.employees)) safe.employees = safe.employees.map(({ password, ...employee }) => employee);
+      if (Array.isArray(safe.clients)) safe.clients = safe.clients.map(({ loginPassword, ...client }) => client);
+      localStorage.setItem(storageKey(), JSON.stringify(safe));
       return true;
     } catch (error) {
       console.warn("CRM cache unavailable; online state remains authoritative", error?.name || "StorageError");
@@ -138,7 +141,7 @@
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 12000);
     try {
-      const response = await fetch(`/api/state?ts=${Date.now()}`, { cache: "no-store", signal: controller.signal, headers: accessHeaders() });
+      const response = await fetch(`/api/state?compact=1&ts=${Date.now()}`, { cache: "no-store", signal: controller.signal, headers: accessHeaders() });
       const data = await response.json().catch(() => ({}));
       configured = Boolean(data.configured);
       online = configured && response.ok && !data.error;
@@ -176,7 +179,7 @@
         const response = await fetch("/api/state", {
           method: "PUT",
           headers: accessHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ patch: window.MarketizoStatePatch.create(basePayload, payload), baseUpdatedAt: lastUpdatedAt,
+          body: JSON.stringify({ compact: true, patch: window.MarketizoStatePatch.create(basePayload, payload), baseUpdatedAt: lastUpdatedAt,
             deletedIds: Object.fromEntries(["clients", "employees", "employeeWorkLogs", "employeeAbsences", "employeeActivities"].map((key) => {
               const desiredIds = new Set((payload[key] || []).map((item) => item.id));
               return [key, (basePayload[key] || []).filter((item) => !desiredIds.has(item.id)).map((item) => item.id)];
@@ -262,6 +265,33 @@
     finally { window.clearTimeout(timer); }
   }
 
+  async function exportSnapshot() {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch("/api/state", { cache: "no-store", headers: accessHeaders(), signal: controller.signal });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.payload) return { ok: false, error: data.error || "Potpun izvoz nije dostupan." };
+      // Export must not advance the revision of an unrelated pending edit.
+      return { ok: true, payload: data.payload };
+    } catch (error) { return { ok: false, error: error?.message || "Izvoz nije dostupan." }; }
+    finally { window.clearTimeout(timer); }
+  }
+
+  async function downloadContract(clientId, filename = "ugovor") {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(`/api/client-contract?id=${encodeURIComponent(clientId)}`, { cache: "no-store", headers: accessHeaders(), signal: controller.signal });
+      if (!response.ok) { const data = await response.json().catch(() => ({})); return { ok: false, error: data.error || "Preuzimanje ugovora nije uspelo." }; }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");anchor.href=url;anchor.download=filename;anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return { ok: true };
+    } catch (error) { return { ok: false, error: error?.message || "Preuzimanje ugovora nije uspelo." }; }
+    finally { window.clearTimeout(timer); }
+  }
+
   function startPolling(onPayload, interval = 60000) {
     window.clearInterval(pollTimer);
     if (typeof onPayload !== "function" || isLocalFile()) return;
@@ -310,6 +340,8 @@
     startPolling,
     addActivity,
     postWorkLog,
+    exportSnapshot,
+    downloadContract,
     status() {
       return { configured, online, error: lastError };
     },
