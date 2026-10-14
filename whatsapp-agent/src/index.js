@@ -1052,7 +1052,7 @@ async function sendDailyReport() {
     if (!currentBatch.length) { delivery.nextBatch += 1; saveDailyState(); continue; }
     const ids = new Set(currentBatch.map(group => group.id));
     const reviewInput = {
-      date: delivery.date, groups: currentBatch.map(group => ({
+      date: delivery.date, reportMode, reviewPeriod: "Tekuća nedelja do trenutka pregleda; starije poruke koristi samo kao kontekst i jasno ih razlikuj od sadašnjeg stanja", groups: currentBatch.map(group => ({
         group: group.name, assignment: clickupContextForGroups([group.name])[0],
         recentConversation: (groupHistory.get(group.id) || []).slice(-100)
       })),
@@ -1074,13 +1074,15 @@ async function sendDailyReport() {
           "Ne izmišljaj metrike kampanja ili broj leadova iz razgovora. Čekanje unutar roka, normalne korekcije i generičko hvala nisu upozorenje.",
           "Nedostatak poruka ili neprоčitan prilog nisu dokaz da je klijent zelen. Ne izmišljaj sadržaj fotografija, dokumenata ili neprоčitane glasovne poruke.",
           "Za svaki relevantan klijent napiši samo 2–4 kratke rečenice (najviše 600 znakova): trenutna situacija, da li je hitna baš za Miljana i zašto, potvrđeni negativni događaji ili važna pohvala, i šta zaslužuje njegovu pažnju. Ne piši sledeći korak, preporuke, zadatke niti proceduralne rubrike. Ako tim može sam da reši situaciju, jasno reci da nije hitna za vlasnika. Hitno za vlasnika znači da je potrebna njegova poslovna odluka ili intervencija sada, ne samo kašnjenje operativnog posla.",
-          "Vrati JSON: reviewedGroups (tačno sva dostavljena imena), alerts (najviše jedan objekat po grupi: group, severity URGENT/RED/YELLOW/PRAISE, summary najviše 600 znakova u 2–4 rečenice, nextAction uvek prazan string, evidence najviše 500 znakova sa datumom i konkretnim dokazom). Ako nema važnog problema alerts je prazno."
+          "Vrati JSON: reviewedGroups (tačno sva dostavljena imena), alerts (najviše jedan objekat po grupi: group, severity URGENT/RED/YELLOW/PRAISE/STATUS, summary najviše 600 znakova u 2–4 rečenice, nextAction uvek prazan string, evidence najviše 500 znakova sa datumom i konkretnim dokazom). U režimu twice_weekly vrati tačno jedan sažetak za SVAKU dostavljenu grupu, i kada nema problema: severity STATUS i neutralna procena sa datumom poslednje aktivnosti. Bez poruka ne proglašavaj klijenta zdravim. Za druge režime bez važnog problema alerts je prazno."
         ].join(" ") },
         { role: "user", content: JSON.stringify(reviewInput) }
       ]
     });
     const parsed = JSON.parse(completion.choices[0]?.message?.content || "{}");
-    delivery.alerts.push(...validateReview(names, parsed));
+    const validated = validateReview(names, parsed);
+    if (reportMode === "twice_weekly" && validated.length !== names.length) throw Error("Scheduled report must summarize every active group");
+    delivery.alerts.push(...validated);
     delivery.reviewedCount += currentBatch.length;
     delivery.nextBatch += 1;
     saveDailyState();
@@ -1115,7 +1117,7 @@ function startDailyReportScheduler() {
     const today = viennaDateKey();
     const weekday = parts.weekday !== "Sat" && parts.weekday !== "Sun";
     const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-    if (reportMode !== "weekly" && whatsappReady && teamMonitoringInitialized && weekday && minutes >= 9 * 60 && minutes < 12 * 60 && dailyState.lastMorningDate !== today && !morningReportInFlight) {
+    if (reportMode === "daily" && whatsappReady && teamMonitoringInitialized && weekday && minutes >= 9 * 60 && minutes < 12 * 60 && dailyState.lastMorningDate !== today && !morningReportInFlight) {
       morningReportInFlight = true;
       void sendMorningReport()
         .catch((error) => console.error("Morning report failed:", error))
@@ -1125,7 +1127,8 @@ function startDailyReportScheduler() {
     const pendingDailyDelivery = Boolean(dailyState.dailyDelivery?.date);
     const pendingWeeklyDelivery = Boolean(dailyState.weeklyDelivery?.date && Array.isArray(dailyState.weeklyDelivery.parts));
     const weeklyDue = reportMode === "weekly" && (pendingWeeklyDelivery || (parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today));
-    const closingDue = reportMode !== "weekly" && (closingReportMissing || pendingDailyDelivery);
+    const scheduledReportDay = reportMode === "twice_weekly" ? ["Wed", "Fri"].includes(parts.weekday) : reportMode !== "weekly";
+    const closingDue = (scheduledReportDay && closingReportMissing) || pendingDailyDelivery;
     const retryAllowed = !dailyState.nextClosingReportAttemptAt
       || new Date(dailyState.nextClosingReportAttemptAt).getTime() <= Date.now();
     const deliveryWindow = pendingDailyDelivery || pendingWeeklyDelivery || ((weekday || reportMode !== "weekly") && minutes >= 17 * 60 + 30 && minutes < 24 * 60);
@@ -1605,7 +1608,7 @@ const groupMonitor = createGroupMonitor({
     await sendWhatsappMessage(alertTo, [
       "*Marketizo agent — provera rada*",
       `WhatsApp je povezan. Čitam ${coverage.readableGroups}/${coverage.monitoredGroups} grupa u aktivnom opsegu (ukupno otkrivenih: ${coverage.discoveredGroups}); ${coverage.matchedGroups}/${coverage.clientGroups} grupa je povezano sa ClickUp raspodelom.`,
-      `Interni tim: ${teamMemberIds.size} identifikatora. Dnevni pregled je podešen za 17:30 po bečkom vremenu, svakog dana.`,
+      `Interni tim: ${teamMemberIds.size} identifikatora. Redovni pregled je podešen za sredu i petak u 17:30 po bečkom vremenu; važni negativni signali prijavljuju se odmah.`,
       coverage.unmatchedGroups.length ? `Za ${coverage.unmatchedGroups.length} grupa veza sa ClickUp klijentom još nije potvrđena; ostaju u praćenju i biće navedene u izveštaju.` : "Sve klijentske grupe imaju potvrđenu vezu sa raspodelom."
     ].join("\n\n"), "monitoring verification " + version);
     dailyState.lastMonitoringVerification = version;
