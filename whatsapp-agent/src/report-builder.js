@@ -30,8 +30,7 @@ export function renderDailyReport({ date, reviewedCount, groupCount, alerts, cov
   const paragraphs = alerts.map(alert => [
     `*${alert.group}* — ${symbols[alert.severity]}`,
     alert.summary,
-    alert.nextAction ? `*Sledeći korak:* ${alert.nextAction}` : '',
-    alert.evidence ? `*Osnov:* ${alert.evidence}` : ''
+    ''
   ].filter(Boolean).join('\n\n'));
   const combined = [overview, ...paragraphs].join('\n\n');
   if (combined.length <= 3500) return [combined];
