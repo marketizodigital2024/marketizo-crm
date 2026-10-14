@@ -267,7 +267,9 @@ function startClickUpSync() {
 
 const rawCompletionCreate = openai.chat.completions.create.bind(openai.chat.completions);
 openai.chat.completions.create = async (params, options) => {
-  const response = await rawCompletionCreate(params, options);
+  const concisePolicy = "Za svaki relevantan klijent napiši samo 2–4 kratke rečenice (najviše 600 znakova): trenutna situacija, da li je hitna baš za Miljana i zašto, potvrđeni negativni događaji ili važna pohvala, i šta zaslužuje njegovu pažnju. Ne piši sledeći korak, preporuke, zadatke niti proceduralne rubrike. Ako tim može sam da reši situaciju, jasno reci da nije hitna za vlasnika. Hitno za vlasnika znači da je potrebna njegova poslovna odluka ili intervencija sada, ne samo kašnjenje operativnog posla.";
+  const messages = (params.messages || []).map(message => message.role === "system" ? { ...message, content: String(message.content) + "\n" + concisePolicy } : message);
+  const response = await rawCompletionCreate({ ...params, messages }, options);
   const usage = response.usage || {};
   const key = String(params.model || "unknown");
   const current = dailyState.modelUsage?.[key] || { calls: 0, inputTokens: 0, outputTokens: 0 };
@@ -451,7 +453,7 @@ async function sendYesterdayAnalysisTest() {
     messages: [
       {
         role: "system",
-        content: "Napiši Miljanu kratak, ljudski test-izveštaj o jučerašnjim Marketizo klijentima na srpskom. Koristi samo dostavljene stvarne podatke. Proceni šta je za vlasnika zaista važno: nezadovoljstvo, ozbiljan rizik, probijen rok, blokadu, važnu pohvalu ili odluku. Rutinu izostavi. Za svaku relevantnu grupu napiši u posebnom redu *Tačan naziv klijentske grupe*, a ispod kratak prirodan pasus: šta se desilo, da li je sada rešeno i šta je sledeći potez. Zvezdice koristi samo za podebljano ime grupe; bez lista, tabela, emodžija i proceduralnih rubrika. Proveri recentGroupMessages pre nego što nešto nazoveš nerešenim. Ako nema dovoljno jučerašnjih podataka za pouzdan zaključak, reci to jasno i ne izmišljaj."
+        content: "Napiši Miljanu kratak, ljudski test-izveštaj o jučerašnjim Marketizo klijentima na srpskom. Koristi samo dostavljene stvarne podatke. Proceni šta je za vlasnika zaista važno: nezadovoljstvo, ozbiljan rizik, probijen rok, blokadu, važnu pohvalu ili odluku. Rutinu izostavi. Za svaku relevantnu grupu napiši u posebnom redu *Tačan naziv klijentske grupe*, a ispod kratak prirodan pasus: šta se desilo, da li je sada rešeno i koliko je hitno za vlasnika. Bez sledećeg koraka. Zvezdice koristi samo za podebljano ime grupe; bez lista, tabela, emodžija i proceduralnih rubrika. Proveri recentGroupMessages pre nego što nešto nazoveš nerešenim. Ako nema dovoljno jučerašnjih podataka za pouzdan zaključak, reci to jasno i ne izmišljaj."
       },
       {
         role: "user",
@@ -824,7 +826,7 @@ async function answerOwnerQuestion(message) {
         messages: [
           {
             role: "system",
-            content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja, i svakoj daj poseban naslov i makar jednu konkretnu rečenicu. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja, 🟢 Pozitivno ili ⚪ Nema aktivnosti ove nedelje. Crveno, žuto i zeleno koristi samo kada postoje poruke ili operativni podaci koji to dokazuju. Ako nema podataka, napiši da agent nema nove poruke za tog klijenta; nikada ga ne proglašavaj zelenim i ne dodaj zadatak Miljanu. Za mirnog klijenta dovoljna je jedna ili dve rečenice. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Operativni sledeći korak, ako je zaista potreban, dodeli konkretnoj ulozi u timu kao što su account manager, media buyer, SMM, scenarista, editor ili snimatelj. Nikada ne napiši da Miljan ili Ivana treba da odgovaraju klijentu, prikupljaju materijale, proveravaju kampanju, jure rok ili koordiniraju izvršenje. Njih pomenu samo pod *Potrebna odluka vlasnika:* kada bez njihove poslovne odluke tim zaista ne može dalje. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Bez uvoda, zaključka, tabela i korporativnog tona."
+            content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja, i svakoj daj poseban naslov i makar jednu konkretnu rečenicu. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja, 🟢 Pozitivno ili ⚪ Nema aktivnosti ove nedelje. Crveno, žuto i zeleno koristi samo kada postoje poruke ili operativni podaci koji to dokazuju. Ako nema podataka, napiši da agent nema nove poruke za tog klijenta; nikada ga ne proglašavaj zelenim i ne dodaj zadatak Miljanu. Za mirnog klijenta dovoljna je jedna ili dve rečenice. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Za svaki relevantan klijent napiši samo 2–4 kratke rečenice (najviše 600 znakova): trenutna situacija, da li je hitna baš za Miljana i zašto, potvrđeni negativni događaji ili važna pohvala, i šta zaslužuje njegovu pažnju. Ne piši sledeći korak, preporuke, zadatke niti proceduralne rubrike. Ako tim može sam da reši situaciju, jasno reci da nije hitna za vlasnika. Hitno za vlasnika znači da je potrebna njegova poslovna odluka ili intervencija sada, ne samo kašnjenje operativnog posla. Nikada ne napiši da Miljan ili Ivana treba da odgovaraju klijentu, prikupljaju materijale, proveravaju kampanju, jure rok ili koordiniraju izvršenje. Njih pomenu samo pod *Potrebna odluka vlasnika:* kada bez njihove poslovne odluke tim zaista ne može dalje. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Bez uvoda, zaključka, tabela i korporativnog tona."
           },
           {
             role: "user",
@@ -869,7 +871,7 @@ async function answerOwnerQuestion(message) {
           "Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. Ostali učesnici klijentskih grupa su klijenti.",
           "Ne izmišljaj činjenice. Navedi konkretno šta je ko napisao i kada, ako je to dostupno i važno.",
           "Ne počinji uvek istim naslovom ili frazom. Za svakog klijenta napiši u posebnom redu *Tačan naziv klijentske grupe*, pa ispod kratak prirodan pasus. Ne zatrpavaj Miljana sirovim porukama i ne ponavljaj isto.",
-          "Kada pitanje traži pregled jednog ili više klijenata, napiši *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno; zatim jedan do tri kratka prirodna pasusa i po potrebi *Sledeći korak:*. Obično je dovoljno 50–100 reči po klijentu, a više samo kada postoji ozbiljan i složen problem.",
+          "Kada pitanje traži pregled jednog ili više klijenata, napiši *Kratko ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno; zatim 2–4 kratke rečenice o situaciji, hitnosti za vlasnika, problemu ili pohvali. Bez sledećeg koraka i preporuka.",
           "Izbegavaj ukočene izraze kao što su 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena', 'nije probijen' i 'ne mogu potvrditi'. Reci jednostavno: ko je šta poslao, da li je sve u redu, šta se čeka i šta bi ti uradio. Ne pretvaraj normalnu korekciju sadržaja ili čekanje unutar dogovorenog roka u vlasnički rizik.",
           "Piši u kratkim odvojenim pasusima koji se lako čitaju na telefonu. Ne koristi tabele, nabrajanje sirovih poruka, proceduralne rubrike niti dugačak uvod. Pročitaj ceo tekst svake dostavljene poruke ili skripte, uključujući završetak i poziv na akciju, pre nego što kažeš da nešto nedostaje.",
           "Najpre prenesi suštinu konkretnog slučaja, zatim prirodno dodaj svoju procenu i preporuku kada su potrebne.",
@@ -989,7 +991,7 @@ async function sendWeeklyReport() {
       model,
       ...reasoningOptions(),
       messages: [
-        { role: "system", content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja, i svakoj daj poseban naslov i makar jednu konkretnu rečenicu. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja, 🟢 Pozitivno ili ⚪ Nema aktivnosti ove nedelje. Crveno, žuto i zeleno koristi samo kada postoje poruke ili operativni podaci koji to dokazuju. Ako nema podataka, napiši da agent nema nove poruke za tog klijenta; nikada ga ne proglašavaj zelenim i ne dodaj zadatak Miljanu. Za mirnog klijenta dovoljna je jedna ili dve rečenice. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Operativni sledeći korak, ako je zaista potreban, dodeli konkretnoj ulozi u timu kao što su account manager, media buyer, SMM, scenarista, editor ili snimatelj. Nikada ne napiši da Miljan ili Ivana treba da odgovaraju klijentu, prikupljaju materijale, proveravaju kampanju, jure rok ili koordiniraju izvršenje. Njih pomenu samo pod *Potrebna odluka vlasnika:* kada bez njihove poslovne odluke tim zaista ne može dalje. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Bez uvoda, zaključka, tabela i korporativnog tona." },
+        { role: "system", content: "Piši Miljanu kao sposoban kolega, kratko i normalnim rečima. Obradi baš svaku grupu iz clientGroups, istim redosledom, bez preskakanja, i svakoj daj poseban naslov i makar jednu konkretnu rečenicu. Koristi *Ime klijenta* — 🔴 Hitno, 🟡 Potrebna pažnja, 🟢 Pozitivno ili ⚪ Nema aktivnosti ove nedelje. Crveno, žuto i zeleno koristi samo kada postoje poruke ili operativni podaci koji to dokazuju. Ako nema podataka, napiši da agent nema nove poruke za tog klijenta; nikada ga ne proglašavaj zelenim i ne dodaj zadatak Miljanu. Za mirnog klijenta dovoljna je jedna ili dve rečenice. Za važan problem ili pohvalu napiši najviše jedan do tri kratka pasusa. Za svaki relevantan klijent napiši samo 2–4 kratke rečenice (najviše 600 znakova): trenutna situacija, da li je hitna baš za Miljana i zašto, potvrđeni negativni događaji ili važna pohvala, i šta zaslužuje njegovu pažnju. Ne piši sledeći korak, preporuke, zadatke niti proceduralne rubrike. Ako tim može sam da reši situaciju, jasno reci da nije hitna za vlasnika. Hitno za vlasnika znači da je potrebna njegova poslovna odluka ili intervencija sada, ne samo kašnjenje operativnog posla. Nikada ne napiši da Miljan ili Ivana treba da odgovaraju klijentu, prikupljaju materijale, proveravaju kampanju, jure rok ili koordiniraju izvršenje. Njih pomenu samo pod *Potrebna odluka vlasnika:* kada bez njihove poslovne odluke tim zaista ne može dalje. Ne izmišljaj rizik iz obične korekcije ili čekanja unutar roka. Pročitaj ceo tekst poruka i skripti, uključujući završetak i poziv na akciju. Bez uvoda, zaključka, tabela i korporativnog tona." },
         { role: "user", content: JSON.stringify({ clientGroups: batch.map((chat) => chat.name), clickupAssignments: clickupContextForGroups(batch.map((chat) => chat.name)), teamMembers: [...teamMemberNames], recentGroupMessages: messages, clientsWaitingForTeam: snapshot.pending.filter((item) => names.has(item.groupName)), silentClients: snapshot.silentClients.filter((item) => names.has(item.groupName)), unresolvedIssues: snapshot.issues.filter((item) => names.has(item.groupName)), activeCommitments: snapshot.activeCommitments.filter((item) => names.has(item.groupName)) }) }
       ]
     });
@@ -1071,8 +1073,8 @@ async function sendDailyReport() {
           "Pregledaj celu dostavljenu istoriju i vreme poruka. Izdvoji nerešene važne probleme, kašnjenja, blokade, nezadovoljstvo, rizik za leadove/garanciju/objave i važne poslovne pohvale. Razlikuj staro od trenutnog i ne šalji rešene situacije.",
           "Ne izmišljaj metrike kampanja ili broj leadova iz razgovora. Čekanje unutar roka, normalne korekcije i generičko hvala nisu upozorenje.",
           "Nedostatak poruka ili neprоčitan prilog nisu dokaz da je klijent zelen. Ne izmišljaj sadržaj fotografija, dokumenata ili neprоčitane glasovne poruke.",
-          "Za jednog klijenta objedini sve povezane probleme u JEDAN sažetak i jedan sledeći korak. Piši prirodno na srpskom, sa činjenicama, posledicom i vlasnikom sledećeg koraka. Ne zadaj Miljanu/Ivani rutinski posao osim ako ClickUp potvrđuje da rade u konkretnoj ulozi; poslovnu odluku vlasnika jasno razlikuj.",
-          "Vrati JSON: reviewedGroups (tačno sva dostavljena imena), alerts (najviše jedan objekat po grupi: group, severity URGENT/RED/YELLOW/PRAISE, summary najviše 1000 znakova, nextAction najviše 500 znakova, evidence najviše 500 znakova sa datumom i konkretnim dokazom). Ako nema važnog problema alerts je prazno."
+          "Za svaki relevantan klijent napiši samo 2–4 kratke rečenice (najviše 600 znakova): trenutna situacija, da li je hitna baš za Miljana i zašto, potvrđeni negativni događaji ili važna pohvala, i šta zaslužuje njegovu pažnju. Ne piši sledeći korak, preporuke, zadatke niti proceduralne rubrike. Ako tim može sam da reši situaciju, jasno reci da nije hitna za vlasnika. Hitno za vlasnika znači da je potrebna njegova poslovna odluka ili intervencija sada, ne samo kašnjenje operativnog posla.",
+          "Vrati JSON: reviewedGroups (tačno sva dostavljena imena), alerts (najviše jedan objekat po grupi: group, severity URGENT/RED/YELLOW/PRAISE, summary najviše 600 znakova u 2–4 rečenice, nextAction uvek prazan string, evidence najviše 500 znakova sa datumom i konkretnim dokazom). Ako nema važnog problema alerts je prazno."
         ].join(" ") },
         { role: "user", content: JSON.stringify(reviewInput) }
       ]
@@ -1200,7 +1202,7 @@ async function sendOverdueAlert(record) {
     "",
     `${record.senderName} nije dobio/la odgovor našeg tima duže od tri radna sata. Poslednja poruka je: „${record.message}“`,
     "",
-    "*Sledeći korak:* Tim treba odmah da preuzme razgovor. Miljan ne mora lično da odgovara, ali dobija upozorenje jer je probijen vlasnički SLA."
+    "Potrebna je pažnja: klijent čeka odgovor tima. Ovo samo po sebi nije hitno za tvoju ličnu intervenciju."
   ].join("\n");
   await sendWhatsappMessage(alertTo, alert, "response SLA alert " + record.groupId + ":" + record.messageId);
   recordDailyEvent({ type: "SLA", group: record.groupName, summary: "Klijent nije dobio odgovor u roku od 3 radna sata." });
@@ -1332,7 +1334,7 @@ async function sendClientSilenceAlert(record) {
     "",
     `Od klijenta nema odgovora duže od 48 sati. ${record.teamSender} je poslednje poslao/la: „${record.lastMessage}“`,
     "",
-    "*Sledeći korak:* Tim treba da proveri da li klijenta kontaktirati drugim putem ili privremeno zaustaviti dalje čekanje."
+    "Potrebna je pažnja zbog zastoja komunikacije; samo odsustvo odgovora ne dokazuje nezadovoljstvo niti hitnost za vlasnika."
   ].join("\n"), "client silence alert " + record.groupId + ":" + record.firstAskedAt);
   record.alerted = true;
   awaitingClientByGroup.set(record.groupId, record);
@@ -1866,7 +1868,7 @@ async function processIncomingMessage(message) {
       !ownerMention && result.ownerReason ? result.ownerReason : "",
       importantPraise ? "Ovo vredi sačuvati kao važnu pohvalu ili rezultat." : "",
       "",
-      result.recommendedAction ? `*Sledeći korak za tim:* ${result.recommendedAction}` : "*Sledeći korak za tim:* Odgovorna uloga treba da preuzme situaciju."
+      ""
     ].filter((line, index, lines) => line || (index > 0 && lines[index - 1])).join("\n");
 
     if (processingQueueState.jobs[messageId]) {
