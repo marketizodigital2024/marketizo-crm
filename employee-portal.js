@@ -149,7 +149,7 @@ function syncOperationalAdminAccess() {
 
   try {
     const existingAdminSession = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null");
-    if (enabled) {
+    if (enabled && existingAdminSession?.role !== "full-admin") {
       localStorage.setItem("marketizoAdminSession", JSON.stringify({
         email: String(activeEmployee.email || employeeSession.email || "").toLowerCase(),
         name: activeEmployee.name || "Operativni administrator",
@@ -158,7 +158,7 @@ function syncOperationalAdminAccess() {
         token: employeeSession.token,
         expiresAt: Number(employeeSession.expiresAt || 0),
       }));
-    } else if (existingAdminSession?.role === "operational-admin") {
+    } else if (!enabled && existingAdminSession?.role === "operational-admin" && existingAdminSession.employeeId === activeEmployee?.id) {
       localStorage.removeItem("marketizoAdminSession");
     }
   } catch {
@@ -211,14 +211,14 @@ async function restoreEmployeeSession() {
 }
 
 function loadState(sourceData = null) {
-  const saved = sourceData ? "" : localStorage.getItem("agencyCrmData");
+  const saved = sourceData ? "" : localStorage.getItem((window.MarketizoRemote?.storageKey?.() || "marketizoEmployeeData"));
   let data = {};
   try {
     data = sourceData ? JSON.parse(JSON.stringify(sourceData)) : saved ? JSON.parse(saved) : {};
   } catch {
     data = {};
   }
-  data.employees = (data.employees?.length ? data.employees : defaultEmployees).map((employee) => ({
+  data.employees = (data.employees || []).map((employee) => ({
     id: employee.id || createId(),
     name: "",
     email: "",
@@ -338,12 +338,12 @@ function loadState(sourceData = null) {
       "2026-08": -0.5,
     };
   }
-  localStorage.setItem("agencyCrmData", JSON.stringify(data));
+  window.MarketizoRemote?.cache?.(data);
   return data;
 }
 
 function saveState(options = {}) {
-  localStorage.setItem("agencyCrmData", JSON.stringify(state));
+  window.MarketizoRemote?.cache?.(state);
   if (options.remote === false) return Promise.resolve({ ok: true, localOnly: true });
   if (!window.MarketizoRemote?.save) {
     return Promise.resolve({ ok: false, error: "Online baza nije dostupna. Pokušaj ponovo." });
@@ -506,7 +506,11 @@ async function syncPendingWorkLogs({ notify = false } = {}) {
     for (const item of employeeItems) {
       const result = await postEmployeeWorkLog(item.workLog, item.recipientId);
       if (!result.ok) {
-        if (!result.retryable) removePendingWorkLog(item.workLog.id);
+        // Only a successful server acknowledgement can remove a local entry.
+        // A validation failure remains available for correction and recovery.
+        if (notify) showToast(result.authRequired ? "Prijava je potrebna" : "Unos nije sinhronizovan",
+          result.error || "Unos ostaje sačuvan na ovom uređaju. Pokušaj ponovo.", "warn");
+        if (result.authRequired || result.retryable) break;
         continue;
       }
       removePendingWorkLog(item.workLog.id);
@@ -555,12 +559,13 @@ function dateKey(date) {
 }
 
 function currentDateKey() {
-  return dateKey(new Date());
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
 }
 
 function currentMonthKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return currentDateKey().slice(0, 7);
 }
 
 function parseDate(value) {
@@ -2627,7 +2632,7 @@ document.getElementById("portalGoalList")?.addEventListener("click", async (even
 });
 
 window.addEventListener("storage", (event) => {
-  if (event.key !== "agencyCrmData" || !activeEmployee) return;
+  if (event.key !== (window.MarketizoRemote?.storageKey?.() || "marketizoEmployeeData") || !activeEmployee) return;
   state = loadState();
   renderEmployeePortal();
 });

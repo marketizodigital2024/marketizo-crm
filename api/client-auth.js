@@ -1,3 +1,5 @@
+const { verifyPassword } = require("../lib/password.js");
+const dbFetch = (...args) => require("../lib/database-request.js").request(fetch, ...args);
 const crypto = require("node:crypto");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -39,7 +41,7 @@ function verify(token) {
 }
 
 async function readClients() {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=clients:payload->clients`, {
+  const response = await dbFetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=clients:payload->clients`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
   });
   if (!response.ok) throw new Error(`State fetch failed (${response.status})`);
@@ -58,9 +60,10 @@ module.exports = async function handler(req, res) {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const clients = await readClients();
     if (body.action === "login") {
+      if (!(await require("../lib/login-rate.js").allowLogin(req, fetch, SUPABASE_URL, SUPABASE_KEY, secret()))) return send(res, 429, { error: "Previše pokušaja prijave. Sačekaj 15 minuta i pokušaj ponovo." });
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
-      const client = clients.find((item) => item.status !== "Arhiviran" && String(item.loginEmail || "").trim().toLowerCase() === email && String(item.loginPassword || "") === password);
+      const client = clients.find((item) => item.status !== "Arhiviran" && String(item.loginEmail || "").trim().toLowerCase() === email && verifyPassword(password, item.loginPassword));
       if (!client) return send(res, 401, { error: "Pogrešan email ili lozinka." });
       const expiresAt = Date.now() + SESSION_TTL_MS;
       return send(res, 200, { ok: true, token: sign({ clientId: client.id, email, role: "client", exp: expiresAt }), expiresAt, client: publicClient(client) });
@@ -76,3 +79,6 @@ module.exports = async function handler(req, res) {
     return send(res, 500, { error: error.message || "Auth failed" });
   }
 };
+
+const originalHandler = module.exports;
+module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);

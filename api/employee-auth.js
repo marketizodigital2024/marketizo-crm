@@ -1,3 +1,5 @@
+const { verifyPassword } = require("../lib/password.js");
+const dbFetch = (...args) => require("../lib/database-request.js").request(fetch, ...args);
 const crypto = require("node:crypto");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -37,7 +39,7 @@ function verify(token) {
 }
 
 async function readEmployees() {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=employees:payload->employees`, {
+  const response = await dbFetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=employees:payload->employees`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
   });
   if (!response.ok) throw new Error(`State fetch failed (${response.status})`);
@@ -50,10 +52,10 @@ async function readFastEmployees({ email = "", id = "" } = {}) {
   if (email) filters.push(`email=eq.${encodeURIComponent(email)}`);
   if (id) filters.push(`id=eq.${encodeURIComponent(id)}`);
   const query = filters.length ? `&${filters.join("&")}` : "";
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${AUTH_TABLE}?select=employee_data${query}&limit=2`, {
+  const response = await dbFetch(`${SUPABASE_URL}/rest/v1/${AUTH_TABLE}?select=employee_data${query}&limit=2`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
   });
-  if (response.status === 404) return [];
+  if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Employee auth fetch failed (${response.status})`);
   const rows = await response.json();
   return rows.map((row) => row.employee_data).filter(Boolean);
@@ -70,18 +72,19 @@ module.exports = async function handler(req, res) {
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     if (["login", "adminLogin", "operationalAdminLogin", "fullAdminLogin"].includes(body.action)) {
+      if (!(await require("../lib/login-rate.js").allowLogin(req, fetch, SUPABASE_URL, SUPABASE_KEY, secret()))) return send(res, 429, { error: "Previše pokušaja prijave. Sačekaj 15 minuta i pokušaj ponovo." });
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
-      let employees = await readFastEmployees({ email }).catch(() => []);
-      let employee = employees.find((item) =>
+      let employees = await readFastEmployees({ email });
+      let employee = (employees || []).find((item) =>
         item.active !== false && item.status !== "Neaktivan" && String(item.email || "").trim().toLowerCase() === email &&
-        String(item.password || "") === password
+        verifyPassword(password, item.password)
       );
-      if (!employee) {
+      if (employees === null) {
         employees = await readEmployees();
         employee = employees.find((item) =>
           item.active !== false && item.status !== "Neaktivan" && String(item.email || "").trim().toLowerCase() === email &&
-          String(item.password || "") === password
+          verifyPassword(password, item.password)
         );
       }
       if (!employee) return send(res, 401, { error: "Pogrešan email ili lozinka." });
@@ -107,8 +110,8 @@ module.exports = async function handler(req, res) {
     if (body.action === "validate") {
       const session = verify(body.token);
       if (!session) return send(res, 401, { error: "Sesija je istekla." });
-      let employees = await readFastEmployees({ id: session.employeeId }).catch(() => []);
-      if (!employees.length) employees = await readEmployees();
+      let employees = await readFastEmployees({ id: session.employeeId });
+      if (employees === null) employees = await readEmployees();
       const employee = employees.find((item) =>
         item.active !== false && item.status !== "Neaktivan" && (item.id === session.employeeId || String(item.email || "").toLowerCase() === session.email)
       );
@@ -122,3 +125,6 @@ module.exports = async function handler(req, res) {
   }
 }
 
+
+const originalHandler = module.exports;
+module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);

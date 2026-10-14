@@ -1,3 +1,4 @@
+const dbFetch = (...args) => require("../lib/database-request.js").request(fetch, ...args);
 const { accessSession, readStoredState, supabaseConfig, supabaseHeaders, preserveDailyPrewriteBackup } = require("./state.js").helpers;
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
@@ -64,7 +65,7 @@ module.exports = async function handler(req, res) {
       };
       await preserveDailyPrewriteBackup(config, current);
       const updatedAt = new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString();
-      const response = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}&select=updated_at`, {
+      const response = await dbFetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}&select=updated_at`, {
         method: "PATCH",
         headers: { ...supabaseHeaders(config.key), Prefer: "return=representation" },
         body: JSON.stringify({ payload, updated_at: updatedAt }),
@@ -83,3 +84,6 @@ module.exports = async function handler(req, res) {
     return json(res, 500, { ok: false, error: error?.message || "Upis aktivnosti nije uspeo." });
   }
 };
+
+const originalHandler = module.exports;
+module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);

@@ -1,3 +1,4 @@
+const dbFetch = (...args) => require("../lib/database-request.js").request(fetch, ...args);
 const crypto = require("node:crypto");
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
@@ -56,7 +57,7 @@ async function readBody(req) {
 }
 
 async function readRow(url, key) {
-  const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
+  const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
     headers: headers(key),
   });
   if (!response.ok) throw new Error(`Čitanje baze nije uspelo (${response.status}).`);
@@ -120,7 +121,7 @@ module.exports = async function handler(req, res) {
           return report;
         });
         const updatedAt = new Date().toISOString();
-        const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
+        const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
           method: "PATCH", headers: headers(key, "return=representation"), body: JSON.stringify({ payload, updated_at: updatedAt }),
         });
         if (!response.ok) throw new Error(`Slanje upitnika nije uspelo (${response.status}).`);
@@ -145,7 +146,7 @@ module.exports = async function handler(req, res) {
         if (!employee || !report) return json(res, 403, { ok: false, error: "Upitnik nije pronađen za ovog zaposlenog." });
         Object.assign(report, { answers, status: "completed", submittedAt: new Date().toISOString(), acknowledgedAt: null, acknowledgedBy: null });
         const updatedAt = new Date().toISOString();
-        const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
+        const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
           method: "PATCH", headers: headers(key, "return=representation"), body: JSON.stringify({ payload, updated_at: updatedAt }),
         });
         if (!response.ok) throw new Error(`Čuvanje nedeljnog izveštaja nije uspelo (${response.status}).`);
@@ -168,7 +169,7 @@ module.exports = async function handler(req, res) {
         report.acknowledgedAt = new Date().toISOString();
         report.acknowledgedBy = leaderId;
         const updatedAt = new Date().toISOString();
-        const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
+        const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
           method: "PATCH", headers: headers(key, "return=representation"), body: JSON.stringify({ payload, updated_at: updatedAt }),
         });
         if (!response.ok) throw new Error(`Potvrda nedeljnog izveštaja nije uspela (${response.status}).`);
@@ -188,15 +189,14 @@ module.exports = async function handler(req, res) {
         const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.isLeader);
         const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.isFinalDailyReport === true);
         const reportEmployee = (payload.employees || []).find((item) => item.id === report?.employeeId);
-        const leaderName = String(leader?.name || "").toLowerCase();
-        const ownerLeader = leader?.id === "emp-miljan" || leader?.id === "emp-ivana" || leaderName.includes("miljan") || leaderName.includes("ivana");
+        const ownerLeader = leader?.id === "emp-miljan" || leader?.id === "emp-ivana";
         if (!leader || !report || (!ownerLeader && report.recipientId !== leaderId && reportEmployee?.leaderId !== leaderId)) {
           return json(res, 403, { ok: false, error: "Ovaj izveštaj nije dodeljen tom lideru." });
         }
         report.acknowledgedAt = new Date().toISOString();
         report.acknowledgedBy = leaderId;
         const updatedAt = new Date().toISOString();
-        const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
+        const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
           method: "PATCH",
           headers: headers(key, "return=representation"),
           body: JSON.stringify({ payload, updated_at: updatedAt }),
@@ -249,7 +249,7 @@ module.exports = async function handler(req, res) {
         payload.employeeReports.unshift(report);
       }
       const updatedAt = new Date().toISOString();
-      const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
+      const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
         method: "PATCH",
         headers: headers(key, "return=representation"),
         body: JSON.stringify({ payload, updated_at: updatedAt }),
@@ -264,3 +264,6 @@ module.exports = async function handler(req, res) {
   }
 };
 
+
+const originalHandler = module.exports;
+module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);
