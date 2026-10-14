@@ -741,7 +741,7 @@ function applyHazim2026ActualsV1() {
     ));
     const existingHours = state.employeeWorkLogs
       .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
-      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+      .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
     const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
     if (Math.abs(correctionHours) < 0.01) return;
     const [year, month] = monthKey.split("-").map(Number);
@@ -813,7 +813,7 @@ function applyMilica2026ActualsV1() {
     ));
     const existingHours = state.employeeWorkLogs
       .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
-      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+      .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
     const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
     if (Math.abs(correctionHours) < 0.01) return;
     const [year, month] = monthKey.split("-").map(Number);
@@ -864,7 +864,7 @@ function applyAleksa2026ActualsV1() {
     ));
     const existingHours = state.employeeWorkLogs
       .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
-      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+      .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
     const correctionHours = Math.round((targetHours - existingHours) * 100) / 100;
     if (Math.abs(correctionHours) < 0.01) return;
     const [year, month] = monthKey.split("-").map(Number);
@@ -1404,12 +1404,12 @@ function migrateState(data) {
     leaderId: "",
     status: "Aktivan",
     ...employee,
-    weeklyHours: parseNumber(employee.weeklyHours || 38.5, 38.5),
+    weeklyHours: parseNumber(employee.weeklyHours ?? 38.5, 38.5),
     openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
     openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
-    vacationDays: parseNumber(employee.vacationDays || 25, 26),
+    vacationDays: parseNumber(employee.vacationDays ?? 25, 25),
     openingVacationUsed: parseNumber(employee.openingVacationUsed || 0, 0),
-    giftDays: parseNumber(employee.giftDays || 1, 1),
+    giftDays: parseNumber(employee.giftDays ?? 1, 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
   }));
   const employeeAbsences = (data.employeeAbsences || []).map((absence) => ({
@@ -1433,7 +1433,7 @@ function migrateState(data) {
     employeeId: log.employeeId || employees[0]?.id || "",
     date: log.date || currentDateKey(),
     hours: Number(log.hours || 0),
-    minutes: Number(log.minutes || Math.round(Number(log.hours || 0) * 60)),
+    minutes: window.MarketizoCosts.minutes(log),
     activityId: log.activityId || "",
     activityName: log.activityName || log.note || "Rad",
     activityCategory: log.activityCategory || "Ostalo",
@@ -1657,6 +1657,25 @@ function isOpenClientLeadStatus(status) {
 
 function isClientLeadStatusContacted(status) {
   return normalizeLeadStatus(status) !== "Novi";
+}
+
+function confirmedFormRecordId(form) {
+  form.dataset ||= {};
+  const fingerprint = JSON.stringify(Array.from(new FormData(form).entries()));
+  if (form.dataset.retryFingerprint !== fingerprint) {
+    form.dataset.retryFingerprint = fingerprint;
+    form.dataset.retryId = crypto.randomUUID();
+  }
+  return form.dataset.retryId;
+}
+function clearConfirmedFormRecordId(form) {
+  delete form.dataset.retryId;
+  delete form.dataset.retryFingerprint;
+}
+function addConfirmedRecord(collection, record) {
+  const existing = collection.find(item => item.id === record.id);
+  if (!existing) collection.unshift(record);
+  return existing || record;
 }
 
 let adminConfirmedSaveInFlight = false;
@@ -1888,7 +1907,7 @@ function isClientLeadContacted(lead) {
 }
 
 function clientLeads(client) {
-  return (state.leads || []).filter((lead) => lead.client === client.name);
+  return (state.leads || []).filter((lead) => lead.clientId ? lead.clientId === client.id : lead.client === client.name);
 }
 
 function clientLeadStats(client) {
@@ -2284,7 +2303,7 @@ function renderAdminEmployeeRisk(monthKey) {
           return `
           <div class="setup-item alert-item clickable-item employee-hours-row ${status}" data-go-view="employees" data-select-shortcut-employee="${employee.id}">
             <strong>${formatHourBalance(balance)}</strong>
-            <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours || 38.5)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
+            <span>${employee.name}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours ?? 38.5)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
             <button class="mini-action" data-view-employee-activities="${employee.id}" type="button">Vidi aktivnosti</button>
           </div>`;
         })
@@ -2311,11 +2330,11 @@ function openEmployeeActivitiesDialog(employeeId, monthKey = currentMonthKey()) 
     dialog.className = "employee-activities-dialog";
     document.body.append(dialog);
   }
-  const totalMinutes = logs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+  const totalMinutes = logs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
   dialog.innerHTML = `<div class="employee-activities-dialog-card">
     <div class="panel-head"><div><p class="eyebrow">${monthLabel(monthKey)}</p><h2>${employee.name} · aktivnosti</h2></div><button class="icon-button" data-close-employee-activities type="button">×</button></div>
     <div class="employee-activities-summary"><strong>${logs.length}</strong><span>aktivnosti</span><strong>${totalMinutes} min</strong><span>ukupno</span></div>
-    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${log.activityName || "Rad"}</strong><span>${log.activityCategory || "Ostalo"} · ${formatDate(log.date)}</span></div><b>${Number(log.minutes || Number(log.hours || 0) * 60)} min</b><p>${log.clientName || "Bez klijenta"}${log.note ? ` · ${log.note}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
+    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${log.activityName || "Rad"}</strong><span>${log.activityCategory || "Ostalo"} · ${formatDate(log.date)}</span></div><b>${window.MarketizoCosts.minutes(log)} min</b><p>${log.clientName || "Bez klijenta"}${log.note ? ` · ${log.note}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
   </div>`;
   dialog.querySelector("[data-close-employee-activities]").addEventListener("click", () => dialog.close());
   dialog.showModal();
@@ -2903,7 +2922,7 @@ function vacationAnniversary(startDate, years) {
 }
 
 function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
-  const annualAllowance = parseNumber(employee?.vacationDays || 25, 25);
+  const annualAllowance = parseNumber(employee?.vacationDays ?? 25, 25);
   if (!employee?.startDate) return { earned: annualAllowance, used: 0, left: annualAllowance };
   const start = vacationUtcDate(employee.startDate);
   const reference = vacationUtcDate(referenceDate);
@@ -2967,7 +2986,7 @@ function employeeMonthAbsenceDays(employeeId, monthKey, type = "") {
 function employeeMonthHours(employeeId, monthKey) {
   const loggedHours = state.employeeWorkLogs
     .filter((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey))
-    .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
   const penaltyHours = employeeMonthLatePenaltyHours(employeeId, monthKey);
   const adjustmentHours = employeeMonthHourDeductionMinutes(employeeId, monthKey) / 60;
   return Math.round((loggedHours - penaltyHours - adjustmentHours) * 100) / 100;
@@ -2982,7 +3001,7 @@ function employeeMonthHourDeductionMinutes(employeeId, monthKey) {
 function employeeMonthRawHours(employeeId, monthKey) {
   return state.employeeWorkLogs
     .filter((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey))
-    .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
 }
 
 function employeeMonthLatePenaltyHours(employeeId, monthKey) {
@@ -3089,7 +3108,7 @@ function employeeMonthBalance(employee, monthKey) {
     const today = currentDateKey();
     const todayHours = state.employeeWorkLogs
       .filter((log) => log.employeeId === employee.id && String(log.date || "") === today)
-      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+      .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
     completedHours -= todayHours;
   }
   return Math.round((completedHours - employeeExpectedHoursToDate(employee, monthKey)) * 100) / 100;
@@ -3184,7 +3203,7 @@ function notifyOnce({ key, scope = "admin", targetId = "", type = "info", title,
   if (key && state.dismissedNotificationKeys.includes(key)) return;
   if (key && state.notifications.some((notification) => notification.key === key)) return;
   state.notifications.unshift({
-    id: crypto.randomUUID(),
+    id: key ? `notice-${key}` : crypto.randomUUID(),
     key,
     scope,
     targetId,
@@ -3281,7 +3300,7 @@ function generateSystemNotifications() {
         if (targetMinutes <= 0) return;
         const enteredMinutes = (state.employeeWorkLogs || [])
           .filter((log) => log.employeeId === employee.id && log.date === yesterday)
-          .reduce((sum, log) => sum + Number(log.minutes || Math.round(Number(log.hours || 0) * 60)), 0);
+          .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
         if (enteredMinutes >= targetMinutes) return;
         notifyOnce({
           key: `employee-hours-shortage-${employee.id}-${yesterday}`,
@@ -3539,7 +3558,7 @@ function renderSelectedEmployeeAbsenceList(employeeId, year) {
     </div>
     <div class="setup-item">
       <strong>${giftUsed}</strong>
-      <span>Poklon dan · ${Math.max(Number(employee?.giftDays || 1) - giftUsed, 0)} preostalo</span>
+      <span>Poklon dan · ${Math.max(Number(employee?.giftDays ?? 1) - giftUsed, 0)} preostalo</span>
     </div>
     <div class="setup-item">
       <strong>${sickDays}</strong>
@@ -3648,15 +3667,15 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.costWeeklyHours.value = window.MarketizoCosts.terms(employee, currentDateKey()).weeklyHours;
     form.elements.startDate.value = employee.startDate || "";
     form.elements.salary.value = Number(employee.salary || 0);
-    form.elements.weeklyHours.value = parseNumber(employee.weeklyHours || 38.5);
+    form.elements.weeklyHours.value = parseNumber(employee.weeklyHours ?? 38.5);
     form.elements.openingHourBalance.value = parseNumber(employee.openingHourBalance || 0);
     form.elements.openingBalanceMonth.value = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
     form.elements.isLeader.checked = Boolean(employee.isLeader);
     if (form.elements.isOperationalAdmin) form.elements.isOperationalAdmin.checked = Boolean(employee.isOperationalAdmin);
     form.elements.leaderId.value = employee.leaderId || "";
-    form.elements.vacationDays.value = Number(employee.vacationDays || 25);
+    form.elements.vacationDays.value = Number(employee.vacationDays ?? 25);
     form.elements.openingVacationUsed.value = parseNumber(employee.openingVacationUsed || 0);
-    form.elements.giftDays.value = Number(employee.giftDays || 1);
+    form.elements.giftDays.value = Number(employee.giftDays ?? 1);
     form.elements.status.value = employee.status || "Aktivan";
   } else {
     setText("employeeProfileMode", "Novi zaposleni");
@@ -3771,7 +3790,7 @@ function renderEmployeeWorkRows(monthKey) {
       <tr>
         <td>${formatDate(log.date)}</td>
         <td>${employee?.name || "Obrisan zaposleni"}</td>
-        <td>${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))} min<br /><span>${formatHours(log.hours || 0)}h</span></td>
+        <td>${window.MarketizoCosts.minutes(log)} min<br /><span>${formatHours(log.hours || 0)}h</span></td>
         <td><strong>${log.activityName || "Rad"}</strong>${log.note ? `<br /><span>${log.note}</span>` : ""}</td>
         <td>${log.clientName || "Bez klijenta"}</td>
         <td><strong>+</strong> ${log.positive || "-"}<br /><strong>-</strong> ${log.negative || "-"}</td>
@@ -3812,7 +3831,7 @@ function openWorkLogEditor(id) {
   dialog.innerHTML = `<form method="dialog" class="work-log-editor-form">
     <div class="panel-head"><div><p class="eyebrow">Evidencija rada</p><h2>Izmeni unos</h2></div><button class="icon-button" value="cancel" type="submit">×</button></div>
     <label>Datum<input name="date" type="date" value="${log.date}" required /></label>
-    <label>Minuta<input name="minutes" type="number" min="1" value="${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))}" required /></label>
+    <label>Minuta<input name="minutes" type="number" min="1" value="${window.MarketizoCosts.minutes(log)}" required /></label>
     <label>Aktivnost<select name="activityId" required>${activityOptions}</select></label>
     <label>Klijent<select name="clientId"><option value="">Bez klijenta</option>${clientOptions}</select></label>
     <label class="wide">Napomena<textarea name="note" rows="3">${log.note || ""}</textarea></label>
@@ -4265,8 +4284,8 @@ document.getElementById("employeeRatingForm")?.addEventListener("submit", async 
   const data = Object.fromEntries(new FormData(form));
   selectedEmployeeId = data.employeeId;
   state.employeeRatings = state.employeeRatings || [];
-  state.employeeRatings.push({
-    id: crypto.randomUUID(),
+  addConfirmedRecord(state.employeeRatings, {
+    id: confirmedFormRecordId(_confirmedTarget),
     employeeId: data.employeeId,
     month: data.month,
     source: data.source,
@@ -4276,25 +4295,11 @@ document.getElementById("employeeRatingForm")?.addEventListener("submit", async 
     createdAt: new Date().toISOString(),
   });
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   form.reset();
   form.elements.month.value = currentMonthKey();
   setSelectedEmployeeOnForms(selectedEmployeeId);
   renderAll();
-});
-
-document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) => {
-  const submitted = Object.fromEntries(new FormData(event.currentTarget));
-  window.setTimeout(async () => {
-  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
-  const _confirmedBefore = structuredClone(state);
-
-    const goal = [...(state.employeeGoals || [])].reverse().find((item) => item.employeeId === submitted.employeeId && item.title === submitted.title);
-    if (!goal) return;
-    goal.category = submitted.category || "Razvoj";
-    if (goal.status === "Završeno" && !goal.completedDate) goal.completedDate = currentDateKey();
-    if (!(await confirmAdminSave(_confirmedBefore))) return;
-    renderAll();
-  }, 0);
 });
 
 document.getElementById("employeeRecognitionForm")?.addEventListener("submit", async (event) => {
@@ -4309,7 +4314,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", a
   selectedEmployeeId = data.employeeId;
   state.employeeRecognitions = state.employeeRecognitions || [];
   const recognition = {
-    id: crypto.randomUUID(),
+    id: confirmedFormRecordId(_confirmedTarget),
     employeeId: data.employeeId,
     month: data.month,
     type: data.type,
@@ -4317,7 +4322,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", a
     text: data.text.trim(),
     createdAt: new Date().toISOString(),
   };
-  state.employeeRecognitions.push(recognition);
+  addConfirmedRecord(state.employeeRecognitions, recognition);
   notifyOnce({
     key: `recognition-created-${recognition.id}`,
     scope: "employee",
@@ -4327,6 +4332,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", a
     message: `${recognition.text} - ${recognition.author}`,
   });
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   form.reset();
   form.elements.month.value = currentMonthKey();
   setSelectedEmployeeOnForms(selectedEmployeeId);
@@ -5377,13 +5383,13 @@ function selectedPortalClient() {
 function portalClientLeads() {
   const client = selectedPortalClient();
   if (!client) return [];
-  return state.leads.filter((lead) => lead.client === client.name);
+  return state.leads.filter((lead) => lead.clientId ? lead.clientId === client.id : lead.client === client.name);
 }
 
 function portalClientTeam() {
   const client = selectedPortalClient();
   if (!client) return [];
-  return state.teamMembers.filter((member) => member.client === client.name);
+  return state.teamMembers.filter((member) => member.clientId ? member.clientId === client.id : member.client === client.name);
 }
 
 function renderClientPortal() {
@@ -5986,7 +5992,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", async (event
     const employee = state.employees.find((item) => item.id === id);
     if (!employee) return;
     const rate = window.MarketizoCosts.terms(employee, `${effectiveMonth}-01`);
-    const changed = payload.salary !== Number(employee.salary || 0) || payload.weeklyHours !== Number(employee.weeklyHours || 38.5) || costWeeklyHours !== rate.weeklyHours || effectiveMonth !== currentMonthKey();
+    const changed = payload.salary !== Number(employee.salary || 0) || payload.weeklyHours !== Number(employee.weeklyHours ?? 38.5) || costWeeklyHours !== rate.weeklyHours || effectiveMonth !== currentMonthKey();
     if (changed) {
       employee.salaryByMonth = { ...(employee.salaryByMonth || {}) };
       employee.weeklyHoursByMonth = { ...(employee.weeklyHoursByMonth || {}) };
@@ -5994,7 +6000,7 @@ document.getElementById("employeeForm")?.addEventListener("submit", async (event
       // Anchor today's terms before a past/future edit so other periods stay stable.
       if (effectiveMonth !== currentMonthKey()) {
         employee.salaryByMonth[currentMonthKey()] ??= Number(employee.salary || 0);
-        employee.weeklyHoursByMonth[currentMonthKey()] ??= Number(employee.weeklyHours || 38.5);
+        employee.weeklyHoursByMonth[currentMonthKey()] ??= Number(employee.weeklyHours ?? 38.5);
         employee.costWeeklyHoursByMonth[currentMonthKey()] ??= window.MarketizoCosts.terms(employee, currentDateKey()).weeklyHours;
       }
       employee.salaryByMonth[effectiveMonth] = payload.salary;
@@ -6053,7 +6059,7 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", async
     return;
   }
   const absence = {
-    id: crypto.randomUUID(),
+    id: confirmedFormRecordId(_confirmedTarget),
     employeeId,
     type: formData.get("type"),
     startDate: startDate <= endDate ? startDate : endDate,
@@ -6063,7 +6069,7 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", async
     approvedAt: new Date().toISOString(),
     approvedBy: "Admin",
   };
-  state.employeeAbsences.unshift(absence);
+  addConfirmedRecord(state.employeeAbsences, absence);
   selectedEmployeeId = employeeId;
   notifyOnce({
     key: `absence-admin-added-${absence.id}`,
@@ -6074,6 +6080,7 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", async
     message: `${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)} je upisan u kalendar.`,
   });
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   _confirmedTarget.reset();
   renderAll();
   showToast("Sačuvano", "Odsustvo je upisano i zaposlenom je poslato obaveštenje.", "ok");
@@ -6233,7 +6240,7 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", async (e
   const minutes = parseNumber(formData.get("minutes"), 0);
   const penaltyMinutes = Math.max(15, minutes);
   const record = {
-    id: crypto.randomUUID(),
+    id: confirmedFormRecordId(_confirmedTarget),
     employeeId,
     date: formData.get("date"),
     minutes,
@@ -6242,7 +6249,7 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", async (e
     acknowledgedAt: "",
     createdAt: new Date().toISOString(),
   };
-  state.employeeLateRecords.unshift(record);
+  addConfirmedRecord(state.employeeLateRecords, record);
   selectedEmployeeId = employeeId;
   notifyOnce({
     key: `late-record-${record.id}`,
@@ -6253,6 +6260,7 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", async (e
     message: `${record.minutes} minuta · odbija se ${record.penaltyMinutes} minuta · ${formatDate(record.date)} · ${record.reason}.`,
   });
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   _confirmedTarget.reset();
   _confirmedTarget.elements.date.value = currentDateKey();
   _confirmedTarget.elements.minutes.value = 10;
@@ -6274,23 +6282,26 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", async (e
     return;
   }
   const title = String(formData.get("title") || "").trim();
-  const duplicate = (state.employeeGoals || []).some((item) => item.employeeId === employeeId && String(item.title || "").trim().toLowerCase() === title.toLowerCase() && item.startDate === formData.get("startDate") && item.endDate === formData.get("endDate"));
+  const recordId = confirmedFormRecordId(_confirmedTarget);
+  const duplicate = (state.employeeGoals || []).some((item) => item.id !== recordId && item.employeeId === employeeId && String(item.title || "").trim().toLowerCase() === title.toLowerCase() && item.startDate === formData.get("startDate") && item.endDate === formData.get("endDate"));
   if (duplicate) {
     showToast("Već postoji", "Isti cilj je već dodat zaposlenom.", "warn");
     return;
   }
   const goal = {
-    id: crypto.randomUUID(),
+    id: recordId,
     employeeId,
     title,
     target: formData.get("target"),
+    category: formData.get("category") || "Razvoj",
+    completedDate: formData.get("status") === "Završeno" ? currentDateKey() : "",
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate"),
     progress: Number(formData.get("progress") || 0),
     status: formData.get("status"),
     note: "",
   };
-  state.employeeGoals.unshift(goal);
+  addConfirmedRecord(state.employeeGoals, goal);
   selectedEmployeeId = employeeId;
   notifyOnce({
     key: `goal-created-${goal.id}`,
@@ -6301,6 +6312,7 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", async (e
     message: `${goal.title}: ${goal.target || "bez dodatnog opisa"} · rok ${formatDate(goal.endDate)}.`,
   });
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   _confirmedTarget.reset();
   _confirmedTarget.elements.startDate.value = currentDateKey();
   _confirmedTarget.elements.endDate.value = currentDateKey();
@@ -6325,7 +6337,7 @@ document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", asyn
   const date = String(formData.get("date") || currentDateKey());
   const structuredAnswers = oneOnOneQuestions.map((question, index) => ({ question, answer: String(formData.get(`oneOnOneAnswer${index}`) || "").trim() }));
   const note = {
-    id: crypto.randomUUID(),
+    id: confirmedFormRecordId(_confirmedTarget),
     employeeId,
     date,
     title: `1:1 · ${formatDate(date)}`,
@@ -6333,7 +6345,7 @@ document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", asyn
     createdBy: "Admin",
     visibleToEmployee: true,
   };
-  state.employeeOneOnOnes.unshift(note);
+  addConfirmedRecord(state.employeeOneOnOnes, note);
   selectedEmployeeId = employeeId;
   notifyOnce({
     key: `one-on-one-${note.id}`,
@@ -6344,6 +6356,7 @@ document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", asyn
     message: `${note.title} · ${formatDate(note.date)}`,
   });
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   _confirmedTarget.reset();
   _confirmedTarget.elements.date.value = currentDateKey();
   renderAll();
@@ -6359,14 +6372,14 @@ document.getElementById("companyPlanForm")?.addEventListener("submit", async (ev
   event.preventDefault();
   const formData = new FormData(_confirmedTarget);
   const plan = {
-    id: crypto.randomUUID(),
+    id: confirmedFormRecordId(_confirmedTarget),
     date: formData.get("date"),
     type: formData.get("type"),
     title: formData.get("title"),
     note: formData.get("note"),
     createdAt: new Date().toISOString(),
   };
-  state.companyPlans.unshift(plan);
+  addConfirmedRecord(state.companyPlans, plan);
   state.employees.forEach((employee) => {
     notifyOnce({
       key: `company-plan-${plan.id}-${employee.id}`,
@@ -6378,6 +6391,7 @@ document.getElementById("companyPlanForm")?.addEventListener("submit", async (ev
     });
   });
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   _confirmedTarget.reset();
   _confirmedTarget.elements.date.value = currentDateKey();
   renderAll();
@@ -6582,8 +6596,9 @@ document.getElementById("portalLeadForm")?.addEventListener("submit", async (eve
   if (!client) return;
   const formData = new FormData(_confirmedTarget);
   const lead = {
-    id: crypto.randomUUID(),
+    id: confirmedFormRecordId(_confirmedTarget),
     client: client.name,
+    clientId: client.id,
     name: formData.get("name"),
     phone: formData.get("phone"),
     email: formData.get("email"),
@@ -6603,9 +6618,11 @@ document.getElementById("portalLeadForm")?.addEventListener("submit", async (eve
     lastContact: "",
     lastStatusChangeAt: isClientLeadStatusContacted(formData.get("status")) ? new Date().toISOString() : "",
   };
-  state.leads.unshift(lead);
-  client.leads = Number(client.leads || 0) + 1;
+  const isNewLead = !state.leads.some(item => item.id === lead.id);
+  addConfirmedRecord(state.leads, lead);
+  if (isNewLead) client.leads = Number(client.leads || 0) + 1;
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   _confirmedTarget.reset();
   document.getElementById("portalLeadPanel")?.setAttribute("hidden", "");
   renderAll();
@@ -6622,15 +6639,17 @@ document.getElementById("portalTeamForm")?.addEventListener("submit", async (eve
   const client = selectedPortalClient();
   if (!client) return;
   const formData = new FormData(_confirmedTarget);
-  state.teamMembers.push({
-    id: crypto.randomUUID(),
+  addConfirmedRecord(state.teamMembers, {
+    id: confirmedFormRecordId(_confirmedTarget),
     client: client.name,
+    clientId: client.id,
     name: formData.get("name"),
     role: formData.get("role"),
     phone: formData.get("phone"),
     email: formData.get("email"),
   });
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  clearConfirmedFormRecordId(_confirmedTarget);
   _confirmedTarget.reset();
   renderAll();
   showToast("Sačuvano", "Osoba je dodata u tim klijenta.", "ok");

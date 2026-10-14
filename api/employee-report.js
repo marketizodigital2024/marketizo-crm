@@ -224,7 +224,7 @@ module.exports = async function handler(req, res) {
       if (!employee) return json(res, 400, { ok: false, error: "Zaposleni nije pronađen ili nalog nije aktivan." });
       const minutes = (payload.employeeWorkLogs || [])
         .filter((log) => log.employeeId === employeeId && log.date === date)
-        .reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+        .reduce((sum, log) => sum + require("../cost-calculation.js").minutes(log), 0);
       payload.employeeReports = Array.isArray(payload.employeeReports) ? payload.employeeReports : [];
       let report = payload.employeeReports.find((item) => item.employeeId === employeeId && item.date === date && item.isFinalDailyReport === true);
       const now = new Date().toISOString();

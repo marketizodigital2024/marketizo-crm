@@ -308,7 +308,7 @@ function statusMatchesFilter(status, filter) {
 
 function clientLeads() {
   if (!activeClient) return [];
-  return (state.leads || []).filter((lead) => lead.client === activeClient.name);
+  return (state.leads || []).filter((lead) => lead.clientId ? lead.clientId === activeClient.id : lead.client === activeClient.name);
 }
 
 function filteredClientLeads() {
@@ -331,7 +331,7 @@ function filteredClientLeads() {
 function clientTeam() {
   if (!activeClient) return [];
   state.teamMembers = state.teamMembers || [];
-  return state.teamMembers.filter((member) => member.client === activeClient.name);
+  return state.teamMembers.filter((member) => member.clientId ? member.clientId === activeClient.id : member.client === activeClient.name);
 }
 
 function groupCount(items, key) {
@@ -926,13 +926,20 @@ document.getElementById("clientLeadForm").addEventListener("submit", async (even
   const form = event.currentTarget;
   const formData = new FormData(form);
   if (clientSaveInFlight) return;
+  form.dataset ||= {};
+  const fingerprint = JSON.stringify([activeClient.id, Array.from(formData.entries())]);
+  if (form.dataset.retryFingerprint !== fingerprint) {
+    form.dataset.retryFingerprint = fingerprint;
+    form.dataset.retryId = crypto.randomUUID();
+  }
   const previous = structuredClone(state);
   state.leads = state.leads || [];
   const status = normalizeLeadStatus(formData.get("status"));
   const reactedAt = isContactedStatus(status) ? new Date().toISOString() : "";
   const newLead = {
-    id: crypto.randomUUID(),
+    id: form.dataset.retryId,
     client: activeClient.name,
+    clientId: activeClient.id,
     name: formData.get("name"),
     phone: formData.get("phone"),
     email: formData.get("email"),
@@ -952,8 +959,10 @@ document.getElementById("clientLeadForm").addEventListener("submit", async (even
     calledAt: reactedAt || null,
     lastStatusChangeAt: reactedAt,
   };
+  const isNewLead = !state.leads.some(item => item.id === newLead.id);
+  state.leads = state.leads.filter(item => item.id !== newLead.id);
   state.leads.unshift(newLead);
-  activeClient.leads = Number(activeClient.leads || 0) + 1;
+  if (isNewLead) activeClient.leads = Number(activeClient.leads || 0) + 1;
   clientSaveInFlight = true;
   const saved = await saveState();
   clientSaveInFlight = false;
@@ -967,6 +976,8 @@ document.getElementById("clientLeadForm").addEventListener("submit", async (even
     state = loadClientState(saved.payload);
     activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
   }
+  delete form.dataset.retryId;
+  delete form.dataset.retryFingerprint;
   form.reset();
   document.getElementById("leadFormPanel").hidden = true;
   renderClientApp();
@@ -1056,11 +1067,19 @@ document.getElementById("clientTeamForm").addEventListener("submit", async (even
   const form = event.currentTarget;
   const formData = new FormData(form);
   if (clientSaveInFlight) return;
+  form.dataset ||= {};
+  const fingerprint = JSON.stringify([activeClient.id, Array.from(formData.entries())]);
+  if (form.dataset.retryFingerprint !== fingerprint) {
+    form.dataset.retryFingerprint = fingerprint;
+    form.dataset.retryId = crypto.randomUUID();
+  }
   const previous = structuredClone(state);
   state.teamMembers = state.teamMembers || [];
+  state.teamMembers = state.teamMembers.filter(item => item.id !== form.dataset.retryId);
   state.teamMembers.push({
-    id: crypto.randomUUID(),
+    id: form.dataset.retryId,
     client: activeClient.name,
+    clientId: activeClient.id,
     name: formData.get("name"),
     role: formData.get("role"),
     phone: formData.get("phone"),
@@ -1079,6 +1098,8 @@ document.getElementById("clientTeamForm").addEventListener("submit", async (even
     state = loadClientState(saved.payload);
     activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
   }
+  delete form.dataset.retryId;
+  delete form.dataset.retryFingerprint;
   form.reset();
   renderClientApp();
   showToast("Sačuvano", "Član tima je dodat.", "ok");

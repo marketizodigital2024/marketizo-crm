@@ -70,5 +70,7 @@
   ],
   "regions": [
     "dub1"
-  ]
+  ],
+  "buildCommand": "pnpm test",
+  "installCommand": "pnpm install --frozen-lockfile --prod=false"
 }

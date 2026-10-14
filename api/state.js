@@ -115,8 +115,8 @@ function hideClientState(payload, client) {
   financialKeys.forEach((key) => delete safeClient[key]);
   return {
     clients: [safeClient],
-    leads: (payload.leads || []).filter((item) => item.client === client.name || item.clientId === client.id),
-    teamMembers: (payload.teamMembers || []).filter((item) => item.client === client.name || item.clientId === client.id),
+    leads: (payload.leads || []).filter((item) => item.clientId ? item.clientId === client.id : item.client === client.name),
+    teamMembers: (payload.teamMembers || []).filter((item) => item.clientId ? item.clientId === client.id : item.client === client.name),
   };
 }
 
@@ -184,13 +184,14 @@ function mergeEmployeePayload(submitted, current, actor) {
 }
 
 function mergeClientPayload(submitted, current, actor) {
+  const submittedClient = submitted.clients?.find(item => item.id === actor.id);
   const clients = (current.clients || []).map((client) => client.id === actor.id
-    ? { ...client, crmSettings: submitted.clients?.[0]?.crmSettings || client.crmSettings, whatsapp: submitted.clients?.[0]?.whatsapp ?? client.whatsapp, leads: submitted.clients?.[0]?.leads ?? client.leads }
+    ? { ...client, crmSettings: submittedClient?.crmSettings || client.crmSettings, whatsapp: submittedClient?.whatsapp ?? client.whatsapp, leads: submittedClient?.leads ?? client.leads }
     : client);
   const replaceClientRows = (key) => {
     const previous = Array.isArray(current[key]) ? current[key] : [];
     const desired = Array.isArray(submitted[key]) ? submitted[key] : [];
-    const belongs = (item) => item.client === actor.name || item.clientId === actor.id;
+    const belongs = (item) => item.clientId ? item.clientId === actor.id : item.client === actor.name;
     return [...previous.filter((item) => !belongs(item)), ...desired.filter(belongs)];
   };
   return { ...current, clients, leads: replaceClientRows("leads"), teamMembers: replaceClientRows("teamMembers") };

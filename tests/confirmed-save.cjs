@@ -5,7 +5,7 @@ const end=source.indexOf('document.getElementById("editLeadForm")',start);
 let handler,failed=true,reset=0,success=0,notifications=0,seq=0;
 const client={id:'client-a',name:'Fixture',leads:0};
 const ctx={window:{MarketizoRemote:{cache(){}}},state:{clients:[client],leads:[]},activeClient:client,clientSaveInFlight:false,structuredClone,Date,Number,
- crypto:{randomUUID:()=>`fixture-${++seq}`},FormData:class{get(k){return {status:'Novi',name:'Example'}[k]||''}},
+ crypto:{randomUUID:()=>`fixture-${++seq}`},FormData:class{get(k){return {status:'Novi',name:'Example'}[k]||''}*entries(){yield*Object.entries({status:'Novi',name:'Example'})}},
  normalizeLeadStatus:v=>v,isContactedStatus:()=>false,localStorage:{setItem(){}},
  document:{getElementById(id){return id==='clientLeadForm'?{addEventListener(event,fn){handler=fn}}:{hidden:false}}},
  saveState:async()=>({ok:!failed,error:'fixture failure'}),loadClientState:v=>v,
@@ -13,7 +13,7 @@ const ctx={window:{MarketizoRemote:{cache(){}}},state:{clients:[client],leads:[]
 };
 vm.createContext(ctx);vm.runInContext(source.slice(start,end),ctx);
 (async()=>{
- const form={reset(){reset++}},event={preventDefault(){},currentTarget:form};
+ const form={dataset:{},reset(){reset++}},event={preventDefault(){},currentTarget:form};
  await handler(event);assert.equal(ctx.state.leads.length,0);assert.equal(reset,0);assert.equal(success,0);assert.equal(notifications,0);
  failed=false;await handler(event);assert.equal(ctx.state.leads.length,1);assert.equal(reset,1);assert.equal(success,1);assert.equal(notifications,1);
  const app=fs.readFileSync(__dirname+'/../app.js','utf8');

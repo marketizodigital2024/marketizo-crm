@@ -211,9 +211,9 @@ async function restoreEmployeeSession() {
 }
 
 function loadState(sourceData = null) {
-  const saved = sourceData ? "" : localStorage.getItem((window.MarketizoRemote?.storageKey?.() || "marketizoEmployeeData"));
   let data = {};
   try {
+    const saved = sourceData ? "" : localStorage.getItem((window.MarketizoRemote?.storageKey?.() || "marketizoEmployeeData"));
     data = sourceData ? JSON.parse(JSON.stringify(sourceData)) : saved ? JSON.parse(saved) : {};
   } catch {
     data = {};
@@ -236,19 +236,20 @@ function loadState(sourceData = null) {
     leaderId: "",
     status: "Aktivan",
     ...employee,
-    weeklyHours: parseNumber(employee.weeklyHours || 38.5, 38.5),
+    weeklyHours: parseNumber(employee.weeklyHours ?? 38.5, 38.5),
     openingHourBalance: parseNumber(employee.openingHourBalance || 0, 0),
     openingBalanceMonth: employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1),
-    vacationDays: parseNumber(employee.vacationDays || 25, 26),
+    vacationDays: parseNumber(employee.vacationDays ?? 25, 25),
     openingVacationUsed: parseNumber(employee.openingVacationUsed || 0, 0),
-    giftDays: parseNumber(employee.giftDays || 1, 1),
+    giftDays: parseNumber(employee.giftDays ?? 1, 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
   }));
   data.employeeAbsences = data.employeeAbsences || [];
   // Remote refreshes must retain entries still waiting for server confirmation.
   data.employeeWorkLogs = data.employeeWorkLogs || [];
   const knownWorkLogIds = new Set(data.employeeWorkLogs.map((log) => log.id));
-  readPendingWorkLogs().forEach(({ workLog }) => {
+  const visibleEmployeeIds = new Set(data.employees.map(employee => employee.id));
+  readPendingWorkLogs().filter(({ workLog }) => visibleEmployeeIds.has(workLog.employeeId)).forEach(({ workLog }) => {
     if (!knownWorkLogIds.has(workLog.id)) {
       data.employeeWorkLogs.unshift(workLog);
       knownWorkLogIds.add(workLog.id);
@@ -259,7 +260,7 @@ function loadState(sourceData = null) {
     employeeId: log.employeeId || "",
     date: log.date || currentDateKey(),
     hours: Number(log.hours || 0),
-    minutes: Number(log.minutes || Math.round(Number(log.hours || 0) * 60)),
+    minutes: window.MarketizoCosts.minutes(log),
     activityId: log.activityId || "",
     activityName: log.activityName || log.note || "Rad",
     activityCategory: log.activityCategory || "Ostalo",
@@ -320,24 +321,6 @@ function loadState(sourceData = null) {
     ...notification,
     hiddenUntil: notification.hiddenUntil || "",
   }));
-  const sladjan = data.employees.find((employee) =>
-    String(employee.name || "").trim().toLowerCase().replace(/[đ]/g, "dj") === "sladjan simic"
-  );
-  if (sladjan) {
-    sladjan.openingHourBalance = 0;
-    sladjan.openingBalanceMonth = "2025-12";
-    sladjan.monthlyBalanceOverrides = {
-      ...(sladjan.monthlyBalanceOverrides || {}),
-      "2026-01": 2.5,
-      "2026-02": 1.5,
-      "2026-03": 3.5,
-      "2026-04": 0,
-      "2026-05": 0,
-      "2026-06": -2,
-      "2026-07": 1.5,
-      "2026-08": -0.5,
-    };
-  }
   window.MarketizoRemote?.cache?.(data);
   return data;
 }
@@ -736,12 +719,15 @@ function reportRecipientId() {
   return activeEmployee.leaderId || "admin";
 }
 
-function employeeYearAbsenceDays(type, year) {
-  const openingUsed = type === "Godišnji odmor" && year === Number(currentDateKey().slice(0, 4)) ? parseNumber(activeEmployee?.openingVacationUsed || 0) : 0;
-  return openingUsed + employeeAbsences(type).filter((absence) => absence.status === "Odobreno").reduce((sum, absence) => {
-    const days = workdayKeysBetween(absence.startDate, absence.endDate).filter((day) => day.startsWith(`${year}-`));
-    return sum + days.length;
-  }, 0);
+function employeeYearAbsenceDays(type, year, employee = activeEmployee) {
+  const openingUsed = type === "Godišnji odmor" && year === Number(currentDateKey().slice(0, 4)) ? parseNumber(employee?.openingVacationUsed ?? 0) : 0;
+  const overrides = employee?.monthlyAbsenceDays || {};
+  const overriddenMonths = new Set(Object.keys(overrides).filter(month => month.startsWith(`${year}-`)));
+  const overriddenDays = [...overriddenMonths].reduce((sum, month) => sum + parseNumber(overrides[month]?.[type] ?? 0), 0);
+  return openingUsed + overriddenDays + (state.employeeAbsences || [])
+    .filter(absence => absence.employeeId === employee.id && absence.type === type && absence.status === "Odobreno")
+    .reduce((sum, absence) => sum + workdayKeysBetween(absence.startDate, absence.endDate)
+      .filter(day => day.startsWith(`${year}-`) && !overriddenMonths.has(day.slice(0, 7))).length, 0);
 }
 
 function vacationUtcDate(dateKey) {
@@ -757,7 +743,7 @@ function vacationAnniversary(startDate, years) {
 }
 
 function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
-  const annualAllowance = parseNumber(employee?.vacationDays || 25, 25);
+  const annualAllowance = parseNumber(employee?.vacationDays ?? 25, 25);
   if (!employee?.startDate) return { earned: annualAllowance, used: 0, left: annualAllowance };
   const start = vacationUtcDate(employee.startDate);
   const reference = vacationUtcDate(referenceDate);
@@ -779,10 +765,11 @@ function employeeVacationSnapshot(employee, referenceDate = currentDateKey()) {
   const firstYear = Number(String(employee.startDate).slice(0, 4));
   const lastYear = reference.getUTCFullYear();
   let used = 0;
-  for (let year = firstYear; year <= lastYear; year += 1) used += employeeYearAbsenceDays("Godišnji odmor", year);
-  const reserved = employeeAbsences("Godišnji odmor")
-    .filter((absence) => absence.status === "Odobreno")
-    .reduce((sum, absence) => sum + workdayKeysBetween(absence.startDate, absence.endDate).filter((day) => day > referenceDate && day.slice(0, 4) <= String(lastYear)).length, 0);
+  for (let year = firstYear; year <= lastYear; year += 1) used += employeeYearAbsenceDays("Godišnji odmor", year, employee);
+  const overriddenMonths = new Set(Object.keys(employee.monthlyAbsenceDays || {}));
+  const reserved = (state.employeeAbsences || [])
+    .filter((absence) => absence.employeeId === employee.id && absence.type === "Godišnji odmor" && absence.status === "Odobreno")
+    .reduce((sum, absence) => sum + workdayKeysBetween(absence.startDate, absence.endDate).filter((day) => day > referenceDate && day.slice(0, 4) <= String(lastYear) && !overriddenMonths.has(day.slice(0, 7))).length, 0);
   used = Math.round((used - reserved) * 100) / 100;
   return { earned, used, reserved, left: Math.round((earned - used - reserved) * 100) / 100 };
 }
@@ -876,7 +863,7 @@ function employeeMonthLatePenaltyHours(employeeId, monthKey) {
 function employeeMonthHours(employee, monthKey) {
   const logged = (state.employeeWorkLogs || [])
     .filter((log) => log.employeeId === employee.id && String(log.date || "").startsWith(monthKey))
-    .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+    .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
   const adjustmentHours = (state.employeeHourAdjustments || [])
     .filter((adjustment) => adjustment.employeeId === employee.id && String(adjustment.date || "").startsWith(monthKey))
     .reduce((sum, adjustment) => sum + Math.max(0, Number(adjustment.minutes || 0)), 0) / 60;
@@ -915,7 +902,7 @@ function monthBalance(employee, monthKey) {
     const today = currentDateKey();
     const todayHours = state.employeeWorkLogs
       .filter((log) => log.employeeId === employee.id && String(log.date || "") === today)
-      .reduce((sum, log) => sum + Number(log.hours || 0), 0);
+      .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
     completedHours -= todayHours;
   }
   return Math.round((completedHours - expectedHoursToDate(employee, monthKey)) * 100) / 100;
@@ -976,7 +963,7 @@ function hasWorkLogForDate(date) {
 function loggedMinutesForDate(date) {
   return (state.employeeWorkLogs || [])
     .filter((log) => log.employeeId === activeEmployee.id && log.date === date)
-    .reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+    .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
 }
 
 function expectedMinutesForDate(employee, date) {
@@ -1150,7 +1137,7 @@ async function waitForOnlineHydration() {
 
 function renderEmployeePortal() {
   if (!activeEmployee) return;
-  state = loadState();
+  state = loadState(state);
   activeEmployee = state.employees.find((employee) => employee.id === activeEmployee.id) || activeEmployee;
   syncOperationalAdminAccess();
   const year = Number(portalMonth.slice(0, 4));
@@ -1163,7 +1150,7 @@ function renderEmployeePortal() {
   const vacation = employeeVacationSnapshot(activeEmployee, year === currentYear ? currentDateKey() : `${year}-12-31`);
   const giftUsed = employeeYearAbsenceDays("Poklon dan", year);
   const sickDays = employeeYearAbsenceDays("Bolovanje", year);
-  const giftLeft = Math.max(Number(activeEmployee.giftDays || 1) - giftUsed, 0);
+  const giftLeft = Math.max(Number(activeEmployee.giftDays ?? 1) - giftUsed, 0);
 
   document.getElementById("employeePortalMonth").value = portalMonth;
   setText("employeePortalName", activeEmployee.name);
@@ -1174,13 +1161,13 @@ function renderEmployeePortal() {
   setText("portalHourBalance", formatHourBalance(balance));
   setText("portalVacation", `${formatVacationDays(vacation.used)}/${formatVacationDays(vacation.earned)}`);
   setText("portalVacationLeft", `${formatVacationDays(vacation.reserved)} rezervisano · ${formatVacationDays(vacation.left)} raspoloživo`);
-  setText("portalGiftDay", `${giftUsed}/${activeEmployee.giftDays || 1}`);
+  setText("portalGiftDay", `${giftUsed}/${activeEmployee.giftDays ?? 1}`);
   setText("portalGiftLeft", `${giftLeft} preostalo`);
   setText("portalSickDays", sickDays);
   setText("portalStartDate", formatDate(activeEmployee.startDate));
   setText("portalPosition", activeEmployee.position || "-");
   setText("portalSalary", currency.format(Number(activeEmployee.salary || 0)));
-  setText("portalWeeklyHours", `${formatHours(activeEmployee.weeklyHours || 38.5)}h`);
+  setText("portalWeeklyHours", `${formatHours(activeEmployee.weeklyHours ?? 38.5)}h`);
 
   const hourDate = document.querySelector('#portalHoursForm input[name="date"]');
   const absenceStart = document.querySelector('#portalAbsenceForm input[name="startDate"]');
@@ -1276,7 +1263,7 @@ function renderPortalCalendar() {
                 return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${label}</span>`;
               })
               .join("")}
-            ${dayLogs.length ? `<span class="calendar-note hours-note">${formatHours(dayLogs.reduce((sum, log) => sum + Number(log.hours || 0), 0))}h</span>` : ""}
+            ${dayLogs.length ? `<span class="calendar-note hours-note">${formatHours(dayLogs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0))}h</span>` : ""}
           </div>`;
         })
         .join("")}
@@ -1342,7 +1329,7 @@ function renderPortalTeamTimeline() {
 function renderPortalHourRows(logs) {
   const selectedDate = document.getElementById("portalHoursDateFilter")?.value || "";
   const visibleLogs = selectedDate ? logs.filter((log) => log.date === selectedDate) : logs;
-  const totalMinutes = visibleLogs.reduce((sum, log) => sum + Number(log.minutes || Math.round(Number(log.hours || 0) * 60)), 0);
+  const totalMinutes = visibleLogs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
   const rows = visibleLogs
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(
@@ -1351,7 +1338,7 @@ function renderPortalHourRows(logs) {
         <header>
           <div>
             <strong>${formatDate(log.date)}</strong>
-            <span>${Number(log.minutes || Math.round(Number(log.hours || 0) * 60))} min · ${log.locked === false ? "Otključano" : "Zaključano"}</span>
+            <span>${window.MarketizoCosts.minutes(log)} min · ${log.locked === false ? "Otključano" : "Zaključano"}</span>
           </div>
         </header>
         <p><b>Aktivnost:</b> ${log.activityCategory || "Ostalo"} · ${log.activityName || "Rad"}</p>
@@ -1688,13 +1675,13 @@ function renderLeaderPanel() {
   const teamLogs = selectedActivityDate
     ? monthTeamLogs.filter((log) => log.date === selectedActivityDate)
     : monthTeamLogs;
-  const teamLogMinutes = teamLogs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+  const teamLogMinutes = teamLogs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
   setText("leaderActivitySummary", `${teamLogs.length} aktivnosti · ${formatHours(teamLogMinutes / 60)}h`);
   document.getElementById("leaderActivityLogList").innerHTML = teamLogs.length
     ? teamLogs
         .map((log) => {
           const employee = (state.employees || []).find((item) => item.id === log.employeeId);
-          const minutes = Number(log.minutes || Number(log.hours || 0) * 60);
+          const minutes = window.MarketizoCosts.minutes(log);
           return `
           <div class="setup-item activity-log-row">
             <strong>${formatNumber(minutes)} min</strong>
@@ -1919,7 +1906,7 @@ function renderLeaderReportsPage() {
   const logs = (state.employeeWorkLogs || [])
     .filter((log) => visibleIds.has(log.employeeId) && log.date === selectedDate)
     .sort((a, b) => String(a.createdAt || a.id || "").localeCompare(String(b.createdAt || b.id || "")));
-  const totalMinutes = logs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+  const totalMinutes = logs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
   setText("leaderLiveReportSummary", `${logs.length} ${logs.length === 1 ? "aktivnost" : "aktivnosti"}`);
   setText("leaderLiveReportMinutes", `${formatNumber(totalMinutes)} min`);
   setText("leaderLiveReportTitle", `${formatDate(selectedDate)} · ${selectedEmployee ? visiblePeople[0]?.name || "Zaposleni" : "ceo tim"}`);
@@ -1931,13 +1918,13 @@ function renderLeaderReportsPage() {
       ? visiblePeople.map((employee) => {
           const employeeLogs = logs.filter((log) => log.employeeId === employee.id);
           if (!employeeLogs.length) return "";
-          const minutes = employeeLogs.reduce((sum, log) => sum + Number(log.minutes || Number(log.hours || 0) * 60), 0);
+          const minutes = employeeLogs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
           const expected = expectedMinutesForDate(employee, selectedDate);
           const missing = Math.max(0, expected - minutes);
           return `<div class="leader-report-day">
             <div class="panel-head"><div><h3>${escapePortalText(employee.name || "Zaposleni")}</h3><p class="muted">Upisano ${formatNumber(minutes)} od ${formatNumber(expected)} min${missing ? ` · nedostaje ${formatNumber(missing)} min` : " · dnevni fond ispunjen"}</p></div><strong>${formatHours(minutes / 60)}h</strong></div>
             ${employeeLogs.map((log) => {
-              const logMinutes = Number(log.minutes || Number(log.hours || 0) * 60);
+              const logMinutes = window.MarketizoCosts.minutes(log);
               return `<div class="setup-item activity-log-row"><strong>${formatNumber(logMinutes)} min</strong><span><b>${escapePortalText(log.activityName || "Aktivnost")}</b><br />Klijent: ${escapePortalText(log.clientName || "Bez klijenta")}${log.note ? `<br />${escapePortalText(log.note)}` : ""}</span></div>`;
             }).join("")}
           </div>`;
