@@ -3148,14 +3148,12 @@ function hasEmployeeWorkLog(employeeId, date) {
 }
 
 function readSmallFile(file) {
-  return new Promise((resolve) => {
-    if (!file || !file.name || file.size > 1500000) {
-      resolve("");
-      return;
-    }
+  return new Promise((resolve, reject) => {
+    if (!file || !file.name) { resolve(""); return; }
+    if (file.size > 1500000) { reject(new Error("Ugovor je veći od 1,5 MB. Izaberi manji fajl.")); return; }
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => resolve("");
+    reader.onerror = () => reject(new Error("Ugovor nije pročitan. Izaberi fajl ponovo."));
     reader.readAsDataURL(file);
   });
 }
@@ -6147,6 +6145,7 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
     return;
   }
   if (!state.employeeWorkLogs.some(item => item.id === workLog.id)) state.employeeWorkLogs.unshift(workLog);
+  window.MarketizoRemote?.adoptBaseline?.(state);
   delete form.dataset.pendingWorkId;
   delete form.dataset.pendingWorkFingerprint;
   selectedEmployeeId = employeeId;
@@ -6413,6 +6412,14 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const submitButton = form.querySelector('[type="submit"]');
   if (submitButton?.disabled) return;
   if (submitButton) submitButton.disabled = true;
+  form.dataset.saving = "true";
+  adminConfirmedSaveInFlight = true;
+  try {
+  const fingerprint = JSON.stringify(Array.from(formData.entries(), ([key, value]) => [key, value && typeof value === "object" ? [value.name, value.size, value.lastModified] : value]));
+  if (form.dataset.retryFingerprint !== fingerprint) {
+    form.dataset.retryFingerprint = fingerprint;
+    form.dataset.retryId = crypto.randomUUID();
+  }
   const values = packageValues(formData.get("package"), formData.get("revenue"), formData.get("contractMonths"));
   const contractFile = formData.get("contractFile");
   const invoiceStatus = "Nije poslat";
@@ -6421,7 +6428,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const startDate = String(formData.get("startDate") || "");
   const invoiceStartMonth = String(formData.get("invoiceStartMonth") || startDate.slice(0, 7) || selectedMonthKey());
   state.clients.unshift({
-    id: crypto.randomUUID(),
+    id: form.dataset.retryId,
     name,
     niche: formData.get("niche"),
     country: formData.get("country"),
@@ -6469,11 +6476,20 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   });
   withLoginDefaults(state.clients[0]);
   if (!(await confirmAdminSave(_confirmedBefore))) return;
+  delete form.dataset.retryId;
+  delete form.dataset.retryFingerprint;
   form.reset();
-  if (submitButton) submitButton.disabled = false;
   document.getElementById("clientAddPanel")?.setAttribute("hidden", "");
   renderAll();
   showToast("Sačuvano", "Klijent je dodat u bazu.", "ok");
+  } catch (error) {
+    state = _confirmedBefore;
+    showToast("Nije sačuvano", error.message || "Pokušaj ponovo; forma je zadržana.", "warn");
+  } finally {
+    adminConfirmedSaveInFlight = false;
+    delete form.dataset.saving;
+    if (submitButton) submitButton.disabled = false;
+  }
 });
 
 const adminPackageSelect = document.querySelector('#adminClientForm select[name="package"]');
@@ -6500,6 +6516,9 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
   if (!client) return;
   const values = packageValues(formData.get("package"), formData.get("revenue"), formData.get("contractMonths"));
   const contractFile = formData.get("contractFile");
+  _confirmedTarget.dataset.saving = "true";
+  adminConfirmedSaveInFlight = true;
+  try {
   const contractFileData = await readSmallFile(contractFile);
   Object.assign(client, {
     name: formData.get("name"),
@@ -6543,6 +6562,13 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
   editClientModal.close();
   renderAll();
   showToast("Sačuvano", "Izmene klijenta su sačuvane.", "ok");
+  } catch (error) {
+    state = _confirmedBefore;
+    showToast("Nije sačuvano", error.message || "Pokušaj ponovo; forma je zadržana.", "warn");
+  } finally {
+    adminConfirmedSaveInFlight = false;
+    delete _confirmedTarget.dataset.saving;
+  }
 });
 
 document.getElementById("portalLeadForm")?.addEventListener("submit", async (event) => {
@@ -6762,6 +6788,8 @@ hydrateOnlineState().then(() => {
   window.MarketizoRemote?.startPolling((payload) => {
     state = loadState(payload);
     window.MarketizoRemote.adoptBaseline?.(state);
+    onlineHydrationComplete = true;
+    setAdminLoadStatus(true);
     renderAll();
   });
 });
