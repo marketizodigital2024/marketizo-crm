@@ -37,10 +37,11 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
           if (since && Number(chat.timestamp || 0) > 0 && Number(chat.timestamp) * 1000 < since && now() - since < 900000) continue;
           const scanStarted = now();
           try {
-            const messages = (await fetchMessages(chat, since ? 500 : 100))
+            const historyLimit = since && scanStarted - since > 900000 ? 500 : 100;
+            const messages = (await fetchMessages(chat, historyLimit))
               .sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
             const oldest = Number(messages[0]?.timestamp || 0) * 1000;
-            if (since && messages.length >= 500 && oldest > since) group.historyGap = true;
+            if (since && messages.length >= historyLimit && oldest > since) group.historyGap = true;
             for (const message of messages) {
               const at = Number(message.timestamp || 0) * 1000;
               if (!Number.isFinite(at) || !at) continue;
