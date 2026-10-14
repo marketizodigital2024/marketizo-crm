@@ -1402,11 +1402,25 @@ async function handleOwnerClientRead(req, res) {
   const expected = process.env.OWNER_READ_API_TOKEN || "";
   const supplied = String(req.headers.authorization || "").replace(/^Bearer /, "");
   if (expected.length < 40 || supplied.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) return respond(401, {error:"Unauthorized"});
-  if (req.method !== "GET") return respond(405, {error:"Read-only endpoint"});
+  if (!["GET", "POST"].includes(req.method)) return respond(405, {error:"Method not allowed"});
   if (!whatsappReady) return respond(503, {error:"WhatsApp disconnected"});
   if (ownerReadInFlight) return respond(429, {error:"One owner review is already running"});
   ownerReadInFlight = true;
   try {
+    if (req.method === "POST") {
+      let body = "";
+      for await (const chunk of req) {
+        body += chunk.toString("utf8");
+        if (body.length > 6000) return respond(413, {error:"Summary too long"});
+      }
+      let input;
+      try { input = JSON.parse(body); } catch { return respond(400, {error:"Invalid JSON"}); }
+      if (typeof input.summary !== "string" || !input.summary.trim() || input.summary.length > 3500) return respond(400, {error:"A concise summary is required"});
+      const key = crypto.createHash("sha256").update(input.summary).digest("hex").slice(0,20);
+      const label = "owner requested client summary " + key;
+      await sendWhatsappMessage(alertTo, input.summary, label);
+      return respond(200, {accepted:true,label,delivery:outbox.status()});
+    }
     const query = new URL(req.url, "http://localhost").searchParams.get("client") || "";
     if (!query.trim() || query.length > 150) return respond(400, {error:"Client name required"});
     await syncClickUpClients();
