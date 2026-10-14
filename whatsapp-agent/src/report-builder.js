@@ -21,6 +21,7 @@ export function renderDailyReport({ date, reviewedCount, groupCount, alerts, cov
   const symbols = { URGENT: '🔴 Hitno', RED: '🔴 Rizik', YELLOW: '🟡 Potrebna pažnja', PRAISE: '🟢 Važna pohvala' };
   const header = `*DNEVNI PREGLED — ${date}*\nPregledano ${reviewedCount}/${groupCount} grupa. ClickUp dodela: ${coverage.matchedGroups}/${coverage.clientGroups}.`;
   const warnings = [];
+  if (coverage.unmappedActiveClients?.length) warnings.push(`Aktivni klijenti bez potvrđene grupe: ${coverage.unmappedActiveClients.join(', ')}.`);
   if (!coverage.clickupFresh) warnings.push('ClickUp dodele nisu sveže potvrđene; poslednja poznata raspodela može biti zastarela.');
   if (coverage.unmatchedGroups.length) warnings.push(`Nepovezane grupe (${coverage.unmatchedGroups.length}): ${coverage.unmatchedGroups.join(', ')}.`);
   if (coverage.unreadableGroups.length) warnings.push(`Čitanje nije potvrđeno za: ${coverage.unreadableGroups.join(', ')}.`);

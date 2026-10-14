@@ -171,7 +171,7 @@ if (Array.isArray(savedClickup?.clients)) {
 async function notifyTechnicalIncident(key, summary) {
   dailyState.technicalIncidents ||= {};
   const previous = dailyState.technicalIncidents[key];
-  if (previous && !previous.resolvedAt && Date.now() - Number(previous.notifiedAt || 0) < 6 * 3600000) return;
+  if (previous && !previous.resolvedAt && previous.summary === summary && Date.now() - Number(previous.notifiedAt || 0) < 6 * 3600000) return;
   const incident = { key, summary, openedAt: previous?.openedAt || Date.now(), notifiedAt: Date.now(), resolvedAt: 0 };
   dailyState.technicalIncidents[key] = incident;
   saveDailyState();
@@ -203,10 +203,13 @@ function activeGroupIds() {
 function operationalCoverage() {
   const groups = groupMonitor.chats().filter(chat => !isInternalGroup(chat.name) && shouldMonitorGroup(chat));
   const assignments = clickupContextForGroups(groups.map(chat => chat.name));
+  const mappedClientIds = new Set(assignments.flatMap(item => item.client?.clients ? item.client.clients.map(client => client.clickupTaskId) : item.client ? [item.client.clickupTaskId] : []));
+  const unmappedActiveClients = clickupClients.filter(client => client.clientStatus === "Aktivan" && !mappedClientIds.has(client.clickupTaskId)).map(client => client.name);
   return {
     ...groupMonitor.status(),
     clientGroups: groups.length,
     activeClickupClients: clickupClients.filter(client => client.clientStatus === "Aktivan").length,
+    unmappedActiveClients,
     matchedGroups: assignments.filter(item => item.client).length,
     unmatchedGroups: assignments.filter(item => !item.client).map(item => item.group),
     clickupFresh: Boolean(clickupLastSyncAt && Date.now() - clickupLastSyncAt < clickupSyncIntervalMs * 3),
@@ -1551,6 +1554,9 @@ const groupMonitor = createGroupMonitor({
       const extra = coverage.unmatchedGroups.length > 10 ? " (i još " + (coverage.unmatchedGroups.length - 10) + ")" : "";
       void notifyTechnicalIncident("group-mapping", "Za " + coverage.unmatchedGroups.length + " grupa nije potvrđena veza sa Raspodelom klijenata: " + list + extra + ". Čitam njihove poruke, ali neću izmišljati zaposlene koji rade za njih.");
     } else if (coverage.clickupFresh) resolveTechnicalIncident("group-mapping");
+    if (coverage.clickupFresh && coverage.unmappedActiveClients.length) {
+      void notifyTechnicalIncident("active-client-groups", "U ClickUp-u su aktivni, ali agent nema potvrđenu WhatsApp grupu za: " + coverage.unmappedActiveClients.join(", ") + ". Njihove razgovore ne mogu da uključim u dnevni pregled dok agent nije dodat ili naziv nije povezan.");
+    } else if (coverage.clickupFresh) resolveTechnicalIncident("active-client-groups");
     if (Date.now() - lastTeamRosterRefreshAt > 300000) void refreshTeamMembers().catch(error =>
       { console.error("[TEAM_ROSTER_REFRESH_FAILED] retaining known roster:", error.message); void notifyTechnicalIncident("team-roster", "Ne mogu da osvežim članove internog tima. Poslednji potvrđeni članovi ostaju u praćenju."); });
   }
@@ -1562,6 +1568,7 @@ function publicMonitoringStatus() {
     lastDiscoveryAt: coverage.lastDiscoveryAt, discoveryError: coverage.discoveryError,
     monitoredGroups: coverage.monitoredGroups, excludedGroups: coverage.excludedGroups,
     activeClickupClients: coverage.activeClickupClients,
+    unmappedActiveClientCount: coverage.unmappedActiveClients.length,
     clientGroups: coverage.clientGroups, matchedGroups: coverage.matchedGroups, unmatchedGroupCount: coverage.unmatchedGroups.length,
     clickupFresh: coverage.clickupFresh, clickupLastError: coverage.clickupLastError,
     processingQueue: Object.keys(processingQueueState.jobs).length };
