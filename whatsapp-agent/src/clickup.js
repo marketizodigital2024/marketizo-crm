@@ -55,7 +55,10 @@ export function matchClickUpClient(groupName, clients) {
     const selected = active.length ? active : candidates;
     const composite = { clickupTaskId: selected.map(client => client.clickupTaskId).join("+"),
       name: selected.map(client => client.name).join(" + "), clientStatus: active.length ? "Aktivan" : "Neaktivan",
-      clients: selected, assignmentSource: "Explicit multi-client group name; separate ClickUp role fields" };
+      clients: selected, separateBusinesses: true,
+      sharedOwner: candidates.some(client => client.clickupTaskId === "12445eqxrun") && candidates.some(client => client.clickupTaskId === "12445eqxruj"),
+      reportingUnit: "One WhatsApp group; retain each business and its own employees separately",
+      assignmentSource: "Explicit multi-client group name; separate ClickUp role fields" };
     for (const role of ["scenarist", "editor", "smm", "paidAds", "videographer", "checking"]) {
       composite[role] = selected.map(client => client.name + ": " + (client[role] || "Nije potvrđeno")).join("; ");
     }
