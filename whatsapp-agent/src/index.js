@@ -996,7 +996,7 @@ function startDailyReportScheduler() {
     const closingDue = reportMode !== "weekly" && closingReportMissing;
     const retryAllowed = !dailyState.nextClosingReportAttemptAt
       || new Date(dailyState.nextClosingReportAttemptAt).getTime() <= Date.now();
-    const deliveryWindow = pendingWeeklyDelivery || (weekday && minutes >= 17 * 60 + 30 && minutes < 20 * 60);
+    const deliveryWindow = pendingWeeklyDelivery || ((weekday || reportMode !== "weekly") && minutes >= 17 * 60 + 30 && minutes < 20 * 60);
     if (whatsappReady && deliveryWindow && (weeklyDue || closingDue) && retryAllowed && !closingReportInFlight) {
       closingReportInFlight = true;
       if (weeklyDue) {
@@ -1121,7 +1121,7 @@ function loadResponseState() {
 
 async function refreshTeamMembers() {
   const chats = await client.getChats();
-  const teamChat = chats.find((chat) => chat.isGroup && chat.name === teamGroupName);
+  const teamChat = chats.find((chat) => chat.isGroup && normalizedName(chat.name).trim() === normalizedName(teamGroupName).trim());
   if (!teamChat) throw new Error(`Team group not found: ${teamGroupName}`);
   teamMemberIds.clear();
   teamMemberNumbers.clear();
@@ -1271,6 +1271,9 @@ http.createServer((req, res) => {
       status: fatalExitScheduled ? "restarting" : "ok",
       ready,
       whatsappReady,
+      teamMonitoringInitialized,
+      teamMemberCount: teamMemberIds.size,
+      reportMode,
       fresh: Boolean(fresh),
       consecutiveHealthFailures,
       lastReportDate: dailyState.lastReportDate || "",
@@ -1307,6 +1310,40 @@ client.on("qr", async (code) => {
   console.log("WhatsApp QR is ready on the private pairing page.");
 });
 
+let teamMonitoringInitialized = false;
+let teamMonitoringInitializing = false;
+async function initializeTeamMonitoring() {
+  if (!whatsappReady || teamMonitoringInitialized || teamMonitoringInitializing) return;
+  teamMonitoringInitializing = true;
+  try {
+    await withTimeout(refreshTeamMembers(), "team roster initialization");
+    loadResponseState();
+    loadClientWaitState();
+    loadGroupHistory();
+    loadFollowupState();
+    loadProcessedMessagesState();
+    startDailyReportScheduler();
+    teamMonitoringInitialized = true;
+    console.log("[TEAM_MONITORING_READY] Team roster and report scheduler initialized.");
+  } catch (error) {
+    console.error("[TEAM_MONITORING_RETRY] Setup incomplete; retrying in 30 seconds:", error);
+  } finally {
+    teamMonitoringInitializing = false;
+  }
+  if (teamMonitoringInitialized) {
+    try {
+      await sendDeploymentTest();
+      await sendYesterdayAnalysisTest();
+    } catch (error) {
+      console.error("Startup notification failed:", error);
+    }
+  }
+}
+const teamMonitoringRetryTimer = setInterval(() => {
+  void initializeTeamMonitoring();
+}, 30000);
+teamMonitoringRetryTimer.unref();
+
 client.on("ready", async () => {
   startClickUpSync();
   clearTimeout(initializationTimer);
@@ -1317,19 +1354,7 @@ client.on("ready", async () => {
   startWhatsAppHealthWatchdog();
   qrDataUrl = null;
   console.log("Marketizo WhatsApp agent is connected.");
-  try {
-    await refreshTeamMembers();
-    loadResponseState();
-    loadClientWaitState();
-    loadGroupHistory();
-    loadFollowupState();
-    loadProcessedMessagesState();
-    startDailyReportScheduler();
-    await sendDeploymentTest();
-    await sendYesterdayAnalysisTest();
-  } catch (error) {
-    console.error("Team roster setup failed:", error);
-  }
+  await initializeTeamMonitoring();
 });
 
 client.on("message_ack", (message, ack) => {
