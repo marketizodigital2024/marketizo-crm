@@ -1,4 +1,4 @@
-const CACHE_NAME = "marketizo-crm-20261014-audit-fix-r2";
+const CACHE_NAME = "marketizo-crm-20261014-audit-fix-r3";
 const ASSETS = [
   "index.html",
   "client-login.html",
@@ -12,11 +12,11 @@ const ASSETS = [
   "employees-goals.html",
   "employees-settings.html",
   "styles.css?v=20261014-audit-fix",
-  "app.js?v=20261014-audit-fix",
+  "app.js?v=20261014-audit-fix-r3",
   "cost-calculation.js?v=20261008-repair",
   "client-portal.js?v=20261014-audit-fix",
   "employee-portal.js?v=20261014-audit-fix",
-  "remote-state.js?v=20261014-audit-fix",
+  "remote-state.js?v=20261014-audit-fix-r3",
   "lib/state-patch.js?v=20261014-audit-fix",
   "admin-auth.js?v=20261014-audit-fix",
   "marketizo-logo.png",
