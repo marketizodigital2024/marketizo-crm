@@ -150,6 +150,24 @@ module.exports = async function handler(req, res) {
       const { accessSession, readStoredState } = require("./state.js").helpers;
       const row = await readStoredState({ url, key });
       if (accessSession(req, row.payload, key)?.role !== "full-admin") return send(res, 401, { error: "Unauthorized" });
+      if (String(req.query?.verify || "") === "1") {
+        const pathname = String(req.query?.pathname || "");
+        if (!/^marketizo-crm\/daily\/\d{4}-\d{2}-\d{2}\.json$/.test(pathname)) return send(res, 400, { ok: false, error: "Nevažeća putanja backupa." });
+        const blob = await blobClient();
+        if (!blob) return send(res, 503, { ok: false, error: "Nezavisni backup nije povezan." });
+        const downloaded = await blob.get(pathname, { access: "private" });
+        if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) return send(res, 404, { ok: false, error: "Backup nije pronađen." });
+        const document = JSON.parse(await new Response(downloaded.stream).text());
+        const state = document.state;
+        if (document.format !== "marketizo-crm-backup-v1" || !state || Array.isArray(state) || !Array.isArray(state.employees) || !state.employees.length || !Array.isArray(state.clients) || !Array.isArray(state.employeeWorkLogs)) return send(res, 422, { ok: false, error: "Backup nije prošao proveru strukture." });
+        const checksum = require("node:crypto").createHash("sha256").update(JSON.stringify(state)).digest("hex");
+        return send(res, 200, { ok: true, verified: true, pathname, backupDate: document.backupDate,
+          sourceUpdatedAt: document.sourceUpdatedAt, currentRevision: document.sourceUpdatedAt === row.updatedAt,
+          counts: backupCounts(state), checksum, includesKpi: document.kpi != null,
+          contractFiles: state.clients.filter(client => Boolean(client.contractFileData)).length,
+          credentialsHashed: [...state.employees.map(e => e.password), ...state.clients.map(c => c.loginPassword)]
+            .filter(Boolean).every(value => String(value).startsWith("crm$bcrypt-sha256$v1$")) });
+      }
       const independent = await listBlobBackups();
       let rows = [];
       let recentById = new Map();

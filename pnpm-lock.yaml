@@ -14,8 +14,15 @@ importers:
       bcryptjs:
         specifier: 3.0.2
         version: 3.0.2
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.9
+        version: 0.5.9
 
 packages:
+
+  '@electric-sql/pglite@0.5.9':
+    resolution: {integrity: sha512-GoQTRMZ/o4J3sMW4mLDtDFGNOm1xy5oH+iHDALWll3uERY6OF4BSnL1t7FZH2Mlw+RPceDBlFJgSaecO73c4EA==}
 
   '@vercel/blob@2.8.0':
     resolution: {integrity: sha512-Nu+HWKpkgovCh/ezlG7wCVwF7RErTzLzZMbGKFBdGBCbTKyK+s5VXPLl+0+TpNEQPH8AVaGzOpIsXUOtkqylCQ==}
@@ -139,6 +146,8 @@ packages:
     resolution: {integrity: sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg==}
 
 snapshots:
+
+  '@electric-sql/pglite@0.5.9': {}
 
   '@vercel/blob@2.8.0':
     dependencies:

@@ -117,6 +117,24 @@ module.exports = async function handler(req, res) {
       return json(res, 400, { ok: false, error: "Nedostaju obavezni podaci aktivnosti." });
     }
 
+    if (tableName === "agency_crm_state" && rowId === "marketizo-main") {
+      const now = new Date();
+      const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
+      const atomic = await dbFetch(`${url}/rest/v1/rpc/marketizo_append_work_log`, {
+        method: "POST", headers: headers(key),
+        body: JSON.stringify({ p_role: session.role, p_actor_id: session.employeeId,
+          p_work_log: submittedLog, p_backup_date: viennaDateKey(now),
+          p_backup_slot: `backup-prewrite-${dayNumber % BACKUP_SLOTS}` }),
+      });
+      // Compatibility for deployments installed before this service-only RPC.
+      // Never fall back after a timeout or an uncertain commit.
+      if (atomic.status !== 404) {
+        if (!atomic.ok) throw new Error(`Upis aktivnosti nije uspeo (${atomic.status}).`);
+        const result = await atomic.json();
+        return json(res, Number(result.status) || (result.ok ? 200 : 500), result);
+      }
+    }
+
     for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
       const row = await readRow(url, key);
       if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });

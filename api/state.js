@@ -206,12 +206,12 @@ async function preserveDailyPrewriteBackup(config, current) {
   const backupDate = viennaDateKey(now);
   const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
   const backupId = `backup-prewrite-${dayNumber % BACKUP_SLOTS}`;
-  const existingResponse = await dbFetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=payload`, {
+  const existingResponse = await dbFetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=backupDate:payload->>backupDate`, {
     headers: supabaseHeaders(config.key),
   });
   if (!existingResponse.ok) throw new Error(`Provera dnevnog backupa nije uspela (${existingResponse.status}).`);
   const existingRows = await existingResponse.json();
-  if (existingRows[0]?.payload?.backupDate === backupDate) return;
+  if (existingRows[0]?.backupDate === backupDate) return;
   const backupResponse = await dbFetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
     method: "POST",
     headers: {
@@ -453,8 +453,8 @@ module.exports = async function handler(req, res) {
       });
       const updatedAt = new Date().toISOString();
       const writeUrl = current.updatedAt
-        ? `${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}`
-        : `${config.url}/rest/v1/${tableName}`;
+        ? `${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}&select=updated_at`
+        : `${config.url}/rest/v1/${tableName}?select=updated_at`;
       const response = await dbFetch(writeUrl, {
         method: current.updatedAt ? "PATCH" : "POST",
         headers: {
