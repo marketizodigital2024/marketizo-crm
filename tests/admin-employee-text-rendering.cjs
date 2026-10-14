@@ -21,6 +21,13 @@ for (const id of ['employeeAbsenceRequestRows', 'portalLeadCards', 'portalTeamLi
 }
 assert(!nodes.get('portalLeadCards').innerHTML.includes('data-audit-id="'));
 assert.deepEqual(fixture, original); assert.equal(lead.name, marker);
+vm.runInContext(named(admin, 'clientCostEmployeeChoicesHtml'), ctx);
+const choices = [{ textContent: marker, value: 'qa" data-audit-id="' }];
+const choicesHtml = ctx.clientCostEmployeeChoicesHtml(choices);
+assert(!choicesHtml.includes('<b data-audit-marker>'));
+assert(!choicesHtml.includes('data-audit-id="'));
+assert(choicesHtml.includes('&lt;b data-audit-marker&gt;'));
+assert.equal(choices[0].textContent, marker);
 const esc = { }; vm.createContext(esc); vm.runInContext(named(employee, 'escapePortalText'), esc);
 assert.equal(esc.escapePortalText(marker), ctx.escapeInvoiceText(marker)); assert.equal(esc.escapePortalText(0), '0'); assert.equal(ctx.escapeInvoiceText(0), '0');
 assert.match(employee, /escapePortalText\(notification\.title\)/);
