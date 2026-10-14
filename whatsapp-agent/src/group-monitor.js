@@ -44,6 +44,7 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
             for (const message of messages) {
               const at = Number(message.timestamp || 0) * 1000;
               if (!Number.isFinite(at) || !at) continue;
+              if (since && at < since - 300000) continue;
               await remember(chat, message);
               // Initial history is context, not a burst of stale alerts. Daily review reads it.
               if (since && at >= since - 300000) enqueue(message);

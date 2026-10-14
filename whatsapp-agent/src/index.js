@@ -601,7 +601,7 @@ function loadGroupHistory() {
     if (!fs.existsSync(conversationStatePath)) return;
     const stored = JSON.parse(fs.readFileSync(conversationStatePath, "utf8"));
     for (const [groupId, messages] of Object.entries(stored)) {
-      groupHistory.set(groupId, Array.isArray(messages) ? messages.slice(-60) : []);
+      groupHistory.set(groupId, Array.isArray(messages) ? messages.slice(-100) : []);
     }
     console.log(`Group context restored: ${groupHistory.size} group(s).`);
   } catch (error) {
