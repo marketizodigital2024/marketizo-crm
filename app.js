@@ -1314,6 +1314,10 @@ function escapeInvoiceText(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 }
 
+function clientCostEmployeeChoicesHtml(options) {
+  return [...options].map(item => `<label data-employee-name="${escapeInvoiceText(item.textContent.toLowerCase())}"><input type="checkbox" value="${escapeInvoiceText(item.value)}" /><span>${escapeInvoiceText(item.textContent)}</span></label>`).join("");
+}
+
 function clientsForInvoiceMonth(clients, monthKey) {
   return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]));
 }
@@ -4662,7 +4666,7 @@ function setupClientCostAnalysis() {
   const populate = () => {
     clientSelect.innerHTML = `<option value="">Sve vreme: klijenti, interno i neraspoređeno</option><option value="__unassigned__">Neraspoređeno vreme</option>${(state.clients || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${escapeInvoiceText(item.id)}">${escapeInvoiceText(item.name)}${item.status === "Aktivan" ? "" : " (" + escapeInvoiceText(item.status || "neaktivan") + ")"}</option>`).join("")}`;
     employeeSelect.innerHTML = (state.employees || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${escapeInvoiceText(item.id)}">${escapeInvoiceText(item.name)}${item.status === "Neaktivan" ? " (neaktivan)" : ""}</option>`).join("");
-    employeeList.innerHTML = [...employeeSelect.options].map((item) => `<label data-employee-name="${item.textContent.toLowerCase()}"><input type="checkbox" value="${item.value}" /><span>${item.textContent}</span></label>`).join("");
+    employeeList.innerHTML = clientCostEmployeeChoicesHtml(employeeSelect.options);
     employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
       const option = [...employeeSelect.options].find((item) => item.value === checkbox.value);
       if (option) option.selected = checkbox.checked;
