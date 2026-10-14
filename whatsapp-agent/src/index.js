@@ -741,7 +741,8 @@ async function answerOwnerQuestion(message) {
   const normalizedQuestion = normalizedName(question);
   const allClientsRequested = /\b(sve|svih|svaki|svaku|svakog)\b/.test(normalizedQuestion)
     && /\b(klijent|klijente|klijenata|grupe|grupa)\b/.test(normalizedQuestion);
-  const storedHistory = [...groupHistory.values()]
+  const permittedIds = activeGroupIds();
+  const storedHistory = [...groupHistory.entries()].filter(([id]) => permittedIds.has(id)).map(([, history]) => history)
     .flat()
     .sort((a, b) => String(a.at).localeCompare(String(b.at)))
     .slice(-300);
@@ -1030,13 +1031,13 @@ async function sendWeeklyReport() {
 async function sendDailyReport() {
   const today = viennaDateKey();
   let delivery = dailyState.dailyDelivery;
-  if (delivery && delivery.policy !== "active-only-v1") { delete dailyState.dailyDelivery; delivery = null; saveDailyState(); }
+  if (delivery && delivery.policy !== "active-only-v2") { delete dailyState.dailyDelivery; delivery = null; saveDailyState(); }
   if (!delivery) {
     await groupMonitor.reconcile();
     if (groupMonitor.status().syncing) throw Error("Group history synchronization is still running; retrying daily review");
-    const groups = groupMonitor.chats().filter(chat => !isInternalGroup(chat.name));
+    const groups = groupMonitor.chats().filter(chat => !isInternalGroup(chat.name) && shouldMonitorGroup(chat));
     if (!groupMonitor.chats().length) throw Error("No group inventory; refusing an empty all-clear report");
-    delivery = { date: today, policy: "active-only-v1", groups: groups.map(chat => ({ id: serializedId(chat.id), name: chat.name })),
+    delivery = { date: today, policy: "active-only-v2", groups: groups.map(chat => ({ id: serializedId(chat.id), name: chat.name })),
       nextBatch: 0, reviewedCount: 0, alerts: [], parts: null, nextPartIndex: 0 };
     dailyState.dailyDelivery = delivery;
     saveDailyState();
@@ -1603,12 +1604,12 @@ async function initializeTeamMonitoring() {
     loadGroupHistory();
     loadFollowupState();
     loadProcessedMessagesState();
-    if (dailyState.monitoringPolicy !== "active-only-v1") {
+    if (dailyState.monitoringPolicy !== "active-only-v2") {
       if (dailyState.weeklyDelivery) dailyState.archivedWeeklyDelivery = dailyState.weeklyDelivery;
       delete dailyState.weeklyDelivery;
       delete dailyState.dailyDelivery;
       dailyState.nextClosingReportAttemptAt = "";
-      dailyState.monitoringPolicy = "active-only-v1";
+      dailyState.monitoringPolicy = "active-only-v2";
       saveDailyState();
     }
     startDailyReportScheduler();
