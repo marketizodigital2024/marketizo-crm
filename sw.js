@@ -1,4 +1,4 @@
-const CACHE_NAME = "marketizo-crm-20261014-audit-fix";
+const CACHE_NAME = "marketizo-crm-20261014-audit-fix-r2";
 const ASSETS = [
   "index.html",
   "client-login.html",
@@ -59,6 +59,9 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
+          // Navigations to .html URLs use a platform clean-URL redirect.
+          // Its opaque redirect response has status 0 and must reach the browser.
+          if (response.type === "opaqueredirect") return response;
           if (!response.ok) throw new Error("Static asset is unavailable");
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
