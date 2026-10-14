@@ -236,6 +236,14 @@ async function readBody(req) {
   return raw ? JSON.parse(raw) : {};
 }
 
+function compactContracts(payload) {
+  if (!payload) return payload;
+  return { ...payload, clients: (payload.clients || []).map((client) => {
+    const { contractFileData, ...copy } = client;
+    return { ...copy, contractFileAvailable: Boolean(contractFileData || client.contractFileAvailable) };
+  }) };
+}
+
 function hidePasswords(payload) {
   if (!payload) return payload;
   const copy = JSON.parse(JSON.stringify(payload));
@@ -253,8 +261,9 @@ async function readStoredState(config) {
   return { payload: rows[0]?.payload || {}, updatedAt: rows[0]?.updated_at || "" };
 }
 
-async function readSessionState(config, session) {
-  const response = await dbFetch(`${config.url}/rest/v1/rpc/marketizo_read_session_state`, {
+async function readSessionState(config, session, compact = false) {
+  const rpc = compact ? "marketizo_read_session_state_compact" : "marketizo_read_session_state";
+  const response = await dbFetch(`${config.url}/rest/v1/rpc/${rpc}`, {
     method: "POST", headers: { ...supabaseHeaders(config.key), "Content-Type": "application/json" },
     body: JSON.stringify({ p_role: session.role, p_employee_id: session.employeeId || null, p_client_id: session.clientId || null }),
   });
@@ -354,7 +363,8 @@ module.exports = async function handler(req, res) {
     const session = verifyAccessToken(token, config.key);
     if (!session) return json(res, 401, { configured: true, error: "Prijava je obavezna.", payload: null });
     if (req.method === "GET") {
-      const row = await readSessionState(config, session);
+      const compact = req.query?.compact === "1";
+      const row = await readSessionState(config, session, compact);
       const access = accessSession(req, row.payload, config.key);
       if (!access) return json(res, 401, { configured: true, error: "Prijava je obavezna.", payload: null });
       const visiblePayload = access.role === "full-admin" ? hidePasswords(row.payload || null)
@@ -364,7 +374,7 @@ module.exports = async function handler(req, res) {
       return json(res, 200, {
         configured: true,
         empty: !row.payload,
-        payload: visiblePayload,
+        payload: compact ? compactContracts(visiblePayload) : visiblePayload,
         updatedAt: row.updatedAt || "",
         accessRole: access.role,
       });
@@ -435,6 +445,12 @@ module.exports = async function handler(req, res) {
       }
       await preserveDailyPrewriteBackup(config, current);
       payload = preserveCredentials(payload, current.payload);
+      if (Array.isArray(payload.clients)) payload.clients = payload.clients.map((client) => {
+        const copy = { ...client };
+        const stored = current.payload.clients?.find(item => item.id === client.id);
+        if (!Object.prototype.hasOwnProperty.call(stored || {}, "contractFileAvailable")) delete copy.contractFileAvailable;
+        return copy;
+      });
       const updatedAt = new Date().toISOString();
       const writeUrl = current.updatedAt
         ? `${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}`
@@ -469,7 +485,7 @@ module.exports = async function handler(req, res) {
       // not roll it back or make the user repeat the business-data save.
       // Employee authentication is synchronized by the database trigger in this transaction.
       const canonical = access.role === "full-admin" ? hidePasswords(payload) : access.role === "operational-admin" ? hideOperationalFinancials(payload) : access.role === "employee" ? hideEmployeeState(payload, access.employee) : hideClientState(payload, access.client);
-      return json(res, 200, { configured: true, ok: true, updatedAt, payload: canonical });
+      return json(res, 200, { configured: true, ok: true, updatedAt, payload: body.compact === true ? compactContracts(canonical) : canonical });
     }
 
     return json(res, 405, { configured: true, error: "Metod nije podržan." });
@@ -482,7 +498,7 @@ module.exports = async function handler(req, res) {
 };
 
 
-module.exports.helpers = { accessSession, readStoredState, supabaseConfig, supabaseHeaders, preserveDailyPrewriteBackup };
+module.exports.helpers = { accessSession, verifyAccessToken, readStoredState, supabaseConfig, supabaseHeaders, preserveDailyPrewriteBackup };
 
 const originalHandler = module.exports;
 module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);

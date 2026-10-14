@@ -8,7 +8,7 @@ const ctx={adminConfirmedSaveInFlight:false,state:{employeeAbsences:[],notificat
 vm.createContext(ctx);vm.runInContext(named('confirmAdminSave')+'\n'+named('saveState')+'\n'+source.slice(begin,end),ctx);
 (async()=>{
   const event={preventDefault(){},currentTarget:form};const pending=handler(event);event.currentTarget=null;
-  assert.equal(calls,1);assert.equal(resets,0);assert.equal(toasts.length,0);await handler({preventDefault(){},currentTarget:form});assert.equal(calls,1);
+  assert.equal(calls,1);assert.equal(resets,0);assert.equal(toasts.length,0);let prevented=false;await handler({preventDefault(){prevented=true},currentTarget:form});assert.equal(calls,1);assert.equal(prevented,true,'Double submit must never use native form navigation');
   release({ok:false,error:'fixture network failure'});await pending;assert.equal(resets,0);assert.equal(ctx.state.employeeAbsences.length,0);assert.equal(ctx.state.notifications.length,0);assert.equal(ctx.adminConfirmedSaveInFlight,false);assert.equal(toasts.at(-1)[0],'Nije sačuvano');assert.equal(fields.note,'Fixture leave');
   const retry=handler({preventDefault(){},currentTarget:form});assert.equal(calls,2);assert.equal(ctx.state.employeeAbsences.length,1);release({ok:true});await retry;assert.equal(resets,1);assert.equal(ctx.state.employeeAbsences.length,1);assert.equal(toasts.at(-1)[0],'Sačuvano');assert.equal(rendered,1);
   console.log('PASS: real admin absence handler waits for server confirmation, blocks double submit, retains failed form, rolls back phantom data, retries once and captures event target across await.');
