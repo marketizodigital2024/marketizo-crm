@@ -10,7 +10,7 @@ function customFieldValue(field) {
   const options = field.type_config?.options || [];
   const render = (value) => {
     const option = options.find((item) => item.id === value || item.orderindex === value);
-    return option?.name || value?.username || value?.email || value?.name || value;
+    return option?.name || option?.label || value?.username || value?.name || (typeof value === "object" ? "" : value);
   };
   return Array.isArray(field.value) ? field.value.map(render).filter(Boolean).join(", ") : String(render(field.value));
 }
@@ -19,8 +19,10 @@ export function taskToClient(task) {
   const fields = Object.fromEntries((task.custom_fields || []).map((field) => [field.name, customFieldValue(field)]));
   return {
     clickupTaskId: String(task.id || ""), name: String(task.name || "").trim(), package: fields.Paket || "",
-    scenarist: fields.Scenarista || "", editor: fields.Editor || "", smm: fields.SMM || "",
-    paidAds: fields["Paid Ads"] || "", videographer: fields.Snimatelj || "",
+    scenarist: fields["Scenarista (Tim)"] || fields.Scenarista || "", editor: fields["Editor (Tim)"] || fields.Editor || "", smm: fields["SMM (Tim)"] || fields.SMM || "",
+    paidAds: fields["Paid Ads (Tim)"] || fields["Paid Ads"] || "", videographer: fields["Snimatelj (Tim)"] || fields.Snimatelj || "", checking: fields.Checking || "",
+    updatedAt: task.date_updated ? new Date(Number(task.date_updated)).toISOString() : "",
+    assignmentSource: "ClickUp structured role fields",
     reelsMonthly: fields["Reela mesečno"] || "", postsWeekly: fields["Postova nedeljno"] || "",
     storiesWeekly: fields["Storija nedeljno"] || "", clientStatus: fields["Status klijenta"] || "",
     smmLoad: fields["Opterećenje SMM %"] || ""
@@ -29,25 +31,35 @@ export function taskToClient(task) {
 
 export function matchClickUpClient(groupName, clients) {
   const group = normalizeClientName(groupName);
-  const exact = clients.find((client) => normalizeClientName(client.name) === group);
-  if (exact) return exact;
+  if (!group) return null;
+  const exact = clients.filter((client) => normalizeClientName(client.name) === group);
+  if (exact.length) return exact.length === 1 ? exact[0] : null;
   const candidates = clients.filter((client) => {
     const name = normalizeClientName(client.name);
     return name.length >= 4 && (group.includes(name) || name.includes(group));
   });
-  return candidates.length === 1 ? candidates[0] : null;
+  if (candidates.length) return candidates.length === 1 ? candidates[0] : null;
+  const tokens = group.split(" ").filter(Boolean);
+  const tokenMatches = clients.filter(client => {
+    const names = normalizeClientName(client.name).split(" ").filter(Boolean);
+    // Token order and long inflection suffixes may differ, e.g. Posch Grabstein / Grabsteine POSCH.
+    return names.length >= 2 && names.every(name => tokens.some(token =>
+      token === name || (Math.min(token.length, name.length) >= 5 && (token.startsWith(name) || name.startsWith(token)))));
+  });
+  return tokenMatches.length === 1 ? tokenMatches[0] : null;
 }
 
 export async function fetchClickUpClients({ token, listId, fetchImpl = fetch, apiBase = DEFAULT_API_BASE }) {
   if (!token || !listId) return [];
   const clients = [];
   for (let page = 0; page < 100; page += 1) {
-    const response = await fetchImpl(`${apiBase}/list/${encodeURIComponent(listId)}/task?include_closed=true&subtasks=true&page=${page}`, { headers: { Authorization: token } });
+    const response = await fetchImpl(`${apiBase}/list/${encodeURIComponent(listId)}/task?include_closed=true&subtasks=true&page=${page}`, { headers: { Authorization: token }, signal: AbortSignal.timeout(20000) });
     if (!response.ok) throw new Error(`ClickUp API ${response.status}`);
     const payload = await response.json();
     const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
     clients.push(...tasks.map(taskToClient));
-    if (tasks.length < 100) break;
+    if (payload.last_page === true || tasks.length < 100) return clients.filter(client => client.name);
+    if (page === 99) throw new Error("ClickUp pagination exceeded 100 pages; refusing a partial snapshot");
   }
   return clients.filter((client) => client.name);
 }
