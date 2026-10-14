@@ -9,7 +9,7 @@ export function validateReview(groups, review) {
   for (const alert of alerts) {
     if (!expected.has(alert.group) || seen.has(alert.group)) throw Error('Daily review contains unknown or repeated group');
     seen.add(alert.group);
-    if (!['URGENT', 'RED', 'YELLOW', 'PRAISE'].includes(alert.severity)) throw Error('Invalid report severity');
+    if (!['URGENT', 'RED', 'YELLOW', 'PRAISE', 'STATUS'].includes(alert.severity)) throw Error('Invalid report severity');
     if (typeof alert.summary !== 'string' || !alert.summary.trim() || alert.summary.length > 1000) throw Error('Invalid report summary');
     if (String(alert.nextAction || '').length > 500) throw Error('Report action exceeds limit');
     if (String(alert.evidence || '').length > 500) throw Error('Report evidence exceeds limit');
@@ -18,15 +18,15 @@ export function validateReview(groups, review) {
 }
 
 export function renderDailyReport({ date, reviewedCount, groupCount, alerts, coverage }) {
-  const symbols = { URGENT: '🔴 Hitno', RED: '🔴 Rizik', YELLOW: '🟡 Potrebna pažnja', PRAISE: '🟢 Važna pohvala' };
-  const header = `*DNEVNI PREGLED — ${date}*\nPregledano ${reviewedCount}/${groupCount} grupa. ClickUp dodela: ${coverage.matchedGroups}/${coverage.clientGroups}.`;
+  const symbols = { URGENT: '🔴 Hitno', RED: '🔴 Rizik', YELLOW: '🟡 Potrebna pažnja', PRAISE: '🟢 Važna pohvala', STATUS: '⚪ Stanje' };
+  const header = `*PREGLED KLIJENATA — ${date}*\nPregledano ${reviewedCount}/${groupCount} grupa. ClickUp dodela: ${coverage.matchedGroups}/${coverage.clientGroups}.`;
   const warnings = [];
   if (coverage.unmappedActiveClients?.length) warnings.push(`Aktivni klijenti bez potvrđene grupe: ${coverage.unmappedActiveClients.join(', ')}.`);
   if (!coverage.clickupFresh) warnings.push('ClickUp dodele nisu sveže potvrđene; poslednja poznata raspodela može biti zastarela.');
   if (coverage.unmatchedGroups.length) warnings.push(`Nepovezane grupe (${coverage.unmatchedGroups.length}): ${coverage.unmatchedGroups.join(', ')}.`);
   if (coverage.unreadableGroups.length) warnings.push(`Čitanje nije potvrđeno za: ${coverage.unreadableGroups.join(', ')}.`);
   if (coverage.historyGapGroups.length) warnings.push(`Moguća rupa u istoriji za: ${coverage.historyGapGroups.join(', ')}.`);
-  const overview = [header, ...warnings, alerts.length ? `${alerts.length} klijenata zahteva pažnju ili ima važan pozitivan signal.` : 'U pročitanim porukama nema potvrđenog problema koji traži tvoju intervenciju.'].join('\n\n');
+  const overview = [header, ...warnings, alerts.length ? `${alerts.filter(alert => alert.severity !== "STATUS").length} klijenata ima važan problem ili pozitivan signal; ostali imaju redovan pregled stanja.` : 'U pročitanim porukama nema potvrđenog problema koji traži tvoju intervenciju.'].join('\n\n');
   const paragraphs = alerts.map(alert => [
     `*${alert.group}* — ${symbols[alert.severity]}`,
     alert.summary,
