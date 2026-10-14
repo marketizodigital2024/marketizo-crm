@@ -45,7 +45,7 @@ const whatsappOperationTimeoutMs = Number(process.env.WHATSAPP_OPERATION_TIMEOUT
 const whatsappProtocolTimeoutMs = Number(process.env.WHATSAPP_PROTOCOL_TIMEOUT_MS || 120000);
 const whatsappHealthIntervalMs = Number(process.env.WHATSAPP_HEALTH_INTERVAL_MS || 60000);
 const whatsappHealthFailureLimit = Number(process.env.WHATSAPP_HEALTH_FAILURE_LIMIT || 2);
-const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-09-14-no-owner-tasks-6";
+const reportDeliveryVersion = process.env.REPORT_DELIVERY_VERSION || "2026-10-14-active-only-1";
 const reportMode = String(process.env.REPORT_MODE || "weekly").toLowerCase();
 const hybridTrialStartedAt = process.env.HYBRID_TRIAL_STARTED_AT || "2026-09-10";
 const deploymentTestVersion = "2026-09-11-stability-test-1";
@@ -190,12 +190,23 @@ function resolveTechnicalIncident(key) {
 function isInternalGroup(name) {
   return normalizedName(name) === normalizedName(teamGroupName);
 }
+function activeClientForGroup(name) {
+  const client = matchClickUpClient(name, clickupClients);
+  return client?.clientStatus === "Aktivan" ? client : null;
+}
+function shouldMonitorGroup(chat) {
+  return isInternalGroup(chat.name) || Boolean(activeClientForGroup(chat.name));
+}
+function activeGroupIds() {
+  return new Set(groupMonitor.chats().filter(chat => !isInternalGroup(chat.name) && shouldMonitorGroup(chat)).map(chat => serializedId(chat.id)));
+}
 function operationalCoverage() {
-  const groups = groupMonitor.chats().filter(chat => !isInternalGroup(chat.name));
+  const groups = groupMonitor.chats().filter(chat => !isInternalGroup(chat.name) && shouldMonitorGroup(chat));
   const assignments = clickupContextForGroups(groups.map(chat => chat.name));
   return {
     ...groupMonitor.status(),
     clientGroups: groups.length,
+    activeClickupClients: clickupClients.filter(client => client.clientStatus === "Aktivan").length,
     matchedGroups: assignments.filter(item => item.client).length,
     unmatchedGroups: assignments.filter(item => !item.client).map(item => item.group),
     clickupFresh: Boolean(clickupLastSyncAt && Date.now() - clickupLastSyncAt < clickupSyncIntervalMs * 3),
@@ -204,7 +215,7 @@ function operationalCoverage() {
 }
 let mappingLogDigest = "";
 function logGroupMappings() {
-  const mapping = clickupContextForGroups(groupMonitor.chats().filter(chat => !isInternalGroup(chat.name)).map(chat => chat.name));
+  const mapping = clickupContextForGroups(groupMonitor.chats().filter(chat => !isInternalGroup(chat.name) && shouldMonitorGroup(chat)).map(chat => chat.name));
   const digest = crypto.createHash("sha256").update(JSON.stringify(mapping)).digest("hex");
   if (mappingLogDigest === digest) return;
   mappingLogDigest = digest;
@@ -217,7 +228,6 @@ async function syncClickUpClients() {
   clickupSyncInFlight = true;
   try {
     const next = await fetchClickUpClients({ token: clickupToken, listId: clickupListId });
-    if (!next.length && clickupClients.length) throw Error("Unexpected empty ClickUp snapshot; retaining last successful assignments");
     clickupClients = next;
     clickupLastSyncAt = Date.now();
     clickupLastError = "";
@@ -630,6 +640,7 @@ function saveFollowupState() {
 }
 
 async function sendCommitmentOverdueAlert(record) {
+  if (!activeClientForGroup(record.groupName)) { commitments.delete(record.groupId); saveFollowupState(); return; }
   record.alerted = true;
   commitments.set(record.groupId, record);
   recordDailyEvent({ type: "COMMITMENT", group: record.groupName, summary: `Probijen rok: ${record.summary}` });
@@ -733,7 +744,7 @@ async function answerOwnerQuestion(message) {
     .slice(-300);
   const chats = await withTimeout(client.getChats(), "WhatsApp group inventory");
   const clientGroups = chats.filter((chat) => chat.isGroup
-    && !isInternalGroup(chat.name));
+    && !isInternalGroup(chat.name) && shouldMonitorGroup(chat));
   const queryTokens = question.toLocaleLowerCase("sr-Latn")
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length >= 2 && !["sta", "šta", "kod", "grupi", "grupa", "cemu", "čemu", "radi", "ima"].includes(token));
@@ -905,11 +916,12 @@ function recordDailyEvent(event) {
 }
 
 function ownerActionSnapshot() {
-  const pending = [...pendingByGroup.values()];
-  const issues = [...openIssues.values()];
-  const activeCommitments = [...commitments.values()].filter((record) => !record.completed);
-  const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted);
-  const recentGroupMessages = [...groupHistory.values()]
+  const ids = activeGroupIds();
+  const pending = [...pendingByGroup.values()].filter(item => ids.has(item.groupId));
+  const issues = [...openIssues.values()].filter(item => ids.has(item.groupId));
+  const activeCommitments = [...commitments.values()].filter((record) => !record.completed && ids.has(record.groupId));
+  const silentClients = [...awaitingClientByGroup.values()].filter((record) => record.alerted && ids.has(record.groupId));
+  const recentGroupMessages = [...groupHistory.entries()].filter(([id]) => ids.has(id)).map(([, history]) => history)
     .flat()
     .sort((a, b) => String(a.at).localeCompare(String(b.at)))
     .slice(-300);
@@ -931,7 +943,7 @@ async function sendMorningReport() {
     ...reasoningOptions(),
     messages: [
       { role: "system", content: "Napiši Miljanu jutarnji pregled kao sposoban kolega koji mu normalnim rečima kaže samo ono važno. Za klijenta napiši *Kratko ime* — 🔴 Hitno, 🟡 Potrebna pažnja ili 🟢 Pozitivno, pa jedan do tri kratka pasusa. Obično je dovoljno 50–100 reči po klijentu. Bez konsultantskog, pravničkog i korporativnog tona; izbegavaj izraze 'u prikazanom razgovoru', 'evidentirani rok', 'moja procena' i 'nije probijen'. Reci jednostavno ko je šta poslao, da li je sve u redu i šta se čeka. Normalna korekcija ili čekanje unutar dogovorenog roka nije vlasnički problem. Svi ljudi iz teamMembers su zaposleni Marketiza, nikada klijenti. pendingReplies znači da klijent čeka odgovor zaposlenog duže od tri radna sata. silentClients znači da zaposleni čeka odgovor klijenta duže od 48 sati. Pročitaj ceo sadržaj poruka i skripti, uključujući poziv na akciju. Ako je rešeno, ne navodi ga. Nikada ne dodeljuj Miljanu ili Ivani operativni zadatak; operativni korak pripada odgovarajućoj ulozi u timu. Njih pomenu samo pod *Potrebna odluka vlasnika:* kada bez njihove poslovne odluke tim ne može dalje. Ne izmišljaj činjenice." },
-      { role: "user", content: JSON.stringify({ date: today, clickupAssignments: clickupContextForGroups(groupMonitor.chats().filter(chat => !isInternalGroup(chat.name)).map(chat => chat.name)), coverage: operationalCoverage(), teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients, recentGroupMessages: snapshot.recentGroupMessages }) }
+      { role: "user", content: JSON.stringify({ date: today, clickupAssignments: clickupContextForGroups(groupMonitor.chats().filter(chat => !isInternalGroup(chat.name) && shouldMonitorGroup(chat)).map(chat => chat.name)), coverage: operationalCoverage(), teamMembers: [...teamMemberNames], clientsWaitingForTeam: snapshot.pending, unresolvedIssues: snapshot.issues, dueCommitments: relevantCommitments, silentClients: snapshot.silentClients, recentGroupMessages: snapshot.recentGroupMessages }) }
     ]
   });
   await sendWhatsappMessage(alertTo, String(completion.choices[0]?.message?.content || "").trim(), "morning report " + today);
@@ -948,7 +960,7 @@ async function sendWeeklyReport() {
   const snapshot = ownerActionSnapshot();
   const chats = await withTimeout(client.getChats(), "WhatsApp weekly group inventory");
   const groups = chats
-    .filter((chat) => chat.isGroup && !isInternalGroup(chat.name))
+    .filter((chat) => chat.isGroup && !isInternalGroup(chat.name) && shouldMonitorGroup(chat))
     .sort((a, b) => a.name.localeCompare(b.name, "sr-Latn"));
   const messagesByGroup = new Map(await Promise.all(groups.map(async (chat) => {
     try {
@@ -1015,12 +1027,13 @@ async function sendWeeklyReport() {
 async function sendDailyReport() {
   const today = viennaDateKey();
   let delivery = dailyState.dailyDelivery;
+  if (delivery && delivery.policy !== "active-only-v1") { delete dailyState.dailyDelivery; delivery = null; saveDailyState(); }
   if (!delivery) {
     await groupMonitor.reconcile();
     if (groupMonitor.status().syncing) throw Error("Group history synchronization is still running; retrying daily review");
     const groups = groupMonitor.chats().filter(chat => !isInternalGroup(chat.name));
-    if (!groups.length) throw Error("No group inventory; refusing an empty all-clear report");
-    delivery = { date: today, groups: groups.map(chat => ({ id: serializedId(chat.id), name: chat.name })),
+    if (!groupMonitor.chats().length) throw Error("No group inventory; refusing an empty all-clear report");
+    delivery = { date: today, policy: "active-only-v1", groups: groups.map(chat => ({ id: serializedId(chat.id), name: chat.name })),
       nextBatch: 0, reviewedCount: 0, alerts: [], parts: null, nextPartIndex: 0 };
     dailyState.dailyDelivery = delivery;
     saveDailyState();
@@ -1028,10 +1041,12 @@ async function sendDailyReport() {
   const batchSize = 5;
   while (!delivery.parts && delivery.nextBatch * batchSize < delivery.groups.length) {
     const batch = delivery.groups.slice(delivery.nextBatch * batchSize, (delivery.nextBatch + 1) * batchSize);
-    const names = batch.map(group => group.name);
-    const ids = new Set(batch.map(group => group.id));
+    const currentBatch = batch.filter(group => activeClientForGroup(group.name));
+    const names = currentBatch.map(group => group.name);
+    if (!currentBatch.length) { delivery.nextBatch += 1; saveDailyState(); continue; }
+    const ids = new Set(currentBatch.map(group => group.id));
     const reviewInput = {
-      date: delivery.date, groups: batch.map(group => ({
+      date: delivery.date, groups: currentBatch.map(group => ({
         group: group.name, assignment: clickupContextForGroups([group.name])[0],
         recentConversation: (groupHistory.get(group.id) || []).slice(-100)
       })),
@@ -1059,12 +1074,13 @@ async function sendDailyReport() {
     });
     const parsed = JSON.parse(completion.choices[0]?.message?.content || "{}");
     delivery.alerts.push(...validateReview(names, parsed));
-    delivery.reviewedCount += batch.length;
+    delivery.reviewedCount += currentBatch.length;
     delivery.nextBatch += 1;
     saveDailyState();
     console.log(`[DAILY_REVIEW_PROGRESS] ${delivery.date}: ${delivery.reviewedCount}/${delivery.groups.length} groups reviewed`);
   }
   if (!delivery.parts) {
+    delivery.alerts = delivery.alerts.filter(alert => activeClientForGroup(alert.group));
     delivery.parts = renderDailyReport({ date: delivery.date, reviewedCount: delivery.reviewedCount,
       groupCount: delivery.groups.length, alerts: delivery.alerts, coverage: operationalCoverage() });
     saveDailyState();
@@ -1101,7 +1117,7 @@ function startDailyReportScheduler() {
     const closingReportMissing = dailyState.lastReportDate !== today || dailyState.lastReportVersion !== reportDeliveryVersion;
     const pendingDailyDelivery = Boolean(dailyState.dailyDelivery?.date);
     const pendingWeeklyDelivery = Boolean(dailyState.weeklyDelivery?.date && Array.isArray(dailyState.weeklyDelivery.parts));
-    const weeklyDue = pendingWeeklyDelivery || (parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today);
+    const weeklyDue = reportMode === "weekly" && (pendingWeeklyDelivery || (parts.weekday === "Fri" && dailyState.lastWeeklyDate !== today));
     const closingDue = reportMode !== "weekly" && (closingReportMissing || pendingDailyDelivery);
     const retryAllowed = !dailyState.nextClosingReportAttemptAt
       || new Date(dailyState.nextClosingReportAttemptAt).getTime() <= Date.now();
@@ -1173,6 +1189,7 @@ function saveResponseState() {
 }
 
 async function sendOverdueAlert(record) {
+  if (!activeClientForGroup(record.groupName)) { pendingByGroup.delete(record.groupId); saveResponseState(); return; }
   const alert = [
     `*${record.groupName}* — 🔴 Klijent čeka odgovor`,
     "",
@@ -1303,6 +1320,7 @@ function saveClientWaitState() {
 }
 
 async function sendClientSilenceAlert(record) {
+  if (!activeClientForGroup(record.groupName)) { awaitingClientByGroup.delete(record.groupId); saveClientWaitState(); return; }
   if (record.alerted) return;
   await sendWhatsappMessage(alertTo, [
     `*${record.groupName}* — 🟡 Klijent ne odgovara`,
@@ -1388,6 +1406,10 @@ http.createServer((req, res) => {
       teamMonitoringInitialized,
       teamMemberCount: teamMemberIds.size,
       reportMode,
+      reportingScope: "ClickUp active clients only",
+      closingReportInFlight,
+      dailyReviewProgress: dailyState.dailyDelivery ? { date: dailyState.dailyDelivery.date, reviewed: dailyState.dailyDelivery.reviewedCount, total: dailyState.dailyDelivery.groups.length, sentParts: dailyState.dailyDelivery.nextPartIndex } : null,
+      nextReportAttemptAt: dailyState.nextClosingReportAttemptAt || "",
       groupMonitoring: publicMonitoringStatus(),
       delivery: outbox.status(),
       processingFailures,
@@ -1487,6 +1509,7 @@ const groupMonitor = createGroupMonitor({
   fetchMessages: (chat, limit) => withTimeout(chat.fetchMessages({ limit }), "read group history"),
   idOf: serializedId,
   isReady: () => whatsappReady && teamMonitoringInitialized && !fatalExitScheduled,
+  shouldRead: shouldMonitorGroup,
   onError: (key, group) => { void notifyTechnicalIncident(key, group ? "Ne mogu da pročitam grupu *" + group + "*. Ostale grupe nastavljam da pratim." : "Ne mogu da osvežim spisak WhatsApp grupa. Otkrivanje novih grupa trenutno nije potvrđeno."); },
   onSuccess: key => resolveTechnicalIncident(key),
   load: () => readOperationalState(groupInventoryPath),
@@ -1506,13 +1529,13 @@ const groupMonitor = createGroupMonitor({
   },
   enqueue: enqueueIncomingMessage,
   onCycle: async () => {
-    const version = "2026-10-14-continuous-monitor-v1";
+    const version = "2026-10-14-active-clients-monitor-v2";
     if (dailyState.lastMonitoringVerification === version || !clickupLastSyncAt) return;
     const coverage = operationalCoverage();
-    if (coverage.readableGroups !== coverage.discoveredGroups) return;
+    if (coverage.readableGroups !== coverage.monitoredGroups) return;
     await sendWhatsappMessage(alertTo, [
       "*Marketizo agent — provera rada*",
-      `WhatsApp je povezan. Čitam ${coverage.readableGroups}/${coverage.discoveredGroups} grupa; ${coverage.matchedGroups}/${coverage.clientGroups} grupa je povezano sa ClickUp raspodelom.`,
+      `WhatsApp je povezan. Čitam ${coverage.readableGroups}/${coverage.monitoredGroups} grupa u aktivnom opsegu (ukupno otkrivenih: ${coverage.discoveredGroups}); ${coverage.matchedGroups}/${coverage.clientGroups} grupa je povezano sa ClickUp raspodelom.`,
       `Interni tim: ${teamMemberIds.size} identifikatora. Dnevni pregled je podešen za 17:30 po bečkom vremenu, svakog dana.`,
       coverage.unmatchedGroups.length ? `Za ${coverage.unmatchedGroups.length} grupa veza sa ClickUp klijentom još nije potvrđena; ostaju u praćenju i biće navedene u izveštaju.` : "Sve klijentske grupe imaju potvrđenu vezu sa raspodelom."
     ].join("\n\n"), "monitoring verification " + version);
@@ -1536,12 +1559,28 @@ function publicMonitoringStatus() {
   return { discoveredGroups: coverage.discoveredGroups, readableGroups: coverage.readableGroups,
     unreadableGroupCount: coverage.unreadableGroups.length, historyGapGroupCount: coverage.historyGapGroups.length,
     lastDiscoveryAt: coverage.lastDiscoveryAt, discoveryError: coverage.discoveryError,
+    monitoredGroups: coverage.monitoredGroups, excludedGroups: coverage.excludedGroups,
+    activeClickupClients: coverage.activeClickupClients,
     clientGroups: coverage.clientGroups, matchedGroups: coverage.matchedGroups, unmatchedGroupCount: coverage.unmatchedGroups.length,
     clickupFresh: coverage.clickupFresh, clickupLastError: coverage.clickupLastError,
     processingQueue: Object.keys(processingQueueState.jobs).length };
 }
-for (const event of ["group_join", "group_update", "group_leave"]) client.on(event, () => {
-  void groupMonitor.reconcile();
+for (const event of ["group_join", "group_update", "group_leave"]) client.on(event, notification => {
+  void (async () => {
+    await syncClickUpClients();
+    await groupMonitor.reconcile();
+    if (event === "group_join" && notification?.chatId) {
+      const chat = await withTimeout(notification.getChat(), "newly joined WhatsApp group");
+      if (chat?.isGroup && !shouldMonitorGroup(chat)) {
+        const record = matchClickUpClient(chat.name, clickupClients);
+        if (!record) await notifyTechnicalIncident("new-group:" + notification.chatId,
+          "Nova grupa *" + chat.name + "* nema potvrđen aktivni zapis u Raspodeli klijenata. Čekam mapiranje pre analize.");
+      }
+    }
+  })().catch(error => {
+    console.error("[GROUP_EVENT_SYNC_FAILED]", error.message);
+    void notifyTechnicalIncident("new-group-sync", "Učitavanje grupe nakon promene članstva nije uspelo; ponoviću automatsku proveru.");
+  });
 });
 
 let teamMonitoringInitialized = false;
@@ -1556,6 +1595,14 @@ async function initializeTeamMonitoring() {
     loadGroupHistory();
     loadFollowupState();
     loadProcessedMessagesState();
+    if (dailyState.monitoringPolicy !== "active-only-v1") {
+      if (dailyState.weeklyDelivery) dailyState.archivedWeeklyDelivery = dailyState.weeklyDelivery;
+      delete dailyState.weeklyDelivery;
+      delete dailyState.dailyDelivery;
+      dailyState.nextClosingReportAttemptAt = "";
+      dailyState.monitoringPolicy = "active-only-v1";
+      saveDailyState();
+    }
     startDailyReportScheduler();
     outbox.start();
     teamMonitoringInitialized = true;
@@ -1691,6 +1738,8 @@ async function processIncomingMessage(message) {
   const messageId = serializedId(message.id);
   const prepared = processingQueueState.jobs[messageId]?.preparedAlert;
   if (prepared && !processedMessageIds.has(messageId)) {
+    const chat = await withTimeout(message.getChat(), "confirm queued alert client is still active");
+    if (!shouldMonitorGroup(chat)) { markMessageProcessed(messageId); return; }
     await sendWhatsappMessage(alertTo, prepared.body, prepared.label);
     markMessageProcessed(messageId);
     return;
@@ -1722,6 +1771,10 @@ async function processIncomingMessage(message) {
 
     const chat = await message.getChat();
     if (!chat.isGroup) { markMessageProcessed(messageId); return; }
+    if (!shouldMonitorGroup(chat)) {
+      console.log("[GROUP_SKIPPED] No active ClickUp client: " + chat.name);
+      markMessageProcessed(messageId); return;
+    }
 
     const contact = await message.getContact();
     const senderName = contact.pushname || contact.name || contact.number || "Nepoznato";
@@ -1797,7 +1850,7 @@ async function processIncomingMessage(message) {
         ? "🟢 Važan pozitivan signal"
         : "🟡 Potrebna pažnja";
     const alert = [
-      `*${chat.name}* — ${alertStatus}`,
+      `*${activeClientForGroup(chat.name)?.name || chat.name}* — ${alertStatus}`,
       "",
       result.summary,
       ownerMention ? "Pomenut si direktno u razgovoru." : "",
@@ -1821,7 +1874,7 @@ async function processIncomingMessage(message) {
       if (message.from?.endsWith("@g.us") && !message.fromMe) {
         const chat = await message.getChat();
         const contact = await message.getContact();
-        if (chat?.isGroup && !isInternalGroup(chat.name) && !isTeamSender(message, contact)) {
+        if (chat?.isGroup && !isInternalGroup(chat.name) && shouldMonitorGroup(chat) && !isTeamSender(message, contact)) {
           const fallbackText = String(message.body || "Poruka koju analiza nije uspela da obradi").trim();
           if (!pendingByGroup.has(message.from) && teamMemberIds.size) beginResponseWatch(message, chat, contact, fallbackText);
           recordDailyEvent({ type: "ANALYSIS_FAILURE", group: chat.name, summary: "Automatska analiza poruke nije uspela; odgovor tima se ipak prati." });

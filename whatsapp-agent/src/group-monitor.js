@@ -1,6 +1,6 @@
 // Reconcile WhatsApp group membership and bounded history independently of AI work.
 export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, load, save,
-  remember, enqueue, onInventory, onCycle = () => {}, onError = () => {}, onSuccess = () => {}, now = Date.now, logger = console, pollMs = 120000 }) {
+  remember, enqueue, onInventory, shouldRead = () => true, onCycle = () => {}, onError = () => {}, onSuccess = () => {}, now = Date.now, logger = console, pollMs = 120000 }) {
   const state = load() || { groups: {}, lastDiscoveryAt: 0 };
   state.groups ||= {};
   let running = false, timer;
@@ -19,7 +19,7 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
       for (const chat of chats) {
         const id = idOf(chat.id);
         const previous = state.groups[id];
-        state.groups[id] = { ...previous, id, name: chat.name, active: true, discoveredAt: previous?.discoveredAt || discoveredAt };
+        state.groups[id] = { ...previous, id, name: chat.name, active: true, monitored: shouldRead(chat), discoveredAt: previous?.discoveredAt || discoveredAt };
       }
       state.lastDiscoveryAt = discoveredAt;
       state.discoveryError = '';
@@ -30,6 +30,8 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
       await Promise.all(Array.from({ length: Math.min(3, chats.length) }, async () => {
         while (next < chats.length && isReady()) {
           const chat = chats[next++], id = idOf(chat.id), group = state.groups[id];
+          if (!shouldRead(chat)) { group.monitored = false; failures.delete(id); onSuccess('group-read:' + id); continue; }
+          group.monitored = true;
           const since = Number(group.lastReadAt || 0);
           // Read every group initially and periodically; changed chats are read on every poll.
           if (since && Number(chat.timestamp || 0) > 0 && Number(chat.timestamp) * 1000 < since && now() - since < 900000) continue;
@@ -62,7 +64,7 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
         }
       }));
       logger.log(`[GROUP_SYNC] discovered=${chats.length} readable=${chats.filter(c => !state.groups[idOf(c.id)].lastError).length} failed=${failures.size}`);
-      await onCycle(status());
+      try { await onCycle(status()); } catch (error) { logger.error('[MONITOR_NOTIFICATION_FAILED]', error.message); }
       return true;
     } catch (error) {
       state.discoveryError = String(error.message || error).slice(0, 240);
@@ -73,9 +75,12 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
     } finally { running = false; }
   }
   function status() {
-    const groups = Object.values(state.groups).filter(group => group.active);
+    const all = Object.values(state.groups).filter(group => group.active);
+    const groups = all.filter(group => group.monitored);
     return {
-      discoveredGroups: groups.length,
+      discoveredGroups: all.length,
+      monitoredGroups: groups.length,
+      excludedGroups: all.length - groups.length,
       readableGroups: groups.filter(group => group.lastReadAt && !group.lastError).length,
       unreadableGroups: groups.filter(group => !group.lastReadAt || group.lastError).map(group => group.name),
       historyGapGroups: groups.filter(group => group.historyGap).map(group => group.name),

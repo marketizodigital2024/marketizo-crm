@@ -31,6 +31,15 @@ export function taskToClient(task) {
 
 export function matchClickUpClient(groupName, clients) {
   const group = normalizeClientName(groupName);
+  const verifiedAliases = {
+    "violeta golden bridge": "12445eqxrv8",
+    "aleksandar": "12445eqxrvy"
+  };
+  if (verifiedAliases[group]) return clients.find(client => client.clickupTaskId === verifiedAliases[group]) || null;
+
+  const compact = group.replace(/ /g, "");
+  const compactMatches = clients.filter(client => normalizeClientName(client.name).replace(/ /g, "") === compact);
+  if (compact && compactMatches.length) return compactMatches.length === 1 ? compactMatches[0] : null;
   if (!group) return null;
   const exact = clients.filter((client) => normalizeClientName(client.name) === group);
   if (exact.length) return exact.length === 1 ? exact[0] : null;
@@ -38,7 +47,20 @@ export function matchClickUpClient(groupName, clients) {
     const name = normalizeClientName(client.name);
     return name.length >= 4 && (group.includes(name) || name.includes(group));
   });
-  if (candidates.length) return candidates.length === 1 ? candidates[0] : null;
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length > 1) {
+    // A group explicitly naming several businesses keeps each assignment separate.
+    if (!/[+&]/.test(String(groupName))) return null;
+    const active = candidates.filter(client => client.clientStatus === "Aktivan");
+    const selected = active.length ? active : candidates;
+    const composite = { clickupTaskId: selected.map(client => client.clickupTaskId).join("+"),
+      name: selected.map(client => client.name).join(" + "), clientStatus: active.length ? "Aktivan" : "Neaktivan",
+      clients: selected, assignmentSource: "Explicit multi-client group name; separate ClickUp role fields" };
+    for (const role of ["scenarist", "editor", "smm", "paidAds", "videographer", "checking"]) {
+      composite[role] = selected.map(client => client.name + ": " + (client[role] || "Nije potvrđeno")).join("; ");
+    }
+    return composite;
+  }
   const tokens = group.split(" ").filter(Boolean);
   const tokenMatches = clients.filter(client => {
     const names = normalizeClientName(client.name).split(" ").filter(Boolean);
@@ -46,7 +68,22 @@ export function matchClickUpClient(groupName, clients) {
     return names.length >= 2 && names.every(name => tokens.some(token =>
       token === name || (Math.min(token.length, name.length) >= 5 && (token.startsWith(name) || name.startsWith(token)))));
   });
-  return tokenMatches.length === 1 ? tokenMatches[0] : null;
+  if (tokenMatches.length) return tokenMatches.length === 1 ? tokenMatches[0] : null;
+  const identityTokens = value => normalizeClientName(value)
+    .replace(/\bskorpion\b/g, "scorpion")
+    .split(" ").filter(token => token && !new Set([
+      "gmbh", "restaurant", "restoran", "grill", "cafe", "kafic", "caffe", "picerija",
+      "parfemi", "parfumes", "perfumes", "parfum", "camping", "kamp", "prikolice",
+      "rechtsanwalt", "inkasso", "finanzierung", "osiguranje", "praxis", "beauty", "slovenija", "marketing"
+    ]).has(token));
+  const groupTokens = identityTokens(groupName);
+  if (!groupTokens.length) return null;
+  const uniqueCandidates = clients.filter(client => {
+    const clientTokens = identityTokens(client.name);
+    return clientTokens.length && groupTokens.every(token => clientTokens.some(name =>
+      token === name || (Math.min(token.length, name.length) >= 5 && (token.startsWith(name) || name.startsWith(token)))));
+  });
+  return uniqueCandidates.length === 1 ? uniqueCandidates[0] : null;
 }
 
 export async function fetchClickUpClients({ token, listId, fetchImpl = fetch, apiBase = DEFAULT_API_BASE }) {
