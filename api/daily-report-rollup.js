@@ -1,3 +1,4 @@
+const dbFetch = (...args) => require("../lib/database-request.js").request(fetch, ...args);
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
 
@@ -26,7 +27,7 @@ function viennaParts(date = new Date()) {
 
 function expectedMinutes(employee, date) {
   const day = new Date(`${date}T12:00:00Z`).getUTCDay();
-  if (day < 1 || day > 5) return 0;
+  if (!require("../lib/business-calendar.js").isWorkingDay(date)) return 0;
   const month = date.slice(0, 7);
   const weeklyHours = require("../cost-calculation.js").weeklyHours(employee, month);
   // Full-time schedule: Mon-Thu 8.5h including the break, Friday 6.5h total.
@@ -69,13 +70,13 @@ module.exports = async function handler(req, res) {
 
   try {
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const sourceResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, { headers: headers(key) });
+      const sourceResponse = await dbFetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, { headers: headers(key) });
       if (!sourceResponse.ok) throw new Error(`State fetch failed (${sourceResponse.status})`);
       const source = (await sourceResponse.json())[0];
       if (!source?.payload) return send(res, 404, { error: "Main state is empty" });
       const payload = JSON.parse(JSON.stringify(source.payload));
       payload.employeeReports = Array.isArray(payload.employeeReports) ? payload.employeeReports : [];
-      const activeEmployees = (payload.employees || []).filter((employee) => employee.status !== "Neaktivan" && (!employee.startDate || employee.startDate <= date));
+      const activeEmployees = (payload.employees || []).filter((employee) => employee.status !== "Neaktivan" && employee.active !== false && (!employee.startDate || employee.startDate <= date) && (!employee.endDate || employee.endDate >= date));
       const created = [];
       const updated = [];
 
@@ -126,7 +127,7 @@ module.exports = async function handler(req, res) {
 
       if (dryRun) return send(res, 200, { ok: true, dryRun: true, date, created: created.length, updated: updated.length, employeeIds: [...created, ...updated] });
       const updatedAt = now.toISOString();
-      const saveResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&updated_at=eq.${encodeURIComponent(source.updated_at)}&select=updated_at`, {
+      const saveResponse = await dbFetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&updated_at=eq.${encodeURIComponent(source.updated_at)}&select=updated_at`, {
         method: "PATCH",
         headers: headers(key, "return=representation"),
         body: JSON.stringify({ payload, updated_at: updatedAt }),
@@ -141,3 +142,6 @@ module.exports = async function handler(req, res) {
   }
 };
 
+
+const originalHandler = module.exports;
+module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);

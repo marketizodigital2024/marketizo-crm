@@ -1,0 +1,15 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const source=fs.readFileSync(__dirname+'/../app.js','utf8');
+function named(name){const search='function '+name+'(';let start=source.indexOf(search);if(source.slice(start-6,start)==='async ')start-=6;const end=source.indexOf('\n}',start)+2;return source.slice(start,end);}
+const begin=source.indexOf('document.getElementById("employeeAbsenceForm")');const end=source.indexOf('\ndocument.getElementById("employeeWorkForm")',begin);assert.ok(begin>0&&end>begin);
+let handler,release,calls=0,resets=0,rendered=0;const toasts=[],local=new Map(),fields={employeeId:'emp-a',type:'Godišnji odmor',startDate:'2026-10-16',endDate:'2026-10-16',note:'Fixture leave'};
+const form={addEventListener(type,callback){handler=callback},reset(){resets++}};
+const ctx={adminConfirmedSaveInFlight:false,state:{employeeAbsences:[],notifications:[]},onlineHydrationComplete:true,localStorage:{setItem:(key,value)=>local.set(key,value)},window:{MarketizoRemote:{save(){calls++;return new Promise(resolve=>release=resolve)}}},document:{getElementById:()=>form},FormData:class{get(key){return fields[key]}},crypto,structuredClone,Date,selectedEmployeeId:'',notifyOnce(item){ctx.state.notifications.push(item)},formatDate:x=>x,renderAll(){rendered++},showToast:(...args)=>toasts.push(args),alert(){throw Error('Unexpected validation failure')}};
+vm.createContext(ctx);vm.runInContext(named('confirmAdminSave')+'\n'+named('saveState')+'\n'+source.slice(begin,end),ctx);
+(async()=>{
+  const event={preventDefault(){},currentTarget:form};const pending=handler(event);event.currentTarget=null;
+  assert.equal(calls,1);assert.equal(resets,0);assert.equal(toasts.length,0);await handler({preventDefault(){},currentTarget:form});assert.equal(calls,1);
+  release({ok:false,error:'fixture network failure'});await pending;assert.equal(resets,0);assert.equal(ctx.state.employeeAbsences.length,0);assert.equal(ctx.state.notifications.length,0);assert.equal(ctx.adminConfirmedSaveInFlight,false);assert.equal(toasts.at(-1)[0],'Nije sačuvano');assert.equal(fields.note,'Fixture leave');
+  const retry=handler({preventDefault(){},currentTarget:form});assert.equal(calls,2);assert.equal(ctx.state.employeeAbsences.length,1);release({ok:true});await retry;assert.equal(resets,1);assert.equal(ctx.state.employeeAbsences.length,1);assert.equal(toasts.at(-1)[0],'Sačuvano');assert.equal(rendered,1);
+  console.log('PASS: real admin absence handler waits for server confirmation, blocks double submit, retains failed form, rolls back phantom data, retries once and captures event target across await.');
+})().catch(error=>{console.error(error);process.exitCode=1});

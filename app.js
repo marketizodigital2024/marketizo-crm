@@ -1138,22 +1138,8 @@ function applyEmployeeActivityCatalogV1() {
   return true;
 }
 
-applyAugust2026FinanceCorrections();
-applyAugust2026ClickUpInvoiceSyncV2();
-applyMonthlyInvoiceRostersV5();
-applyMikrohausSeptemberInvoiceV1();
-applySladjan2026BalanceCorrections();
-applyHazim2026ActualsV1();
-applyMilica2026ActualsV1();
-applyAleksa2026ActualsV1();
-applyNikola2026BalanceV1();
-applyConfirmedAbsencesV2();
-applyProductionDataCleanupV1();
-applyQa20260827Cleanup();
-applyQa20260828Cleanup();
-applyQa20260828CleanupV2();
-applyEmployeeActivityCatalogV1();
-saveState({ remote: false });
+// Business corrections are explicit migrations, never side effects of opening a page.
+
 let activeFilter = "all";
 let activeStatusFilter = "all";
 let activeLeadFilter = "all";
@@ -1196,12 +1182,13 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 }
 
 function currentMonthKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return currentDateKey().slice(0, 7);
 }
 
 function currentDateKey() {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
 }
 
 function selectedMonthKey() {
@@ -1353,19 +1340,18 @@ function groupInvoiceSum(clients, field, monthKey) {
 }
 
 function loadState(sourceData = null) {
-  const saved = sourceData ? "" : localStorage.getItem("agencyCrmData");
+  const saved = sourceData ? "" : localStorage.getItem((window.MarketizoRemote?.storageKey?.() || "marketizoAdminData"));
   if (sourceData) return migrateState(structuredClone(sourceData));
-  if (!saved) return migrateState(structuredClone(starterData));
+  if (!saved) return migrateState(window.location.protocol === "file:" ? structuredClone(starterData) : {});
   try {
     return migrateState(JSON.parse(saved));
   } catch {
-    return structuredClone(starterData);
+    return migrateState(window.location.protocol === "file:" ? structuredClone(starterData) : {});
   }
 }
 
 function migrateState(data) {
-  const clients = (data.clients || starterData.clients)
-    .filter((client) => !starterClientNames.has(client.name))
+  const clients = (data.clients || [])
     .map((client) => {
       const normalizedClient = {
         package: "Starter",
@@ -1400,39 +1386,7 @@ function migrateState(data) {
       };
       return withInvoiceDefaults(withLoginDefaults(normalizedClient));
     });
-  importedClients.forEach(([name, packageName, invoiceStatus, paymentStatus, paymentMethod]) => {
-    if (clients.some((client) => client.name === name)) return;
-    const values = packageValues(packageName);
-    clients.push(withInvoiceDefaults(withLoginDefaults({
-      id: crypto.randomUUID(),
-      name,
-      niche: "Klijent",
-      country: "Austrija",
-      status: "Aktivan",
-      revenue: values.revenue,
-      leads: 0,
-      cpl: 0,
-      owner: "Marketizo",
-      team: "",
-      package: packageName,
-      contactName: "",
-      contactPhone: "",
-      whatsapp: "",
-      billingDay: 15,
-      paymentStatus,
-      invoiceStatus,
-      paymentMethod,
-      invoices: {},
-      contractMonths: values.contractMonths,
-      startDate: "",
-      metaPageId: "",
-      metaFormId: "",
-      contractFileName: "",
-      contractFileData: "",
-      contractNote: "",
-    })));
-  });
-  const employees = (data.employees?.length ? data.employees : defaultEmployeeProfiles).map((employee) => ({
+  const employees = (data.employees || []).map((employee) => ({
     id: employee.id || crypto.randomUUID(),
     name: "",
     email: "",
@@ -1458,7 +1412,7 @@ function migrateState(data) {
     giftDays: parseNumber(employee.giftDays || 1, 1),
     status: ["Aktivan", "Pauza", "Neaktivan"].includes(employee.status) ? employee.status : "Aktivan",
   }));
-  const employeeAbsences = (data.employeeAbsences || starterData.employeeAbsences || []).map((absence) => ({
+  const employeeAbsences = (data.employeeAbsences || []).map((absence) => ({
     id: absence.id || crypto.randomUUID(),
     employeeId: absence.employeeId || employees[0]?.id || "",
     type: absence.type || "Godišnji odmor",
@@ -1474,7 +1428,7 @@ function migrateState(data) {
     rejectionReason: absence.rejectionReason || "",
     hidden: Boolean(absence.hidden),
   }));
-  const employeeWorkLogs = (data.employeeWorkLogs || starterData.employeeWorkLogs || []).map((log) => ({
+  const employeeWorkLogs = (data.employeeWorkLogs || []).map((log) => ({
     id: log.id || crypto.randomUUID(),
     employeeId: log.employeeId || employees[0]?.id || "",
     date: log.date || currentDateKey(),
@@ -1492,7 +1446,7 @@ function migrateState(data) {
     locked: log.locked !== false,
     submittedAt: log.submittedAt || new Date().toISOString(),
   }));
-  const employeeActivities = (data.employeeActivities || starterData.employeeActivities || []).map((activity) => ({
+  const employeeActivities = (data.employeeActivities || []).map((activity) => ({
     id: activity.id || crypto.randomUUID(),
     name: activity.name || "Aktivnost",
     category: activity.category || "Ostalo",
@@ -1513,7 +1467,7 @@ function migrateState(data) {
       log.activityCategory = activity.category;
     }
   });
-  const employeeDocuments = (data.employeeDocuments || starterData.employeeDocuments || []).map((documentItem) => ({
+  const employeeDocuments = (data.employeeDocuments || []).map((documentItem) => ({
     id: documentItem.id || crypto.randomUUID(),
     employeeId: documentItem.employeeId || employees[0]?.id || "",
     month: documentItem.month || currentMonthKey(),
@@ -1524,7 +1478,7 @@ function migrateState(data) {
     uploadedBy: documentItem.uploadedBy || "Admin",
     uploadedAt: documentItem.uploadedAt || new Date().toISOString(),
   }));
-  const employeeLateRecords = (data.employeeLateRecords || starterData.employeeLateRecords || []).map((record) => ({
+  const employeeLateRecords = (data.employeeLateRecords || []).map((record) => ({
     id: record.id || crypto.randomUUID(),
     employeeId: record.employeeId || employees[0]?.id || "",
     date: record.date || currentDateKey(),
@@ -1534,7 +1488,7 @@ function migrateState(data) {
     acknowledgedAt: record.acknowledgedAt || "",
     createdAt: record.createdAt || new Date().toISOString(),
   }));
-  const employeeGoals = (data.employeeGoals || starterData.employeeGoals || []).map((goal) => ({
+  const employeeGoals = (data.employeeGoals || []).map((goal) => ({
     id: goal.id || crypto.randomUUID(),
     employeeId: goal.employeeId || employees[0]?.id || "",
     title: goal.title || "",
@@ -1566,7 +1520,7 @@ function migrateState(data) {
     text: item.text || "",
     createdAt: item.createdAt || new Date().toISOString(),
   }));
-  const employeeOneOnOnes = (data.employeeOneOnOnes || starterData.employeeOneOnOnes || []).map((note) => ({
+  const employeeOneOnOnes = (data.employeeOneOnOnes || []).map((note) => ({
     id: note.id || crypto.randomUUID(),
     employeeId: note.employeeId || employees[0]?.id || "",
     date: note.date || currentDateKey(),
@@ -1575,7 +1529,7 @@ function migrateState(data) {
     createdBy: note.createdBy || "Admin",
     visibleToEmployee: note.visibleToEmployee !== false,
   }));
-  const employeeReports = (data.employeeReports || starterData.employeeReports || []).map((report) => ({
+  const employeeReports = (data.employeeReports || []).map((report) => ({
     ...report,
     id: report.id || crypto.randomUUID(),
     employeeId: report.employeeId || employees[0]?.id || "",
@@ -1587,7 +1541,7 @@ function migrateState(data) {
     note: report.note || "",
     createdAt: report.createdAt || new Date().toISOString(),
   }));
-  const companyPlans = (data.companyPlans || starterData.companyPlans || []).map((plan) => ({
+  const companyPlans = (data.companyPlans || []).map((plan) => ({
     id: plan.id || crypto.randomUUID(),
     date: plan.date || currentDateKey(),
     title: plan.title || "",
@@ -1595,7 +1549,7 @@ function migrateState(data) {
     type: plan.type || "Plan firme",
     createdAt: plan.createdAt || new Date().toISOString(),
   }));
-  const notifications = (data.notifications || starterData.notifications || []).map((notification) => ({
+  const notifications = (data.notifications || []).map((notification) => ({
     id: notification.id || crypto.randomUUID(),
     key: notification.key || "",
     scope: notification.scope || "admin",
@@ -1611,9 +1565,9 @@ function migrateState(data) {
     ...structuredClone(starterData),
     ...data,
     clients,
-    deals: data.deals || starterData.deals,
-    tasks: data.tasks || starterData.tasks,
-    leads: (data.leads || starterData.leads).map((lead) => {
+    deals: data.deals || [],
+    tasks: data.tasks || [],
+    leads: (data.leads || []).map((lead) => {
       const status = normalizeLeadStatus(lead.status);
       const reactedAt = lead.calledAt || lead.lastContact || lead.lastStatusChangeAt || "";
       return {
@@ -1631,7 +1585,7 @@ function migrateState(data) {
         calledAt: isClientLeadStatusContacted(status) ? reactedAt || lead.calledAt || "" : null,
       };
     }),
-    teamMembers: data.teamMembers || starterData.teamMembers,
+    teamMembers: data.teamMembers || [],
     employees,
     employeeAbsences,
     employeeWorkLogs,
@@ -1648,7 +1602,7 @@ function migrateState(data) {
     notifications,
     backup: {
       recommendedLocation: "Google Drive / Marketizo Backups",
-      ...(data.backup || starterData.backup || {}),
+      ...(data.backup || {} || {}),
     },
   };
 }
@@ -1705,8 +1659,28 @@ function isClientLeadStatusContacted(status) {
   return normalizeLeadStatus(status) !== "Novi";
 }
 
+let adminConfirmedSaveInFlight = false;
+async function confirmAdminSave(previous) {
+  adminConfirmedSaveInFlight = true;
+  try {
+    const saved = await saveState();
+    if (!saved?.ok) {
+      state = previous;
+      window.MarketizoRemote?.cache?.(state);
+      showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo; forma je zadržana.", "warn");
+      return false;
+    }
+    if (saved.payload) {
+      state = loadState(saved.payload);
+      window.MarketizoRemote?.adoptBaseline?.(state);
+    }
+    return true;
+  } finally { adminConfirmedSaveInFlight = false; }
+}
+
 function saveState(options = {}) {
-  localStorage.setItem("agencyCrmData", JSON.stringify(state));
+  if (options.remote !== false && !onlineHydrationComplete) return Promise.resolve({ ok: false, error: "Sačekaj da se online podaci učitaju pa pokušaj ponovo." });
+  window.MarketizoRemote?.cache?.(state);
   if (options.remote !== false && onlineHydrationComplete && window.MarketizoRemote) {
     return window.MarketizoRemote.save(state);
   }
@@ -1721,51 +1695,58 @@ window.addEventListener("marketizo-state-conflict", (event) => {
   showToast("Podaci su osveženi", event.detail?.message || "Neko je već uneo novije podatke. Ponovi poslednju izmenu.", "warn");
 });
 
+function setAdminLoadStatus(ready, message = "Učitavanje online podataka…") {
+  document.body.classList.toggle("crm-online-loading", !ready);
+  let notice = document.getElementById("crmOnlineLoadNotice");
+  if (!notice) {
+    notice = document.createElement("aside");
+    notice.id = "crmOnlineLoadNotice";
+    notice.setAttribute("role", "status");
+    const text = document.createElement("span");
+    text.dataset.loadMessage = "true";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "Pokušaj ponovo";
+    retry.addEventListener("click", () => window.location.reload());
+    notice.append(text, retry);
+    document.querySelector("main")?.prepend(notice);
+  }
+  notice.hidden = ready;
+  notice.querySelector("[data-load-message]").textContent = message;
+}
+
 async function hydrateOnlineState() {
   if (!window.MarketizoRemote || window.location.protocol === "file:") {
     onlineHydrationComplete = true;
+    setAdminLoadStatus(true);
     return;
   }
+  setAdminLoadStatus(false);
   let result;
   try {
     result = await window.MarketizoRemote.load();
   } catch (error) {
     console.error("Online state load failed", error);
     showToast("Online baza nije dostupna", "Podaci nisu poslati da se postojeća baza ne bi prepisala.", "warn");
+    setAdminLoadStatus(false, "Online podaci nisu dostupni. Proveri vezu i pokušaj ponovo.");
     return;
   }
   if (result.payload) {
     state = loadState(result.payload);
-    const financeCorrected = applyAugust2026FinanceCorrections();
-    const clickUpInvoicesCorrected = applyAugust2026ClickUpInvoiceSyncV2();
-    const invoiceRostersCorrected = applyMonthlyInvoiceRostersV5();
-    const mikrohausSeptemberInvoiceAdded = applyMikrohausSeptemberInvoiceV1();
-    const sladjanCorrected = applySladjan2026BalanceCorrections();
-    const hazimCorrected = applyHazim2026ActualsV1();
-    const nikolaCorrected = applyNikola2026BalanceV1();
-    const confirmedAbsencesAdded = applyConfirmedAbsencesV2();
-    const productionDataCleaned = applyProductionDataCleanupV1();
-    const qaDataCleaned = applyQa20260827Cleanup();
-    const qa20260828DataCleaned = applyQa20260828Cleanup();
-    const qa20260828DataCleanedV2 = applyQa20260828CleanupV2();
-    const activityCatalogAdded = applyEmployeeActivityCatalogV1();
+    window.MarketizoRemote.adoptBaseline?.(state);
     onlineHydrationComplete = true;
-    saveState({ remote: financeCorrected || clickUpInvoicesCorrected || invoiceRostersCorrected || mikrohausSeptemberInvoiceAdded || sladjanCorrected || hazimCorrected || nikolaCorrected || confirmedAbsencesAdded || productionDataCleaned || qaDataCleaned || qa20260828DataCleaned || qa20260828DataCleanedV2 || activityCatalogAdded });
+    setAdminLoadStatus(true);
+    saveState({ remote: false });
     renderAll();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     window.dispatchEvent(new Event("marketizo-cost-data-ready"));
     return;
   }
   if (result.configured && result.empty) {
-    onlineHydrationComplete = true;
-    saveState();
-    showToast("Online baza", "Zajednička baza je inicijalizovana.", "ok");
+    setAdminLoadStatus(false, "Zajednička baza nema podatke. Automatska inicijalizacija je zaustavljena.");
     return;
   }
-  if (!result.configured) {
-    onlineHydrationComplete = true;
-    showToast("Online baza nije povezana", "Dodaj Supabase env varijable u Vercel da svi uređaji vide iste podatke.", "warn");
-  }
+  setAdminLoadStatus(false, result.error || "Online podaci nisu učitani. Proveri prijavu i pokušaj ponovo.");
 }
 
 function parseNumber(value, fallback = 0) {
@@ -2121,25 +2102,34 @@ function isNotificationHidden(notification) {
   return notification.hiddenUntil && new Date(notification.hiddenUntil).getTime() > Date.now();
 }
 
-function hideNotification(id) {
+async function hideNotification(id) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const notification = (state.notifications || []).find((item) => item.id === id);
   if (!notification) return;
   notification.hiddenUntil = addDays(currentDateKey(), 7);
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
   showToast("Sakriveno", "Obaveštenje je sklonjeno na 7 dana.", "info");
 }
 
-function unhideNotification(id) {
+async function unhideNotification(id) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const notification = (state.notifications || []).find((item) => item.id === id);
   if (!notification) return;
   notification.hiddenUntil = "";
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
   showToast("Vraćeno", "Obaveštenje je ponovo aktivno.", "ok");
 }
 
-function deleteNotification(id) {
+async function deleteNotification(id) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const notification = (state.notifications || []).find((item) => item.id === id);
   if (!notification) return;
   state.dismissedNotificationKeys = state.dismissedNotificationKeys || [];
@@ -2148,7 +2138,7 @@ function deleteNotification(id) {
     state.dismissedNotificationKeys = state.dismissedNotificationKeys.slice(-500);
   }
   state.notifications = state.notifications.filter((item) => item.id !== id);
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
   showToast("Obrisano", "Obaveštenje je trajno uklonjeno.", "ok");
 }
@@ -2366,11 +2356,14 @@ function renderContractExpiryList() {
         })
         .join("")
     : `<div class="empty-state">Nema ugovora koji ističu u narednih 30 dana.</div>`;
-  target.querySelectorAll("[data-dismiss-contract]").forEach((button) => button.addEventListener("click", () => {
+  target.querySelectorAll("[data-dismiss-contract]").forEach((button) => button.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     const key = `contract-expiry-${button.dataset.dismissContract}-${button.dataset.contractEnd}`;
     state.dismissedNotificationKeys = [...new Set([...(state.dismissedNotificationKeys || []), key])].slice(-500);
     state.notifications = (state.notifications || []).filter((item) => item.key !== key);
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
     showToast("Uklonjeno", "Upozorenje za ugovor je uklonjeno. Ugovor je sačuvan.", "ok");
   }));
@@ -2453,7 +2446,10 @@ function renderMonthlyInvoices(clients, monthKey) {
 
 function bindInvoiceControls() {
   document.querySelectorAll("[data-invoice-client]").forEach((control) => {
-    control.addEventListener("change", () => {
+    control.addEventListener("change", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
       const client = state.clients.find((item) => item.id === control.dataset.invoiceClient);
       if (!client) return;
       const invoice = monthlyInvoice(client);
@@ -2468,13 +2464,16 @@ function bindInvoiceControls() {
         if (control.value === "Plaćeno") invoice.paidAt = new Date().toISOString();
       }
       if (control.dataset.invoiceField === "paymentMethod") client.paymentMethod = control.value;
-      saveState();
+      if (!(await confirmAdminSave(_confirmedBefore))) return;
       renderAll();
       showToast("Sačuvano", `${client.name}: status računa je ažuriran.`, "ok");
     });
   });
   document.querySelectorAll("[data-invoice-payment-form]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
+    form.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
       event.preventDefault();
       const client = state.clients.find((item) => item.id === form.dataset.invoicePaymentForm);
       if (!client) return;
@@ -2492,13 +2491,16 @@ function bindInvoiceControls() {
       invoice.paymentStatus = invoiceRemainingAmount(client) <= 0.001 ? "Plaćeno" : "Delimično";
       invoice.paidAt = invoice.paymentStatus === "Plaćeno" ? new Date().toISOString() : "";
       client.paymentStatus = invoice.paymentStatus;
-      saveState();
+      if (!(await confirmAdminSave(_confirmedBefore))) return;
       renderAll();
       showToast("Uplata sačuvana", `${client.name}: evidentirano ${currency.format(amount)}.`, "ok");
     });
   });
   document.querySelectorAll("[data-delete-invoice-payment]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
       const client = state.clients.find((item) => item.id === button.dataset.invoiceClient);
       if (!client || !confirm("Obrisati ovu uplatu?")) return;
       const invoice = monthlyInvoice(client);
@@ -2507,7 +2509,7 @@ function bindInvoiceControls() {
       invoice.paymentStatus = invoice.paidAmount >= invoiceAmount(client) ? "Plaćeno" : invoice.paidAmount > 0 ? "Delimično" : "Nije plaćeno";
       invoice.paidAt = invoice.paymentStatus === "Plaćeno" ? new Date().toISOString() : "";
       client.paymentStatus = invoice.paymentStatus;
-      saveState();
+      if (!(await confirmAdminSave(_confirmedBefore))) return;
       renderAll();
       showToast("Uplata obrisana", `${client.name}: stanje računa je preračunato.`, "ok");
     });
@@ -2608,15 +2610,21 @@ function bindEditButtons() {
   });
 }
 
-function archiveClient(id) {
+async function archiveClient(id) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const client = state.clients.find((item) => item.id === id);
   if (!client) return;
   client.status = client.status === "Arhiviran" ? "Neaktivan" : "Arhiviran";
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
 }
 
-function deleteClient(id) {
+async function deleteClient(id) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const client = state.clients.find((item) => item.id === id);
   if (!client) return;
   if (!confirm(`Obrisati klijenta: ${client.name}? Brišu se i njegovi leadovi i sales osobe.`)) return;
@@ -2624,7 +2632,7 @@ function deleteClient(id) {
   state.leads = (state.leads || []).filter((lead) => lead.client !== client.name);
   state.teamMembers = (state.teamMembers || []).filter((member) => member.client !== client.name);
   if (selectedPortalClientId === id) selectedPortalClientId = state.clients[0]?.id || "";
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
 }
 
@@ -3545,11 +3553,14 @@ function renderLeaderAssignment(employee) {
         .join("")
     : `<div class="empty-state">Nema drugih zaposlenih za dodelu.</div>`;
   document.querySelectorAll("[data-assign-leader]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
       const member = employeeById(button.dataset.employeeId);
       if (!member) return;
       member.leaderId = member.leaderId === button.dataset.assignLeader ? "" : button.dataset.assignLeader;
-      saveState();
+      if (!(await confirmAdminSave(_confirmedBefore))) return;
       renderAll();
     });
   });
@@ -3661,7 +3672,10 @@ function hideEmployeeProfileForm() {
   document.body.classList.remove("employee-editor-open");
 }
 
-function deleteEmployee(id) {
+async function deleteEmployee(id) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const employee = employeeById(id);
   if (!employee) return;
   if (!confirm(`Obrisati zaposlenog: ${employee.name}?`)) return;
@@ -3680,7 +3694,7 @@ function deleteEmployee(id) {
   state.notifications = (state.notifications || []).filter((item) => item.targetId !== id);
   selectedEmployeeId = state.employees[0]?.id || "";
   hideEmployeeProfileForm();
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
 }
 
@@ -3738,11 +3752,14 @@ function renderEmployeeWorkRows(monthKey) {
   setText("employeeWorkRowsCount", `${rows.length} unosa`);
   document.getElementById("employeeWorkRows").innerHTML = rows.join("") || `<tr><td colspan="7">Nema unetih sati za izabrani mesec i zaposlenog.</td></tr>`;
   document.querySelectorAll("[data-edit-work-log]").forEach((button) => button.addEventListener("click", () => openWorkLogEditor(button.dataset.editWorkLog)));
-  document.querySelectorAll("[data-delete-work-log]").forEach((button) => button.addEventListener("click", () => {
+  document.querySelectorAll("[data-delete-work-log]").forEach((button) => button.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     const log = state.employeeWorkLogs.find((item) => item.id === button.dataset.deleteWorkLog);
     if (!log || !confirm(`Obrisati unos od ${formatDate(log.date)} (${log.activityName || "Rad"})?`)) return;
     state.employeeWorkLogs = state.employeeWorkLogs.filter((item) => item.id !== log.id);
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
     showToast("Obrisano", "Pogrešan unos vremena je uklonjen.", "ok");
   }));
@@ -3772,7 +3789,10 @@ function openWorkLogEditor(id) {
     <label class="wide">Napomena<textarea name="note" rows="3">${log.note || ""}</textarea></label>
     <div class="dialog-actions wide"><button class="secondary-button" value="cancel" type="submit">Otkaži</button><button class="primary-button" value="save" type="submit">Sačuvaj izmenu</button></div>
   </form>`;
-  dialog.addEventListener("close", () => {
+  dialog.addEventListener("close", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     if (dialog.returnValue !== "save") return;
     const form = dialog.querySelector("form");
     const data = new FormData(form);
@@ -3795,7 +3815,7 @@ function openWorkLogEditor(id) {
       clientId: client?.id || "", clientName: client?.name || "",
       note: String(data.get("note") || ""), updatedAt: new Date().toISOString(),
     });
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
     showToast("Sačuvano", "Unos sati je izmenjen i odmah je vidljiv zaposlenom.", "ok");
   }, { once: true });
@@ -3814,7 +3834,10 @@ function renderEmployeeActivities() {
   target.innerHTML = activities.length
     ? activities.map((activity) => `<div class="setup-item activity-category-row"><strong>${activity.name}</strong><label class="activity-category-control"><span>Kategorija</span><select data-activity-category="${activity.id}" aria-label="Kategorija za ${activity.name}">${categoryChoices.map((category) => `<option value="${category}" ${category === (activity.category || "Ostalo") ? "selected" : ""}>${category}</option>`).join("")}</select></label><button class="edit-button danger-action" data-delete-activity="${activity.id}" type="button">Obriši</button></div>`).join("")
     : `<div class="empty-state">Dodaj prvu aktivnost koju zaposleni mogu da izaberu.</div>`;
-  target.querySelectorAll("[data-activity-category]").forEach((select) => select.addEventListener("change", () => {
+  target.querySelectorAll("[data-activity-category]").forEach((select) => select.addEventListener("change", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     const activity = activities.find((item) => item.id === select.dataset.activityCategory);
     const category = String(select.value || "").trim();
     if (!activity || !category || activity.category === category) return;
@@ -3830,14 +3853,17 @@ function renderEmployeeActivities() {
     (state.employeeReports || []).forEach((report) => {
       if (report.activityId === activity.id) report.activityCategory = category;
     });
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
     showToast("Sačuvano", `${activity.name} je premeštena u kategoriju ${category}.`, "ok");
   }));
-  target.querySelectorAll("[data-delete-activity]").forEach((button) => button.addEventListener("click", () => {
+  target.querySelectorAll("[data-delete-activity]").forEach((button) => button.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     if (!confirm("Obrisati aktivnost iz ponuđene liste? Stari unosi ostaju sačuvani.")) return;
     state.employeeActivities = state.employeeActivities.filter((item) => item.id !== button.dataset.deleteActivity);
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
   }));
 }
@@ -4072,10 +4098,13 @@ function renderEmployeePerformanceOverview() {
     });
     activateProfileTab();
     renderProfileClientRatings(employee.id);
-    document.getElementById("saveEmployeeInternalNote")?.addEventListener("click", () => {
+    document.getElementById("saveEmployeeInternalNote")?.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
       state.employeeInternalNotes = state.employeeInternalNotes || {};
       state.employeeInternalNotes[employee.id] = document.getElementById("employeeInternalNote")?.value.trim() || "";
-      saveState();
+      if (!(await confirmAdminSave(_confirmedBefore))) return;
       showToast("Sačuvano", "Interna napomena je sačuvana samo za admina.", "ok");
     });
   }
@@ -4155,7 +4184,10 @@ function renderEmployeeGoalRows() {
     const slider = row.querySelector('input[type="range"]');
     const output = row.querySelector("output");
     slider.addEventListener("input", () => output.value = `${slider.value}%`);
-    row.querySelector("button").addEventListener("click", () => {
+    row.querySelector("button").addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
       const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.adminGoalId);
       if (!goal) return;
       goal.progress = Number(slider.value);
@@ -4166,7 +4198,7 @@ function renderEmployeeGoalRows() {
         goal.status = "U toku";
         goal.completedDate = "";
       }
-      saveState();
+      if (!(await confirmAdminSave(_confirmedBefore))) return;
       renderAll();
       showToast("Progres sačuvan", `${employeeById(goal.employeeId)?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
     });
@@ -4193,9 +4225,13 @@ function renderEmployeeGoalRows() {
     : `<div class="empty-state">${selectedEmployee ? `${selectedEmployee.name} trenutno nema unetih pohvala ili fokusa.` : "Nema unetih pohvala ili fokusa."}</div>`;
 }
 
-document.getElementById("employeeRatingForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeRatingForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = _confirmedTarget;
   const data = Object.fromEntries(new FormData(form));
   selectedEmployeeId = data.employeeId;
   state.employeeRatings = state.employeeRatings || [];
@@ -4209,7 +4245,7 @@ document.getElementById("employeeRatingForm")?.addEventListener("submit", (event
     note: data.note.trim(),
     createdAt: new Date().toISOString(),
   });
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   form.reset();
   form.elements.month.value = currentMonthKey();
   setSelectedEmployeeOnForms(selectedEmployeeId);
@@ -4218,19 +4254,26 @@ document.getElementById("employeeRatingForm")?.addEventListener("submit", (event
 
 document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) => {
   const submitted = Object.fromEntries(new FormData(event.currentTarget));
-  window.setTimeout(() => {
+  window.setTimeout(async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     const goal = [...(state.employeeGoals || [])].reverse().find((item) => item.employeeId === submitted.employeeId && item.title === submitted.title);
     if (!goal) return;
     goal.category = submitted.category || "Razvoj";
     if (goal.status === "Završeno" && !goal.completedDate) goal.completedDate = currentDateKey();
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
   }, 0);
 });
 
-document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeRecognitionForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = _confirmedTarget;
   const data = Object.fromEntries(new FormData(form));
   selectedEmployeeId = data.employeeId;
   state.employeeRecognitions = state.employeeRecognitions || [];
@@ -4252,7 +4295,7 @@ document.getElementById("employeeRecognitionForm")?.addEventListener("submit", (
     title: recognition.type === "Pohvala" ? "Dobio/la si pohvalu" : "Novi razvojni fokus",
     message: `${recognition.text} - ${recognition.author}`,
   });
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   form.reset();
   form.elements.month.value = currentMonthKey();
   setSelectedEmployeeOnForms(selectedEmployeeId);
@@ -4799,7 +4842,7 @@ function setupEmployeeHourDeduction() {
     delete form.dataset.saving;
     if (!result?.ok) {
       state.employeeHourAdjustments = state.employeeHourAdjustments.filter((item) => item.id !== adjustment.id);
-      localStorage.setItem("agencyCrmData", JSON.stringify(state));
+      window.MarketizoRemote?.cache?.(state);
       showToast("Korekcija nije sačuvana", result?.error || "Pokušaj ponovo.", "warn");
       return;
     }
@@ -4831,7 +4874,7 @@ function renderEmployeeHourAdjustments() {
     button.disabled = false;
     if (!result?.ok) {
       state.employeeHourAdjustments.push(adjustment);
-      localStorage.setItem("agencyCrmData", JSON.stringify(state));
+      window.MarketizoRemote?.cache?.(state);
       showToast("Poništavanje nije sačuvano", result?.error || "Pokušaj ponovo.", "warn");
       return;
     }
@@ -4859,13 +4902,16 @@ function setupExistingGoalProgressEditor() {
       const slider = row.querySelector('input[type="range"]');
       const output = row.querySelector("output");
       slider.addEventListener("input", () => output.value = `${slider.value}%`);
-      row.querySelector("button").addEventListener("click", () => {
+      row.querySelector("button").addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
         const goal = (state.employeeGoals || []).find((item) => item.id === row.dataset.existingGoalId);
         if (!goal) return;
         goal.progress = Number(slider.value);
         if (goal.progress >= 100) { goal.status = "Završeno"; goal.completedDate = goal.completedDate || currentDateKey(); }
         else if (goal.status === "Završeno") { goal.status = "U toku"; goal.completedDate = ""; }
-        saveState();
+        if (!(await confirmAdminSave(_confirmedBefore))) return;
         render();
         showToast("Progres sačuvan", `${employee?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
       });
@@ -4985,7 +5031,10 @@ function renderEmployeeReportRows(monthKey) {
   if (reportRows) reportRows.innerHTML = rows.join("") || `<tr><td colspan="6">Nema izveštaja za ovaj mesec.</td></tr>`;
 }
 
-function approveAbsence(id) {
+async function approveAbsence(id) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const absence = state.employeeAbsences.find((item) => item.id === id);
   if (!absence || absence.status !== "Zatraženo") return;
   const employee = employeeById(absence.employeeId);
@@ -5009,11 +5058,14 @@ function approveAbsence(id) {
     title: "Odmor odobren",
     message: `${employee?.name || "Zaposleni"} ima odobren ${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)}.`,
   });
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
 }
 
-function rejectAbsence(id) {
+async function rejectAbsence(id) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const absence = state.employeeAbsences.find((item) => item.id === id);
   if (!absence || absence.status !== "Zatraženo") return;
   const employee = employeeById(absence.employeeId);
@@ -5035,7 +5087,7 @@ function rejectAbsence(id) {
     title: "Zahtev za odmor je odbijen",
     message: `${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)} nije odobren. Razlog: ${reason}`,
   });
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
   showToast("Zahtev je odbijen", `${employee?.name || "Zaposleni"} će videti razlog odbijanja.`, "warn");
 }
@@ -5190,26 +5242,35 @@ function renderAdminTeamCalendar() {
       }).join("")}
     </div>`);
   }
-  target.querySelectorAll("[data-hide-absence]").forEach((button) => button.addEventListener("click", () => {
+  target.querySelectorAll("[data-hide-absence]").forEach((button) => button.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     const absence = state.employeeAbsences.find((item) => item.id === button.dataset.hideAbsence);
     if (!absence) return;
     absence.hidden = true;
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
     showToast("Sakriveno", "Odsustvo je sklonjeno iz glavnog kalendara.", "info");
   }));
-  target.querySelectorAll("[data-unhide-absence]").forEach((button) => button.addEventListener("click", () => {
+  target.querySelectorAll("[data-unhide-absence]").forEach((button) => button.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     const absence = state.employeeAbsences.find((item) => item.id === button.dataset.unhideAbsence);
     if (!absence) return;
     absence.hidden = false;
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
   }));
-  target.querySelectorAll("[data-delete-absence]").forEach((button) => button.addEventListener("click", () => {
+  target.querySelectorAll("[data-delete-absence]").forEach((button) => button.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
     const absence = state.employeeAbsences.find((item) => item.id === button.dataset.deleteAbsence);
     if (!absence || !confirm("Trajno obrisati ovo odsustvo iz evidencije?")) return;
     state.employeeAbsences = state.employeeAbsences.filter((item) => item.id !== absence.id);
-    saveState();
+    if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
     showToast("Obrisano", "Odsustvo je uklonjeno iz evidencije.", "ok");
   }));
@@ -5261,7 +5322,7 @@ function renderClients() {
 function renderReports() {
   const clients = visibleClients();
   const monthKey = selectedMonthKey();
-  if (ensureInvoiceMonthRoster(monthKey)) saveState();
+  // Invoice roster changes are explicit business actions, never render side effects.
   const invoiceClients = financeClientsForMonth(clients, monthKey);
   const revenueByCountry = groupInvoiceSum(invoiceClients, "country", monthKey);
   const revenueByStatus = groupInvoiceSum(invoiceClients, "status", monthKey);
@@ -5558,7 +5619,7 @@ function renderAll() {
   setupOperationalAdminField();
   const notificationCount = (state.notifications || []).length;
   generateSystemNotifications();
-  if ((state.notifications || []).length !== notificationCount) saveState();
+  if ((state.notifications || []).length !== notificationCount) saveState({ remote: false });
   renderAdminPanel();
   if (document.getElementById("clientCards")) renderClients();
   if (document.getElementById("leadCards")) renderLeadCrm();
@@ -5745,7 +5806,7 @@ document.getElementById("employeeForm")?.addEventListener("input", (event) => {
 });
 
 window.addEventListener("storage", (event) => {
-  if (event.key !== "agencyCrmData") return;
+  if (event.key !== (window.MarketizoRemote?.storageKey?.() || "marketizoAdminData")) return;
   state = loadState();
   renderAll();
 });
@@ -5931,9 +5992,13 @@ document.getElementById("employeeForm")?.addEventListener("submit", async (event
   showToast("Sačuvano", `${name} je sačuvan u zaposlenima.`, "ok");
 });
 
-document.getElementById("employeeAbsenceForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeAbsenceForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   const startDate = String(formData.get("startDate") || "");
   const endDate = String(formData.get("endDate") || startDate);
   const employeeId = formData.get("employeeId");
@@ -5962,8 +6027,8 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", (even
     title: "Odsustvo je upisano",
     message: `${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)} je upisan u kalendar.`,
   });
-  saveState();
-  event.currentTarget.reset();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  _confirmedTarget.reset();
   renderAll();
   showToast("Sačuvano", "Odsustvo je upisano i zaposlenom je poslato obaveštenje.", "ok");
 });
@@ -6099,9 +6164,13 @@ document.getElementById("employeeActivityForm")?.addEventListener("submit", asyn
   }
 });
 
-document.getElementById("employeeLateForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeLateForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   const employeeId = formData.get("employeeId");
   if (!employeeId) {
     alert("Izaberi zaposlenog za ovaj unos.");
@@ -6129,17 +6198,21 @@ document.getElementById("employeeLateForm")?.addEventListener("submit", (event) 
     title: "Upisano kašnjenje",
     message: `${record.minutes} minuta · odbija se ${record.penaltyMinutes} minuta · ${formatDate(record.date)} · ${record.reason}.`,
   });
-  saveState();
-  event.currentTarget.reset();
-  event.currentTarget.elements.date.value = currentDateKey();
-  event.currentTarget.elements.minutes.value = 10;
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  _confirmedTarget.reset();
+  _confirmedTarget.elements.date.value = currentDateKey();
+  _confirmedTarget.elements.minutes.value = 10;
   renderAll();
   showToast("Sačuvano", `Kašnjenje je upisano. Odbija se ${penaltyMinutes} minuta.`, "warn");
 });
 
-document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeGoalForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   const employeeId = formData.get("employeeId");
   if (!employeeId) {
     alert("Izaberi zaposlenog za ovaj unos.");
@@ -6172,18 +6245,22 @@ document.getElementById("employeeGoalForm")?.addEventListener("submit", (event) 
     title: "Dodat ti je cilj",
     message: `${goal.title}: ${goal.target || "bez dodatnog opisa"} · rok ${formatDate(goal.endDate)}.`,
   });
-  saveState();
-  event.currentTarget.reset();
-  event.currentTarget.elements.startDate.value = currentDateKey();
-  event.currentTarget.elements.endDate.value = currentDateKey();
-  event.currentTarget.elements.progress.value = 0;
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  _confirmedTarget.reset();
+  _confirmedTarget.elements.startDate.value = currentDateKey();
+  _confirmedTarget.elements.endDate.value = currentDateKey();
+  _confirmedTarget.elements.progress.value = 0;
   renderAll();
   showToast("Sačuvano", "Cilj je dodat zaposlenom.", "ok");
 });
 
-document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", (event) => {
+document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   const employeeId = formData.get("employeeId");
   if (!employeeId) {
     alert("Izaberi zaposlenog za ovaj unos.");
@@ -6210,16 +6287,20 @@ document.getElementById("employeeOneOnOneForm")?.addEventListener("submit", (eve
     title: "Nova 1:1 beleška",
     message: `${note.title} · ${formatDate(note.date)}`,
   });
-  saveState();
-  event.currentTarget.reset();
-  event.currentTarget.elements.date.value = currentDateKey();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  _confirmedTarget.reset();
+  _confirmedTarget.elements.date.value = currentDateKey();
   renderAll();
   showToast("Sačuvano", "1:1 beleška je sačuvana.", "ok");
 });
 
-document.getElementById("companyPlanForm")?.addEventListener("submit", (event) => {
+document.getElementById("companyPlanForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   const plan = {
     id: crypto.randomUUID(),
     date: formData.get("date"),
@@ -6239,9 +6320,9 @@ document.getElementById("companyPlanForm")?.addEventListener("submit", (event) =
       message: `${plan.type}: ${plan.title} · ${formatDate(plan.date)}`,
     });
   });
-  saveState();
-  event.currentTarget.reset();
-  event.currentTarget.elements.date.value = currentDateKey();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  _confirmedTarget.reset();
+  _confirmedTarget.elements.date.value = currentDateKey();
   renderAll();
   showToast("Sačuvano", "Plan firme je dodat i vidljiv zaposlenima.", "ok");
 });
@@ -6256,8 +6337,12 @@ document.getElementById("openClientModal").addEventListener("click", () => {
 });
 
 document.getElementById("adminClientForm").addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const form = event.currentTarget;
+  const form = _confirmedTarget;
   const formData = new FormData(form);
   const name = String(formData.get("name") || "").trim();
   const loginEmail = String(formData.get("loginEmail") || "").trim().toLowerCase();
@@ -6324,7 +6409,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     domainPrice: Number(formData.get("domainPrice") || 0),
   });
   withLoginDefaults(state.clients[0]);
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   form.reset();
   if (submitButton) submitButton.disabled = false;
   document.getElementById("clientAddPanel")?.setAttribute("hidden", "");
@@ -6345,8 +6430,12 @@ document.getElementById("closeEditClientModal")?.addEventListener("click", () =>
 document.getElementById("cancelEditClient")?.addEventListener("click", () => editClientModal.close());
 
 document.getElementById("editClientForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   const client = state.clients.find((item) => item.id === formData.get("id"));
   if (!client) return;
   const values = packageValues(formData.get("package"), formData.get("revenue"), formData.get("contractMonths"));
@@ -6390,17 +6479,21 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     };
   }
   withLoginDefaults(client);
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   editClientModal.close();
   renderAll();
   showToast("Sačuvano", "Izmene klijenta su sačuvane.", "ok");
 });
 
-document.getElementById("portalLeadForm")?.addEventListener("submit", (event) => {
+document.getElementById("portalLeadForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
   const client = selectedPortalClient();
   if (!client) return;
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   const lead = {
     id: crypto.randomUUID(),
     client: client.name,
@@ -6425,18 +6518,22 @@ document.getElementById("portalLeadForm")?.addEventListener("submit", (event) =>
   };
   state.leads.unshift(lead);
   client.leads = Number(client.leads || 0) + 1;
-  saveState();
-  event.currentTarget.reset();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  _confirmedTarget.reset();
   document.getElementById("portalLeadPanel")?.setAttribute("hidden", "");
   renderAll();
   showToast("Sačuvano", "Lead je dodat za izabranog klijenta.", "ok");
 });
 
-document.getElementById("portalTeamForm")?.addEventListener("submit", (event) => {
+document.getElementById("portalTeamForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
   const client = selectedPortalClient();
   if (!client) return;
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   state.teamMembers.push({
     id: crypto.randomUUID(),
     client: client.name,
@@ -6445,8 +6542,8 @@ document.getElementById("portalTeamForm")?.addEventListener("submit", (event) =>
     phone: formData.get("phone"),
     email: formData.get("email"),
   });
-  saveState();
-  event.currentTarget.reset();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  _confirmedTarget.reset();
   renderAll();
   showToast("Sačuvano", "Osoba je dodata u tim klijenta.", "ok");
 });
@@ -6475,9 +6572,13 @@ if (leadButton && leadModal) leadButton.addEventListener("click", () => leadModa
 document.getElementById("closeLeadModal")?.addEventListener("click", () => leadModal?.close());
 document.getElementById("cancelLead")?.addEventListener("click", () => leadModal?.close());
 
-document.getElementById("leadForm")?.addEventListener("submit", (event) => {
+document.getElementById("leadForm")?.addEventListener("submit", async (event) => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+  const _confirmedTarget = event.currentTarget;
+
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const formData = new FormData(_confirmedTarget);
   state.leads.unshift({
     id: crypto.randomUUID(),
     client: formData.get("client"),
@@ -6495,14 +6596,17 @@ document.getElementById("leadForm")?.addEventListener("submit", (event) => {
   });
   const client = state.clients.find((item) => item.name === formData.get("client"));
   if (client) client.leads = Number(client.leads) + 1;
-  saveState();
-  event.currentTarget.reset();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  _confirmedTarget.reset();
   leadModal?.close();
   renderAll();
   showToast("Sačuvano", "Lead je ručno dodat.", "ok");
 });
 
-function updateLeadStatus(id, status) {
+async function updateLeadStatus(id, status) {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const lead = state.leads.find((item) => item.id === id);
   if (!lead) return;
   lead.status = normalizeLeadStatus(status);
@@ -6510,7 +6614,7 @@ function updateLeadStatus(id, status) {
     lead.calledAt = new Date().toISOString();
   }
   lead.lastStatusChangeAt = new Date().toISOString();
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
   showToast("Sačuvano", `Lead je prebačen u status ${lead.status}.`, "ok");
 }
@@ -6521,7 +6625,10 @@ function renderLeadClientOptions() {
   select.innerHTML = state.clients.map((client) => `<option>${client.name}</option>`).join("");
 }
 
-document.getElementById("addDealBtn")?.addEventListener("click", () => {
+document.getElementById("addDealBtn")?.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const name = prompt("Naziv prilike");
   if (!name) return;
   state.deals.unshift({
@@ -6532,11 +6639,14 @@ document.getElementById("addDealBtn")?.addEventListener("click", () => {
     stage: "Novi lead",
     note: "Dodato iz CRM-a.",
   });
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
 });
 
-document.getElementById("addTaskBtn")?.addEventListener("click", () => {
+document.getElementById("addTaskBtn")?.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   const title = prompt("Naziv zadatka");
   if (!title) return;
   state.tasks.unshift({
@@ -6547,7 +6657,7 @@ document.getElementById("addTaskBtn")?.addEventListener("click", () => {
     due: "Danas",
     priority: "Srednji",
   });
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
 });
 
@@ -6565,10 +6675,13 @@ document.getElementById("exportBtn").addEventListener("click", () => {
   downloadBackup("agency-crm-export.json");
 });
 
-document.getElementById("backupNowBtn")?.addEventListener("click", () => {
+document.getElementById("backupNowBtn")?.addEventListener("click", async () => {
+  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
+  const _confirmedBefore = structuredClone(state);
+
   state.backup = state.backup || {};
   state.backup.lastDownloadedAt = new Date().toISOString();
-  saveState();
+  if (!(await confirmAdminSave(_confirmedBefore))) return;
   downloadBackup(`marketizo-crm-backup-${currentDateKey()}.json`);
   renderAll();
 });
@@ -6578,6 +6691,7 @@ hydrateOnlineState().then(() => {
   renderAll();
   window.MarketizoRemote?.startPolling((payload) => {
     state = loadState(payload);
+    window.MarketizoRemote.adoptBaseline?.(state);
     renderAll();
   });
 });
@@ -6737,14 +6851,8 @@ function applySeptember2026OpeningBalancesV1() {
   return true;
 }
 
-window.addEventListener("load", () => {
-  window.setTimeout(() => {
-    if (!applySeptember2026OpeningBalancesV1()) return;
-    saveState();
-    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
-    if (typeof render === "function") render();
-  }, 4000);
-});
+// Legacy correction is available only as an explicit migration.
+
 
 function applyDejanSeptember2026OpeningBalanceV2() {
   state.backup = state.backup || {};
@@ -6769,14 +6877,8 @@ function applyDejanSeptember2026OpeningBalanceV2() {
   return true;
 }
 
-window.addEventListener("load", () => {
-  window.setTimeout(() => {
-    if (!applyDejanSeptember2026OpeningBalanceV2()) return;
-    saveState();
-    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
-    if (typeof render === "function") render();
-  }, 4500);
-});
+// Legacy correction is available only as an explicit migration.
+
 // Confirmed opening balances for official tracking from 01.09.2026.
 function applySeptember2026ConfirmedBalancesV2() {
   state.backup = state.backup || {};
@@ -6841,14 +6943,8 @@ function applySeptember2026ConfirmedBalancesV2() {
   return true;
 }
 
-window.addEventListener("load", () => {
-  window.setTimeout(() => {
-    if (!applySeptember2026ConfirmedBalancesV2()) return;
-    saveState();
-    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
-    if (typeof render === "function") render();
-  }, 4500);
-});
+// Legacy correction is available only as an explicit migration.
+
 
 function applyLukaNikolicAndBugarinAbsencesV3() {
   state.backup = state.backup || {};
@@ -6905,14 +7001,8 @@ function applyLukaNikolicAndBugarinAbsencesV3() {
   return true;
 }
 
-window.addEventListener("load", () => {
-  window.setTimeout(() => {
-    if (!applyLukaNikolicAndBugarinAbsencesV3()) return;
-    saveState();
-    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
-    if (typeof render === "function") render();
-  }, 5000);
-});
+// Legacy correction is available only as an explicit migration.
+
 
 // Normalize every existing full-time profile to the contractual 38.5-hour week.
 function applyFullTime385HoursV1() {
@@ -6931,14 +7021,8 @@ function applyFullTime385HoursV1() {
   return true;
 }
 
-window.addEventListener("load", () => {
-  window.setTimeout(() => {
-    if (!applyFullTime385HoursV1()) return;
-    saveState();
-    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
-    if (typeof render === "function") render();
-  }, 5500);
-});
+// Legacy correction is available only as an explicit migration.
+
 
 // Keep CRM creation history separate from the first invoice month.
 // Only empty, unsent and unpaid invoice drafts before the selected month are removed.
@@ -6953,12 +7037,6 @@ function applyInvoiceStartMonthV1() {
   return true;
 }
 
-window.addEventListener("load", () => {
-  window.setTimeout(() => {
-    if (!applyInvoiceStartMonthV1()) return;
-    saveState();
-    if (typeof scheduleRemoteStateSave === "function") scheduleRemoteStateSave();
-    if (typeof render === "function") render();
-  }, 6000);
-});
+// Legacy correction is available only as an explicit migration.
+
 

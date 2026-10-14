@@ -1,3 +1,9 @@
+function escapeClientText(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[char]));
+}
+
 let state = loadClientState();
 let activeClient = null;
 let onlineHydrationPromise = null;
@@ -34,14 +40,14 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 function loadClientState(sourceData = null) {
   if (sourceData) return JSON.parse(JSON.stringify(sourceData));
   try {
-    return JSON.parse(localStorage.getItem("agencyCrmData") || '{"clients":[],"leads":[],"teamMembers":[]}');
+    return JSON.parse(localStorage.getItem((window.MarketizoRemote?.storageKey?.() || "marketizoClientData")) || '{"clients":[],"leads":[],"teamMembers":[]}');
   } catch {
     return { clients: [], leads: [], teamMembers: [] };
   }
 }
 
 function saveState(options = {}) {
-  localStorage.setItem("agencyCrmData", JSON.stringify(state));
+  window.MarketizoRemote?.cache?.(state);
   if (options.remote !== false) return window.MarketizoRemote?.save(state) || Promise.resolve({ ok: false, error: "Online čuvanje nije dostupno." });
   return Promise.resolve({ ok: true, localOnly: true });
 }
@@ -135,7 +141,7 @@ function showToast(title, message = "", type = "ok") {
   const className = type === "danger" ? "danger" : type === "warn" ? "warn" : "ok";
   const toast = document.createElement("div");
   toast.className = `toast-message ${className}`;
-  toast.innerHTML = `<strong>${title}</strong>${message ? `<span>${message}</span>` : ""}`;
+  toast.innerHTML = `<strong>${escapeClientText(title)}</strong>${message ? `<span>${escapeClientText(message)}</span>` : ""}`;
   stack.appendChild(toast);
   window.setTimeout(() => toast.remove(), 4200);
 }
@@ -177,7 +183,7 @@ function showLeadNotification(lead) {
   updateNotificationBadge();
   const toast = document.getElementById("leadToast");
   if (toast) {
-    toast.innerHTML = `<strong>Novi lead je stigao</strong><span>${lead.name || "Novi kontakt"} · ${lead.phone || "Telefon nije unet"}</span>`;
+    toast.innerHTML = `<strong>Novi lead je stigao</strong><span>${escapeClientText(lead.name || "Novi kontakt")} · ${escapeClientText(lead.phone || "Telefon nije unet")}</span>`;
     toast.hidden = false;
     window.clearTimeout(showLeadNotification.timeoutId);
     showLeadNotification.timeoutId = window.setTimeout(() => {
@@ -241,11 +247,11 @@ function parseLines(value, fallback) {
 
 function selectOptions(options, selected = "", emptyLabel = "") {
   const values = mergeUnique(selected ? [selected] : [], options);
-  const empty = emptyLabel ? `<option value="">${emptyLabel}</option>` : "";
+  const empty = emptyLabel ? `<option value="">${escapeClientText(emptyLabel)}</option>` : "";
   return (
     empty +
     values
-      .map((option) => `<option value="${option}" ${option === selected ? "selected" : ""}>${option}</option>`)
+      .map((option) => `<option value="${escapeClientText(option)}" ${option === selected ? "selected" : ""}>${escapeClientText(option)}</option>`)
       .join("")
   );
 }
@@ -360,7 +366,7 @@ function renderBars(target, data) {
         .map(
           ([label, value]) => `
           <div class="bar-row">
-            <label><span>${label}</span><span>${value}</span></label>
+            <label><span>${escapeClientText(label)}</span><span>${value}</span></label>
             <div class="bar-track"><span style="width:${(value / max) * 100}%"></span></div>
           </div>`
         )
@@ -498,7 +504,7 @@ function renderSettingsForm() {
   const fixedPreview = document.getElementById("settingsFixedPreview");
   if (fixedPreview) {
     fixedPreview.innerHTML = [...settings.statuses, ...settings.sources, ...settings.lossReasons]
-      .map((item) => `<span>${item}</span>`)
+      .map((item) => `<span>${escapeClientText(item)}</span>`)
       .join("");
   }
 }
@@ -514,7 +520,7 @@ function updateSelectOptions(id, values, selected, allLabel) {
   const select = document.getElementById(id);
   if (!select) return;
   select.innerHTML = values
-    .map((value) => `<option value="${value}" ${value === selected ? "selected" : ""}>${displayFilterLabel(value, allLabel)}</option>`)
+    .map((value) => `<option value="${escapeClientText(value)}" ${value === selected ? "selected" : ""}>${escapeClientText(displayFilterLabel(value, allLabel))}</option>`)
     .join("");
 }
 
@@ -572,9 +578,9 @@ function renderTopScore(leads, won, lost, open, openValue) {
   const [topLoss, topLossCount] = topEntry(groupCount(lost.map((lead) => ({ ...lead, lossReason: lead.lossReason || "Nije unet razlog" })), "lossReason"));
   const avgWon = won.length ? won.reduce((sum, lead) => sum + Number(lead.estimate || 0), 0) / won.length : 0;
   document.getElementById("clientTopScore").innerHTML = `
-    <div class="setup-item"><strong>${topSourceCount}</strong><span>Top izvor: ${topSource}</span></div>
-    <div class="setup-item"><strong>${topCloserCount}</strong><span>Najviše dobijenih: ${topCloser}</span></div>
-    <div class="setup-item"><strong>${topLossCount}</strong><span>Najčešći razlog gubitka: ${topLoss}</span></div>
+    <div class="setup-item"><strong>${topSourceCount}</strong><span>Top izvor: ${escapeClientText(topSource)}</span></div>
+    <div class="setup-item"><strong>${topCloserCount}</strong><span>Najviše dobijenih: ${escapeClientText(topCloser)}</span></div>
+    <div class="setup-item"><strong>${topLossCount}</strong><span>Najčešći razlog gubitka: ${escapeClientText(topLoss)}</span></div>
     <div class="setup-item"><strong>${open.length}</strong><span>Otvorena vrednost: ${currency.format(openValue)}</span></div>
     <div class="setup-item"><strong>${currency.format(avgWon)}</strong><span>Prosečna vrednost dobijenog leada</span></div>`;
 }
@@ -588,7 +594,7 @@ function renderTeamClosing(leads, team) {
     const lost = personLeads.filter((lead) => isLostStatus(lead.status)).length;
     const total = won + lost;
     const winRate = total ? Math.round((won / total) * 100) : 0;
-    return `<tr><td>${name}</td><td>${won}</td><td>${lost}</td><td>${winRate}%</td></tr>`;
+    return `<tr><td>${escapeClientText(name)}</td><td>${won}</td><td>${lost}</td><td>${winRate}%</td></tr>`;
   });
   document.getElementById("clientTeamClosingRows").innerHTML = rows.join("") || `<tr><td colspan="4">Nema podataka.</td></tr>`;
 }
@@ -611,7 +617,7 @@ function renderActionList(leads) {
         .map(
           (lead) => `
           <div class="portal-row">
-            <div><strong>${lead.name}</strong><span>${lead.phone} · ${lead.source || "Izvor nije unet"} · ${lead.nextAction || "Pozvati u roku od 1 radnog dana"}</span></div>
+            <div><strong>${escapeClientText(lead.name)}</strong><span>${escapeClientText(lead.phone)} · ${escapeClientText(lead.source || "Izvor nije unet")} · ${escapeClientText(lead.nextAction || "Pozvati u roku od 1 radnog dana")}</span></div>
             <a class="call-button" href="tel:${normalizePhone(lead.phone)}">Pozovi</a>
           </div>`
         )
@@ -637,35 +643,35 @@ function renderLeadList(leads) {
           return `
           <article class="lead-list-row ${leadRowClass(lead)}">
             <div class="lead-list-main">
-              <strong>${lead.name}</strong>
-              <span>${lead.phone || "Telefon nije unet"} · ${lead.location || "Lokacija nije uneta"}</span>
+              <strong>${escapeClientText(lead.name)}</strong>
+              <span>${escapeClientText(lead.phone || "Telefon nije unet")} · ${escapeClientText(lead.location || "Lokacija nije uneta")}</span>
             </div>
             <div class="lead-list-meta">
               <span>${leadDate}</span>
-              <span>${inferLeadPipeline(lead)}</span>
-              <span>${lead.source || "Bez izvora"}</span>
-              <span>${lead.service || "Tip usluge nije unet"}</span>
+              <span>${escapeClientText(inferLeadPipeline(lead))}</span>
+              <span>${escapeClientText(lead.source || "Bez izvora")}</span>
+              <span>${escapeClientText(lead.service || "Tip usluge nije unet")}</span>
             </div>
             <div class="lead-list-meta">
               <span>${currency.format(Number(lead.estimate || 0))}</span>
-              <span>${lead.responsible || "Nije dodeljeno"}</span>
-              <span>${nextAction}</span>
+              <span>${escapeClientText(lead.responsible || "Nije dodeljeno")}</span>
+              <span>${escapeClientText(nextAction)}</span>
             </div>
             <div>
-              <select class="table-select lead-status-select" data-id="${lead.id}">
+              <select class="table-select lead-status-select" data-id="${escapeClientText(lead.id)}">
                 ${statusOptions(lead.status || "Novi")}
               </select>
-              ${lead.note ? `<small class="lead-note">Napomena: ${lead.note}</small>` : ""}
-              ${lead.lossReason ? `<small class="lead-loss">Razlog: ${lead.lossReason}</small>` : ""}
+              ${lead.note ? `<small class="lead-note">Napomena: ${escapeClientText(lead.note)}</small>` : ""}
+              ${lead.lossReason ? `<small class="lead-loss">Razlog: ${escapeClientText(lead.lossReason)}</small>` : ""}
               ${
                 customFields.length
-                  ? `<small class="lead-note">Forma: ${customFields.map(([key, value]) => `${key}: ${value}`).join(" · ")}</small>`
+                  ? `<small class="lead-note">Forma: ${customFields.map(([key, value]) => `${escapeClientText(key)}: ${escapeClientText(value)}`).join(" · ")}</small>`
                   : ""
               }
             </div>
             <div class="lead-list-actions">
               <a class="call-button" href="tel:${normalizePhone(lead.phone)}">Pozovi</a>
-              <button class="edit-button edit-lead" data-id="${lead.id}" type="button" aria-label="Izmeni lead">✎</button>
+              <button class="edit-button edit-lead" data-id="${escapeClientText(lead.id)}" type="button" aria-label="Izmeni lead">✎</button>
             </div>
           </article>`;
         })
@@ -685,7 +691,7 @@ function renderLeadList(leads) {
   if (!saved?.ok) {
     state = previous;
     activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
-    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    window.MarketizoRemote?.cache?.(state);
     showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
   }
   if (saved.payload) {
@@ -707,9 +713,9 @@ function renderTeam(team) {
         .map(
           (member) => `
           <div class="setup-item team-member-row">
-            <strong>${member.name.slice(0, 1).toUpperCase()}</strong>
-            <span>${member.name} · ${member.role}<br />${member.phone || "Telefon nije unet"} ${member.email ? `· ${member.email}` : ""}</span>
-            <button class="edit-button danger-action delete-team-member" data-id="${member.id}" type="button" title="Obriši osobu">×</button>
+            <strong>${escapeClientText(member.name.slice(0, 1).toUpperCase())}</strong>
+            <span>${escapeClientText(member.name)} · ${escapeClientText(member.role)}<br />${escapeClientText(member.phone || "Telefon nije unet")} ${member.email ? `· ${escapeClientText(member.email)}` : ""}</span>
+            <button class="edit-button danger-action delete-team-member" data-id="${escapeClientText(member.id)}" type="button" title="Obriši osobu">×</button>
           </div>`
         )
         .join("")
@@ -728,7 +734,7 @@ function renderTeam(team) {
   if (!saved?.ok) {
     state = previous;
     activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
-    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    window.MarketizoRemote?.cache?.(state);
     showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
   }
   if (saved.payload) {
@@ -743,14 +749,14 @@ function renderTeam(team) {
 
 function renderResponsibleOptions(team) {
   const options = team.length ? team.map((member) => member.name) : ["Vlasnik", "Recepcija", "Prodaja"];
-  document.getElementById("leadResponsible").innerHTML = options.map((name) => `<option>${name}</option>`).join("");
+  document.getElementById("leadResponsible").innerHTML = options.map((name) => `<option>${escapeClientText(name)}</option>`).join("");
 }
 
 function renderEditResponsibleOptions(team, selected) {
   const names = new Set(team.length ? team.map((member) => member.name) : ["Vlasnik", "Recepcija", "Prodaja"]);
   if (selected) names.add(selected);
   document.getElementById("editLeadResponsible").innerHTML = [...names]
-    .map((name) => `<option value="${name}" ${name === selected ? "selected" : ""}>${name}</option>`)
+    .map((name) => `<option value="${escapeClientText(name)}" ${name === selected ? "selected" : ""}>${escapeClientText(name)}</option>`)
     .join("");
 }
 
@@ -954,7 +960,7 @@ document.getElementById("clientLeadForm").addEventListener("submit", async (even
   if (!saved?.ok) {
     state = previous;
     activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
-    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    window.MarketizoRemote?.cache?.(state);
     showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
   }
   if (saved.payload) {
@@ -995,7 +1001,7 @@ document.getElementById("editLeadForm")?.addEventListener("submit", async (event
   if (!saved?.ok) {
     state = previous;
     activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
-    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    window.MarketizoRemote?.cache?.(state);
     showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
   }
   if (saved.payload) {
@@ -1026,7 +1032,7 @@ document.getElementById("clientSettingsForm")?.addEventListener("submit", async 
   if (!saved?.ok) {
     state = previous;
     activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
-    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    window.MarketizoRemote?.cache?.(state);
     showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
   }
   if (saved.payload) {
@@ -1066,7 +1072,7 @@ document.getElementById("clientTeamForm").addEventListener("submit", async (even
   if (!saved?.ok) {
     state = previous;
     activeClient = state.clients.find((item) => item.id === activeClient.id) || activeClient;
-    localStorage.setItem("agencyCrmData", JSON.stringify(state));
+    window.MarketizoRemote?.cache?.(state);
     showToast("Nije sačuvano", saved?.error || "Pokušaj ponovo.", "warn"); return;
   }
   if (saved.payload) {

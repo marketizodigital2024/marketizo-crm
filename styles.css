@@ -4345,3 +4345,7 @@ body.employee-profile-page .employee-summary-grid article:nth-child(4n + 4)::bef
 
 .employee-profile-inline-link { display: inline-block; margin-top: 5px; color: #1e8052; font-size: 12px; font-weight: 800; text-decoration: none; }
 .employee-profile-inline-link:hover { text-decoration: underline; }
+/* Keep pending/failed online loads distinct from real zero-valued records. */
+.crm-online-loading main > section { display: none !important; }
+#crmOnlineLoadNotice { display: flex; align-items: center; gap: 16px; padding: 24px; margin: 16px 0; border: 1px solid #dedede; border-radius: 12px; background: #fff; color: #222; }
+#crmOnlineLoadNotice[hidden] { display: none; }

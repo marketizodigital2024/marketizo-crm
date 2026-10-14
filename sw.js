@@ -1,4 +1,4 @@
-const CACHE_NAME = "marketizo-crm-20261008-repair";
+const CACHE_NAME = "marketizo-crm-20261014-audit-fix";
 const ASSETS = [
   "index.html",
   "client-login.html",
@@ -11,13 +11,14 @@ const ASSETS = [
   "employees-recognitions.html",
   "employees-goals.html",
   "employees-settings.html",
-  "styles.css?v=97",
-  "app.js?v=20261008-repair",
+  "styles.css?v=20261014-audit-fix",
+  "app.js?v=20261014-audit-fix",
   "cost-calculation.js?v=20261008-repair",
-  "client-portal.js?v=20261008-repair",
-  "employee-portal.js?v=20261008-repair",
-  "remote-state.js?v=20261008-repair",
-  "admin-auth.js?v=7",
+  "client-portal.js?v=20261014-audit-fix",
+  "employee-portal.js?v=20261014-audit-fix",
+  "remote-state.js?v=20261014-audit-fix",
+  "lib/state-patch.js?v=20261014-audit-fix",
+  "admin-auth.js?v=20261014-audit-fix",
   "marketizo-logo.png",
   "manifest.webmanifest",
   "employee-manifest.webmanifest",
@@ -36,7 +37,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("marketizo-crm-") && key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
@@ -58,11 +59,21 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
+          if (!response.ok) throw new Error("Static asset is unavailable");
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
           return response;
         })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("index.html")))
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          const path = requestUrl.pathname.replace(/^\//, "");
+          if (event.request.mode === "navigate") {
+            const page = !path ? "index.html" : path.includes(".") ? path : `${path}.html`;
+            return (await caches.match(page)) || Response.error();
+          }
+          return Response.error();
+        })
     );
     return;
   }

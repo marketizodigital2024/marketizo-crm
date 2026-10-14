@@ -1,11 +1,19 @@
 (function () {
-  const storageKey = "agencyCrmData";
+  function storageKey() {
+    const path = String(window.location.pathname || "");
+    const portal = /(?:^|\/)employee-login(?:\.html)?$/.test(path) ? "employee"
+      : /(?:^|\/)client-login(?:\.html)?$/.test(path) ? "client" : "admin";
+    let session = null;
+    try { session = JSON.parse(localStorage.getItem(portal === "employee" ? "marketizoEmployeeSession" : portal === "client" ? "marketizoClientSession" : "marketizoAdminSession") || "null"); } catch {}
+    return `marketizoStateV2:${portal}:${session?.role || portal}:${session?.employeeId || session?.clientId || "anonymous"}`;
+  }
   let configured = false;
   let online = false;
   let lastError = "";
   let saveTimer = null;
   let saveInFlight = false;
   let pendingPayload = null;
+  let pendingBasePayload = null;
   let pendingWaiters = [];
   let lastUpdatedAt = "";
   let lastServerPayload = null;
@@ -21,13 +29,21 @@
   }
 
   function accessHeaders(extra = {}) {
+    const path = String(window.location.pathname || "");
+    const keys = /(?:^|\/)employee-login(?:\.html)?$/.test(path)
+      ? ["marketizoEmployeeSession"]
+      : /(?:^|\/)client-login(?:\.html)?$/.test(path)
+        ? ["marketizoClientSession"]
+        : ["marketizoAdminSession"];
     let session = null;
-    try { session = JSON.parse(localStorage.getItem("marketizoAdminSession") || "null"); } catch {}
-    if (!session?.token) {
-      try { session = JSON.parse(localStorage.getItem("marketizoEmployeeSession") || "null"); } catch {}
-    }
-    if (!session?.token) {
-      try { session = JSON.parse(localStorage.getItem("marketizoClientSession") || "null"); } catch {}
+    for (const key of keys) {
+      try {
+        const candidate = JSON.parse(localStorage.getItem(key) || "null");
+        if (candidate?.token && Number(candidate.expiresAt || 0) > Date.now()) {
+          session = candidate;
+          break;
+        }
+      } catch {}
     }
     return { ...extra, ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}) };
   }
@@ -37,7 +53,15 @@
   }
 
   function setLocal(payload) {
-    localStorage.setItem(storageKey, JSON.stringify(payload || {}));
+    // Cached state is optional; durable pending work entries use a separate queue.
+    // Never evict legacy caches or pending entries to make room.
+    try {
+      localStorage.setItem(storageKey(), JSON.stringify(payload || {}));
+      return true;
+    } catch (error) {
+      console.warn("CRM cache unavailable; online state remains authoritative", error?.name || "StorageError");
+      return false;
+    }
   }
 
   function userIsEditing() {
@@ -140,10 +164,11 @@
     if (!pendingPayload || isLocalFile()) return { ok: true, localOnly: isLocalFile() };
     if (saveInFlight) return;
     saveInFlight = true;
-    let payload = pendingPayload;
     let basePayload = clone(lastServerPayload || {});
+    let payload = mergeChanges(pendingBasePayload || basePayload, pendingPayload, basePayload);
     const waiters = pendingWaiters;
     pendingPayload = null;
+    pendingBasePayload = null;
     pendingWaiters = [];
     let result = { ok: false, error: "Online čuvanje nije uspelo." };
     try {
@@ -151,7 +176,12 @@
         const response = await fetch("/api/state", {
           method: "PUT",
           headers: accessHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ payload, baseUpdatedAt: lastUpdatedAt }),
+          body: JSON.stringify({ patch: window.MarketizoStatePatch.create(basePayload, payload), baseUpdatedAt: lastUpdatedAt,
+            deletedIds: Object.fromEntries(["clients", "employees", "employeeWorkLogs", "employeeAbsences", "employeeActivities"].map((key) => {
+              const desiredIds = new Set((payload[key] || []).map((item) => item.id));
+              return [key, (basePayload[key] || []).filter((item) => !desiredIds.has(item.id)).map((item) => item.id)];
+            })),
+          }),
         });
         const data = await response.json().catch(() => ({}));
         configured = Boolean(data.configured);
@@ -193,6 +223,7 @@
   function save(payload) {
     setLocal(payload);
     if (isLocalFile()) return Promise.resolve({ ok: true, localOnly: true });
+    if (!pendingPayload) pendingBasePayload = clone(lastServerPayload || {});
     pendingPayload = clone(payload);
     window.clearTimeout(saveTimer);
     const result = new Promise((resolve) => pendingWaiters.push(resolve));
@@ -255,6 +286,11 @@
   });
 
   window.MarketizoRemote = {
+    storageKey,
+    cache: setLocal,
+    adoptBaseline(payload) {
+      if (!saveInFlight && !pendingPayload) lastServerPayload = clone(payload);
+    },
     load,
     save,
     startPolling,

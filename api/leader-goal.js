@@ -1,3 +1,4 @@
+const dbFetch = (...args) => require("../lib/database-request.js").request(fetch, ...args);
 const { createHmac, randomUUID, timingSafeEqual } = require("crypto");
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
@@ -38,7 +39,7 @@ async function readBody(req) {
 }
 
 async function readRow(url, key) {
-  const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, { headers: headers(key) });
+  const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, { headers: headers(key) });
   if (!response.ok) throw new Error(`Čitanje baze nije uspelo (${response.status}).`);
   return (await response.json())[0] || null;
 }
@@ -57,11 +58,11 @@ async function preserveDailyPrewriteBackup(url, key, row) {
   const backupDate = viennaDateKey(now);
   const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
   const backupId = `backup-prewrite-${dayNumber % BACKUP_SLOTS}`;
-  const existingResponse = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=payload`, { headers: headers(key) });
+  const existingResponse = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=payload`, { headers: headers(key) });
   if (!existingResponse.ok) throw new Error(`Provera dnevnog backupa nije uspela (${existingResponse.status}).`);
   const existingRows = await existingResponse.json();
   if (existingRows[0]?.payload?.backupDate === backupDate) return;
-  const backupResponse = await fetch(`${url}/rest/v1/${tableName}?on_conflict=id`, {
+  const backupResponse = await dbFetch(`${url}/rest/v1/${tableName}?on_conflict=id`, {
     method: "POST",
     headers: headers(key, "resolution=merge-duplicates,return=minimal"),
     body: JSON.stringify({ id: backupId, payload: { backupDate, sourceUpdatedAt: row.updated_at, state: row.payload }, updated_at: now.toISOString() }),
@@ -114,7 +115,7 @@ module.exports = async function handler(req, res) {
       payload.notifications.unshift(notification);
       await preserveDailyPrewriteBackup(url, key, row);
       const updatedAt = new Date().toISOString();
-      const response = await fetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
+      const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
         method: "PATCH",
         headers: headers(key, "return=representation"),
         body: JSON.stringify({ payload, updated_at: updatedAt }),
@@ -129,3 +130,6 @@ module.exports = async function handler(req, res) {
   }
 };
 
+
+const originalHandler = module.exports;
+module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);

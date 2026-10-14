@@ -10,7 +10,9 @@ function adminLoginPath() {
 }
 
 function getAdminSession() {
-  const session = JSON.parse(localStorage.getItem(adminSessionKey) || "null");
+  let session;
+  try { session = JSON.parse(localStorage.getItem(adminSessionKey) || "null"); }
+  catch { localStorage.removeItem(adminSessionKey); return null; }
   if (!session || !session.token || Number(session.expiresAt || 0) < Date.now()) {
     localStorage.removeItem(adminSessionKey);
     return null;
@@ -19,7 +21,7 @@ function getAdminSession() {
 }
 
 function setAdminSession(user) {
-  if (user.role === "operational-admin") localStorage.removeItem("agencyCrmData");
+  // Portal/account caches are separate; preserve legacy recovery data.
   localStorage.setItem(
     adminSessionKey,
     JSON.stringify({
@@ -56,16 +58,20 @@ document.getElementById("adminLoginForm")?.addEventListener("submit", async (eve
   const password = String(formData.get("password") || "").trim();
   const submit = event.currentTarget.querySelector('button[type="submit"]');
   if (submit) { submit.disabled = true; submit.textContent = "Provera pristupa..."; }
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetch("/api/employee-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "adminLogin", email, password }) });
+    const response = await fetch("/api/employee-auth", { method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "adminLogin", email, password }) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) throw new Error(result.error || "Login podaci nisu tačni.");
     setAdminSession({ email, name: result.employee?.name || email, employeeId: result.employee?.id || "", role: result.role, token: result.token, expiresAt: result.expiresAt });
     window.location.href = adminHomePath();
   } catch (error) {
     const message = document.getElementById("adminLoginError");
-    if (message) { message.textContent = error?.message || "Login podaci nisu tačni."; message.hidden = false; }
+    if (message) { message.textContent = controller.signal.aborted ? "Provera pristupa traje predugo. Pokušaj ponovo; podaci nisu menjani." : error?.message || "Login podaci nisu tačni."; message.hidden = false; }
     if (submit) { submit.disabled = false; submit.textContent = "Uloguj se"; }
+  } finally {
+    window.clearTimeout(timeout);
   }
 });
 

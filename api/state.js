@@ -1,3 +1,5 @@
+const { hashPassword } = require("../lib/password.js");
+const dbFetch = (...args) => require("../lib/database-request.js").request(fetch, ...args);
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
 const rowId = process.env.CRM_STATE_ID || "marketizo-main";
 const BACKUP_SLOTS = 30;
@@ -204,13 +206,13 @@ async function preserveDailyPrewriteBackup(config, current) {
   const backupDate = viennaDateKey(now);
   const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
   const backupId = `backup-prewrite-${dayNumber % BACKUP_SLOTS}`;
-  const existingResponse = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=payload`, {
+  const existingResponse = await dbFetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(backupId)}&select=payload`, {
     headers: supabaseHeaders(config.key),
   });
   if (!existingResponse.ok) throw new Error(`Provera dnevnog backupa nije uspela (${existingResponse.status}).`);
   const existingRows = await existingResponse.json();
   if (existingRows[0]?.payload?.backupDate === backupDate) return;
-  const backupResponse = await fetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
+  const backupResponse = await dbFetch(`${config.url}/rest/v1/${tableName}?on_conflict=id`, {
     method: "POST",
     headers: {
       ...supabaseHeaders(config.key),
@@ -243,12 +245,23 @@ function hidePasswords(payload) {
 }
 
 async function readStoredState(config) {
-  const response = await fetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
+  const response = await dbFetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
     headers: supabaseHeaders(config.key),
   });
   if (!response.ok) throw new Error(`Čitanje postojećih naloga nije uspelo (${response.status}).`);
   const rows = await response.json();
   return { payload: rows[0]?.payload || {}, updatedAt: rows[0]?.updated_at || "" };
+}
+
+async function readSessionState(config, session) {
+  const response = await dbFetch(`${config.url}/rest/v1/rpc/marketizo_read_session_state`, {
+    method: "POST", headers: { ...supabaseHeaders(config.key), "Content-Type": "application/json" },
+    body: JSON.stringify({ p_role: session.role, p_employee_id: session.employeeId || null, p_client_id: session.clientId || null }),
+  });
+  if (response.status === 404) return readStoredState(config);
+  if (!response.ok) throw new Error(`Čitanje podataka sesije nije uspelo (${response.status}).`);
+  const row = await response.json();
+  return { payload: row?.payload || {}, updatedAt: row?.updated_at || "" };
 }
 
 function preserveCredentials(payload, current) {
@@ -257,18 +270,18 @@ function preserveCredentials(payload, current) {
   return {
     ...payload,
     employees: Array.isArray(payload?.employees) ? payload.employees.map((employee) => {
-      if (String(employee.password || "").trim()) return employee;
+      if (String(employee.password || "").trim()) return { ...employee, password: hashPassword(employee.password) };
       const match = previous.find((item) => item.id === employee.id) || previous.find((item) =>
         String(item.email || "").trim().toLowerCase() === String(employee.email || "").trim().toLowerCase()
       );
-      return match?.password ? { ...employee, password: match.password } : employee;
+      return match?.password ? { ...employee, password: hashPassword(match.password) } : employee;
     }) : payload.employees,
     clients: Array.isArray(payload?.clients) ? payload.clients.map((client) => {
-      if (String(client.loginPassword || "").trim()) return client;
+      if (String(client.loginPassword || "").trim()) return { ...client, loginPassword: hashPassword(client.loginPassword) };
       const match = previousClients.find((item) => item.id === client.id) || previousClients.find((item) =>
         String(item.loginEmail || "").trim().toLowerCase() === String(client.loginEmail || "").trim().toLowerCase()
       );
-      return match?.loginPassword ? { ...client, loginPassword: match.loginPassword } : client;
+      return match?.loginPassword ? { ...client, loginPassword: hashPassword(match.loginPassword) } : client;
     }) : payload.clients,
   };
 }
@@ -281,10 +294,14 @@ const protectedCollections = [
   "employeeActivities",
 ];
 
-function unsafeCollectionShrink(payload, current) {
+function unsafeCollectionShrink(payload, current, declaredDeletions = {}) {
   for (const key of protectedCollections) {
     const previous = Array.isArray(current?.[key]) ? current[key] : [];
     const next = Array.isArray(payload?.[key]) ? payload[key] : [];
+    const nextIds = new Set(next.map((item) => item.id));
+    const declaredIds = new Set(Array.isArray(declaredDeletions?.[key]) ? declaredDeletions[key] : []);
+    const undeclared = previous.filter((item) => item.id && !nextIds.has(item.id) && !declaredIds.has(item.id));
+    if (undeclared.length) return { key, previous: previous.length, next: next.length, undeclaredCount: undeclared.length };
     if (previous.length < 10) continue;
     const allowedDrop = Math.max(1, Math.floor(previous.length * 0.05));
     if (next.length < previous.length - allowedDrop) {
@@ -305,7 +322,7 @@ async function syncEmployeeAuth(config, employees = []) {
       updated_at: new Date().toISOString(),
     }));
   if (!rows.length) return;
-  const response = await fetch(`${config.url}/rest/v1/${employeeAuthTable}?on_conflict=id`, {
+  const response = await dbFetch(`${config.url}/rest/v1/${employeeAuthTable}?on_conflict=id`, {
     method: "POST",
     headers: {
       ...supabaseHeaders(config.key),
@@ -333,8 +350,11 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const token = String(req.headers?.authorization || "").replace(/^Bearer\s+/i, "");
+    const session = verifyAccessToken(token, config.key);
+    if (!session) return json(res, 401, { configured: true, error: "Prijava je obavezna.", payload: null });
     if (req.method === "GET") {
-      const row = await readStoredState(config);
+      const row = await readSessionState(config, session);
       const access = accessSession(req, row.payload, config.key);
       if (!access) return json(res, 401, { configured: true, error: "Prijava je obavezna.", payload: null });
       const visiblePayload = access.role === "full-admin" ? hidePasswords(row.payload || null)
@@ -353,7 +373,7 @@ module.exports = async function handler(req, res) {
     if (req.method === "PUT" || req.method === "POST") {
       const body = await readBody(req);
       let payload = body.payload;
-      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      if (!Object.prototype.hasOwnProperty.call(body, "patch") && (!payload || typeof payload !== "object" || Array.isArray(payload))) {
         return json(res, 400, { configured: true, error: "Nedostaje payload objekat." });
       }
       const current = await readStoredState(config);
@@ -367,6 +387,15 @@ module.exports = async function handler(req, res) {
           error: "Podaci su u međuvremenu promenjeni. Učitana je najnovija verzija; ponovi izmenu.",
           updatedAt: current.updatedAt,
         });
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "patch")) {
+        const visible = access.role === "full-admin" ? hidePasswords(current.payload)
+          : access.role === "operational-admin" ? hideOperationalFinancials(current.payload)
+            : access.role === "employee" ? hideEmployeeState(current.payload, access.employee)
+              : hideClientState(current.payload, access.client);
+        try { payload = require("../lib/state-patch.js").apply(visible, body.patch); }
+        catch { return json(res, 400, { configured: true, error: "Neispravna izmena podataka." }); }
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) return json(res, 400, { configured: true, error: "Neispravno stanje nakon izmene." });
       }
       if (["full-admin", "operational-admin"].includes(access.role)) {
         const adjustments = payload.employeeHourAdjustments || current.payload.employeeHourAdjustments || [];
@@ -394,7 +423,7 @@ module.exports = async function handler(req, res) {
       if (access.role === "operational-admin") payload = mergeOperationalPayload(payload, current.payload, access.employee);
       if (access.role === "employee") payload = mergeEmployeePayload(payload, current.payload, access.employee);
       if (access.role === "client") payload = mergeClientPayload(payload, current.payload, access.client);
-      const unsafeShrink = unsafeCollectionShrink(payload, current.payload);
+      const unsafeShrink = unsafeCollectionShrink(payload, current.payload, body.deletedIds);
       if (unsafeShrink) {
         return json(res, 409, {
           configured: true,
@@ -410,7 +439,7 @@ module.exports = async function handler(req, res) {
       const writeUrl = current.updatedAt
         ? `${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}`
         : `${config.url}/rest/v1/${tableName}`;
-      const response = await fetch(writeUrl, {
+      const response = await dbFetch(writeUrl, {
         method: current.updatedAt ? "PATCH" : "POST",
         headers: {
           ...supabaseHeaders(config.key),
@@ -454,3 +483,6 @@ module.exports = async function handler(req, res) {
 
 
 module.exports.helpers = { accessSession, readStoredState, supabaseConfig, supabaseHeaders, preserveDailyPrewriteBackup };
+
+const originalHandler = module.exports;
+module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);

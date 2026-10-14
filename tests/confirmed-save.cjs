@@ -4,7 +4,7 @@ const start=source.indexOf('document.getElementById("clientLeadForm").addEventLi
 const end=source.indexOf('document.getElementById("editLeadForm")',start);
 let handler,failed=true,reset=0,success=0,notifications=0,seq=0;
 const client={id:'client-a',name:'Fixture',leads:0};
-const ctx={state:{clients:[client],leads:[]},activeClient:client,clientSaveInFlight:false,structuredClone,Date,Number,
+const ctx={window:{MarketizoRemote:{cache(){}}},state:{clients:[client],leads:[]},activeClient:client,clientSaveInFlight:false,structuredClone,Date,Number,
  crypto:{randomUUID:()=>`fixture-${++seq}`},FormData:class{get(k){return {status:'Novi',name:'Example'}[k]||''}},
  normalizeLeadStatus:v=>v,isContactedStatus:()=>false,localStorage:{setItem(){}},
  document:{getElementById(id){return id==='clientLeadForm'?{addEventListener(event,fn){handler=fn}}:{hidden:false}}},

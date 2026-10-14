@@ -5,6 +5,7 @@ const fixture=()=>({employees:[{id:'emp-miljan',name:'Test owner',email:'owner@e
 let current={payload:fixture(),updated_at:'2026-10-05T00:00:00.000Z'};
 let raced=false;
 async function fakeFetch(input,options={}){const u=new URL(input);if(u.hostname!=='fixture.invalid')throw Error('External call forbidden');const table=u.pathname.split('/').pop(),method=options.method||'GET';let rows=[];
+ if(table==='marketizo_read_session_state')return {ok:true,status:200,json:async()=>structuredClone(current),text:async()=>''};
  if(table==='agency_crm_employee_auth'){rows=current.payload.employees.filter(e=>(!u.searchParams.has('email')||e.email===u.searchParams.get('email').slice(3))&&(!u.searchParams.has('id')||e.id===u.searchParams.get('id').slice(3))).map(e=>({employee_data:e}));}
  else if(method==='GET'){const id=u.searchParams.get('id')||'';if(id==='eq.marketizo-main')rows=[{...structuredClone(current),employees:structuredClone(current.payload.employees)}];}
  else if(method==='PATCH'){const body=JSON.parse(options.body);if(!raced&&u.searchParams.get('updated_at')===`eq.${current.updated_at}`){current={payload:body.payload,updated_at:body.updated_at};rows=[structuredClone(current)];}}
