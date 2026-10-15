@@ -4257,10 +4257,12 @@ body.employee-editor-open {
 .one-on-one-question textarea { width: 100%; }
 .one-on-one-history { display: grid; gap: 10px; margin-top: 18px; }
 @media (max-width: 720px) { .employee-goal-progress { grid-template-columns: 1fr auto; } .employee-goal-progress button { grid-column: 1 / -1; width: 100%; } }
-.client-cost-activity-cell { position: relative; display: inline-flex; width: max-content; max-width: 100%; cursor: help; outline: none; }
-.client-cost-activity-cell > b { border-bottom: 1px dashed currentColor; }
-.client-cost-activity-tooltip { position: absolute; z-index: 20; left: 0; bottom: calc(100% + 8px); display: none; width: min(380px, 70vw); padding: 12px 14px; border-radius: 10px; background: #15231b; color: #fff; box-shadow: 0 12px 30px rgba(12, 30, 20, .22); font-size: 13px; line-height: 1.5; }
-.client-cost-activity-cell:hover .client-cost-activity-tooltip, .client-cost-activity-cell:focus .client-cost-activity-tooltip { display: block; }
+.client-cost-activity-button { display:inline-flex; flex-direction:column; align-items:flex-start; gap:4px; width:max-content; max-width:100%; border:0; padding:6px 0; background:transparent; color:inherit; font:inherit; cursor:pointer; text-align:left; }
+.client-cost-activity-button b { border-bottom:1px dashed currentColor; }
+.client-cost-activity-button small { color:#467254; font-size:12px; }
+.client-cost-activity-button:focus-visible { outline:2px solid #16864a; outline-offset:4px; border-radius:4px; }
+.company-activity-detail-total { background:#edf4ee; }
+
 .portal-hours-filter { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 10px; align-items: end; margin-bottom: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
 .portal-hours-filter label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 750; }
 .portal-hours-filter input { width: 100%; }
