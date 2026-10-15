@@ -34,3 +34,15 @@ assert.match(employee, /escapePortalText\(notification\.title\)/);
 assert.match(employee, /escapePortalText\(String\(notification\.message/);
 assert.match(admin, /escapeInvoiceText\(absentNames\.slice/);
 console.log('PASS: actual admin absence, lead and team renderers escape submitted text and quoted IDs without changing data; employee text escaping matches and preserves numeric zero.');
+
+// Generated contract markup must remain an anchor while untrusted labels stay escaped.
+ctx.currentDateKey=()=> '2026-10-15'; ctx.daysBetween=()=> 10;
+ctx.dashboardContractRows=()=>[{client:{id:'qa-contract',name:marker,contractFileAvailable:true,contractFileName:marker,contractNote:marker},endDate:'2026-10-25'}];
+const expiry={innerHTML:'',querySelectorAll:()=>[]}; nodes.set('contractExpiryList',expiry);
+vm.runInContext(named(admin,'contractDownloadLink')+'\n'+named(admin,'renderContractExpiryList'),ctx);
+ctx.renderContractExpiryList();
+assert(expiry.innerHTML.includes('<a class="document-link"'));
+assert(!expiry.innerHTML.includes('&lt;a class='));
+assert(!expiry.innerHTML.includes('<b data-audit-marker>'));
+assert(expiry.innerHTML.includes('&lt;b data-audit-marker&gt;'));
+console.log('PASS: expiring contract download stays clickable and all stored fields remain escaped.');
