@@ -6962,6 +6962,8 @@ updateContextActions("admin");
       if (!dropdown.hidden) document.getElementById("clientCostEmployeeSearch")?.focus();
     });
     picker.addEventListener("change", update);
+    const list = picker.querySelector("#clientCostEmployeeList");
+    if (list) new MutationObserver(update).observe(list, { childList: true });
     picker.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => setTimeout(update, 0)));
     document.addEventListener("click", (event) => {
       if (!picker.contains(event.target)) {
