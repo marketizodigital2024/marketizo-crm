@@ -17,4 +17,4 @@ RUN npm install --omit=dev \
 
 COPY . .
 
-CMD ["sh", "-c", "if [ -d \"$WWEBJS_AUTH_PATH\" ]; then find \"$WWEBJS_AUTH_PATH\" -maxdepth 4 -name 'Singleton*' -delete; fi && exec npm start"]
+CMD ["sh", "-c", "if [ -d \"$WWEBJS_AUTH_PATH\" ]; then find \"$WWEBJS_AUTH_PATH\" -maxdepth 4 -name 'Singleton*' -delete; fi && exec node src/index.js"]
