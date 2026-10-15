@@ -4637,7 +4637,7 @@ function setupClientCostAnalysis() {
       <article><span>Interno / Marketizo</span><strong id="clientCostInternal">€ 0</strong></article>
       <article><span>Neraspoređeno vreme</span><strong id="clientCostUnassigned">€ 0</strong></article>
     </section>
-    <section class="panel"><p>Trošak prijavljenog rada po bruto plati i prosečnom mesečnom fondu sati. Kirija, softver i drugi troškovi firme nisu uključeni.</p><p id="clientCostWarnings" role="status"></p></section>
+    <section class="panel"><p>Trošak prijavljenog rada po bruto plati i prosečnom mesečnom fondu sati. Bruto obračun ostaje zaseban. Fiksni trošak se dodaje samo za mesece sa sačuvanim podešavanjem; posebni troškovi prikazuju se kao mesečni iznos. Tekući mesec je privremen dok se vreme upisuje.</p><p id="clientCostWarnings" role="status"></p></section>
     <section class="panel client-cost-results"><div class="panel-head"><div><p class="eyebrow">Analiza</p><h2>Utrošak po klijentu i zaposlenom</h2></div><span id="clientCostRange"></span></div><div id="clientCostRows"></div></section>`;
   main.append(view);
 
@@ -4662,6 +4662,46 @@ function setupClientCostAnalysis() {
   const costs = window.MarketizoCosts;
   const money = (amount) => `€ ${amount.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const hours = (minutes) => `${(minutes / 60).toLocaleString("sr-RS", { maximumFractionDigits: 2 })}h`;
+
+  const overhead = window.MarketizoOverhead;
+  const settingsPanel = document.createElement('section');
+  settingsPanel.className = 'panel';
+  settingsPanel.innerHTML = `<details><summary><strong>Fiksni i posebni troškovi po mesecu</strong></summary><p>Unesi troškove bez bruto plata. Fond je sačuvan za izabrani mesec i uključuje osnivače. Početak/kraj angažovanja u toku meseca računa se srazmerno kalendarskim danima.</p><form id="overheadSettingsForm" class="client-cost-filter-grid"><label>Mesec<input name="month" type="month" required /></label><label>Fiksni troškovi bez plata (€)<input name="amount" type="number" min="0" max="10000000" step="0.01" required placeholder="Unesi mesečni iznos" /></label><label><input name="refreshCapacity" type="checkbox" /> Ponovo izračunaj fond iz ugovorenih sati</label><button class="primary-button" type="submit">Sačuvaj mesec</button></form><p id="overheadCapacityInfo"></p><details><summary>Ko ulazi u fond sati</summary><div id="overheadCapacityPeople"></div></details><form id="overheadExtraForm" class="client-cost-filter-grid"><label>Klijent<select name="clientId" required></select></label><label>Posebni troškovi klijenta za ovaj mesec (€)<input name="amount" type="number" min="0" max="10000000" step="0.01" required /></label><label>Opis<input name="note" maxlength="500" placeholder="Put, spoljni saradnik…" /></label><button class="secondary-button" type="submit">Sačuvaj posebni trošak</button></form><p>Posebni trošak je mesečni zbir za izabranog klijenta; ne dodaj ovde stavke koje su već u fiksnim troškovima ili platama.</p><p id="overheadSaveStatus" role="status"></p></details>`;
+  view.insertBefore(settingsPanel, view.querySelector('.client-cost-kpis'));
+  const settingForm = settingsPanel.querySelector('#overheadSettingsForm');
+  const extraForm = settingsPanel.querySelector('#overheadExtraForm');
+  const status = settingsPanel.querySelector('#overheadSaveStatus');
+  settingForm.elements.month.value = currentMonthKey();
+  function loadOverheadEditor() {
+    const month = settingForm.elements.month.value;
+    const saved = state.companyCostsByMonth?.[month];
+    settingForm.elements.amount.value = saved ? saved.fixedAmount : '';
+    settingForm.elements.refreshCapacity.checked = false;
+    const people = saved?.capacity || overhead.capacity(state.employees, month);
+    const total = people.reduce((n,e)=>n+e.monthlyHours,0);
+    settingsPanel.querySelector('#overheadCapacityInfo').textContent = `${saved?'Sačuvan':'Predloženi'} fond: ${hours(total*60)}. ${saved?'Izmena iznosa zadržava ovaj fond dok ne označiš ponovni obračun.':'Mesec još nije podešen; fiksni trošak se ne pretpostavlja.'}`;
+    settingsPanel.querySelector('#overheadCapacityPeople').textContent = people.map(e=>`${e.name}: ${hours(e.monthlyHours*60)}`).join(' · ');
+    extraForm.elements.clientId.innerHTML = `<option value="">Izaberi klijenta</option>${(state.clients||[]).filter(c=>!/^marketizo digital/i.test(c.name)).map(c=>`<option value="${escapeInvoiceText(c.id)}">${escapeInvoiceText(c.name)}</option>`).join('')}`;
+    extraForm.elements.amount.value = ''; extraForm.elements.note.value = '';
+  }
+  settingForm.elements.month.addEventListener('change',()=>{if(settingForm.elements.month.value)loadOverheadEditor();});
+  extraForm.elements.clientId.addEventListener('change',()=>{const x=state.companyCostsByMonth?.[settingForm.elements.month.value]?.extras?.[extraForm.elements.clientId.value];extraForm.elements.amount.value=x?.amount??'';extraForm.elements.note.value=x?.note||'';});
+  async function persistOverhead(form, mutate) {
+    if(adminConfirmedSaveInFlight||!onlineHydrationComplete||currentAdminSession()?.role!=='full-admin') { status.textContent='Sačekaj učitavanje ili prethodno čuvanje. Troškove menja samo vlasnik.'; return; }
+    const before=structuredClone(state);form.inert=true;status.textContent='Čuvanje…';
+    try { mutate(); if(!overhead.validate(state.companyCostsByMonth))throw Error('Proveri iznos i fond sati. Fond mora biti veći od nule.');
+      if(await confirmAdminSave(before)){status.textContent='Sačuvano na serveru.';loadOverheadEditor();render();}
+      else status.textContent='Nije sačuvano. Unos je zadržan; pokušaj ponovo.';
+    } catch(error){state=before;status.textContent=error.message;}finally{form.inert=false;}
+  }
+  settingForm.addEventListener('submit',event=>{event.preventDefault();const month=settingForm.elements.month.value,amount=Number(settingForm.elements.amount.value),refresh=settingForm.elements.refreshCapacity.checked;
+    persistOverhead(settingForm,()=>{const old=state.companyCostsByMonth?.[month];state.companyCostsByMonth={...(state.companyCostsByMonth||{}),[month]:{...old,fixedAmount:amount,capacity:old&&!refresh?old.capacity:overhead.capacity(state.employees,month),extras:old?.extras||{},savedAt:new Date().toISOString()}};});});
+  extraForm.addEventListener('submit',event=>{event.preventDefault();const month=settingForm.elements.month.value,id=extraForm.elements.clientId.value,amount=Number(extraForm.elements.amount.value),note=extraForm.elements.note.value.trim();
+    if(!state.companyCostsByMonth?.[month]){status.textContent='Prvo sačuvaj fiksni trošak i fond za ovaj mesec.';return;}
+    persistOverhead(extraForm,()=>{state.companyCostsByMonth[month].extras={...state.companyCostsByMonth[month].extras,[id]:{amount,note}};});});
+  const overheadSummary=document.createElement('section'); overheadSummary.className='panel';overheadSummary.innerHTML='<h2>Trošak sa fiksnim i posebnim izdacima</h2><div id="overheadTotals" role="status"></div><details><summary>Pokriće fiksnih troškova cele firme</summary><div id="overheadCompany"></div></details>';
+  view.insertBefore(overheadSummary,view.querySelector('.client-cost-results'));
+  loadOverheadEditor();
 
   const populate = () => {
     clientSelect.innerHTML = `<option value="">Sve vreme: klijenti, interno i neraspoređeno</option><option value="__unassigned__">Neraspoređeno vreme</option>${(state.clients || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${escapeInvoiceText(item.id)}">${escapeInvoiceText(item.name)}${item.status === "Aktivan" ? "" : " (" + escapeInvoiceText(item.status || "neaktivan") + ")"}</option>`).join("")}`;
@@ -4704,11 +4744,23 @@ function setupClientCostAnalysis() {
       if (allocation.kind === "internal" || /^marketizo digital/i.test(client)) internalCost += cost;
       if (allocation.kind === "unassigned") unassignedCost += cost;
       const key = `${allocation.id}::${log.employeeId}`;
-      const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0, activities: new Set() };
+      const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0, activities: new Set(), overhead: 0, missingOverhead: false, details: [] };
+      const fixed = overhead.allocation(log, state.companyCostsByMonth);
+      if(fixed===null) group.missingOverhead=true; else group.overhead+=fixed;
+      group.details.push({activity:log.activityName||"Aktivnost",minutes,cost,fixed});
       group.minutes += minutes; group.cost += cost; group.entries += 1; group.activities.add(log.activityName || "Aktivnost"); groups.set(key, group);
       totalMinutes += minutes; totalCost += cost;
     });
     const rows = [...groups.values()].sort((a,b) => b.cost - a.cost);
+    const periodMonths=overhead.months(from.value,to.value);
+    const missingMonths=periodMonths.filter(m=>!overhead.rate(state.companyCostsByMonth,m));
+    let extraTotal=0;
+    const extraLines=[];
+    periodMonths.forEach(m=>{Object.entries(state.companyCostsByMonth?.[m]?.extras||{}).forEach(([id,x])=>{if(selectedClient&&id!==selectedClient)return;extraTotal+=x.amount;extraLines.push(`${m} · ${(state.clients||[]).find(c=>c.id===id)?.name||id}: ${money(x.amount)}${x.note?' — '+x.note:''}`);});});
+    const fixedTotal=rows.reduce((n,r)=>n+r.overhead,0);
+    const complete=!missingMonths.length;
+    overheadSummary.querySelector('#overheadTotals').textContent=`Bruto rad: ${money(totalCost)} · Fiksni deo: ${complete?money(fixedTotal):'nije potpuno podešen'} · Posebni mesečni troškovi: ${money(extraTotal)} · ${complete?'Ukupan obračun':'Poznati deo troška'}: ${money(totalCost+fixedTotal+extraTotal)}. ${missingMonths.length?'Nedostaju podešavanja: '+missingMonths.join(', ')+'. ':''}Posebni troškovi važe za ceo mesec i celog klijenta, bez raspodele po zaposlenima. ${extraLines.join(' | ')}`;
+    overheadSummary.querySelector('#overheadCompany').textContent=periodMonths.map(m=>{const r=overhead.rate(state.companyCostsByMonth,m);if(!r)return `${m}: nije podešeno.`;let assigned=0,internal=0; (state.employeeWorkLogs||[]).filter(l=>String(l.date).startsWith(m)).forEach(l=>{const b=costs.bucket(l,state.clients),v=overhead.allocation(l,state.companyCostsByMonth)||0;if(b.kind==='client'&&!/^marketizo digital/i.test(b.name))assigned+=v;else internal+=v;});return `${m}: fiksni troškovi ${money(r.fixedAmount)} / fond ${hours(r.hours*60)} = ${money(r.hourly)}/h; klijentima ${money(assigned)}, interno/neraspoređeni rad ${money(internal)}, ostatak kapaciteta ${money(r.fixedAmount-assigned-internal)}${r.fixedAmount<assigned+internal?' (rad prelazi sačuvan fond)':''}.`;}).join(' ')+ ' Pregled cele firme koristi sve unose celog meseca, nezavisno od filtera zaposlenih i dana.';
     view.querySelector("#clientCostHours").textContent = hours(totalMinutes);
     view.querySelector("#clientCostAmount").textContent = money(totalCost);
     view.querySelector("#clientCostEntries").textContent = logs.length;
@@ -4717,7 +4769,7 @@ function setupClientCostAnalysis() {
     view.querySelector("#clientCostUnassigned").textContent = money(unassignedCost);
     view.querySelector("#clientCostWarnings").textContent = [...warnings, ...(unassignedCost > 0 ? ["Neraspoređeno vreme je uključeno u zbir, ali nije pripisano klijentu ili internom Marketizu."] : [])].join(" ");
     view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
-    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${escapeInvoiceText(row.client)}</strong><span>${escapeInvoiceText(row.employee)}</span><span class="client-cost-activity-cell" tabindex="0"><b>${row.entries} unosa</b><small class="client-cost-activity-tooltip">${escapeInvoiceText([...row.activities].join(" · "))}</small></span><span>${hours(row.minutes)}</span><strong>${money(row.cost)}</strong></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
+    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Bruto / fiksni / zbir</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${escapeInvoiceText(row.client)}</strong><span>${escapeInvoiceText(row.employee)}</span><span class="client-cost-activity-cell" tabindex="0"><b>${row.entries} unosa</b><small class="client-cost-activity-tooltip">${escapeInvoiceText([...row.activities].join(" · "))}</small></span><span>${hours(row.minutes)}</span><div><strong>${money(row.cost)} / ${row.missingOverhead?'nije podešeno':money(row.overhead)} / ${row.missingOverhead?'nepotpuno':money(row.cost+row.overhead)}</strong><details><summary>Detalji aktivnosti</summary>${row.details.map(d=>`<p>${escapeInvoiceText(d.activity)} · ${hours(d.minutes)} · bruto ${money(d.cost)} · fiksni ${d.fixed===null?'nije podešeno':money(d.fixed)}</p>`).join('')}</details></div></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
   };
   const show = (event) => {
     event?.stopImmediatePropagation();
@@ -4728,7 +4780,7 @@ function setupClientCostAnalysis() {
     setText("pageTitle", "Trošak klijenata");
     updateContextActions("clientCosts");
     history.replaceState(null, "", "#client-costs");
-    populate(); render();
+    populate(); loadOverheadEditor(); render();
   };
   button.addEventListener("click", show);
   view.querySelectorAll("[data-cost-period]").forEach((item) => item.addEventListener("click", () => { setPeriod(item.dataset.costPeriod); render(); }));
@@ -4739,7 +4791,7 @@ function setupClientCostAnalysis() {
   view.querySelector("#clientCostReset").addEventListener("click", () => { clientSelect.value = ""; employeeSearch.value = ""; employeeList.querySelectorAll("label").forEach((item) => { item.hidden = false; item.querySelector("input").checked = false; }); [...employeeSelect.options].forEach((item) => item.selected = false); setPeriod("month"); render(); });
   setPeriod("month"); populate();
   window.addEventListener("marketizo-cost-data-ready", () => {
-    if (view.classList.contains("active")) { populate(); render(); }
+    if (view.classList.contains("active")) { populate(); if(!settingForm.elements.amount.value)loadOverheadEditor(); render(); }
   });
   if (location.hash === "#client-costs") show();
 }

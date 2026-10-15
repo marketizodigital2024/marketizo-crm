@@ -71,6 +71,7 @@ function hideOperationalFinancials(payload) {
     clientFinancialKeys.forEach((key) => delete safe[key]);
     return safe;
   });
+  delete copy.companyCostsByMonth;
   delete copy.packages;
   delete copy.backup;
   return copy;
@@ -444,6 +445,10 @@ module.exports = async function handler(req, res) {
       if (access.role === "operational-admin") payload = mergeOperationalPayload(payload, current.payload, access.employee);
       if (access.role === "employee") payload = mergeEmployeePayload(payload, current.payload, access.employee);
       if (access.role === "client") payload = mergeClientPayload(payload, current.payload, access.client);
+      if (access.role === "full-admin") {
+        if (!Object.hasOwn(payload, "companyCostsByMonth") && current.payload.companyCostsByMonth) payload.companyCostsByMonth = current.payload.companyCostsByMonth;
+        if (!require("../company-overhead.js").validate(payload.companyCostsByMonth)) return json(res, 400, { configured: true, error: "Neispravni mesečni troškovi ili fond sati." });
+      }
       const unsafeShrink = unsafeCollectionShrink(payload, current.payload, body.deletedIds);
       if (unsafeShrink) {
         return json(res, 409, {
