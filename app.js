@@ -4704,8 +4704,12 @@ function setupClientCostAnalysis() {
   loadOverheadEditor();
 
   const populate = () => {
+    const keptClient = clientSelect.value;
+    const keptEmployees = new Set([...employeeSelect.selectedOptions].map(item => item.value));
     clientSelect.innerHTML = `<option value="">Sve vreme: klijenti, interno i neraspoređeno</option><option value="__unassigned__">Neraspoređeno vreme</option>${(state.clients || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${escapeInvoiceText(item.id)}">${escapeInvoiceText(item.name)}${item.status === "Aktivan" ? "" : " (" + escapeInvoiceText(item.status || "neaktivan") + ")"}</option>`).join("")}`;
     employeeSelect.innerHTML = (state.employees || []).slice().sort((a,b) => a.name.localeCompare(b.name)).map((item) => `<option value="${escapeInvoiceText(item.id)}">${escapeInvoiceText(item.name)}${item.status === "Neaktivan" ? " (neaktivan)" : ""}</option>`).join("");
+    if ([...clientSelect.options].some(item => item.value === keptClient)) clientSelect.value = keptClient;
+    [...employeeSelect.options].forEach(item => item.selected = keptEmployees.has(item.value));
     employeeList.innerHTML = clientCostEmployeeChoicesHtml(employeeSelect.options);
     employeeList.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
       const option = [...employeeSelect.options].find((item) => item.value === checkbox.value);
@@ -4747,7 +4751,7 @@ function setupClientCostAnalysis() {
       const group = groups.get(key) || { client, employee: employeeName(log.employeeId), minutes: 0, cost: 0, entries: 0, activities: new Set(), overhead: 0, missingOverhead: false, details: [] };
       const fixed = overhead.allocation(log, state.companyCostsByMonth);
       if(fixed===null) group.missingOverhead=true; else group.overhead+=fixed;
-      group.details.push({activity:log.activityName||"Aktivnost",minutes,cost,fixed});
+      group.details.push({activity:log.activityName||"Aktivnost",date:String(log.date||" ").slice(0,10),minutes,cost,fixed});
       group.minutes += minutes; group.cost += cost; group.entries += 1; group.activities.add(log.activityName || "Aktivnost"); groups.set(key, group);
       totalMinutes += minutes; totalCost += cost;
     });
@@ -4769,7 +4773,7 @@ function setupClientCostAnalysis() {
     view.querySelector("#clientCostUnassigned").textContent = money(unassignedCost);
     view.querySelector("#clientCostWarnings").textContent = [...warnings, ...(unassignedCost > 0 ? ["Neraspoređeno vreme je uključeno u zbir, ali nije pripisano klijentu ili internom Marketizu."] : [])].join(" ");
     view.querySelector("#clientCostRange").textContent = `${from.value} – ${to.value}`;
-    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak rada i firme</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${escapeInvoiceText(row.client)}</strong><span>${escapeInvoiceText(row.employee)}</span><span class="client-cost-activity-cell" tabindex="0"><b>${row.entries} unosa</b><small class="client-cost-activity-tooltip">${escapeInvoiceText([...row.activities].join(" · "))}</small></span><span>${hours(row.minutes)}</span><div><div class="company-cost-breakdown"><small>Bruto <b>${money(row.cost)}</b></small><small>Fiksni <b>${row.missingOverhead?'nije podešeno':money(row.overhead)}</b></small><strong>${row.missingOverhead?'Nepotpun obračun':money(row.cost+row.overhead)}</strong></div><details><summary>Detalji aktivnosti</summary>${row.details.map(d=>`<p>${escapeInvoiceText(d.activity)} · ${hours(d.minutes)} · bruto ${money(d.cost)} · fiksni ${d.fixed===null?'nije podešeno':money(d.fixed)}</p>`).join('')}</details></div></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
+    view.querySelector("#clientCostRows").innerHTML = rows.length ? `<div class="client-cost-table"><div class="client-cost-table-head"><span>Klijent</span><span>Zaposleni</span><span>Aktivnosti</span><span>Vreme</span><span>Trošak rada i firme</span></div>${rows.map((row) => `<div class="client-cost-table-row"><strong>${escapeInvoiceText(row.client)}</strong><span>${escapeInvoiceText(row.employee)}</span><span class="client-cost-activity-cell" tabindex="0"><b>${row.entries} unosa</b><small class="client-cost-activity-tooltip">${escapeInvoiceText([...row.activities].join(" · "))}</small></span><span>${hours(row.minutes)}</span><div><div class="company-cost-breakdown"><small>Bruto <b>${money(row.cost)}</b></small><small>Fiksni <b>${row.missingOverhead?'nije podešeno':money(row.overhead)}</b></small><strong>${row.missingOverhead?'Nepotpun obračun':money(row.cost+row.overhead)}</strong></div><details><summary>Detalji aktivnosti</summary><div class="company-activity-details"><div class="company-activity-detail-row company-activity-detail-head"><span>Aktivnost / datum</span><span>Vreme</span><span>Bruto rad</span><span>Fiksni deo</span></div>${row.details.map(d=>`<div class="company-activity-detail-row"><span>${escapeInvoiceText(d.activity)}<small>${escapeInvoiceText(d.date)}</small></span><span>${hours(d.minutes)}</span><span>${money(d.cost)}</span><span>${d.fixed===null?'Nije podešeno':money(d.fixed)}</span></div>`).join('')}</div></details></div></div>`).join("")}</div>` : `<div class="empty-state">Nema upisanih aktivnosti za izabrane filtere.</div>`;
   };
   const show = (event) => {
     event?.stopImmediatePropagation();
