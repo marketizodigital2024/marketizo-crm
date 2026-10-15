@@ -75,7 +75,7 @@ export function matchClickUpClient(groupName, clients) {
   const identityTokens = value => normalizeClientName(value)
     .replace(/\bskorpion\b/g, "scorpion")
     .split(" ").filter(token => token && !new Set([
-      "gmbh", "restaurant", "restoran", "grill", "cafe", "kafic", "caffe", "picerija",
+      "gmbh", "restaurant", "restoran", "grill", "cafe", "kafic", "caffe", "picerija", "pizzeria",
       "parfemi", "parfumes", "perfumes", "parfum", "camping", "kamp", "prikolice",
       "rechtsanwalt", "inkasso", "finanzierung", "osiguranje", "praxis", "beauty", "slovenija", "marketing"
     ]).has(token));
