@@ -4349,3 +4349,29 @@ body.employee-profile-page .employee-summary-grid article:nth-child(4n + 4)::bef
 .crm-online-loading main > section { display: none !important; }
 #crmOnlineLoadNotice { display: flex; align-items: center; gap: 16px; padding: 24px; margin: 16px 0; border: 1px solid #dedede; border-radius: 12px; background: #fff; color: #222; }
 #crmOnlineLoadNotice[hidden] { display: none; }
+
+/* Monthly company overhead: additive owner cost analysis. */
+.company-cost-settings > details > summary { cursor:pointer; font-size:18px; padding:6px 0; color:#263c30; }
+.company-cost-settings p { color:#627368; line-height:1.6; max-width:85ch; }
+.company-cost-settings form { margin:22px 0; padding:20px; border:1px solid #dce6df; border-radius:16px; background:#f7faf7; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; }
+.company-cost-settings input[type="checkbox"] { width:18px; height:18px; margin-right:8px; accent-color:#16854a; }
+.company-cost-settings summary, .company-cost-summary summary { cursor:pointer; }
+.company-cost-cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:22px 0 14px; }
+.company-cost-cards article { display:flex; flex-direction:column; gap:10px; padding:22px; border:1px solid #dce6df; border-radius:18px; background:#f7faf8; min-width:0; }
+.company-cost-cards article > span { color:#64756a; font-size:13px; font-weight:700; }
+.company-cost-cards article > strong { font-size:clamp(22px,2.2vw,34px); letter-spacing:-.04em; color:#20382a; overflow-wrap:anywhere; }
+.company-cost-cards article > small { color:#718077; line-height:1.5; }
+.company-cost-cards .company-cost-total { background:#143e2b; border-color:#143e2b; box-shadow:0 8px 24px #143e2b18; }
+.company-cost-cards .company-cost-total > strong { color:#fff; }
+.company-cost-cards .company-cost-total > span,.company-cost-cards .company-cost-total > small { color:#c4ddcc; }
+.company-cost-footnote { font-size:12px; line-height:1.6; color:#6d7a71; }
+.company-cost-notice { padding:12px 16px; border-radius:12px; background:#fff3de; color:#795314; }
+.company-cost-summary > details { margin-top:18px; padding-top:18px; border-top:1px solid #e1e9e3; }
+.company-cost-summary #overheadCompany { margin-top:12px; line-height:1.8; color:#617168; }
+.company-cost-breakdown { display:flex; flex-direction:column; gap:5px; }
+.company-cost-breakdown small { display:flex; justify-content:space-between; gap:8px; color:#6d7a71; }
+.company-cost-breakdown > strong { color:#1b6940; margin-top:4px; }
+.client-cost-table-row details summary { font-size:12px; color:#52715e; margin-top:12px; cursor:pointer; }
+.client-cost-table-row details p { font-size:12px; line-height:1.6; color:#607067; }
+@media(max-width:1100px){.company-cost-cards{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:560px){.company-cost-cards,.company-cost-settings form{grid-template-columns:1fr;}.company-cost-cards article{padding:18px;}}
