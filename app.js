@@ -2390,7 +2390,7 @@ function renderContractExpiryList() {
           return `
           <div class="setup-item alert-item warn">
             <strong>${daysBetween(today, endDate)}</strong>
-            <span>${escapeInvoiceText(client.name)} · ističe ${formatDate(endDate)}<br />${escapeInvoiceText(fileLabel)}${client.contractNote ? ` · ${escapeInvoiceText(client.contractNote)}` : ""}</span>
+            <span>${escapeInvoiceText(client.name)} · ističe ${formatDate(endDate)}<br />${fileLabel}${client.contractNote ? ` · ${escapeInvoiceText(client.contractNote)}` : ""}</span>
             <button class="mini-action" type="button" data-dismiss-contract="${escapeInvoiceText(client.id)}" data-contract-end="${endDate}" aria-label="Ukloni upozorenje za ${escapeInvoiceText(client.name)}">Ukloni</button>
           </div>`;
         })
