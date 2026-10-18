@@ -1,6 +1,6 @@
 // Read-only operational projection. No CRM session, database key or HR rows leave CRM.
 const crypto = require('node:crypto');
-const AUDIENCE = 'https://crm.marketizo.com/api/employee-directory';
+const AUDIENCE = 'https://app.marketizo.com/api/employee-directory';
 const SERVICE = 'apolo-cloud-pilot@marketizo-agent-core.iam.gserviceaccount.com';
 const SUBJECT = '101722915310559318926';
 let cached = { keys: [], until: 0 };
