@@ -12,8 +12,10 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY scripts/patch-wwebjs-201832.cjs scripts/wwebjs-201832.patch ./scripts/
+COPY scripts/patch-wwebjs-media.cjs ./scripts/
 RUN npm install --omit=dev \
-  && node scripts/patch-wwebjs-201832.cjs
+  && node scripts/patch-wwebjs-201832.cjs \
+  && node scripts/patch-wwebjs-media.cjs
 
 COPY . .
 
