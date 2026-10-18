@@ -5,6 +5,16 @@ export function messageAuthorId(message) {
   return /^\d+(?::\d+)?@(c\.us|lid)$/.test(id || "") ? id : "";
 }
 
+/** After installing this recovery, try retained failures once promptly; never erase or mark them processed. */
+export function wakeContactRecoveryQueue(state, version, now = Date.now()) {
+  if (state.contactRecoveryVersion === version) return false;
+  for (const job of Object.values(state.jobs || {})) {
+    job.retryAt = Math.min(Number(job.retryAt) || 0, now + 30000);
+  }
+  state.contactRecoveryVersion = version;
+  return true;
+}
+
 export async function resolveGroupMessageContact(message, lookup, onFallback = () => {}) {
   try {
     const contact = await lookup();
