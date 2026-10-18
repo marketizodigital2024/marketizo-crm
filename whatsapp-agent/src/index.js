@@ -149,7 +149,7 @@ let clickupSyncInFlight = false;
 let clickupLastError = "";
 let lastTeamRosterRefreshAt = 0;
 let processingFailures = 0;
-const processingDiagnostics = { version: "2026-10-18-contact-recovery-1", contactFallbacks: 0, lastErrorStage: "", lastErrorAt: "" };
+const processingDiagnostics = { version: "2026-10-18-media-recovery-2", contactFallbacks: 0, lastErrorStage: "", lastErrorAt: "" };
 function groupMessageContact(message) {
   return resolveGroupMessageContact(message,
     () => withTimeout(message.getContact(), "resolve group message contact", 10000),
@@ -1171,8 +1171,8 @@ function startDailyReportScheduler() {
 
 async function transcribeVoiceMessage(message) {
   if (!message.hasMedia || !["ptt", "audio"].includes(message.type)) return "";
-  const media = await message.downloadMedia();
-  if (!media?.data) return "";
+  const media = await withTimeout(message.downloadMedia(), "download voice message", 90000);
+  if (!media?.data) throw Error("Voice media unavailable; retained for retry, never marked as read content");
   const extension = media.mimetype?.includes("ogg") ? "ogg"
     : media.mimetype?.includes("mpeg") ? "mp3"
       : media.mimetype?.includes("mp4") ? "m4a" : "ogg";
