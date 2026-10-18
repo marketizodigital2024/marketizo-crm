@@ -12,3 +12,12 @@ export function incidentHealth(incidents = {}) {
   }
   return counts;
 }
+
+/** Successful reads may close a formerly unmapped group's incident only with fresh active-client evidence. */
+export function recoveredCoverageKeys(key, { assignmentsFresh, activeClient } = {}) {
+  if (!assignmentsFresh) return [];
+  if (key === "group-discovery") return ["new-group-sync"];
+  if (!activeClient || !String(key).startsWith("group-read:")) return [];
+  const id = key.slice("group-read:".length);
+  return /^\d+(?:-\d+)?@g\.us$/.test(id) ? ["new-group:" + id] : [];
+}
