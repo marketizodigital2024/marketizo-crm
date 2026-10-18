@@ -43,6 +43,10 @@
     {
       "path": "/api/daily-report-rollup",
       "schedule": "30 16 * * *"
+    },
+    {
+      "path": "/api/bank-reconcile",
+      "schedule": "*/15 * * * *"
     }
   ],
   "headers": [
@@ -73,5 +77,10 @@
   ],
   "buildCommand": "pnpm test && node scripts/build-static.cjs",
   "installCommand": "pnpm install --frozen-lockfile --prod=false",
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "functions": {
+    "api/bank-reconcile.js": {
+      "maxDuration": 60
+    }
+  }
 }
