@@ -14,6 +14,7 @@ import { validateReview, renderDailyReport } from "./report-builder.js";
 import { createOutbox } from "./outbox.js";
 import { resolveGroupMessageContact, wakeContactRecoveryQueue } from "./message-contact.js";
 import { sendOwnerMessage } from "./owner-message.js";
+import { incidentHealth } from "./incident-health.js";
 import { hasOwnerMention, isAcknowledgement, likelyRequiresTeamReply, needsUrgentAnalysis } from "./urgency.js";
 
 const { Client, LocalAuth } = whatsapp;
@@ -1498,6 +1499,7 @@ http.createServer((req, res) => {
       processingFailures,
       processingDiagnostics,
       activeTechnicalIncidents: Object.values(dailyState.technicalIncidents || {}).filter(incident => !incident.resolvedAt).length,
+      activeTechnicalIncidentTypes: incidentHealth(dailyState.technicalIncidents),
       fresh: Boolean(fresh),
       consecutiveHealthFailures,
       lastReportDate: dailyState.lastReportDate || "",
