@@ -6,6 +6,7 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
   let running = false, timer;
   let chats = [];
   const failures = new Map();
+  const verifiedReads = new Set();
   async function reconcile() {
     if (running || !isReady()) return false;
     running = true;
@@ -34,7 +35,7 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
           group.monitored = true;
           const since = Number(group.lastReadAt || 0);
           // Read every group initially and periodically; changed chats are read on every poll.
-          if (since && Number(chat.timestamp || 0) > 0 && Number(chat.timestamp) * 1000 < since && now() - since < 900000) continue;
+          if (verifiedReads.has(id) && !group.lastError && since && Number(chat.timestamp || 0) > 0 && Number(chat.timestamp) * 1000 < since && now() - since < 900000) continue;
           const scanStarted = now();
           try {
             const historyLimit = since && scanStarted - since > 900000 ? 500 : 100;
@@ -51,6 +52,7 @@ export function createGroupMonitor({ getChats, fetchMessages, idOf, isReady, loa
               if (since && at >= since - 300000) enqueue(message);
             }
             group.lastReadAt = scanStarted;
+            verifiedReads.add(id);
             group.lastMessageAt = Number(messages.at(-1)?.timestamp || 0) * 1000;
             group.messagesRead = messages.length;
             group.lastError = '';
