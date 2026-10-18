@@ -14,7 +14,7 @@ import { validateReview, renderDailyReport } from "./report-builder.js";
 import { createOutbox } from "./outbox.js";
 import { resolveGroupMessageContact, wakeContactRecoveryQueue } from "./message-contact.js";
 import { sendOwnerMessage } from "./owner-message.js";
-import { incidentHealth } from "./incident-health.js";
+import { incidentHealth, recoveredCoverageKeys } from "./incident-health.js";
 import { hasOwnerMention, isAcknowledgement, likelyRequiresTeamReply, needsUrgentAnalysis } from "./urgency.js";
 
 const { Client, LocalAuth } = whatsapp;
@@ -1598,7 +1598,13 @@ const groupMonitor = createGroupMonitor({
   isReady: () => whatsappReady && teamMonitoringInitialized && !fatalExitScheduled,
   shouldRead: shouldMonitorGroup,
   onError: (key, group) => { void notifyTechnicalIncident(key, group ? "Ne mogu da pročitam grupu *" + group + "*. Ostale grupe nastavljam da pratim." : "Ne mogu da osvežim spisak WhatsApp grupa. Otkrivanje novih grupa trenutno nije potvrđeno."); },
-  onSuccess: key => resolveTechnicalIncident(key),
+  onSuccess: key => {
+    resolveTechnicalIncident(key);
+    const groupId = key.startsWith("group-read:") ? key.slice("group-read:".length) : "";
+    const chat = groupMonitor.chats().find(item => serializedId(item.id) === groupId);
+    const assignmentsFresh = Boolean(clickupLastSyncAt && Date.now() - clickupLastSyncAt < clickupSyncIntervalMs * 3);
+    for (const recovered of recoveredCoverageKeys(key, { assignmentsFresh, activeClient: Boolean(chat && activeClientForGroup(chat.name)) })) resolveTechnicalIncident(recovered);
+  },
   load: () => readOperationalState(groupInventoryPath),
   save: value => writeOperationalState(groupInventoryPath, value),
   remember: async (chat, message) => {
