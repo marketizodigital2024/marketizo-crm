@@ -64,7 +64,7 @@
       const result=await response.json();if(!response.ok||!result.ok)throw Error(result.error||'Bankarska provera nije dostupna.');
       if(version!==requestVersion||destroyed||selected!==month())return;
       if(!result.readOnly||result.month!==selected||!Array.isArray(result.invoices))throw Error('Bankarska provera nije potpuna.');
-      data=result;loadedMonth=selected;message.textContent='Banka proverena '+new Date(result.fetchedAt).toLocaleTimeString('sr-Latn-RS',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})+' · Drive računi provereni '+date(result.registryCheckedAt)+'. Postojeći iznosi i statusi nisu menjani.';decorate();
+      data=result;loadedMonth=selected;message.textContent='Banka proverena '+new Date(result.fetchedAt).toLocaleTimeString('sr-Latn-RS',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})+' · Drive računi provereni '+date(result.registryCheckedAt)+'. Poklapanja su proverena prema originalnim računima.';decorate();
     }catch(error){if(version===requestVersion&&!destroyed){data=null;decorate();message.textContent=error.message||'Bankarska provera trenutno nije dostupna. Postojeći računi nisu menjani.';}}
     finally{clearTimeout(timer);inFlight=false;controller=null;if(!destroyed&&selected!==month())load();}
   }
