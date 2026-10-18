@@ -1,8 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { messageAuthorId, resolveGroupMessageContact } from "../src/message-contact.js";
+import { messageAuthorId, resolveGroupMessageContact, wakeContactRecoveryQueue } from "../src/message-contact.js";
 
 const group = { from: "111@g.us", author: "222@lid" };
+test("new contact recovery wakes retained failures once without losing retry evidence or prepared alerts", () => {
+  const state = { jobs: { a: { id: "a", attempts: 100, retryAt: 999999, preparedAlert: { body: "retained" } } } };
+  assert.equal(wakeContactRecoveryQueue(state, "v1", 1000), true);
+  assert.equal(state.jobs.a.retryAt, 31000);
+  assert.equal(state.jobs.a.attempts, 100);
+  assert.equal(state.jobs.a.preparedAlert.body, "retained");
+  state.jobs.a.retryAt = 999999;
+  assert.equal(wakeContactRecoveryQueue(state, "v1", 2000), false);
+  assert.equal(state.jobs.a.retryAt, 999999);
+});
 test("upstream t:t contact failure keeps the exact group author without inventing a phone or name", async () => {
   const events = [];
   const c = await resolveGroupMessageContact(group, async () => { throw Error("t: t"); }, e => events.push(e));

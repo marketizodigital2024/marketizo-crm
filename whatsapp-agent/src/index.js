@@ -12,7 +12,7 @@ import { fetchClickUpClients, matchClickUpClient } from "./clickup.js";
 import { createGroupMonitor } from "./group-monitor.js";
 import { validateReview, renderDailyReport } from "./report-builder.js";
 import { createOutbox } from "./outbox.js";
-import { resolveGroupMessageContact } from "./message-contact.js";
+import { resolveGroupMessageContact, wakeContactRecoveryQueue } from "./message-contact.js";
 import { sendOwnerMessage } from "./owner-message.js";
 import { hasOwnerMention, isAcknowledgement, likelyRequiresTeamReply, needsUrgentAnalysis } from "./urgency.js";
 
@@ -1537,6 +1537,7 @@ client.on("qr", async (code) => {
 const processingQueuePath = path.join(stateDirectory, "marketizo-processing-queue.json");
 const processingQueueState = readOperationalState(processingQueuePath) || { jobs: {} };
 processingQueueState.jobs ||= {};
+if (wakeContactRecoveryQueue(processingQueueState, processingDiagnostics.version)) writeOperationalState(processingQueuePath, processingQueueState);
 const groupProcessingChains = new Map();
 const queuedMessageIds = new Set();
 function persistProcessingQueue() { writeOperationalState(processingQueuePath, processingQueueState); }
