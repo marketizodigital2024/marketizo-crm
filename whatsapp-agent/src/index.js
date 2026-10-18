@@ -13,6 +13,7 @@ import { createGroupMonitor } from "./group-monitor.js";
 import { validateReview, renderDailyReport } from "./report-builder.js";
 import { createOutbox } from "./outbox.js";
 import { resolveGroupMessageContact } from "./message-contact.js";
+import { sendOwnerMessage } from "./owner-message.js";
 import { hasOwnerMention, isAcknowledgement, likelyRequiresTeamReply, needsUrgentAnalysis } from "./urgency.js";
 
 const { Client, LocalAuth } = whatsapp;
@@ -418,7 +419,7 @@ const outbox = createOutbox({
 });
 async function sendWhatsappMessage(to, body, label = "WhatsApp send") {
   if (normalizedDigits(String(to).split("@")[0]) !== alertNumber) throw Error("Refusing a message to anyone other than the configured owner");
-  return outbox.send(to, body, label);
+  return sendOwnerMessage(outbox.send, to, body, label);
 }
 
 async function checkWhatsAppHealth() {
