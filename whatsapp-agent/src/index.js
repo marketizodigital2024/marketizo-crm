@@ -12,6 +12,7 @@ import { fetchClickUpClients, matchClickUpClient } from "./clickup.js";
 import { createGroupMonitor } from "./group-monitor.js";
 import { validateReview, renderDailyReport } from "./report-builder.js";
 import { createOutbox } from "./outbox.js";
+import { resolveGroupMessageContact } from "./message-contact.js";
 import { hasOwnerMention, isAcknowledgement, likelyRequiresTeamReply, needsUrgentAnalysis } from "./urgency.js";
 
 const { Client, LocalAuth } = whatsapp;
@@ -147,6 +148,15 @@ let clickupSyncInFlight = false;
 let clickupLastError = "";
 let lastTeamRosterRefreshAt = 0;
 let processingFailures = 0;
+const processingDiagnostics = { version: "2026-10-18-contact-recovery-1", contactFallbacks: 0, lastErrorStage: "", lastErrorAt: "" };
+function groupMessageContact(message) {
+  return resolveGroupMessageContact(message,
+    () => withTimeout(message.getContact(), "resolve group message contact", 10000),
+    () => {
+      processingDiagnostics.contactFallbacks += 1;
+      console.log("[CONTACT_LOOKUP_FALLBACK] Using exact message author; display name unavailable");
+    });
+}
 const clickupCachePath = path.join(stateDirectory, "marketizo-clickup-cache.json");
 const groupInventoryPath = path.join(stateDirectory, "marketizo-group-inventory.json");
 const outboxPath = path.join(stateDirectory, "marketizo-outbox.json");
@@ -1485,6 +1495,7 @@ http.createServer((req, res) => {
       groupMonitoring: publicMonitoringStatus(),
       delivery: outbox.status(),
       processingFailures,
+      processingDiagnostics,
       activeTechnicalIncidents: Object.values(dailyState.technicalIncidents || {}).filter(incident => !incident.resolvedAt).length,
       fresh: Boolean(fresh),
       consecutiveHealthFailures,
@@ -1811,6 +1822,7 @@ client.on("message_reaction", async (reaction) => {
 });
 
 async function processIncomingMessage(message) {
+  let processingStage = "start";
   const messageId = serializedId(message.id);
   const prepared = processingQueueState.jobs[messageId]?.preparedAlert;
   if (prepared && !processedMessageIds.has(messageId)) {
@@ -1845,15 +1857,17 @@ async function processIncomingMessage(message) {
       return;
     }
 
-    const chat = await message.getChat();
+    processingStage = "group_chat";
+    const chat = await withTimeout(message.getChat(), "resolve message group");
     if (!chat.isGroup) { markMessageProcessed(messageId); return; }
     if (!shouldMonitorGroup(chat)) {
       console.log("[GROUP_SKIPPED] No active ClickUp client: " + chat.name);
       markMessageProcessed(messageId); return;
     }
 
-    const contact = await message.getContact();
-    const senderName = contact.pushname || contact.name || contact.number || "Nepoznato";
+    processingStage = "group_contact";
+    const contact = await groupMessageContact(message);
+    const senderName = contact.displayNameUnavailable ? "Učesnik (ime nije dostupno)" : contact.pushname || contact.name || contact.number || "Nepoznato";
     if (isInternalGroup(chat.name)) {
       rememberGroupMessage(message.from, chat.name, senderName, "team", String(message.body || ""), Number(message.timestamp) * 1000, messageId);
       markMessageProcessed(messageId); return;
@@ -1865,12 +1879,14 @@ async function processIncomingMessage(message) {
       if (teamText) noteTeamWaitingForClient(message, chat, senderName, teamText);
       const looksLikeCommitment = /\b(danas|sutra|rok|gotovo|završ|zavrs|šaljem|saljem|biće|bice|do\s+\d|ponedeljak|utorak|sred|četvrt|cetvrt|petak)\b/i.test(teamText);
       if (teamText && (openIssues.has(message.from) || commitments.has(message.from) || looksLikeCommitment)) {
+        processingStage = "team_followup";
         await updateFollowups(message, chat, senderName, "team", teamText);
       }
       markMessageProcessed(messageId);
       return;
     }
 
+    processingStage = "voice_transcription";
     const voiceTranscript = await transcribeVoiceMessage(message);
     const messageText = voiceTranscript || String(message.body || "").trim();
     if (!messageText) { markMessageProcessed(messageId); return; }
@@ -1880,7 +1896,8 @@ async function processIncomingMessage(message) {
     const context = {
       group: chat.name,
       clickupAssignments: clickupContextForGroups([chat.name]),
-      sender: contact.pushname || contact.name || contact.number || "Nepoznato",
+      sender: senderName,
+      senderIdentitySource: contact.identitySource || "contact_lookup",
       message: messageText,
       timestamp: new Date(message.timestamp * 1000).toISOString(),
       recentConversation: (groupHistory.get(message.from) || []).slice(-12),
@@ -1903,7 +1920,9 @@ async function processIncomingMessage(message) {
       return;
     }
 
+    processingStage = "message_analysis";
     const result = await analyzeMessage(openai, routineModel, smartModel, context);
+    processingStage = "client_followup";
     await updateFollowups(message, chat, senderName, "client", messageText);
     const ownerMention = hasOwnerMention(messageText);
 
@@ -1940,16 +1959,20 @@ async function processIncomingMessage(message) {
       processingQueueState.jobs[messageId].preparedAlert = { body: alert, label: "owner alert " + messageId };
       persistProcessingQueue();
     }
+    processingStage = "owner_alert_delivery";
     await sendWhatsappMessage(alertTo, alert, "owner alert " + messageId);
     markMessageProcessed(messageId);
   } catch (error) {
     processingMessageIds.delete(messageId);
     processingFailures += 1;
+    processingDiagnostics.lastErrorStage = processingStage;
+    processingDiagnostics.lastErrorAt = new Date().toISOString();
+    console.error("[PROCESSING_STAGE_FAILED]", processingStage);
     console.error("Message processing failed:", error);
     try {
       if (message.from?.endsWith("@g.us") && !message.fromMe) {
         const chat = await message.getChat();
-        const contact = await message.getContact();
+        const contact = await groupMessageContact(message);
         if (chat?.isGroup && !isInternalGroup(chat.name) && shouldMonitorGroup(chat) && !isTeamSender(message, contact)) {
           const fallbackText = String(message.body || "Poruka koju analiza nije uspela da obradi").trim();
           if (!pendingByGroup.has(message.from) && teamMemberIds.size) beginResponseWatch(message, chat, contact, fallbackText);
