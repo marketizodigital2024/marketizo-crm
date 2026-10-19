@@ -21,7 +21,7 @@ module.exports=async(req,res)=>{
   const bank=['allocate','dismiss'].includes(body.kind)?await transactions(process.env.KONTOFLUX_READ_KEY):[];
   for(let n=0;n<5;n++){
    if(!allowed())return json(res,403,{ok:false,error:'Pristup više nije dostupan.'});
-   const result=actions.plan(current.payload,registry,bank,body,accessSession(req,current.payload,config.key).username||'owner');
+   const identity=accessSession(req,current.payload,config.key),result=actions.plan(current.payload,registry,bank,body,identity.employee?.id||identity.session?.employeeId||'owner');
    if(result.duplicate)return json(res,200,{ok:true,duplicate:true,verifiedReadback:true});
    if(!current.updatedAt)throw Error('Glavni zapis nije dostupan.');await preserveDailyPrewriteBackup(config,current);
    const updatedAt=new Date(Math.max(Date.now(),Date.parse(current.updatedAt)+1)).toISOString(),id=process.env.CRM_STATE_ID||'marketizo-main';
