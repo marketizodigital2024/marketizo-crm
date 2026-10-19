@@ -87,6 +87,9 @@
     },
     "api/finance-source-sync.js": {
       "maxDuration": 60
+    },
+    "api/finance-monthly-documents.js": {
+      "maxDuration": 60
     }
   }
 }
