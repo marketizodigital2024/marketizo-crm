@@ -79,6 +79,9 @@
   "installCommand": "pnpm install --frozen-lockfile --prod=false",
   "outputDirectory": "public",
   "functions": {
+    "api/finance-payment-actions.js": {
+      "maxDuration": 60
+    },
     "api/bank-reconcile.js": {
       "maxDuration": 60
     },
