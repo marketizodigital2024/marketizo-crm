@@ -81,6 +81,9 @@
   "functions": {
     "api/bank-reconcile.js": {
       "maxDuration": 60
+    },
+    "api/finance-source-sync.js": {
+      "maxDuration": 60
     }
   }
 }

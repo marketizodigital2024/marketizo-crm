@@ -50,7 +50,7 @@ module.exports = async function handler(req, res) {
     if (!/^2026-(0[1-9]|1[0-2])$/.test(month)) return json(res,400,{ok:false,error:'Izaberi mesec iz 2026. godine.'});
     const key = process.env.KONTOFLUX_READ_KEY, rawRegistry = process.env.BANK_DRIVE_REGISTRY;
     if (!key || !rawRegistry) return json(res,503,{ok:false,error:'Povezivanje banke i originalnih Drive računa još nije uključeno.'});
-    const registry = registryFrom(rawRegistry);
+    const registry = process.env.FINANCE_GOOGLE_AUDIENCES ? await require('../lib/finance-source-store.js').loadBankRegistry(config,rawRegistry) : registryFrom(rawRegistry);
     const rows = await transactions(key);
     return json(res,200,{ok:true,readOnly:true,month,bankAccountLast4:'0943',fetchedAt:new Date().toISOString(),registryCheckedAt:registry.checkedAt,invoices:matches(registry,rows,month)});
   } catch {

@@ -1,0 +1,50 @@
+const assert=require('node:assert/strict'),crypto=require('node:crypto'),fs=require('node:fs');
+const {parseText,extract}=require('../lib/finance-document-parser.js');
+const {mergeRegistry,folderId}=require('../lib/finance-source-store.js');
+const {evidenceFor,planSources}=require('../lib/finance-email-evidence.js');
+const {message,metadata}=require('../api/finance-source-sync.js')._test;
+const {verifyGoogle}=require('../lib/finance-google-auth.js');
+const h='a'.repeat(64),wordHash='b'.repeat(64),fileId='file-original-606';
+const original=()=>({id:'original-606',number:606,printedNumber:606,client:'Test GmbH',clientId:'c1',clientLinkVerified:true,date:'2026-10-05',month:'2026-10',gross:12000,net:10000,vat:2000,issues:[],ibans:['TRUSTED'],aliases:['testgmbh'],filename:'Rechnung_000606_Test GmbH.pdf',sha256:h});
+const seed=()=>({version:1,checkedAt:'2026-10-18',invoices:[original()]});
+const text='ATU77282726 IBAN AT08 1200 0100 3482 0943 BIC BKAUATWW Test GmbH Teststraße 4, 1030 Wien, Wien, 05.10.2026 RECHNUNG Nr. 00606 Nettosumme 100,00 € Umsatzsteuer 20 % 20,00 € Bruttosumme 120,00 € Leistungszeitraum: 01.10.2026 – 31.10.2026';
+const state=()=>({employees:[{id:'emp',salary:5000}],employeeWorkLogs:[{id:'log',minutes:32}],contacts:[],clients:[{id:'c1',name:'Test',status:'Aktivan',email:'billing@test.example',revenue:100,invoices:{'2026-10':{amount:100,invoiceStatus:'Nije poslat',paymentStatus:'Plaćeno',paidAmount:100,payments:[{id:'old',amount:100}]}}}]});
+const mail=()=>({id:'abcdef123456',account:'office@marketizo.com',from:'office@marketizo.com',sent:true,labels:['SENT'],to:['billing@test.example'],sentAt:'2026-10-06T10:30:00.000Z',attachments:[{number:606,sha256:h}],url:'https://mail.google.com/mail/u/?authuser=office%40marketizo.com#sent/abcdef123456',checkedAt:'2026-10-19T00:00:00.000Z'});
+let count=0;async function test(name,f){await f();count++;console.log('PASS',name)}
+(async()=>{
+await test('printed invoice number, issuer, recipient, service period and integer net/VAT/gross parsed from actual template',()=>{const x=parseText(text,original().filename);assert.equal(x.number,606);assert.equal(x.month,'2026-10');assert.equal(x.gross,12000);assert.equal(x.net,10000);assert.equal(x.vat,2000);assert.deepEqual(x.issues,[]);assert.ok(parseText(text.replace('120,00','121,00'),original().filename).issues.length);assert.ok(parseText(text,original().filename.replace('000606','000607')).issues.length);assert.throws(()=>parseText(text.replace('ATU77282726','OTHER'),original().filename))});
+await test('real PDF extraction and bounded Word XML extraction; unsupported bytes rejected',async()=>{
+ const stream='BT /F1 12 Tf 50 700 Td (Finance parser test) Tj ET';const objs=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];let pdf='%PDF-1.4\n',offsets=[0];for(let i=0;i<objs.length;i++){offsets.push(Buffer.byteLength(pdf));pdf+=`${i+1} 0 obj\n${objs[i]}\nendobj\n`;}const start=Buffer.byteLength(pdf);pdf+='xref\n0 6\n0000000000 65535 f \n'+offsets.slice(1).map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Root 1 0 R /Size 6 >>\nstartxref\n${start}\n%%EOF`;
+ assert.match(await extract(Buffer.from(pdf),'application/pdf'),/Finance parser test/);
+ const pool=Buffer.alloc(pdf.length+73,120);pool.write(pdf,37);assert.match(await extract(pool.subarray(37,37+pdf.length),'application/pdf'),/Finance parser test/);
+ const {zipSync,strToU8}=require('fflate');const bytes=zipSync({'word/document.xml':strToU8('<w:document><w:p><w:t>Invoice &amp; original</w:t></w:p></w:document>')});assert.match(await extract(Buffer.from(bytes),'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),/Invoice & original/);await assert.rejects(extract(Buffer.from('not a PDF'.repeat(4)),'application/pdf'));
+});
+await test('wrong version, missing manifest hash, changed original or duplicate conflicting variants block matching',()=>{
+ const x={...original(),fileId,filename:original().filename,mimeType:'application/pdf',recipient:'Test GmbH'};
+ const data={files:{[fileId]:{parsed:x}},manifests:{[folderId]:{complete:true,files:[{id:fileId,name:x.filename,sha256Checksum:h}]}},driveCheckedAt:'2026-10-19T00:00:00Z'};
+ let r=mergeRegistry(seed(),data);assert.deepEqual(r.invoices[0].issues,[]);assert.equal(r.invoices[0].fileId,fileId);
+ data.files.conflict={parsed:{...x,gross:99999,fileId:'other-file'}};assert.ok(mergeRegistry(seed(),data).invoices[0].issues.length);delete data.files.conflict;
+ data.manifests[folderId].files=[];assert.ok(mergeRegistry(seed(),data).invoices[0].issues.length);
+});
+await test('SENT message + exact original bytes + approved external recipient are all mandatory',()=>{
+ const s=state(),x=original(),data={messages:{m:mail()}};assert.equal(evidenceFor(x,data,s).status,'sent-confirmed');
+ for(const edit of [m=>m.sent=false,m=>m.labels=['INBOX'],m=>m.attachments[0].sha256=wordHash,m=>m.to=['other@example.com'],m=>m.account='other@example.com']){const m=mail();edit(m);assert.notEqual(evidenceFor(x,{messages:{m}},s).status,'sent-confirmed');}
+ const m=mail();m.to=['other@example.com'];assert.equal(evidenceFor(x,{messages:{m}},s).status,'recipient-review');assert.equal(evidenceFor(x,{messages:{m},approvedRecipients:{c1:['other@example.com']}},s).status,'sent-confirmed');
+});
+await test('Word attachment proof records its actual hash, not the PDF hash',()=>{const x={...original(),variants:[{sha256:h},{sha256:wordHash}]},m=mail();m.attachments[0].sha256=wordHash;assert.equal(evidenceFor(x,{messages:{m}},state()).proof.matchingAttachmentSha256,wordHash)});
+await test('sent status/date persist without overwriting payments, amounts, employees, manual dates; repeat is a no-op',()=>{
+ const s=state(),before=JSON.stringify(s),data={messages:{m:mail()}},r=planSources(s,seed(),data);assert.equal(JSON.stringify(s),before);assert.equal(r.changes.length,1);const i=r.payload.clients[0].invoices['2026-10'];assert.equal(i.invoiceStatus,'Poslat');assert.equal(i.sentAt,mail().sentAt);assert.equal(i.amount,100);assert.equal(i.paymentStatus,'Plaćeno');assert.deepEqual(i.payments,s.clients[0].invoices['2026-10'].payments);assert.deepEqual(r.payload.employees,s.employees);assert.deepEqual(r.payload.employeeWorkLogs,s.employeeWorkLogs);assert.equal(planSources(r.payload,seed(),data).changes.length,0);i.sentAt='manual-date';assert.equal(planSources(r.payload,seed(),data).payload.clients[0].invoices['2026-10'].sentAt,'manual-date');
+});
+await test('no evidence never downgrades sent; unknown client, mismatched price, excluded month and duplicate month stay manual',()=>{
+ const s=state();s.clients[0].invoices['2026-10'].invoiceStatus='Poslat';assert.equal(planSources(s,seed(),{}).payload.clients[0].invoices['2026-10'].invoiceStatus,'Poslat');
+ for(const edit of [(s,r)=>r.invoices[0].clientLinkVerified=false,(s,r)=>s.clients[0].invoices['2026-10'].amount=101,(s,r)=>s.clients[0].invoiceExcludedMonths=['2026-10'],(s,r)=>r.invoices.push({...original(),id:'other',number:607})]){const s=state(),r=seed();edit(s,r);assert.equal(planSources(s,r,{messages:{m:mail()}}).changes.length,0)}
+});
+await test('mail ingestion rejects drafts, forged account, malformed timestamps and unrelated attachments',()=>{const bytes=Buffer.from('original PDF content for test').toString('base64'),m={...mail(),attachments:[{filename:original().filename,data:bytes}]};assert.equal(message(m,m.account).attachments[0].number,606);assert.throws(()=>message({...m,labels:['SENT','DRAFT']},m.account));assert.throws(()=>message({...m,from:'attacker@example.com'},m.account));assert.throws(()=>message({...m,attachments:[{filename:'not-invoice.pdf',data:bytes}]},m.account));assert.throws(()=>metadata({id:'x'}));});
+await test('Google identity requires pinned audience, allowed account, verified email, fresh signed token',async()=>{
+ const {publicKey,privateKey}=crypto.generateKeyPairSync('rsa',{modulusLength:2048});const jwk={...publicKey.export({format:'jwk'}),kid:'test',alg:'RS256',use:'sig'},now=Date.now(),base={iss:'https://accounts.google.com',aud:'approved-client',sub:'104139844812462878450',email:'office@marketizo.com',email_verified:true,iat:Math.floor(now/1000),exp:Math.floor(now/1000)+3600};process.env.FINANCE_GOOGLE_AUDIENCES='["approved-client"]';
+ const token=c=>{const a=Buffer.from(JSON.stringify({alg:'RS256',kid:'test'})).toString('base64url'),b=Buffer.from(JSON.stringify(c)).toString('base64url');return'Bearer '+a+'.'+b+'.'+crypto.sign('RSA-SHA256',Buffer.from(a+'.'+b),privateKey).toString('base64url')};const fetcher=async()=>({ok:true,json:async()=>({keys:[jwk]})});
+ assert.equal((await verifyGoogle(token(base),fetcher,now)).email,base.email);for(const delta of [{aud:'another-client'},{email:'attacker@example.com'},{email_verified:false},{exp:now/1000-1},{iat:now/1000+100}])assert.equal(await verifyGoogle(token({...base,...delta}),fetcher,now),null);delete process.env.FINANCE_GOOGLE_AUDIENCES;
+});
+await test('Google worker scopes are read-only; no send/delete APIs or logged credentials',()=>{const root=__dirname+'/../integrations/google-finance/',m=JSON.parse(fs.readFileSync(root+'appsscript.json')),s=fs.readFileSync(root+'Code.gs','utf8');assert.ok(m.oauthScopes.includes('https://www.googleapis.com/auth/drive.readonly'));assert.ok(m.oauthScopes.includes('https://www.googleapis.com/auth/gmail.readonly'));assert.ok(!m.oauthScopes.some(s=>/gmail\.(send|modify)|\/auth\/drive$/.test(s)));assert.ok(!/GmailApp|DriveApp|\.sendEmail\(|messages\/send|files\/.*delete/.test(s));assert.ok(!/console\.log\(token|console\.log\(ScriptApp\.getOAuthToken/.test(s));});
+console.log(count+' finance source checks passed');
+})().catch(e=>{console.error(e);process.exit(1)});

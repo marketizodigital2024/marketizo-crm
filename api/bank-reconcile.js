@@ -18,7 +18,7 @@ async function handler(req,res){
     let current=await readStoredState(config);
     function allowed(c){return cron||accessSession(req,c.payload,config.key)?.role==='full-admin';}
     if(!allowed(current))return json(res,403,{ok:false,error:'Samo vlasnik može da pokrene usklađivanje.'});
-    const registry=registryFrom(process.env.BANK_DRIVE_REGISTRY), key=process.env.KONTOFLUX_READ_KEY;
+    const registry=process.env.FINANCE_GOOGLE_AUDIENCES ? await require('../lib/finance-source-store.js').loadBankRegistry(config,process.env.BANK_DRIVE_REGISTRY) : registryFrom(process.env.BANK_DRIVE_REGISTRY), key=process.env.KONTOFLUX_READ_KEY;
     if(!key)throw Error('missing bank configuration');
     const bank=await transactions(key);
     for(let attempt=0;attempt<5;attempt++){
