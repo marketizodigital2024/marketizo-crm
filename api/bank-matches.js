@@ -52,7 +52,7 @@ module.exports = async function handler(req, res) {
     if (!key || !rawRegistry) return json(res,503,{ok:false,error:'Povezivanje banke i originalnih Drive računa još nije uključeno.'});
     const registry = process.env.FINANCE_GOOGLE_AUDIENCES ? await require('../lib/finance-source-store.js').loadBankRegistry(config,rawRegistry) : registryFrom(rawRegistry);
     const rows = await transactions(key);
-    return json(res,200,{ok:true,readOnly:true,month,bankAccountLast4:'0943',fetchedAt:new Date().toISOString(),registryCheckedAt:registry.checkedAt,invoices:matches(registry,rows,month)});
+    return json(res,200,{ok:true,readOnly:true,month,bankAccountLast4:'0943',fetchedAt:new Date().toISOString(),registryCheckedAt:registry.checkedAt,invoices:require('../lib/finance-payment-actions.js').reviewMatches(current.payload,matches(registry,rows,month),rows)});
   } catch {
     return json(res,502,{ok:false,error:'Banka ili registar originalnih računa trenutno nisu dostupni. Postojeća plaćanja nisu menjana.'});
   }
