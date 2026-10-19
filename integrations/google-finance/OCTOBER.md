@@ -1,0 +1,15 @@
+# October accounting collection
+
+Destination: `Marketizo Digital/RACUNI/Edin/2026/Racuni Oktobar` (Drive folder `1rZNAsaaMD-YGfA2_Ts1HKnPPWawr9s1i`). Source issued folder is the existing RECHNUNGEN 2026 folder. This release is intentionally enabled for October 2026 only.
+
+The existing read-only source sync and bank posting are unchanged. `Monthly.gs` adds a separate 15-minute collector. It never changes CRM invoice/payment/sent fields or edits, moves or deletes source files. New accounting metadata and temporary originals use separate `finance-monthly-documents-2026-10*` database records. No schema migration is required. Original bytes are transmitted only to the existing Marketizo application/database and the destination Drive folder.
+
+Office reads issued originals, receives queued incoming originals from the application's private endpoint, and creates exact copies. Buchhaltung continues with its existing Gmail read-only scopes; it needs no Drive access. Office additionally needs `drive.file` to create and manage files made by the integration, while preserving its existing `drive.readonly` scope. Review this scope change with the owner immediately before authorizing it. Do not replace the existing live manifest or trigger before approval.
+
+After approval: add `Monthly.gs` to both existing Apps Script projects. Keep their `Code.gs` intact. Use `appsscript-monthly-office.json` as the office manifest and keep the existing mail-only manifest on buchhaltung. Run `installOctoberCollector` on each approved account. Confirm new trigger, execution result, private API record, actual Drive bytes and the production October Finance view. A saved script or a trigger alone is not completion.
+
+Incoming PDF/Word attachments received in October are invoice candidates, not accountant-ready assertions. They go to `Za proveru`; issued originals with no parsing issues go to `Izlazni`. Issue month and service month can differ. Duplicates are keyed by SHA-256. Copy reservations prevent concurrent duplicates; retries find previously-created copies by checksum. Each saved copy is downloaded again and hashed. Missing/moved/changed copies are detected on later office scans and removed from the confirmed-copy count; originals and earlier copies are never deleted.
+
+The owner-only Finance panel lists confirmed copies, pending copies, bank transactions without linked documents and explicit-reference/amount candidates. Suggestions never mark invoices paid or sent. Stripe/PayPal net payouts, split payments, cash, foreign-currency conversions and non-invoice bank items require separate reconciliation. A document candidate is not proof of tax validity or complete bank coverage. Images, portal-only invoices, unreadable or oversized documents need manual collection; no email confirmation is converted into an invoice.
+
+To stop only this collector, remove its `collectOctoberInvoices` triggers. Existing source-sync and bank-reconcile triggers remain independent. No recurring Codex heartbeat is used: this is application data synchronization, executed by the existing Google integration.
