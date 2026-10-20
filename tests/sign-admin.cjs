@@ -1,4 +1,6 @@
 'use strict';
+// Exercise the disabled-send fixture even when the production build enables Sign.
+process.env.SIGN_SES_ENABLED = 'false';
 const assert = require('node:assert/strict');
 const { createHandler } = require('../api/sign-admin.js');
 const { createStore } = require('../lib/sign-store.js');
