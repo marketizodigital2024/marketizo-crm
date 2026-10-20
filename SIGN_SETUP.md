@@ -21,7 +21,7 @@ Sources: https://www.ris.bka.gv.at/eli/jgs/1811/946/P883/NOR12018607 and https:/
 
 ## Deployment steps
 
-Code is in draft PR #54. The private production Sign schema was applied on 20 October 2026 as `marketizo_sign_initial_private_schema`; all 12 tables have RLS and deny direct anon/authenticated access. The command/flow RPCs also deny these roles. SMTP host/port/user/from and SIGN_SES_ENABLED=false were saved through the authorized browser. SMTP credentials and the remaining issuer/evidence configuration still require setup. Test delivery uses a captured mailbox fixture, not a real recipient. The management connector returned 403; authorized Chrome access to project settings now works.
+Code is in draft PR #54. The private production Sign schema was applied on 20 October 2026 as `marketizo_sign_initial_private_schema`; all 12 tables have RLS and deny direct anon/authenticated access. The command/flow RPCs also deny these roles. SMTP host/port/user/from and SIGN_SES_ENABLED=false were saved through the authorized browser. SMTP password presence was subsequently confirmed without reading it. Issuer name/address and the intended production notice URL were saved. The separate internal/evidence keys, operative notice publication/review and actual delivery test still require completion. Test delivery uses a captured mailbox fixture, not a real recipient. The management connector returned 403; authorized Chrome access to project settings now works.
 
 1. For a new environment, on an isolated test database with the CRM fixture, apply `database/marketizo-sign.sql`, then `database/marketizo-sign-flow.sql`. These are reviewed setup scripts. Their combined initial production schema is recorded in Supabase migration history; do not rerun them on the existing production database. Generate the deployment migration using the Supabase CLI and review database advisors/policies before production.
 2. Reuse server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `CRM_STATE_ID`. Browser roles must have no direct Sign table/RPC access. Use a separate preview database and explicit preview origin.
@@ -37,7 +37,7 @@ Code is in draft PR #54. The private production Sign schema was applied on 20 Oc
 - `SIGN_SMTP_HOST`, `SIGN_SMTP_USER`, `SIGN_SMTP_PASSWORD`; `SIGN_SMTP_PORT=465` for TLS or `587` for STARTTLS.
 - `SIGN_MAIL_FROM=office@marketizo.com` (user-confirmed sender).
 - `SIGN_LEGAL_ENTITY`, `SIGN_LEGAL_ADDRESS`: verified registered company details.
-- `SIGN_PRIVACY_URL`: published HTTPS privacy notice for signing and evidence processing.
+- `SIGN_PRIVACY_URL`: published HTTPS privacy notice for signing and evidence processing. The prepared dated page is `/sign-privacy-20261020`; each new request retains its notice version/URL. See `SIGN_OPERATIONS.md` before activation.
 - `CRON_SECRET`: server-only authorization for background delivery/finalization.
 - `SIGN_SES_ENABLED=false` until deployment, mail and legal checks pass; set `true` deliberately afterward.
 - Protected previews may require `VERCEL_AUTOMATION_BYPASS_SECRET` for the authenticated internal PDF/mail helper.

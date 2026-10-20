@@ -72,6 +72,9 @@ async function main(){
   async function until(expression){for(let i=0;i<150;i++){try{if(await evaluate(expression))return;}catch{}await sleep(100);}throw Error('Browser condition failed: '+expression+' | '+await evaluate("document.getElementById('signMessage')?.textContent||document.getElementById('message')?.textContent||document.body.innerText.slice(-400)"));}
   async function click(id){await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);}
   async function fill(id,value){await evaluate(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);}
+  await send('Page.navigate',{url:origin+'/sign-privacy-20261020'},sessionId);
+  await until("document.querySelector('h1')?.textContent==='Zaštita podataka u Marketizo Sign-u'");
+  assert.equal(await evaluate('document.scripts.length'),0,'Privacy notice must be readable without scripts or a signing session');
   await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);await until("document.getElementById('connectionStatus')?.textContent.includes('Jednostavan elektronski potpis') && !document.getElementById('newDocument').disabled");
   await click('newDocument');await until("!document.getElementById('workspace').hidden");await fill('documentTitle','Browser fixture contract');
   await evaluate("document.getElementById('contractEditor').textContent='Ugovor o uslugama. Čćžšđ ÄÖÜ.';document.getElementById('contractEditor').dispatchEvent(new Event('input',{bubbles:true}))");
@@ -101,6 +104,7 @@ async function main(){
   await until("!document.getElementById('receiptLinks').hidden");
   const packages=await evaluate("Promise.all([fetch('/api/sign-public?action=evidence').then(r=>r.json()),fetch('/api/sign-public?action=receipt').then(r=>r.arrayBuffer()).then(b=>Array.from(new Uint8Array(b)))]).then(([e,p])=>({e,p}))");
   require('../scripts/verify-sign-evidence.cjs').verify(packages.e,Buffer.from(packages.p));
+  assert.equal(packages.e.manifest.issuer.privacyNotice.version,'2026-10-20','Final evidence must preserve the notice version sent with the request');
   assert.ok(packages.e.manifest.signers[0].strokes.some(stroke=>stroke.length>=3),'Drawn signature must survive browser, database and final evidence export');
   assert.deepEqual(errors,[]);assert.equal((await db.query('select status from marketizo_sign_documents')).rows[0].status,'signed');
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> OTP -> explicit acceptance -> final receipt -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');

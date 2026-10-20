@@ -30,6 +30,10 @@ const { hash, canonical, seal, unseal, readiness, validateSignature, createWorkf
  for (const key of ['SIGN_SMTP_HOST','SIGN_SMTP_USER','SIGN_SMTP_PASSWORD','SIGN_LEGAL_ENTITY','SIGN_LEGAL_ADDRESS','SIGN_PRIVACY_URL']) process.env[key] = 'fixture';
  process.env.SIGN_PRIVACY_URL = 'https://app.marketizo.com/sign-privacy-20261020';
  process.env.SIGN_SES_ENABLED = 'true'; process.env.SIGN_APP_ORIGIN = 'https://app.marketizo.com';
+ assert.equal(readiness().sendingEnabled, true);
+ process.env.SIGN_PRIVACY_URL='http://example.com/privacy';assert.equal(readiness().sendingEnabled,false,'Do not send with an insecure privacy URL');
+ process.env.SIGN_PRIVACY_URL='https://user:password@example.com/privacy';assert.equal(readiness().sendingEnabled,false,'Do not expose credentials in a privacy URL');
+ process.env.SIGN_PRIVACY_URL='https://app.marketizo.com/sign-privacy-20261020';
  await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, doc), /dokumentovanu/);
  await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, { ...doc, data: { ...doc.data, signatureMethod: 'qes' } }), /kvalifikovani/);
  await workflow.prepare('emp-miljan', { revision: 2, commandId: crypto.randomUUID(), review: { decision: 'ses_allowed', reviewedBy: 'Fixture reviewer', reference: 'Fixture legal review', pdfSha256: hash(pdf), pdfReviewed: true } }, doc);

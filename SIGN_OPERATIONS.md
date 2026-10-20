@@ -2,7 +2,7 @@
 
 ## Current state
 
-The production private schema exists. Sending remains disabled. SMTP password presence was confirmed in Vercel without reading it. The two server keys still need their own saved Secret entries. Company identity is taken from the user's published Impressum, not independently certified against the register.
+The production private schema exists. Sending remains disabled. SMTP password presence was confirmed in Vercel without reading it. The two server keys still need their own saved Secret entries. Issuer name/address and the intended versioned production notice URL are saved as Config; the actual production page has not been published. Company identity is taken from the user's published Impressum, not independently certified against the register.
 
 ## Notice and versioning
 
