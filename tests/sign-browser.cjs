@@ -72,8 +72,8 @@ async function main(){
   async function until(expression){for(let i=0;i<150;i++){try{if(await evaluate(expression))return;}catch{}await sleep(100);}throw Error('Browser condition failed: '+expression+' | '+await evaluate("document.getElementById('signMessage')?.textContent||document.getElementById('message')?.textContent||document.body.innerText.slice(-400)"));}
   async function click(id){await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);}
   async function fill(id,value){await evaluate(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);}
-  await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);await until("document.getElementById('newDocument') && !document.getElementById('newDocument').disabled");
-  await click('newDocument');await fill('documentTitle','Browser fixture contract');
+  await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);await until("document.getElementById('connectionStatus')?.textContent.includes('Jednostavan elektronski potpis') && !document.getElementById('newDocument').disabled");
+  await click('newDocument');await until("!document.getElementById('workspace').hidden");await fill('documentTitle','Browser fixture contract');
   await evaluate("document.getElementById('contractEditor').textContent='Ugovor o uslugama. Čćžšđ ÄÖÜ.';document.getElementById('contractEditor').dispatchEvent(new Event('input',{bubbles:true}))");
   await click('addRecipient');
   await evaluate("for(const [k,v]of Object.entries({name:'Fixture Signer',email:'fixture@example.com',country:'AT'})){const e=document.querySelector('[data-field='+k+']');e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}");
