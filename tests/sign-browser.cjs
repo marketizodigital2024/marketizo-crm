@@ -104,6 +104,6 @@ async function main(){
   fs.writeFileSync(path.join(out,'sign-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true},sessionId)).data,'base64'));
   assert.deepEqual(errors,[]);assert.equal((await db.query('select status from marketizo_sign_documents')).rows[0].status,'signed');
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> OTP -> explicit acceptance -> final receipt -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');
- }finally{ws?.close();chrome?.kill();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
+ }finally{ws?.close();chrome?.kill();server?.closeAllConnections();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
