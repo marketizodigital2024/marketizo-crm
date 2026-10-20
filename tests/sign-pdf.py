@@ -34,6 +34,8 @@ class SignPdfTests(unittest.TestCase):
         self.assertIn("Čćžšđ ÄÖÜ", text)
         self.assertIn("2. Druga obaveza", text)
         self.assertGreater(len(first.pages), 1)
+        self.assertEqual(original["renderer"], "marketizo-pdf-2")
+        self.assert_stationery(first)
         again = helper.render_original({"document": self.document()})
         self.assertEqual(original["sha256"], again["sha256"])
         manifest = {"title": self.document()["title"], "requestId": "5708299e-1592-4217-96c2-f4f9bc26c067", "signers": [
@@ -45,11 +47,43 @@ class SignPdfTests(unittest.TestCase):
         self.assertTrue(final_bytes.startswith(original_bytes))
         reader = PdfReader(io.BytesIO(final_bytes))
         self.assertGreater(len(reader.pages), len(first.pages))
+        self.assert_stationery(reader)
         self.assertIn("Test Potpisnik", "\n".join(p.extract_text() for p in reader.pages))
         self.assertEqual(hashlib.sha256(final_bytes).hexdigest(), final["sha256"])
         output = os.environ.get("SIGN_PDF_FIXTURE_OUTPUT")
         if output:
             Path(output).write_bytes(final_bytes)
+
+    def assert_stationery(self, reader):
+        for page in reader.pages:
+            self.assertGreater(len(page.images), 0, "Logo missing from a PDF page")
+            # Paragraph anchors must stay within the printable text frame.
+            # pypdf's text matrix drifts on multiline ReportLab paragraphs;
+            # use the flowable's transform rather than those inferred baselines.
+            positions = []
+            page.extract_text(visitor_text=lambda text, cm, tm, font, size:
+                              positions.append((text, cm[5])) if text.strip() and cm[5] else None)
+            for text, y in positions:
+                self.assertGreater(y, 44, text)
+                self.assertLess(y, float(page.mediabox.height) - 110, text)
+
+    def test_finalization_preserves_prebranding_original(self):
+        # Previously frozen PDFs must never be re-rendered when branding changes.
+        from reportlab.pdfgen import canvas
+        legacy = io.BytesIO()
+        old = canvas.Canvas(legacy, invariant=1)
+        old.drawString(48, 720, "Previously frozen original")
+        old.save()
+        original = legacy.getvalue()
+        final = helper.render_final({"originalBase64": base64.b64encode(original).decode(),
+            "originalSha256": hashlib.sha256(original).hexdigest(),
+            "evidence": {"title": "Legacy fixture", "requestId": "5708299e-1592-4217-96c2-f4f9bc26c067", "signers": []},
+            "manifestSha256": "b" * 64})
+        data = base64.b64decode(final["base64"])
+        self.assertTrue(data.startswith(original))
+        reader = PdfReader(io.BytesIO(data))
+        self.assertEqual(len(reader.pages[0].images), 0)
+        self.assertGreater(len(reader.pages[-1].images), 0)
 
     def test_safe_text_and_font_failures(self):
         self.assertEqual(helper.plain("<img src=x>"), "&lt;img src=x&gt;")
