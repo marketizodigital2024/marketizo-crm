@@ -40,7 +40,7 @@ GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.min.mjs', imp
   try {
    const pdf = await loadingTask.promise;
    const metadata = await pdf.getMetadata(); let layout = null;
-   try { layout = JSON.parse(metadata.info?.Custom?.MarketizoLayout || 'null'); } catch {}
+   try { layout = JSON.parse(metadata.info?.Custom?.get?.('MarketizoLayout') || metadata.info?.Custom?.MarketizoLayout || 'null'); } catch {}
    let signatureSlot = null;
    if (layout?.version === 1) { const matches = layout.blocks.flatMap(b => b.slots.filter(s => s.name === state.name && s.email).map(s => ({ ...s, page: b.page }))); if (matches.length === 1) signatureSlot = matches[0]; }
    for (let i = 1; i <= pdf.numPages; i++) {

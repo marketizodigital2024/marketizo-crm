@@ -239,6 +239,9 @@ def render_final(payload):
     certificate = build_pdf("Evidencija prihvatanja", story, evidence.get("issuer", {}))
     # Incremental append retains all original PDF bytes unchanged at the start.
     writer = PdfWriter(io.BytesIO(original), incremental=True)
+    original_metadata = PdfReader(io.BytesIO(original)).metadata
+    if original_metadata:
+        writer.add_metadata(original_metadata)
     layout_raw = PdfReader(io.BytesIO(original)).metadata.get("/MarketizoLayout")
     if layout_raw:
         layout = json.loads(layout_raw)
