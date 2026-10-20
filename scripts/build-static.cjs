@@ -24,9 +24,10 @@ for (const file of fs.readdirSync(output).filter(name => name.endsWith('.html'))
     references++;
   }
 }
-for (const privatePath of ['api', 'migrations', 'tests', 'node_modules', 'vercel.json', 'package.json', 'supabase-setup.sql', 'source.tar.gz']) {
+for (const privatePath of ['api', 'database', 'migrations', 'tests', 'node_modules', 'vercel.json', 'package.json', 'supabase-setup.sql', 'source.tar.gz']) {
   assert(!fs.existsSync(path.join(output, privatePath)), `Private build source exposed: ${privatePath}`);
 }
 assert.deepEqual(fs.readdirSync(path.join(output, 'lib')), ['state-patch.js']);
 console.log(`Static build: ${count} root assets, icons and browser state-patch library; server source, tests, migrations and dependencies excluded.`);
 console.log(`PASS: ${references} local HTML asset references exist; private-source exclusions verified.`);
+

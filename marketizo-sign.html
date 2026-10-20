@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="sr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+  <title>Marketizo Sign</title>
+  <link rel="icon" href="icons/marketizo-192.png"><link rel="stylesheet" href="styles.css?v=20261015-overhead-r16d">
+  <link rel="stylesheet" href="marketizo-sign.css?v=20261020-1">
+  <script src="admin-auth.js?v=20261020-sign" defer></script><script src="marketizo-sign.js?v=20261020-1" defer></script>
+</head>
+<body class="sign-body">
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><img class="brand-logo" src="marketizo-logo.png" alt="Marketizo Digital"><div><strong>Marketizo CRM</strong><span>Klijenti, naplata i tim</span></div></div>
+    <nav class="nav" aria-label="Glavna navigacija"><a class="nav-item" href="/">Dashboard</a><a class="nav-item" href="/clients">Klijenti</a><a class="nav-item" href="/employees-overview">Zaposleni</a><a class="nav-item" href="/kpi">KPI i ocene klijenata</a><a class="nav-item active" href="/marketizo-sign" aria-current="page">Marketizo Sign</a></nav>
+    <div class="side-panel"><span>Marketizo Sign</span><strong>Ugovori na jednom mestu</strong><small>Priprema, verzije i evidencija.</small></div>
+  </aside>
+  <main class="main sign-main">
+    <header class="topbar"><div><p class="eyebrow">Marketizo Digital · Austrija</p><h1>Marketizo Sign</h1></div><div class="top-actions"><button class="secondary-button" id="adminLogoutBtn" type="button">Odjavi se</button></div></header>
+    <section class="sign-intro"><div><p class="eyebrow">Dokumenti i ugovori</p><h2>Od prvog nacrta do potpisa.</h2><p>Kreiraj ugovor, izaberi potpisnike i pripremi verziju za potpisivanje.</p></div><button class="primary-button" id="newDocument" type="button">+ Novi dokument</button></section>
+    <p class="sign-connection" id="connectionStatus">Provera pristupa…</p>
+    <p class="sign-message" id="signMessage" role="status" aria-live="polite"></p>
+    <section id="library" aria-label="Biblioteka dokumenata">
+      <div class="sign-tabs" role="group" aria-label="Vrsta prikaza"><button type="button" class="selected" data-library="documents" aria-pressed="true">Dokumenti</button><button type="button" data-library="templates" aria-pressed="false">Šabloni</button><button type="button" data-library="archive" aria-pressed="false">Arhiva</button></div>
+      <div class="sign-filters"><label class="sign-search">Pretraga<input id="signSearch" type="search" maxlength="120" placeholder="Naziv, ime ili e-mail…"></label><label>Kategorija<select id="categoryFilter"><option value="">Sve kategorije</option value="clients">Klijenti</option><option value="employees">Zaposleni</option><option value="nda">NDA</option><option value="annexes">Aneksi</option><option value="other">Ostalo</option></select></label><label>Status<select id="statusFilter"><option value="">Svi statusi</option><option value="draft">Nacrt</option><option value="ready">Zaključana verzija</option><option value="sent">Poslat</option><option value="viewed">Pregledan</option><option value="signing">Potpisivanje</option><option value="signed">Potpisan</option><option value="declined">Odbijen</option><option value="expired">Istekao</option><option value="voided">Poništen</option></select></label><label id="archiveTypeLabel" hidden>Vrsta arhive<select id="archiveType"><option value="document">Dokumenti</option><option value="template">Šabloni</option></select></label><button class="secondary-button" id="refreshList" type="button">Osveži</button></div>
+      <div class="sign-table-wrap"><table class="sign-table"><thead><tr><th>Dokument</th><th>Potpisnici</th><th>Kategorija</th><th>Status</th><th>Ažurirano</th><th><span class="visually-hidden">Akcija</span></th></tr></thead><tbody id="documentRows"></tbody></table><div class="sign-empty" id="signEmpty" hidden><span>✎</span><h3>Prostor za sledeći dogovor.</h3><p id="emptyText">Kreiraj prvi dokument ili sačuvaj svoj šablon.</p></div></div>
+      <div class="sign-pagination"><button class="secondary-button" id="previousPage" type="button" disabled>Prethodna</button><span id="pageLabel"></span><button class="secondary-button" id="nextPage" type="button" disabled>Sledeća</button></div>
+    </section>
+    <section class="sign-workspace" id="workspace" hidden aria-label="Uređivanje dokumenta">
+      <div class="sign-workspace-top"><button type="button" class="secondary-button" id="backToLibrary">← Dokumenti</button><span id="revisionLabel">Novi nacrt</span><span class="sign-dirty" id="dirtyLabel">Nesačuvane izmene</span></div>
+      <div class="sign-editor-layout"><div class="sign-editor-column">
+        <label class="sign-title-label">Naziv dokumenta<input id="documentTitle" maxlength="180" placeholder="Npr. Ugovor o pružanju usluga"></label>
+        <div class="sign-toolbar" role="toolbar" aria-label="Formatiranje teksta"><button type="button" data-edit="bold" aria-label="Podebljano"><b>B</b></button><button type="button" data-edit="italic" aria-label="Kurziv"><i>I</i></button><button type="button" data-edit="underline" aria-label="Podvučeno"><u>U</u></button><button type="button" data-block="h2">Naslov</button><button type="button" data-block="p">Tekst</button><button type="button" data-edit="insertUnorderedList">• Lista</button><button type="button" data-edit="insertOrderedList">1. Lista</button><button type="button" data-edit="undo" aria-label="Poništi izmenu">↶</button></div>
+        <div id="contractEditor" class="sign-editor" contenteditable="true" role="textbox" aria-label="Tekst ugovora" aria-multiline="true" spellcheck="true"></div>
+        <p class="sign-hint">Potpisivanje se odnosi na zaključanu verziju. Naknadne promene zahtevaju novi dokument ili aneks.</p>
+      </div><aside class="sign-details">
+        <h3>Detalji dokumenta</h3><label>Kategorija<select id="documentCategory"><option value="clients">Klijenti</option><option value="employees">Zaposleni</option><option value="nda">NDA</option><option value="annexes">Aneksi</option><option value="other">Ostalo</option></select></label>
+        <label>Počni iz šablona<select id="templateSelect"><option value="">Prazan dokument</option></select></label><button class="secondary-button" id="applyTemplate" type="button">Primeni šablon</button>
+        <div id="recipientsSection"><div class="sign-section-heading"><h3>Potpisnici</h3><button class="sign-text-button" id="addRecipient" type="button">+ Dodaj</button></div><p class="sign-hint">Novi primaoci ne moraju biti u CRM-u.</p><div id="recipientRows"></div></div>
+        <label>Interna beleška<textarea id="documentNote" maxlength="2000" rows="3" placeholder="Beleška za vaš tim"></textarea></label>
+        <div class="sign-policy"><strong>Kvalifikovani potpis (QES)</strong><p>Osnova: austrijsko pravo i eIDAS. Za konkretan ugovor i strane potpisnike potrebna je provera primenjivih pravila.</p><span>Pravni pregled šablona: na čekanju</span></div>
+        <div class="sign-actions"><button class="primary-button" type="button" id="saveDocument">Sačuvaj nacrt</button><button class="secondary-button" type="button" id="previewDocument">Pregled dokumenta</button><button class="secondary-button" type="button" id="freezeDocument">Zaključaj verziju</button><button type="button" id="sendDocument" disabled>Pošalji na QES · čeka povezivanje</button><button class="sign-text-button" type="button" id="saveAsTemplate">Sačuvaj kao šablon</button><button class="sign-text-button" type="button" id="duplicateDocument">Napravi novi nacrt iz ovog</button><button class="sign-text-button" type="button" id="showAudit">Evidencija izmena</button><button class="sign-text-button" type="button" id="archiveDocument">Arhiviraj</button></div>
+      </aside></div>
+    </section>
+    <dialog id="previewDialog" class="sign-preview-dialog"><div class="sign-dialog-top"><h2>Pregled nacrta</h2><button class="secondary-button" id="closePreview" type="button">Zatvori</button></div><p class="sign-hint">Ovo je pregled sadržaja. Potpisani PDF biće dostupan nakon povezivanja i validacije kvalifikovanog servisa.</p><iframe id="previewFrame" title="Pregled ugovora" sandbox=""></iframe></dialog>
+    <dialog id="auditDialog" class="sign-audit-dialog"><div class="sign-dialog-top"><h2>Evidencija izmena</h2><button class="secondary-button" id="closeAudit" type="button">Zatvori</button></div><p class="sign-hint">Vreme je prikazano za Austriju (Europe/Vienna). Serverska evidencija nije kvalifikovani vremenski žig.</p><ol id="auditRows"></ol></dialog>
+    <p class="sign-footer">Marketizo Sign · Dokumenti ostaju u vašoj aplikaciji. Kvalifikovani potpis obavlja povezani servis poverenja.</p>
+  </main>
+</div>
+</body></html>
