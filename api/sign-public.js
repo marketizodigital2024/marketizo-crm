@@ -33,7 +33,8 @@ function createHandler(deps = {}) {
     const action = params.get('action') || 'view', digest = sessionDigest(req);
     if (action === 'view') {
      const data = await flow.rpc('link_view', { sessionDigest: digest });
-     return json(res, 200, { ...data, consentText: CONSENT, privacyUrl: data.issuer?.privacyNotice?.url || process.env.SIGN_PRIVACY_URL || null });
+     const identity = data.verified ? await flow.rpc('otp_target', { sessionDigest: digest }) : {};
+     return json(res, 200, { ...data, signerEmail: identity.email, consentText: CONSENT, privacyUrl: data.issuer?.privacyNotice?.url || process.env.SIGN_PRIVACY_URL || null });
     }
     if (action === 'pdf' || action === 'receipt') return pdf(res, await flow.rpc(action, { sessionDigest: digest }));
     if (action === 'evidence') { res.setHeader('Content-Disposition', 'attachment; filename="Marketizo-evidencija.json"'); return json(res, 200, await flow.rpc('evidence', { sessionDigest: digest })); }

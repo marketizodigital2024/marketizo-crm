@@ -42,7 +42,7 @@ GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.min.mjs', imp
    const metadata = await pdf.getMetadata(); let layout = null;
    try { layout = JSON.parse(metadata.info?.Custom?.get?.('MarketizoLayout') || metadata.info?.Custom?.MarketizoLayout || 'null'); } catch {}
    let signatureSlot = null;
-   if (layout?.version === 1) { const matches = layout.blocks.flatMap(b => b.slots.filter(s => s.name === state.name && s.email).map(s => ({ ...s, page: b.page }))); if (matches.length === 1) signatureSlot = matches[0]; }
+   if (layout?.version === 1) { const matches = layout.blocks.flatMap(b => b.slots.filter(s => s.email && (state.signerEmail ? s.email.toLowerCase() === state.signerEmail.toLowerCase() : s.name === state.name)).map(s => ({ ...s, page: b.page }))); if (matches.length === 1) signatureSlot = matches[0]; }
    for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i), base = page.getViewport({ scale: 1 });
     const width = Math.min(holder.clientWidth || 720, 900), ratio = Math.min(devicePixelRatio || 1, 1.5);
