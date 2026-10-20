@@ -20,12 +20,14 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, KeepTogether, Flowable
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "marketizo-pdf-1"
+VERSION = "marketizo-pdf-2"
+LOGO = ImageReader(str(Path(__file__).resolve().parents[1] / "marketizo-logo.png"))
 FONTS = Path(reportlab.__file__).parent / "fonts"
 for name, file in [("Sign", "Vera.ttf"), ("SignBold", "VeraBd.ttf"), ("SignItalic", "VeraIt.ttf"), ("SignBI", "VeraBI.ttf")]:
     pdfmetrics.registerFont(TTFont(name, str(FONTS / file)))
@@ -52,6 +54,13 @@ def styles():
 
 def page_footer(canvas, doc):
     canvas.saveState()
+    # Shared, print-friendly stationery for agreements and acceptance receipts.
+    # Keep all branding outside the document text frame on every page.
+    canvas.drawImage(LOGO, 20, A4[1] - 104, width=144, height=81, mask="auto")
+    canvas.setStrokeColor(colors.HexColor("#F68B1F"))
+    canvas.setLineWidth(1)
+    canvas.line(48, A4[1] - 110, A4[0] - 48, A4[1] - 110)
+    canvas.line(48, 44, A4[0] - 48, 44)
     canvas.setFont("Sign", 7)
     canvas.setFillColor(colors.HexColor("#647184"))
     canvas.drawString(48, 32, "Marketizo Sign | " + doc.title[:60])
@@ -61,7 +70,7 @@ def page_footer(canvas, doc):
 
 def build_pdf(title, story):
     output = io.BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=A4, rightMargin=48, leftMargin=48, topMargin=48, bottomMargin=52, title=title, author="Marketizo Sign", invariant=1)
+    doc = SimpleDocTemplate(output, pagesize=A4, rightMargin=48, leftMargin=48, topMargin=132, bottomMargin=60, title=title, author="Marketizo Sign", invariant=1)
     doc.build(story, onFirstPage=page_footer, onLaterPages=page_footer)
     data = output.getvalue()
     if len(data) > 1000000:

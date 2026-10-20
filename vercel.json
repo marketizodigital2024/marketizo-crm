@@ -132,6 +132,7 @@
     },
     "api/sign-helper.py": {
       "maxDuration": 60,
+      "includeFiles": "marketizo-logo.png",
       "excludeFiles": "{tests/**,work/**,public/**,.git/**}"
     }
   }
