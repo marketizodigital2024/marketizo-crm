@@ -7275,7 +7275,7 @@ function setEmployeePositions(input, value) {
     label.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0;font-weight:500';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox'; checkbox.name = 'employeePositionChoice'; checkbox.value = role;
-    checkbox.checked = selected.includes(role); checkbox.style.width = 'auto';
+    checkbox.checked = selected.includes(role); checkbox.style.cssText = 'width:18px;height:18px;min-height:18px;margin:0;accent-color:#ff6b00';
     label.append(checkbox, document.createTextNode(role)); picker.box.append(label);
     checkbox.addEventListener('change', () => {
       const checked = [...picker.box.querySelectorAll('input[type="checkbox"]')].filter(item=>item.checked).map(item=>item.value);
@@ -7293,9 +7293,9 @@ function setupEmployeePositionSelection() {
     const existing = typeof state !== 'undefined' ? (state.employees || []).flatMap(e=>employeeRoles(e.position)) : [];
     const roles = [...new Set([...canonical,...existing])];
     const fieldset = document.createElement('fieldset');
-    fieldset.style.cssText = 'min-width:0;margin:0;border:1px solid var(--line,#dce3dd);border-radius:10px;padding:14px';
+    fieldset.style.cssText = 'min-width:0;margin:0;border:1px solid var(--line,#dce3dd);border-radius:10px;padding:14px;grid-column:1 / -1;background:#fff';
     const legend = document.createElement('legend'); legend.textContent = 'Pozicije';
-    const box = document.createElement('div'); box.style.cssText = 'display:grid;gap:8px';
+    const box = document.createElement('div'); box.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px';
     const note = document.createElement('small');
     note.textContent = 'Možeš izabrati više pozicija. Svako ko ima Social Media Manager dobija Upitnike. Ostale dozvole ostaju nepromenjene.';
     note.style.cssText='display:block;margin-top:12px;line-height:1.5';fieldset.append(legend,box,note);
