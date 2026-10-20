@@ -7272,12 +7272,15 @@ function setEmployeePositions(input, value) {
   picker.box.replaceChildren();
   roles.forEach(role => {
     const label = document.createElement('label');
-    label.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0;font-weight:500';
+    label.style.cssText = 'display:flex;align-items:center;gap:12px;margin:0;padding:13px 15px;min-height:50px;border:1px solid #e3e7e2;border-radius:12px;background:#fff;font-size:14px;font-weight:600;line-height:1.35;cursor:pointer;transition:background .15s,border-color .15s;box-sizing:border-box';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox'; checkbox.name = 'employeePositionChoice'; checkbox.value = role;
-    checkbox.checked = selected.includes(role); checkbox.style.cssText = 'width:18px;height:18px;min-height:18px;margin:0;accent-color:#ff6b00';
+    checkbox.checked = selected.includes(role); checkbox.style.cssText = 'width:17px;height:17px;min-height:17px;margin:0;flex:0 0 17px;accent-color:#f47b20';
+    const paint = () => { label.style.background = checkbox.checked ? '#fff4e9' : '#fff'; label.style.borderColor = checkbox.checked ? '#f4a66a' : '#e3e7e2'; };
+    paint();
     label.append(checkbox, document.createTextNode(role)); picker.box.append(label);
     checkbox.addEventListener('change', () => {
+      paint();
       const checked = [...picker.box.querySelectorAll('input[type="checkbox"]')].filter(item=>item.checked).map(item=>item.value);
       input.value = checked.join(' / ');
       picker.box.querySelector('input')?.setCustomValidity(checked.length ? '' : 'Izaberi bar jednu poziciju.');
@@ -7293,12 +7296,12 @@ function setupEmployeePositionSelection() {
     const existing = typeof state !== 'undefined' ? (state.employees || []).flatMap(e=>employeeRoles(e.position)) : [];
     const roles = [...new Set([...canonical,...existing])];
     const fieldset = document.createElement('fieldset');
-    fieldset.style.cssText = 'min-width:0;margin:0;border:1px solid var(--line,#dce3dd);border-radius:10px;padding:14px;grid-column:1 / -1;background:#fff';
-    const legend = document.createElement('legend'); legend.textContent = 'Pozicije';
-    const box = document.createElement('div'); box.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px';
+    fieldset.style.cssText = 'min-width:0;margin:0;border:0;padding:0;grid-column:1 / -1;background:transparent';
+    const legend = document.createElement('legend'); legend.textContent = 'Pozicije'; legend.style.cssText = 'padding:0;margin-bottom:10px;font-size:14px;font-weight:600;color:#405448';
+    const box = document.createElement('div'); box.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:10px';
     const note = document.createElement('small');
-    note.textContent = 'Možeš izabrati više pozicija. Svako ko ima Social Media Manager dobija Upitnike. Ostale dozvole ostaju nepromenjene.';
-    note.style.cssText='display:block;margin-top:12px;line-height:1.5';fieldset.append(legend,box,note);
+    note.textContent = 'Izaberi jednu ili više pozicija. SMM pozicija uključuje pristup Upitnicima.';
+    note.style.cssText='display:block;margin-top:9px;font-size:12px;font-weight:400;color:#66776d;line-height:1.5';fieldset.append(legend,box,note);
     const originalLabel = input.closest('label');
     if (originalLabel) { originalLabel.hidden = true; originalLabel.insertAdjacentElement('afterend',fieldset); }
     else input.insertAdjacentElement('afterend',fieldset);
