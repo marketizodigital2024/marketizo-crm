@@ -1,4 +1,6 @@
 'use strict';
+// The fixture starts disabled, then explicitly tests the enabled configuration.
+process.env.SIGN_SES_ENABLED = 'false';
 const assert = require('node:assert/strict'), crypto = require('node:crypto');
 const { hash, canonical, seal, unseal, readiness, validateSignature, createWorkflow, CONSENT } = require('../lib/sign-workflow.js');
 (async () => {
