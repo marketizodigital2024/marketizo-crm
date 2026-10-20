@@ -18,7 +18,7 @@ Writes carry a stable command UUID and expected revision. A retry returns the or
 
 Recommendation: evaluate **sproof Sign API + eID Hub/Widget**, an Austrian integration platform, for the first sandbox. Its official documentation supports recipient workflows, QES, ID Austria integration, PAdES download and signature validation APIs. It orchestrates trust services; do not label the entire platform or every output a qualified trust service. Validate the specific qualified certificate/service and signature produced for each workflow.
 
-The API documentation at `https://sign.sproof.com/api/v1/documentation/json` identifies version 3.0.10, dated 12 October 2026. It describes Enterprise API access and a developer-key route. Confirm sandbox provisioning and commercial terms directly. No vendor account was created, payment authorized or customer document uploaded.
+The API documentation at `https://sign.sproof.com/api/v1/documentation/json` identifies version 3.0.10, dated 12 October 2026. It describes Enterprise API access and a developer-key route. The current public pricing page also lists API Access in Team, while embedded widgets, one-time QES identification and validation API features appear under Enterprise. Confirm the exact API/identification/embedding entitlement and sandbox terms in writing; do not assume the entry-level subscription covers this integration. No vendor account was created, payment authorized or customer document uploaded.
 
 The documented current create operation is `POST /api/v1/documents/signature`, rather than the legacy create endpoint. For the integration, enforce the approved qualified type at document and recipient levels; do not allow an SES fallback. Creating a request and returning from the signing screen do not prove a signature is valid. Never mark a contract signed from an unverified callback alone.
 
@@ -44,13 +44,14 @@ Then wire sproof preparation/invitation, remote identification, explicit intent,
 
 ## Verification
 
-`pnpm test:sign` runs content/API tests and the PostgreSQL setup/transaction test with the existing locked PGlite dependency. `pnpm test` also includes the existing CRM regression suite. `node scripts/build-static.cjs` verifies HTML asset references and excludes server/database sources from the published output. Browser verification must use fixtures and an isolated database; never send real invitations as a test.
+`pnpm test:sign` runs content/API tests and the PostgreSQL setup/transaction test with the existing locked PGlite dependency. `pnpm test` also includes the existing CRM regression suite. `node scripts/build-static.cjs` verifies HTML asset references and excludes server/database sources from the published output. The complete initial-commit suite passed on Node 22 and 24 in GitHub Actions; local content/API checks and the 151-reference static build passed as well. The local environment blocks listening on a test-server port, so browser interaction and visual layout remain unverified. Before production, perform that check on an isolated test deployment, including preview, mobile layout, retry/conflict handling, template reuse and archive/restore. Never send real invitations as a test.
 
 ## Sources checked 20 October 2026
 
 - sproof developer integration: https://www.sproof.com/en/dev/
 - sproof API schema: https://sign.sproof.com/api/v1/documentation/json
 - sproof developer onboarding: https://academy.sproof.com/en/start/getting-started-for-developers
+- sproof plans: https://www.sproof.com/en/sproof-sign/
 - A-Trust CSC integration: https://a-trust.at/de/produkte/Signaturl%C3%B6sungen_f%C3%BCr_Unternehmen/Kooperation/
 - Austrian provider list: https://www.signatur.rtr.at/Vertrauensdiensteanbieter.en.html
 - Austrian SVG §4: https://www.ris.bka.gv.at/eli/bgbl/i/2016/50/P4/NOR40184733

@@ -52,7 +52,11 @@
         el.append(text);
       }
       if (!el.textContent) el.append(document.createElement('br'));
-      if (block.type === 'bullet' || block.type === 'ordered') { const list = node(block.type === 'bullet' ? 'ul' : 'ol', null); list.append(el); $('contractEditor').append(list); }
+      if (block.type === 'bullet' || block.type === 'ordered') {
+        const tag = block.type === 'bullet' ? 'ul' : 'ol', last = $('contractEditor').lastElementChild;
+        const list = last?.tagName.toLowerCase() === tag ? last : node(tag, null);
+        list.append(el); if (list !== last) $('contractEditor').append(list);
+      }
       else $('contractEditor').append(el);
     }
   }

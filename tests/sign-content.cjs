@@ -6,6 +6,8 @@ const safe = validateDraft(fixture());
 assert.equal(safe.signatureMethod, 'qes'); assert.equal(safe.legalReview, 'pending'); assert.equal(safe.governingLaw, 'AT'); assert.equal(safe.recipients[0].email, 'test@example.com'); assert.equal(safe.recipients[0].country, 'AT');
 assertReady(safe); const html = renderHtml(safe);
 assert.ok(html.includes('&lt;img')); assert.ok(!html.includes('<img')); assert.ok(html.includes('Član 1')); assert.ok(html.includes('NACRT')); assert.ok(!html.includes('<script'));
+const numbered = fixture(); numbered.content.blocks = [{ type: 'ordered', runs: [{ text: 'First' }] }, { type: 'ordered', runs: [{ text: 'Second' }] }, { type: 'paragraph', runs: [{ text: 'Break' }] }, { type: 'ordered', runs: [{ text: 'Restart' }] }];
+assert.ok(renderHtml(validateDraft(numbered)).includes('<ol><li>First</li><li>Second</li></ol><p>Break</p><ol><li>Restart</li></ol>'));
 assert.equal(validateDraft(fixture(), 'template').recipients.length, 0);
 for (const alter of [x => x.content.blocks.push({ type: 'script', runs: [] }), x => x.category = 'invalid', x => x.content.blocks[0].runs[0].text = 'a'.repeat(80001), x => x.recipients[0].email = 'a@b.com\nBCC:test@evil.com', x => x.recipients.push({ ...x.recipients[0] })]) {
   const x = fixture(); alter(x); assert.throws(() => validateDraft(x));
