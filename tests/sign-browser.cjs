@@ -96,7 +96,7 @@ async function main(){
   assert.equal(mails.filter(m=>m.subject.includes('dokument za potpis')).length,1);
   const invitation=mails.find(m=>m.subject.includes('dokument za potpis')),token=invitation.text.match(/\/sign#([\w-]+)/)[1];
   await send('Page.navigate',{url:origin+'/sign#'+token},sessionId);
-  await until("document.querySelectorAll('#documentPages canvas').length>0 && document.getElementById('documentPages').getAttribute('aria-busy')==='false' && !document.getElementById('acceptDocument').disabled");
+  await until("document.querySelectorAll('#documentPages canvas').length>0 && document.getElementById('documentPages').getAttribute('aria-busy')==='false' && !document.getElementById('acceptDocument').disabled && document.getElementById('title').textContent==='Browser fixture contract' && document.getElementById('message').textContent===''");
   assert.equal(mails.some(m=>m.subject.includes('kod')),false,'No OTP must be sent');
   assert.equal(await evaluate("document.getElementById('requestOtp')!==null"),false,'No verification step');
   assert.equal((await db.query("select count(*)::int n from marketizo_sign_parties where accepted_at is not null")).rows[0].n,0,'Opening the link cannot sign');

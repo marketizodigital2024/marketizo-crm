@@ -36,8 +36,9 @@ GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.min.mjs', imp
   const bytes = new Uint8Array(await response.arrayBuffer());
   const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
   if (digest !== state.pdfSha256) throw Error('Verzija dokumenta nije potvrđena. Osvežite stranicu.');
-  const pdf = await getDocument({ data: bytes, isEvalSupported: false, useWasm: false, stopAtErrors: true }).promise;
+  const loadingTask = getDocument({ data: bytes, isEvalSupported: false, useWasm: false, stopAtErrors: true });
   try {
+   const pdf = await loadingTask.promise;
    for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i), base = page.getViewport({ scale: 1 });
     const width = Math.min(holder.clientWidth || 720, 900), ratio = Math.min(devicePixelRatio || 1, 1.5);
@@ -49,8 +50,8 @@ GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.min.mjs', imp
     const text = await page.getTextContent(); sheet.setAttribute('role', 'img');
     sheet.setAttribute('aria-label', 'Strana ' + i + ': ' + text.items.map(item => item.str || '').join(' '));
    }
-   renderedSha = state.pdfSha256; viewed = true; holder.setAttribute('aria-busy', 'false');
-  } finally { await pdf.destroy(); }
+  } finally { await loadingTask.destroy(); }
+  renderedSha = state.pdfSha256; viewed = true; holder.setAttribute('aria-busy', 'false');
  }
  function draw() {
   pen.clearRect(0, 0, canvas.width, canvas.height); pen.lineWidth = 2; pen.strokeStyle = '#20314b'; pen.lineCap = 'round'; pen.lineJoin = 'round';
