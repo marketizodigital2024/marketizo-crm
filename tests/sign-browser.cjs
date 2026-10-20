@@ -87,6 +87,9 @@ async function main(){
   await send('Page.navigate',{url:origin+'/sign#'+token},sessionId);await until("document.getElementById('verification') && !document.getElementById('verification').hidden");
   await click('requestOtp');await until("!document.getElementById('otpForm').hidden && !document.getElementById('otpCode').disabled");
   const code=mails.find(m=>m.subject.includes('kod')).text.match(/kod je: (\d{6})/)[1];await fill('otpCode',code);await evaluate("document.getElementById('otpForm').requestSubmit()");await until("!document.getElementById('agreement').hidden");
+  const out=path.join(root,'browser-results');fs.mkdirSync(out,{recursive:true});
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false},sessionId);await sleep(300);assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth+1'),false);
+  fs.writeFileSync(path.join(out,'sign-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
   await click('openPdf');await evaluate("fetch('/api/sign-public?action=pdf').then(r=>r.arrayBuffer()).then(b=>b.byteLength)");await fill('signerName','Fixture Signer');
   await evaluate("document.getElementById('signatureCanvas').scrollIntoView({block:'center'})");
   const rect=await evaluate("(()=>{const r=document.getElementById('signatureCanvas').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()");
@@ -99,10 +102,6 @@ async function main(){
   const packages=await evaluate("Promise.all([fetch('/api/sign-public?action=evidence').then(r=>r.json()),fetch('/api/sign-public?action=receipt').then(r=>r.arrayBuffer()).then(b=>Array.from(new Uint8Array(b)))]).then(([e,p])=>({e,p}))");
   require('../scripts/verify-sign-evidence.cjs').verify(packages.e,Buffer.from(packages.p));
   assert.ok(packages.e.manifest.signers[0].strokes.some(stroke=>stroke.length>=3),'Drawn signature must survive browser, database and final evidence export');
-  const out=path.join(root,'browser-results');fs.mkdirSync(out,{recursive:true});
-  await send('Page.bringToFront',{},sessionId);
-  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false},sessionId);await sleep(300);assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth+1'),false);
-  fs.writeFileSync(path.join(out,'sign-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
   assert.deepEqual(errors,[]);assert.equal((await db.query('select status from marketizo_sign_documents')).rows[0].status,'signed');
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> OTP -> explicit acceptance -> final receipt -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');
  }finally{ws?.close();chrome?.kill();server?.closeAllConnections();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
