@@ -51,7 +51,7 @@ async function main(){
   server=http.createServer(async(req,res)=>{
    const u=new URL(req.url,origin||'http://127.0.0.1');
    if(u.pathname==='/api/sign-admin')return admin(req,res);if(u.pathname==='/api/sign-public')return pub(req,res);
-   let name=u.pathname;if(name==='/marketizo-sign')name='/marketizo-sign.html';if(name==='/sign')name='/sign.html';
+   let name=u.pathname;if(name==='/marketizo-sign')name='/marketizo-sign.html';if(name==='/sign')name='/sign.html';if(name==='/sign-privacy-20261020')name='/sign-privacy-20261020.html';
    const file=path.resolve(root,'.'+name);if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()||!/\.(html|js|css|png)$/.test(file)){res.statusCode=404;return res.end();}
    res.setHeader('Content-Type',({'.html':'text/html','.js':'application/javascript','.css':'text/css','.png':'image/png'})[path.extname(file)]);res.end(fs.readFileSync(file));
   });
