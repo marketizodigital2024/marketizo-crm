@@ -1,3 +1,4 @@
+const questionnaires = require('../lib/questionnaire-backup.js');
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
 const BACKUP_PREFIX = "marketizo-crm/daily/";
@@ -45,9 +46,8 @@ function validBackup(document) {
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") return send(res, 405, { ok: false, error: "Method not allowed" });
   const authorization = String(req.headers.authorization || "");
-  if (!process.env.CRON_SECRET || authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-    return send(res, 401, { ok: false, error: "Unauthorized" });
-  }
+  const cronAuthorized = !!process.env.CRON_SECRET && authorization === `Bearer ${process.env.CRON_SECRET}`;
+  if (!authorization) return send(res,401,{ok:false,error:"Unauthorized"});
   const url = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!url || !key || !process.env.BLOB_READ_WRITE_TOKEN) {
@@ -56,6 +56,12 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = await readBody(req);
+    if (process.env.VERCEL_ENV === "preview") return send(res, 409, {ok:false,error:"Restore provera se pokreće samo iz glavne aplikacije."});
+    if (!cronAuthorized) {
+      const { accessSession, readStoredState } = require("./state.js").helpers;
+      const current = await readStoredState({url,key});
+      if (accessSession(req,current.payload,key)?.role !== "full-admin" || body.confirm) return send(res,401,{ok:false,error:"Unauthorized"});
+    }
     const pathname = String(body.pathname || "");
     if (!pathname.startsWith(BACKUP_PREFIX) || !pathname.endsWith(".json")) {
       return send(res, 400, { ok: false, error: "Nevažeća putanja backupa." });
@@ -68,6 +74,8 @@ module.exports = async function handler(req, res) {
     const document = JSON.parse(await new Response(downloaded.stream).text());
     if (!validBackup(document)) return send(res, 422, { ok: false, error: "Backup nije prošao proveru strukture." });
 
+    const questionnaireCounts = questionnaires.summary(document.questionnaires);
+    const currentQuestionnaires = await questionnaires.readSnapshot(url,key);
     const sourceResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, {
       headers: supabaseHeaders(key),
     });
@@ -85,6 +93,8 @@ module.exports = async function handler(req, res) {
       backupCounts: counts(document.state),
       currentCounts: counts(current?.payload),
       includesKpi: document.kpi != null,
+      questionnaires: questionnaireCounts,
+      currentQuestionnaires: questionnaires.summary(currentQuestionnaires),
       includesEmployeeAuth: true,
     };
     if (result.dryRun) return send(res, 200, result);
@@ -92,19 +102,23 @@ module.exports = async function handler(req, res) {
 
     const now = new Date();
     const emergencyPath = `marketizo-crm/pre-restore/${now.toISOString().replace(/[:.]/g, "-")}.json`;
-    await blob.put(emergencyPath, JSON.stringify({
+    const emergencyDocument = {
       format: "marketizo-crm-backup-v1",
       backupDate: now.toISOString().slice(0, 10),
       createdAt: now.toISOString(),
       sourceUpdatedAt: current.updated_at,
       state: current.payload,
       kpi: currentKpi?.payload || null,
-    }), { access: "private", contentType: "application/json", addRandomSuffix: false });
+      questionnaires: currentQuestionnaires,
+    };
+    await blob.put(emergencyPath, JSON.stringify(emergencyDocument), { access: "private", contentType: "application/json", addRandomSuffix: false });
+    const emergencyRead = await blob.get(emergencyPath, { access:"private" });
+    if (!emergencyRead || emergencyRead.statusCode !== 200 || !emergencyRead.stream || !questionnaires.equal(JSON.parse(await new Response(emergencyRead.stream).text()), emergencyDocument)) throw new Error("Sigurnosna kopija pre vraćanja nije potvrđena.");
 
-    const restoreResponse = await fetch(`${url}/rest/v1/rpc/marketizo_restore_backup`, {
+    const restoreResponse = await fetch(`${url}/rest/v1/rpc/marketizo_restore_complete_backup`, {
       method: "POST",
       headers: supabaseHeaders(key),
-      body: JSON.stringify({ p_state: document.state, p_kpi: document.kpi || null, p_expected_state_at: current.updated_at, p_expected_kpi_at: currentKpi?.updated_at || null }),
+      body: JSON.stringify({ p_state: document.state, p_kpi: document.kpi || null, p_expected_state_at: current.updated_at, p_expected_kpi_at: currentKpi?.updated_at || null, p_questionnaires: document.questionnaires || null, p_expected_questionnaires: currentQuestionnaires }),
     });
     if (!restoreResponse.ok) throw new Error(`Restore failed (${restoreResponse.status})`);
     const restored = await restoreResponse.json();
@@ -114,4 +128,5 @@ module.exports = async function handler(req, res) {
     return send(res, 500, { ok: false, error: error?.message || "Restore failed" });
   }
 };
+
 
