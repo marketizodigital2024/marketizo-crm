@@ -122,7 +122,7 @@ class Drawing(Flowable):
 
 
 def render_final(payload):
-    original = base64.b64decode(payload["originalBase64"], validate=True)
+    original = base64.b64decode(payload["originalBase64"].replace("\n", "").replace("\r", ""), validate=True)
     if not original.startswith(b"%PDF-") or hashlib.sha256(original).hexdigest() != payload["originalSha256"]:
         raise ValueError("Original PDF integrity mismatch")
     evidence = payload["evidence"]

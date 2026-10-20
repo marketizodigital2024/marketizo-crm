@@ -40,7 +40,7 @@ class SignPdfTests(unittest.TestCase):
             {"name": "Test Potpisnik", "email": "test@example.com", "acceptedAt": "2026-10-20T10:00:00Z", "consentText": "Pročitao/la sam ugovor i želim da ga potpišem jednostavnim elektronskim potpisom.", "strokes": [[[.1,.8],[.4,.2],[.7,.6]]]},
             {"name": "Drugi Potpisnik", "email": "other@example.com", "acceptedAt": "2026-10-20T10:05:00Z", "consentText": "Prihvatam prikazanu verziju ugovora.", "strokes": []}
         ]}
-        final = helper.render_final({"originalBase64": original["base64"], "originalSha256": original["sha256"], "evidence": manifest, "manifestSha256": "a"*64})
+        final = helper.render_final({"originalBase64": "\n".join(original["base64"][i:i+76] for i in range(0,len(original["base64"]),76)), "originalSha256": original["sha256"], "evidence": manifest, "manifestSha256": "a"*64})
         final_bytes = base64.b64decode(final["base64"])
         self.assertTrue(final_bytes.startswith(original_bytes))
         reader = PdfReader(io.BytesIO(final_bytes))
