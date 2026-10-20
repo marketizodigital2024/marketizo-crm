@@ -1,59 +1,53 @@
-# Marketizo Sign — phase 1
+# Marketizo Sign — first-party signing
 
-This branch adds a separate owner-only Sign workspace at `/marketizo-sign`, linked from the CRM dashboard and employee profile. It implements structured rich-text drafts, reusable templates, manual or CRM recipient selection, categories, search with pagination, draft/ready states, archives (including template archives), escaped previews, immutable prepared snapshots and transactional audit events. External recipients do not become CRM records.
+Marketizo Sign adds an owner-only workspace, rich-text documents and reusable templates, external recipients without CRM accounts, categories, search, statuses and archive. The public signing portal uses e-mail OTP, explicit acceptance, typed name and optional drawn signature. This implementation requires no sproof account.
 
-**This is the preparation phase, not a production signing system.** Sending is blocked on the server and in the UI. There is no public signer endpoint, outgoing mail, OTP delivery, canonical PDF renderer, qualified signature execution, validation pipeline or signed-PDF archive yet. A frozen snapshot is not a signed contract. The audit clock and SHA-256 chain are not qualified timestamps or an independent legal attestation. There is no claim of worldwide legal validity.
+## Legal scope
 
-## Database and access
+This is a simple electronic signature (SES). An e-mail code demonstrates access to an inbox, not independently verified identity. The audit clock is a server timestamp; the application Ed25519 evidence seal is not a qualified signature, qualified seal or qualified timestamp. No universal enforceability or court outcome is promised.
 
-The reviewed setup script is `database/marketizo-sign.sql`. It has not been applied to production. It creates separate documents, templates, versions, events and idempotency tables; it does not rewrite `agency_crm_state`. Apply once on an isolated test database containing a fixture CRM row and active owner before running integration tests. It is a manual setup script, not an automatically generated or applied Supabase migration. Produce the deployment migration with the installed Supabase CLI after sandbox verification and advisor review.
+Austrian ABGB §883 generally permits freedom of form. Where written form is required, SVG §4 addresses qualified electronic signatures under §886, subject to exceptions and additional requirements. Review each actual template, contractual signature clause, signing authority and applicable mandatory foreign consumer/employment law. A choice of Austrian law does not resolve all foreign mandatory requirements. Before each SES invitation the sender must record a form reviewer/reference and confirm that SES is appropriate. This declaration records a decision; software does not supply the legal review. Documents marked QES are blocked from the SES route. The QES option is reserved; no qualified provider integration is implemented.
 
-Reuse `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `CRM_STATE_ID` in the server environment. `SIGN_APP_ORIGIN` defaults to `https://app.marketizo.com`; preview should have its own explicit origin and isolated database. No Sign configuration goes into browser JavaScript. Check Supabase Data API exposure separately from RLS, including the 30 October 2026 exposure change. Grant the service role access to the RPC and tables; never grant browser roles access. Verify behavior against deployed policies and run database advisors before rollout.
+Sources: https://www.ris.bka.gv.at/eli/jgs/1811/946/P883/NOR12018607 and https://www.ris.bka.gv.at/eli/bgbl/i/2016/50/P4/NOR40184733 (checked 20 October 2026).
 
-API access reuses the canonical session checks in `api/state.js`. First release permits `full-admin` only. Every command rechecks that the owner remains active in canonical CRM state inside the database transaction. UI visibility is not authorization. Data resides outside CRM browser caches and the shared CRM state payload. `sw.js` excludes Sign navigation from offline caching, and Sign responses use `no-store`.
+## Implemented safeguards
 
-Writes carry a stable command UUID and expected revision. A retry returns the original acknowledgement; changed intent with the same command is rejected. Concurrent document edits return a conflict. Retrying does not overwrite a frozen document. Events, snapshots and command acknowledgements cannot be updated/deleted by the application role. DB superusers remain capable of altering database controls: the hash chain alone does not protect against a fully privileged attacker. Independent timestamp anchoring and protected storage are future work.
+- Canonical CRM authentication and full-admin checks, rechecked transactionally; Sign data is separate from shared CRM state and offline caches.
+- Immutable document versions and prepared PDF bytes. Sender reviews the same PDF that recipients receive. Hash binding prevents signing a changed version.
+- Seven-day invitation, scoped high-entropy token, HttpOnly session, OTP expiry, attempt/resend limits, one-use verification and explicit consent. All required recipients must accept.
+- Transactional encrypted mail outbox, leased delivery/retries, stable mail identifiers and durable finalization. SMTP acceptance does not prove inbox delivery.
+- Original PDF retained byte-for-byte in the incremental final PDF. Receipt and evidence export include hashes, acceptance context and an application Ed25519 seal. `node scripts/verify-sign-evidence.cjs` supports offline integrity verification; establish trust in the issuer public-key fingerprint separately.
+- Private database access, append-only evidence/version records and idempotent commands. Database administrators can alter underlying controls; independent anchoring and externally protected retention remain future improvements.
 
-## Recommended service: sproof
+## Deployment steps
 
-Recommendation: evaluate **sproof Sign API + eID Hub/Widget**, an Austrian integration platform, for the first sandbox. Its official documentation supports recipient workflows, QES, ID Austria integration, PAdES download and signature validation APIs. It orchestrates trust services; do not label the entire platform or every output a qualified trust service. Validate the specific qualified certificate/service and signature produced for each workflow.
+Code is in draft PR #54. Production schema and mail configuration have not been applied. Test delivery uses a captured mailbox fixture, not a real recipient. Vercel project management returned 403 for the connected Marketizo team; restore authorized project access before configuring the deployment.
 
-The API documentation at `https://sign.sproof.com/api/v1/documentation/json` identifies version 3.0.10, dated 12 October 2026. It describes Enterprise API access and a developer-key route. The current public pricing page also lists API Access in Team, while embedded widgets, one-time QES identification and validation API features appear under Enterprise. Confirm the exact API/identification/embedding entitlement and sandbox terms in writing; do not assume the entry-level subscription covers this integration. No vendor account was created, payment authorized or customer document uploaded.
+1. On an isolated test database with the CRM fixture, apply `database/marketizo-sign.sql`, then `database/marketizo-sign-flow.sql`. These are reviewed manual setup scripts, not already-applied production migrations. Generate the deployment migration using the Supabase CLI and review database advisors/policies before production.
+2. Reuse server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `CRM_STATE_ID`. Browser roles must have no direct Sign table/RPC access. Use a separate preview database and explicit preview origin.
+3. Configure server secrets below, deploy Python and Node functions, and verify the scheduled `/api/sign-jobs` worker. Existing `vercel.json` configures its schedule. Keep sending disabled until the checklist is complete.
+4. Run the full isolated browser flow, real test-mail round trip, expiry/retry checks, PDF/evidence export, backup/restore and access review. Verify sender-domain SPF/DKIM/DMARC and bounce handling with the mailbox administrator. The current outbox retries SMTP failures; delivery/bounce reconciliation is not integrated.
+5. Have the actual templates and eligible document types reviewed; publish the privacy notice, define retention/legal holds and deletion procedure, confirm authorized company signers, then explicitly enable SES sending.
 
-The documented current create operation is `POST /api/v1/documents/signature`, rather than the legacy create endpoint. For the integration, enforce the approved qualified type at document and recipient levels; do not allow an SES fallback. Creating a request and returning from the signing screen do not prove a signature is valid. Never mark a contract signed from an unverified callback alone.
+## Server configuration
 
-**Alternative:** A-Trust direct integration through its documented CSC interface. It is listed in the Austrian RTR trusted-list material. Direct integration is attractive for Austrian identity flows, but foreign identity onboarding, workflow management and PDF validation need explicit evaluation. A provider's name on a list is not sufficient: check the specific service's qualified status at the relevant time.
+- `SIGN_APP_ORIGIN=https://app.marketizo.com` (HTTPS origin only).
+- `SIGN_INTERNAL_SECRET`: randomly generated secret, at least 32 characters. Protects internal requests, scoped identifiers and encrypted pending mail. Rotation needs a plan for pending jobs and active sessions.
+- `SIGN_EVIDENCE_SECRET`: separate randomly generated secret, at least 32 characters. Back it up securely; retain trusted historical public keys/fingerprints when rotating.
+- `SIGN_SMTP_HOST`, `SIGN_SMTP_USER`, `SIGN_SMTP_PASSWORD`; `SIGN_SMTP_PORT=465` for TLS or `587` for STARTTLS.
+- `SIGN_MAIL_FROM=office@marketizo.com` (user-confirmed sender).
+- `SIGN_LEGAL_ENTITY`, `SIGN_LEGAL_ADDRESS`: verified registered company details.
+- `SIGN_PRIVACY_URL`: published HTTPS privacy notice for signing and evidence processing.
+- `CRON_SECRET`: server-only authorization for background delivery/finalization.
+- `SIGN_SES_ENABLED=false` until deployment, mail and legal checks pass; set `true` deliberately afterward.
+- Protected previews may require `VERCEL_AUTOMATION_BYPASS_SECRET` for the authenticated internal PDF/mail helper.
 
-**Coverage to obtain in writing:** supported countries, identity documents and mobile numbers for new signers without ID Austria or an existing eID; one-time QES identification; specific QTSP and service used; account requirements for external signers; supported languages; evidence/validation formats; qualified timestamps and PAdES long-term preservation; callback authentication, reconciliation and idempotency; data location, processors, retention/deletion, export and DPA; API/white-label entitlement, minimum spend, cost per identification/signature, test access and SLA. International onboarding coverage is distinct from legal recognition in the signer's jurisdiction.
+Do not paste mailbox passwords, API keys or signing secrets into chat. Configure them in the hosting secret settings through authorized project access.
 
-Stripe Directory was attempted first, but its CLI was absent and its site could not be read through the available tool. The recommendation therefore uses official provider documentation and RTR sources, not a verified Directory listing.
+## Operational limits
 
-## Needed from Marketizo for connection
-
-1. sproof account with a developer/sandbox key and an API-enabled plan or written confirmation from sproof that the proposed plan supports the required flow. No subscription should be purchased until price and coverage are confirmed.
-2. Exact Austrian legal entity name, registered address and registration number; the person authorized to sign for Marketizo and how their authority will be established. Their personal ID Austria/QES is not interchangeable with a company seal.
-3. Two or three representative service, employment and NDA/annex templates, with any existing signature/form clauses, and the name of the legal reviewer. Austrian-law selection does not displace mandatory employment or consumer rules abroad.
-4. Expected monthly number of documents and signers, main recipient countries, sender/reply-to address and branding. This is needed for the quote and a practical country test matrix.
-5. Restore authorized Vercel project access and provide the intended isolated Supabase test project through the connected account. The previous Vercel deployment lookup returned 403 for the Marketizo team. Do not paste database or API keys into chat: store them as server-side environment secrets or grant appropriate project access.
-
-## Next implementation after sandbox access
-
-Add a tested canonical PDF renderer with fonts; have the sender and signer review the exact frozen bytes. Persist the original PDF in private storage with readback hash verification. Add the delivery outbox and e-mail OTP challenge consumption with atomic limits, version/session binding, expiry and replay protection. OTP gates document access; it is not the qualified signing authorization.
-
-Then wire sproof preparation/invitation, remote identification, explicit intent, all required signers, authenticated/reconciled callbacks, independent validation, qualified timestamp evidence, retention and original signed-PDF download. Preserve actual signed bytes rather than rerendering them. Unknown legal/identity coverage or validation results fail closed, without silently switching to a simple signature. Contract policies need dated legal approval before enabling sending.
+The PDF renderer embeds Latin/Greek fonts and supports Serbian Latin and German characters. Unsupported characters are rejected rather than silently corrupted; broader scripts require additional licensed fonts and tests. Original PDF limit is 1 MB, final PDF 1.5 MB. The current archive is private database storage; define capacity, retention, legal holds and recovery before rollout. Receipts do not use PAdES qualified certificates or independent qualified timestamps. No claim of independent identity verification is made. Final receipts are downloadable in the portal; completion e-mail and automatic bounce reconciliation are not implemented.
 
 ## Verification
 
-`pnpm test:sign` runs content/API tests and the PostgreSQL setup/transaction test with the existing locked PGlite dependency. `pnpm test` also includes the existing CRM regression suite. `node scripts/build-static.cjs` verifies HTML asset references and excludes server/database sources from the published output. The complete initial-commit suite passed on Node 22 and 24 in GitHub Actions; local content/API checks and the 151-reference static build passed as well. The local environment blocks listening on a test-server port, so browser interaction and visual layout remain unverified. Before production, perform that check on an isolated test deployment, including preview, mobile layout, retry/conflict handling, template reuse and archive/restore. Never send real invitations as a test.
-
-## Sources checked 20 October 2026
-
-- sproof developer integration: https://www.sproof.com/en/dev/
-- sproof API schema: https://sign.sproof.com/api/v1/documentation/json
-- sproof developer onboarding: https://academy.sproof.com/en/start/getting-started-for-developers
-- sproof plans: https://www.sproof.com/en/sproof-sign/
-- A-Trust CSC integration: https://a-trust.at/de/produkte/Signaturl%C3%B6sungen_f%C3%BCr_Unternehmen/Kooperation/
-- Austrian provider list: https://www.signatur.rtr.at/Vertrauensdiensteanbieter.en.html
-- Austrian SVG §4: https://www.ris.bka.gv.at/eli/bgbl/i/2016/50/P4/NOR40184733
-- EU trust-service recognition: https://digital-strategy.ec.europa.eu/en/faqs/questions-answers-trust-services-under-european-digital-identity-regulation
-- Supabase RLS: https://supabase.com/docs/guides/database/postgres/row-level-security
+The regression suite covers content escaping, authorization, immutable revisions, actual PostgreSQL transactions, concurrent/idempotent commands, OTP abuse/replay, all-party completion, evidence verification and real Python PDF generation. GitHub Actions runs Node 22/24 plus Python PDF checks. A separate browser job drives real Chromium through the admin and external-recipient flow against isolated PostgreSQL and the real PDF renderer; SMTP and CRM login are fixtures. Check the latest PR run before merge. Production sending and qualified signing are not established by these tests.
