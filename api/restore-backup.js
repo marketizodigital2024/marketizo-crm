@@ -47,6 +47,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return send(res, 405, { ok: false, error: "Method not allowed" });
   const authorization = String(req.headers.authorization || "");
   const cronAuthorized = !!process.env.CRON_SECRET && authorization === `Bearer ${process.env.CRON_SECRET}`;
+  if (!authorization) return send(res,401,{ok:false,error:"Unauthorized"});
   const url = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!url || !key || !process.env.BLOB_READ_WRITE_TOKEN) {
