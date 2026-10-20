@@ -75,9 +75,15 @@ function createHandler(deps = {}) {
       const body = await readBody(req);
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new SignError(400, 'Zahtev nije ispravan.');
       if (body.action === 'preparePdf') {
-        const doc = await store.get('document', requireId(body.id));
+        let doc = await store.get('document', requireId(body.id));
+        if (doc.status === 'draft') {
+          if (body.revision !== doc.revision) throw new SignError(409, 'Dokument je izmenjen. Ponovo otvori i pregledaj poslednju verziju.');
+          assertReady(validateDraft(doc.data));
+          await store.command(access.employee.id, requireId(body.commandId), 'freeze', { id: doc.id, kind: 'document', revision: doc.revision });
+          doc = await store.get('document', doc.id);
+        }
         const flow = (deps.createWorkflow || createWorkflow)({ ...config, organization: process.env.CRM_STATE_ID || 'marketizo-main' });
-        return json(res, 200, await flow.preparePdf(access.employee.id, doc));
+        return json(res, 200, { ...await flow.preparePdf(access.employee.id, doc), document: doc });
       }
       if (body.action === 'send' || body.action === 'void') {
         const id = requireId(body.id), doc = await store.get('document', id);
