@@ -8,7 +8,7 @@ const { validateDraft } = require('../lib/sign-content.js');
  try {
   await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb);grant select on agency_crm_state to service_role;');
   const crm = { employees: [{ id: 'emp-miljan', active: true }], clients: [{ id: 'unchanged' }] }; await db.query('insert into agency_crm_state values($1,$2)', ['marketizo-main', JSON.stringify(crm)]);
-  for (const file of ['marketizo-sign.sql','marketizo-sign-flow.sql']) await db.exec(fs.readFileSync(path.join(__dirname, '../database', file), 'utf8'));
+  for (const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-maintenance.sql']) await db.exec(fs.readFileSync(path.join(__dirname, '../database', file), 'utf8'));
   const draft = validateDraft({ title: 'SES fixture', category: 'clients', signatureMethod: 'ses', content: { version: 1, blocks: [{ type: 'paragraph', runs: [{ text: 'Agreed contract' }] }] }, recipients: [{ name: 'First Signer', email: 'first@example.com', country: 'AT' }, { name: 'Second Signer', email: 'second@example.com', country: 'DE' }] });
   const docId = crypto.randomUUID(), reqId = crypto.randomUUID(), commandId = crypto.randomUUID(), original = Buffer.from('%PDF-fixture-original'), originalSha = hash(original);
   const command = async (action, payload) => (await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r', ['marketizo-main','emp-miljan',crypto.randomUUID(),action,JSON.stringify(payload)])).rows[0].r;
@@ -64,6 +64,41 @@ const { validateDraft } = require('../lib/sign-content.js');
   await assert.rejects(db.exec("update marketizo_sign_requests set original_pdf='changed'"),/immutable/);
   await db.exec('reset role');assert.deepEqual((await db.query('select payload from agency_crm_state')).rows[0].payload,crm);
   for(const role of ['anon','authenticated']) { await db.exec(`set role ${role}`);await assert.rejects(flow('view',{sessionDigest:sessions[0]}),/permission denied/);for(const table of ['marketizo_sign_requests','marketizo_sign_sessions','marketizo_sign_receipts','marketizo_sign_outbox','marketizo_sign_prepared_pdfs']) await assert.rejects(db.exec(`select * from ${table}`),/permission denied/);await db.exec('reset role'); }
+  await db.exec('set role service_role');
+  const beforeEvidence = (await db.query('select * from marketizo_sign_receipts where request_id=$1',[reqId])).rows[0];
+  const acceptedBefore = (await db.query('select signature,accepted_at,consent_text from marketizo_sign_parties where request_id=$1 order by id',[reqId])).rows;
+  async function expiredFixture(org,status='open') {
+   const id=crypto.randomUUID(),requestId=crypto.randomUUID(),version=crypto.randomUUID(),party=crypto.randomUUID();
+   await db.query("insert into marketizo_sign_documents(id,organization_id,data,title,category,status,revision,created_by) values($1,$2,$3,'Expiry fixture','clients','sent',1,'emp-miljan')",[id,org,JSON.stringify(draft)]);
+   await db.query("insert into marketizo_sign_versions(id,organization_id,document_id,document_revision,snapshot,content_sha256,frozen_by) values($1,$2,$3,1,$4,$5,'emp-miljan')",[version,org,id,JSON.stringify(draft),originalSha]);
+   await db.query("insert into marketizo_sign_requests(id,organization_id,document_id,version_id,command_id,request_sha256,original_pdf,original_sha256,legal_review,issuer,created_by,status,expires_at) values($1,$2,$3,$4,$5,$6,$7,$6,'{}','{}','emp-miljan',$8,clock_timestamp()-interval '1 day')",[requestId,org,id,version,crypto.randomUUID(),originalSha,original,status]);
+   await db.query("insert into marketizo_sign_parties(id,request_id,recipient,invitation_sha256,challenge_id,otp_sha256,otp_session,otp_expires_at) values($1,$2,$3,$4,$5,'expired-code','expired-session',clock_timestamp()-interval '1 hour')",[party,requestId,JSON.stringify(draft.recipients[0]),hash(party),crypto.randomUUID()]);
+   await db.query("insert into marketizo_sign_sessions(digest,party_id,created_at,expires_at,context) values($1,$2,clock_timestamp()-interval '2 hours',clock_timestamp()-interval '1 hour','{}')",[hash('old-'+party),party]);
+   await db.query("insert into marketizo_sign_sessions(digest,party_id,expires_at,context) values($1,$2,clock_timestamp()+interval '30 minutes','{}')",[hash('live-'+party),party]);
+   await db.query("insert into marketizo_sign_outbox(request_id,party_id,kind,sealed_payload,expires_at) values($1,$2,'invitation','encrypted-expired-invite',clock_timestamp()-interval '1 day')",[requestId,party]);
+   return {id,requestId,party};
+  }
+  const expired=await expiredFixture('marketizo-main'),otherOrg=await expiredFixture('another-tenant'),finalizing=await expiredFixture('marketizo-main','finalizing');
+  await db.query("insert into marketizo_sign_rates values('old-window',clock_timestamp()-interval '2 days',10),('current-window',date_trunc('minute',clock_timestamp()),1)");
+  // An expired session from an accepted party remains evidence; live sessions and hourly counters are retained.
+  await db.query("update marketizo_sign_sessions set expires_at=clock_timestamp()-interval '1 minute' where digest=$1",[sessions[0]]);
+  const maintain=async ()=>(await db.query("select marketizo_sign_maintenance('marketizo-main') r")).rows[0].r;
+  const m=await maintain();assert.equal(m.expired,1);assert.equal(m.sessions,2);assert.equal(m.challenges,2);assert.equal(m.rates,1);
+  assert.equal((await db.query('select status from marketizo_sign_documents where id=$1',[expired.id])).rows[0].status,'expired');
+  assert.equal((await db.query('select status from marketizo_sign_requests where id=$1',[otherOrg.requestId])).rows[0].status,'open');
+  assert.equal((await db.query('select status from marketizo_sign_requests where id=$1',[finalizing.requestId])).rows[0].status,'finalizing');
+  assert.equal((await db.query('select sealed_payload from marketizo_sign_outbox where request_id=$1',[expired.requestId])).rows[0].sealed_payload,null);
+  assert.equal((await db.query('select otp_sha256 from marketizo_sign_parties where id=$1',[expired.party])).rows[0].otp_sha256,null);
+  assert.equal((await db.query('select otp_sha256 from marketizo_sign_parties where id=$1',[otherOrg.party])).rows[0].otp_sha256,'expired-code');
+  assert.equal((await db.query('select count(*)::int n from marketizo_sign_sessions where digest=$1',[sessions[0]])).rows[0].n,1);
+  assert.equal((await db.query('select count(*)::int n from marketizo_sign_sessions where digest=$1',[hash('live-'+expired.party)])).rows[0].n,1);
+  assert.deepEqual((await db.query('select * from marketizo_sign_receipts where request_id=$1',[reqId])).rows[0],beforeEvidence);
+  assert.deepEqual((await db.query('select signature,accepted_at,consent_text from marketizo_sign_parties where request_id=$1 order by id',[reqId])).rows,acceptedBefore);
+  assert.equal((await maintain()).expired,0);
+  assert.equal((await db.query("select count(*)::int n from marketizo_sign_events where document_id=$1 and action='expired'",[expired.id])).rows[0].n,1);
+  await db.exec('reset role');
+  for(const role of ['anon','authenticated']) { await db.exec(`set role ${role}`);await assert.rejects(maintain(),/permission denied/);await db.exec('reset role'); }
+  console.log('PASS: bounded maintenance expires only pending tenant requests, clears transient codes/sessions, preserves live access, acceptance/receipts and audit history, and denies public execution.');
   console.log('PASS: actual PostgreSQL SES flow validates form review, immutable exact PDF, idempotency, per-recipient sessions, OTP throttling/attempt limits/replay, explicit consent, all signers, final-byte prefix, archive evidence and private grants.');
  } finally { await db.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1;});

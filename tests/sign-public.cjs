@@ -26,3 +26,16 @@ async function call(method, body, extras={}) { const req={method,url:extras.url|
  assert.throws(()=>verify(evidence,Buffer.from('changed')),/Final PDF/);
  console.log('PASS: public Sign API enforces origin/session/input limits, never returns invitation secrets, records explicit SES intent and provides independently checkable Ed25519/PDF integrity evidence.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+// Scheduled maintenance is restricted to the existing cron credential.
+(async () => {
+ const {createHandler}=require('../api/sign-jobs.js');
+ const previous=process.env.CRON_SECRET;process.env.CRON_SECRET='fixture-cron-secret';
+ let maintenanceCalls=0,drains=0;
+ const handler=createHandler({config:()=>({configured:true}),createWorkflow:()=>({maintenance:async()=>{maintenanceCalls++;return{ok:true,expired:0};},drain:async()=>{drains++;return{done:0};}})});
+ async function cron(authorization,method='GET') {const res={setHeader(){},end(value){this.body=JSON.parse(value);}};await handler({method,headers:{authorization}},res);return res;}
+ try {
+  assert.equal((await cron('Bearer wrong')).statusCode,401);assert.equal((await cron('Bearer fixture-cron-secret','POST')).statusCode,401);assert.equal(maintenanceCalls,0);
+  assert.equal((await cron('Bearer fixture-cron-secret')).statusCode,200);assert.equal(maintenanceCalls,1);assert.equal(drains,1);
+ } finally {if(previous===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=previous;}
+ console.log('PASS: unauthorized cron requests cannot run maintenance or delivery.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

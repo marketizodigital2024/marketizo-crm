@@ -42,3 +42,9 @@ Do not put secret values or real signing tokens in tickets, screenshots or logs.
 - Supabase DPA: https://supabase.com/legal/customer-resources/data-processing-addendum
 - Supabase data residency: https://supabase.com/legal/privacy-resources/data-residency-and-transfers-faq
 - Google CDPA: https://cloud.google.com/terms/data-processing-addendum
+
+## Bounded scheduled maintenance
+
+Apply `database/marketizo-sign-maintenance.sql` after the base/flow schema. The authenticated existing minute cron calls its service-only, SECURITY INVOKER RPC before draining delivery jobs. Each pass expires at most 100 queued/open requests, records one chained expiry event and cancels their pending encrypted mail. Requests already finalizing or signed are not expired by this procedure. Each pass clears at most 1,000 expired OTP challenges, 1,000 expired unaccepted-party sessions older than one hour (preserving the hourly access counter), 1,000 spent/expired encrypted mail payloads and 1,000 project-wide rate windows older than 24 hours. Live leases and current codes are preserved.
+
+Sessions supporting recorded acceptances, immutable party acceptance/signature records, PDF bytes, versions, receipts, commands and chained audit events are retained. This is transient-data housekeeping, not a general GDPR erasure endpoint or contract retention policy. Owner-authorized requests, legal holds and reviewed retention decisions still use the process above. The only new DELETE grants are on sessions and minute-rate windows, never on the contract/evidence tables.
