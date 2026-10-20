@@ -15,7 +15,7 @@ async function main(){
  const crm={employees:[{id:'emp-miljan',name:'Fixture Owner',active:true}],clients:[]};await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify(crm)]);
  for(const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql'])await db.exec(fs.readFileSync(path.join(root,'database',file),'utf8'));
  const mails=[],errors=[];let server,chrome,ws,origin;
- const allowedTables=new Set(['marketizo_sign_documents','marketizo_sign_templates','marketizo_sign_events','marketizo_sign_versions','marketizo_sign_prepared_pdfs','marketizo_sign_requests','marketizo_sign_receipts']);
+ const allowedTables=new Set(['marketizo_sign_documents','marketizo_sign_templates','marketizo_sign_events','marketizo_sign_versions','marketizo_sign_prepared_pdfs','marketizo_sign_requests','marketizo_sign_receipts','marketizo_sign_outbox']);
  async function fetchDb(url,options={}){
   const u=new URL(url), table=u.pathname.split('/').pop();let result;
   try{
@@ -78,6 +78,7 @@ async function main(){
   await until("document.querySelector('h1')?.textContent==='Zaštita podataka u Marketizo Sign-u'");
   assert.equal(await evaluate('document.scripts.length'),0,'Privacy notice must be readable without scripts or a signing session');
   await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);await until("document.getElementById('connectionStatus')?.textContent.includes('Jednostavan elektronski potpis') && !document.getElementById('newDocument').disabled");
+  assert.equal(await evaluate("document.querySelectorAll('[data-new-audience]').length"),3);
   await click('newDocument');await until("!document.getElementById('workspace').hidden");await fill('documentTitle','Browser fixture contract');await fill('documentDossier','new');await fill('dossierName','Fixture Client Dossier');
   await evaluate("document.getElementById('contractEditor').textContent='Ugovor o uslugama. Čćžšđ ÄÖÜ.';document.getElementById('contractEditor').dispatchEvent(new Event('input',{bubbles:true}))");
   await click('addRecipient');
@@ -97,6 +98,7 @@ async function main(){
   const invitation=mails.find(m=>m.subject.includes('dokument za potpis')),token=invitation.text.match(/\/sign#([\w-]+)/)[1];
   await send('Page.navigate',{url:origin+'/sign#'+token},sessionId);
   await until("document.querySelectorAll('#documentPages canvas').length>0 && document.getElementById('documentPages').getAttribute('aria-busy')==='false' && !document.getElementById('acceptDocument').disabled && document.getElementById('title').textContent==='Browser fixture contract' && document.getElementById('message').textContent===''");
+  assert.equal(await evaluate("document.getElementById('signatureSection').classList.contains('on-paper')"),true,'Signature pad must sit on the agreement');
   assert.equal(mails.some(m=>m.subject.includes('kod')),false,'No OTP must be sent');
   assert.equal(await evaluate("document.getElementById('requestOtp')!==null"),false,'No verification step');
   assert.equal((await db.query("select count(*)::int n from marketizo_sign_parties where accepted_at is not null")).rows[0].n,0,'Opening the link cannot sign');
@@ -104,12 +106,13 @@ async function main(){
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false},sessionId);await sleep(300);assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth+1'),false);
   fs.writeFileSync(path.join(out,'sign-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
   await fill('signerName','Fixture Signer');
-  await evaluate("document.getElementById('signatureCanvas').scrollIntoView({block:'center'})");
-  const rect=await evaluate("(()=>{const r=document.getElementById('signatureCanvas').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()");
+  await click('enlargeSignature'); assert.equal(await evaluate("document.getElementById('signatureDialog').open"),true);
+  const rect=await evaluate("(()=>{const r=document.getElementById('largeSignatureCanvas').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()");
   const start={x:rect.x+rect.width*.15,y:rect.y+rect.height*.65};
   await send('Input.dispatchMouseEvent',{type:'mousePressed',...start,button:'left',buttons:1,clickCount:1},sessionId);
   for(const [x,y]of [[.3,.25],[.45,.7],[.6,.3],[.8,.55]])await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:rect.x+rect.width*x,y:rect.y+rect.height*y,button:'left',buttons:1},sessionId);
   await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:rect.x+rect.width*.8,y:rect.y+rect.height*.55,button:'left',buttons:0,clickCount:1},sessionId);
+  await click('closeSignatureDialog');
   await evaluate("document.getElementById('acceptTerms').checked=true");await click('acceptDocument');
   await until("!document.getElementById('receiptLinks').hidden");
   const packages=await evaluate("Promise.all([fetch('/api/sign-public?action=evidence').then(r=>r.json()),fetch('/api/sign-public?action=receipt').then(r=>r.arrayBuffer()).then(b=>Array.from(new Uint8Array(b)))]).then(([e,p])=>({e,p}))");
@@ -130,6 +133,22 @@ async function main(){
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false},sessionId);await sleep(300);
   fs.writeFileSync(path.join(out,'sign-dossiers.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
   assert.deepEqual(errors,[]);
+  const beforeLinkMails=mails.length;
+  await evaluate("document.querySelector('[data-new-audience=contractor]').click()");
+  await until("document.getElementById('contractAudience').value==='contractor' && document.getElementById('contractStartLabel').hidden");
+  assert.equal(await evaluate("document.getElementById('documentDossier').value"),'','Manual sales contract needs no CRM dossier');
+  await fill('documentTitle','Manual contractor link fixture'); await fill('contractPlace','Wien');
+  await evaluate("document.getElementById('contractEditor').textContent='NEOBAVEZUJUĆI PRIMER / UNVERBINDLICHES MUSTER';document.getElementById('contractEditor').dispatchEvent(new Event('input',{bubbles:true}))");
+  await click('addRecipient');
+  await evaluate("for(const [k,v]of Object.entries({name:'Manual Recipient',email:'manual@example.invalid',company:'Manual PR',address:'Fixture address',taxId:'TEST-123',country:'RS'})){const e=document.querySelector('[data-field='+k+']');e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}");
+  await click('saveDocument');await until("document.getElementById('dirtyLabel').textContent==='Izmene su sačuvane'");
+  const manual=(await db.query("select data from marketizo_sign_documents where title='Manual contractor link fixture'")).rows[0].data;
+  assert.equal(manual.contractDetails.audience,'contractor');assert.equal(manual.recipients[0].taxId,'TEST-123');assert.equal(manual.dossier,null);
+  await click('freezeDocument');await until("!document.getElementById('previewPdf').disabled");await click('previewPdf');await until("document.getElementById('previewDialog').open");await click('closePreview');
+  await click('generateLink');await fill('reviewerName','Fixture reviewer');await fill('reviewReference','Fixture form review');await evaluate("document.getElementById('confirmForm').checked=true;document.getElementById('confirmPdf').checked=true");await click('confirmSend');
+  await until("document.getElementById('linksDialog').open");
+  assert.match(await evaluate("document.querySelector('#generatedLinks input').value"),/\/sign#[A-Za-z0-9_-]{43}$/);
+  assert.equal(mails.length,beforeLinkMails,'Manual link generation cannot send an invitation');
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> inline PDF without OTP -> explicit acceptance -> final receipt email -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');
  }finally{ws?.close();chrome?.kill();server?.closeAllConnections();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
 }

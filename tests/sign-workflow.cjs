@@ -43,5 +43,13 @@ const { hash, canonical, seal, unseal, readiness, validateSignature, createWorkf
  assert.deepEqual(request.issuer.privacyNotice, { version: '2026-10-20.1', url: 'https://app.marketizo.com/sign-privacy-20261020' });
  const mail = unseal(request.parties[0].sealedMail); assert.ok(mail.text.includes(request.issuer.privacyNotice.url),'First invitation must link the same privacy notice retained in evidence'); const token = mail.text.match(/\/sign#([\w-]+)/)[1]; assert.equal(hash(token), request.parties[0].tokenSha256); assert.ok(!JSON.stringify(request).includes(token));
  assert.equal(helperCalls, 1, 'Send must use the already prepared PDF rather than rerendering');
+ const linkResult = await workflow.prepare('emp-miljan', { delivery: 'link', revision: 2, commandId: crypto.randomUUID(), review: { decision: 'ses_allowed', reviewedBy: 'Fixture reviewer', reference: 'Fixture legal review', pdfSha256: hash(pdf), pdfReviewed: true } }, doc);
+ assert.equal(linkResult.links.length, 1); assert.equal(linkResult.links[0].email, 'test@example.com');
+ const linkRequest = rpcs.at(-1).p_data, linkMail = unseal(linkRequest.parties[0].sealedMail);
+ assert.equal(linkMail.delivery, 'link'); assert.equal(linkMail.link, linkResult.links[0].url); assert.equal(hash(linkMail.link.split('#')[1]), linkRequest.parties[0].tokenSha256);
+ let jobs = [{ id: crypto.randomUUID(), kind: 'invitation', sealed_payload: linkRequest.parties[0].sealedMail }], smtpCalls = 0;
+ const linkWorker = createWorkflow({ url: 'https://fixture.invalid', key: 'fixture', organization: 'marketizo-main' }, { fetch: async (url, options) => { const b=JSON.parse(options.body); return { ok: true, json: async () => b.p_action === 'claim' ? { ok:true, job:jobs.shift() || null } : { ok:true } }; }, helper: async () => { smtpCalls++; return {accepted:true}; } });
+ await linkWorker.drain(2); assert.equal(smtpCalls,0,'Generating links must not send an invitation');
+ console.log('PASS: manual links keep recipient-scoped tokens, encrypted storage and no invitation SMTP.');
  console.log('PASS: encrypted outbox, tamper detection, explicit SES/QES choice, form review, exact PDF preparation and random recipient-scoped invitation tokens.');
 })().catch(e => { console.error(e); process.exitCode = 1; });
