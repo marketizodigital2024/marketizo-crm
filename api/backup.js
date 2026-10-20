@@ -1,3 +1,4 @@
+const questionnaires = require('../lib/questionnaire-backup.js');
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
 const KPI_ROW_ID = "marketizo-kpi-v1";
@@ -72,7 +73,7 @@ async function listBlobBackups() {
   };
 }
 
-async function writeIndependentBackup(source, date, now, kpiSource = null) {
+async function writeIndependentBackup(source, date, now, kpiSource = null, questionnaireSource = null) {
   const blob = await blobClient();
   if (!blob) throw new Error("Vercel Blob backup nije povezan.");
   const document = {
@@ -82,6 +83,7 @@ async function writeIndependentBackup(source, date, now, kpiSource = null) {
     sourceUpdatedAt: source.updated_at || "",
     state: source.payload,
     kpi: kpiSource?.payload || null,
+    questionnaires: questionnaireSource,
   };
   const body = JSON.stringify(document);
   const pathname = `${BLOB_PREFIX}${date}.json`;
@@ -113,7 +115,8 @@ async function writeIndependentBackup(source, date, now, kpiSource = null) {
   if (verified.format !== "marketizo-crm-backup-v1" || verified.sourceUpdatedAt !== document.sourceUpdatedAt
     || JSON.stringify(verified.state) !== JSON.stringify(document.state)
     || JSON.stringify(verifiedCounts) !== JSON.stringify(expectedCounts)
-    || JSON.stringify(verified.kpi || null) !== JSON.stringify(document.kpi)) {
+    || JSON.stringify(verified.kpi || null) !== JSON.stringify(document.kpi)
+    || !questionnaires.equal(verified.questionnaires, document.questionnaires)) {
     throw new Error("Vercel Blob backup nije prošao proveru integriteta.");
   }
   let retained = null;
@@ -135,11 +138,12 @@ async function writeIndependentBackup(source, date, now, kpiSource = null) {
     retentionWarning: retentionWarning || undefined,
     verified: true,
     counts: verifiedCounts,
+    questionnaires: questionnaires.summary(verified.questionnaires),
   };
 }
 
 module.exports = async function handler(req, res) {
-  if (req.method !== "GET") return send(res, 405, { error: "Method not allowed" });
+  if (!["GET","POST"].includes(req.method)) return send(res, 405, { error: "Method not allowed" });
 
   const url = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -163,6 +167,7 @@ module.exports = async function handler(req, res) {
         const checksum = require("node:crypto").createHash("sha256").update(JSON.stringify(state)).digest("hex");
         return send(res, 200, { ok: true, verified: true, pathname, backupDate: document.backupDate,
           sourceUpdatedAt: document.sourceUpdatedAt, currentRevision: document.sourceUpdatedAt === row.updatedAt,
+          questionnaires: questionnaires.summary(document.questionnaires),
           counts: backupCounts(state), checksum, includesKpi: document.kpi != null,
           contractFiles: state.clients.filter(client => Boolean(client.contractFileData)).length,
           credentialsHashed: [...state.employees.map(e => e.password), ...state.clients.map(c => c.loginPassword)]
@@ -221,9 +226,14 @@ module.exports = async function handler(req, res) {
 
   const cronSecret = process.env.CRON_SECRET || "";
   const authorization = String(req.headers.authorization || "");
-  if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
-    return send(res, 401, { error: "Unauthorized" });
+  const cronAuthorized = cronSecret && authorization === `Bearer ${cronSecret}`;
+  if (!cronAuthorized) {
+    if (req.method !== "POST") return send(res, 401, { error: "Unauthorized" });
+    const { accessSession, readStoredState } = require("./state.js").helpers;
+    const current = await readStoredState({ url, key });
+    if (accessSession(req, current.payload, key)?.role !== "full-admin") return send(res, 401, { error: "Unauthorized" });
   }
+  if (process.env.VERCEL_ENV === "preview") return send(res, 409, { error: "Backup se pokreće samo iz glavne aplikacije." });
 
   try {
     const now = new Date();
@@ -258,7 +268,8 @@ module.exports = async function handler(req, res) {
     const workLogDates = workLogs.map((log) => String(log.date || "")).filter(Boolean).sort();
     // Create and verify the independent copy first. The rotating database copy
     // is secondary and must not prevent a recoverable backup from being made.
-    const independent = await writeIndependentBackup(source, date, now, kpiSource);
+    const questionnaireSource = await questionnaires.readSnapshot(url, key);
+    const independent = await writeIndependentBackup(source, date, now, kpiSource, questionnaireSource);
 
     const backupResponse = await fetch(`${url}/rest/v1/${TABLE}?on_conflict=id`, {
       method: "POST",
@@ -275,6 +286,7 @@ module.exports = async function handler(req, res) {
           septemberDates: [...new Set(workLogs.map((log) => String(log.date || "")).filter((item) => item.startsWith("2026-09-")))].sort(),
           state: source.payload,
           kpi: kpiSource?.payload || null,
+          questionnaires: questionnaireSource,
         },
         updated_at: now.toISOString(),
       }),
@@ -289,10 +301,12 @@ module.exports = async function handler(req, res) {
       clients: Array.isArray(source.payload.clients) ? source.payload.clients.length : 0,
       workLogs: Array.isArray(source.payload.employeeWorkLogs) ? source.payload.employeeWorkLogs.length : 0,
       independent,
+      questionnaires: questionnaires.summary(questionnaireSource),
       databaseWarning: databaseWarning || undefined,
     });
   } catch (error) {
     return send(res, 500, { error: error?.message || "Backup failed" });
   }
 };
+
 
