@@ -3,7 +3,7 @@ const model = require('../lib/questionnaire-model.js');
 const defaults = require('../lib/questionnaire-templates.json');
 const TABLE = 'marketizo_questionnaires';
 const stateTable = process.env.SUPABASE_TABLE || 'agency_crm_state';
-const mainId = process.env.CRM_STATE_ID || 'marketizo-main';
+const mainId = (process.env.VERCEL_ENV === 'preview' ? 'marketizo-smm-preview-v1' : process.env.CRM_STATE_ID || 'marketizo-main');
 const namespace = () => process.env.VERCEL_ENV === 'preview' ? 'preview' : 'production';
 const secret = () => process.env.EMPLOYEE_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
 function fail(status, message) { const e = new Error(message); e.status = status; throw e; }

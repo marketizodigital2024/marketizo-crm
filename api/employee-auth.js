@@ -5,7 +5,7 @@ const crypto = require("node:crypto");
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
-const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
+const ROW_ID = (process.env.VERCEL_ENV === "preview" ? "marketizo-smm-preview-v1" : process.env.CRM_STATE_ID || "marketizo-main");
 const AUTH_TABLE = "agency_crm_employee_auth";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const FULL_ADMIN_EMPLOYEE_IDS = new Set(["emp-miljan", "emp-ivana"]);
@@ -48,6 +48,7 @@ async function readEmployees() {
 }
 
 async function readFastEmployees({ email = "", id = "" } = {}) {
+  if (process.env.VERCEL_ENV === "preview") return null;
   const filters = [];
   if (email) filters.push(`email=eq.${encodeURIComponent(email)}`);
   if (id) filters.push(`id=eq.${encodeURIComponent(id)}`);
@@ -128,3 +129,4 @@ module.exports = async function handler(req, res) {
 
 const originalHandler = module.exports;
 module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);
+

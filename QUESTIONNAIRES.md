@@ -15,3 +15,7 @@ No client secrets or passwords are collected. Existing credential questions are 
 Public fill links expire after 90 days and can be revoked. They use a UUID plus a purpose-separated HMAC using the existing employee session secret, with the existing service-role secret as fallback. Rotating that secret invalidates outstanding public links. Answer links require an active employee session and do not contain the public fill token. Draft saving is explicit and confirmed by the server. Concurrent saves use compare-and-swap; conflicts keep entered text visible. Retrying a create request is idempotent. Completed submissions cannot be overwritten through the public endpoint.
 
 The new table needs inclusion in the normal database backup/retention plan. The isolated questionnaire table has been created and verified empty with RLS on and no anonymous/authenticated access. No production application release or employee-data changes have occurred.
+
+## Employee-position preview
+
+Employee-auth, employee-profile state reads/writes, and questionnaire role checks in Vercel previews use `marketizo-smm-preview-v1`. This existing-state copy was seeded once from `marketizo-main` without updating any production employee. Preview profile edits skip production session-projection RPCs and production prewrite backups. Preview login reads credentials from that copy rather than the production fast-auth projection. This is a profile/questionnaire test environment; unrelated finance/attendance workflows are outside this preview verification.

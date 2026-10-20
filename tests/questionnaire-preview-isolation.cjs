@@ -1,0 +1,7 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync(__dirname+'/../api/state.js','utf8');
+function named(name){const start=source.indexOf('async function '+name+'(');assert(start>=0);const end=source.indexOf('\n}',start)+2;return source.slice(start,end)}
+(async()=>{let reads=0;const ctx={process:{env:{VERCEL_ENV:'preview'}},readStoredState:async()=>{reads++;return{payload:{employees:[{position:'SMM / Scenarista'}]},updatedAt:'test'}},dbFetch(){throw Error('Preview must not call production RPC or backups')}};vm.createContext(ctx);vm.runInContext(named('readSessionState')+'\n'+named('preserveDailyPrewriteBackup'),ctx);const result=await ctx.readSessionState({},{});assert.equal(reads,1);assert.equal(result.payload.employees[0].position,'SMM / Scenarista');await ctx.preserveDailyPrewriteBackup({},{});
+for(const path of ['api/state.js','api/employee-auth.js','api/questionnaires.js']){const s=fs.readFileSync(__dirname+'/../'+path,'utf8');assert(s.includes('marketizo-smm-preview-v1'),path)}
+const auth=fs.readFileSync(__dirname+'/../api/employee-auth.js','utf8');assert(auth.includes('if (process.env.VERCEL_ENV === "preview") return null;'));
+console.log('PASS: preview employee/profile state uses its own row, skips main-only projections/backups and does not use production fast-auth projection.');})().catch(e=>{console.error(e);process.exitCode=1});
