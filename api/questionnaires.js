@@ -55,19 +55,25 @@ async function handle(req, res) {
       row = await update(row,{...row.payload,answers,status:action==='submit'?'Popunjen':'U toku',...(action==='submit'?{submittedAt:new Date().toISOString()}:{})});
       return json(res,200,{ok:true,submitted:action==='submit',revision:row.updated_at});
     }
+    if (action === 'viewAnswers') {
+      if (!model.checkAnswerToken(body.id,body.token,secret())) fail(404,'Link odgovora nije dostupan.');
+      const row = await read(body.id); const p = row?.payload;
+      if (!p || p.recordType !== 'invite' || p.status !== 'Popunjen' || p.revoked) fail(404,'Link odgovora nije dostupan.');
+      return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:body.token});
+    }
     const { employee, clients } = await actor(req);
     if (action === 'answers') {
       if (!model.uuid(body.id)) fail(400,'Neispravan link.');
       const row = await read(body.id);
       if (!row || row.payload.recordType !== 'invite') fail(404,'Upitnik nije pronađen.');
       const p = row.payload;
-      return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt});
+      return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:p.status==='Popunjen'&&!p.revoked?model.answerToken(row.id,secret()):null});
     }
     if (!model.canManage(employee)) fail(403,'Slanje i uređivanje dostupni su SMM-u i administratorima.');
     if (action === 'list') {
       const ts = await Promise.all(Object.keys(defaults).map(template));
       const rows = await request(`${TABLE}?${nsQuery()}&id=not.like.template:*&select=id,payload,updated_at&order=updated_at.desc&limit=501`);
-      const records = rows.filter(r=>r.payload.recordType==='invite').slice(0,500).map(r=>({...r.payload,id:r.id,revision:r.updated_at,token:model.publicToken(r.id,secret())}));
+      const records = rows.filter(r=>r.payload.recordType==='invite').slice(0,500).map(r=>({...r.payload,id:r.id,revision:r.updated_at,token:model.publicToken(r.id,secret()),answerToken:r.payload.status==='Popunjen'&&!r.payload.revoked?model.answerToken(r.id,secret()):null}));
       return json(res,200,{employee:{id:employee.id,name:employee.name},clients:clients.filter(c=>c.status!=='Arhiviran').map(c=>({id:c.id,name:c.name})),templates:Object.fromEntries(ts.map(t=>[t.id.slice(9),{...t.payload,revision:t.updated_at}])),records,hasMore:rows.length>500});
     }
     if (action === 'template') {
