@@ -57,7 +57,7 @@ begin
  -- Rate keys are project-wide HMAC values; old minute windows expire globally.
  with old_rates as (select key,window_start from public.marketizo_sign_rates
   where window_start<t-interval '24 hours' order by window_start,key limit 1000 for update skip locked)
- delete from public.marketizo_sign_rates r using old_rates o where r.key=o.key and r.window_start=o.window_start;
+ delete from public.marketizo_sign_rates rate_row using old_rates o where rate_row.key=o.key and rate_row.window_start=o.window_start;
  get diagnostics rates=row_count;
  return jsonb_build_object('ok',true,'expired',expired,'sessions',sessions,'challenges',challenges,'payloads',payloads,'rates',rates);
 end; $$;
