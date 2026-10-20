@@ -110,6 +110,16 @@ class SignPdfTests(unittest.TestCase):
             message = smtp.send_message.call_args.args[0]
             self.assertEqual(message["From"], "office@marketizo.com")
             self.assertEqual(message["To"], "recipient@example.com")
+            pdf_bytes = b"%PDF-fixture-final"
+            attachment = {"base64": base64.b64encode(pdf_bytes).decode(), "sha256": hashlib.sha256(pdf_bytes).hexdigest()}
+            self.assertTrue(helper.send_mail({"id":"receipt-fixture","to":"recipient@example.com","subject":"Signed PDF","text":"In attachment","attachment":attachment})["accepted"])
+            message = smtp.send_message.call_args.args[0]
+            attached = list(message.iter_attachments())
+            self.assertEqual(len(attached), 1)
+            self.assertEqual(attached[0].get_content_type(), "application/pdf")
+            self.assertEqual(attached[0].get_payload(decode=True), pdf_bytes)
+            with self.assertRaises(ValueError):
+                helper.send_mail({"id":"bad","to":"recipient@example.com","subject":"Bad","text":"Bad","attachment":{**attachment,"sha256":"0"*64}})
 
 
 if __name__ == "__main__":

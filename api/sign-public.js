@@ -32,7 +32,7 @@ function createHandler(deps = {}) {
    if (req.method === 'GET') {
     const action = params.get('action') || 'view', digest = sessionDigest(req);
     if (action === 'view') {
-     const data = await flow.rpc('view', { sessionDigest: digest });
+     const data = await flow.rpc('link_view', { sessionDigest: digest });
      return json(res, 200, { ...data, consentText: CONSENT, privacyUrl: data.issuer?.privacyNotice?.url || process.env.SIGN_PRIVACY_URL || null });
     }
     if (action === 'pdf' || action === 'receipt') return pdf(res, await flow.rpc(action, { sessionDigest: digest }));
@@ -43,23 +43,16 @@ function createHandler(deps = {}) {
    if (body.action === 'exchange') {
     if (!TOKEN.test(body.token || '')) throw new SignError(401, 'Link nije važeći.');
     const token = crypto.randomBytes(32).toString('base64url');
-    await flow.rpc('exchange', { invitationDigest: hash(body.token), sessionDigest: hash(token), context: ctx });
+    await flow.rpc('link_exchange', { invitationDigest: hash(body.token), sessionDigest: hash(token), context: ctx });
     res.setHeader('Set-Cookie', `${COOKIE}=${token}; Path=/; Max-Age=1800; Secure; HttpOnly; SameSite=Strict`);
     return json(res, 200, { ok: true });
    }
    const digest = sessionDigest(req);
-   if (body.action === 'otp_issue') {
-    const r = await flow.issueOtp(digest); await flow.drain(1).catch(() => {}); return json(res, 200, r);
-   }
-   if (body.action === 'otp_verify') {
-    if (!UUID.test(body.challengeId || '') || !/^\d{6}$/.test(body.code || '')) throw new SignError(400, 'Upiši šestocifreni kod.');
-    return json(res, 200, await flow.verifyOtp(digest, body.challengeId, body.code));
-   }
    if (body.action === 'accept') {
     if (!UUID.test(body.commandId || '') || !/^[a-f0-9]{64}$/.test(body.pdfSha256 || '') || body.accepted !== true || body.authority !== true) throw new SignError(400, 'Potvrdi dokument, nameru i ovlašćenje.');
     const signature = validateSignature(body.signature), payload = { commandId: body.commandId, pdfSha256: body.pdfSha256, signature, accepted: true, authority: true, consentText: CONSENT };
-    const r = await flow.rpc('accept', { ...payload, sessionDigest: digest, payloadSha256: hash(canonical(payload)) });
-    await flow.drain(1).catch(() => {}); return json(res, 200, r);
+    const r = await flow.rpc('link_accept', { ...payload, sessionDigest: digest, payloadSha256: hash(canonical(payload)) });
+    await flow.drain(3).catch(() => {}); return json(res, 200, r);
    }
    if (body.action === 'decline') return json(res, 200, await flow.rpc('decline', { sessionDigest: digest, reason: String(body.reason || '').slice(0, 1000) }));
    throw new SignError(400, 'Nepoznata radnja.');

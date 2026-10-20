@@ -11,6 +11,7 @@ for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     count++;
   }
 }
+fs.cpSync(path.join(root, 'vendor/pdfjs'), path.join(output, 'vendor/pdfjs'), { recursive: true });
 fs.cpSync(path.join(root, 'icons'), path.join(output, 'icons'), { recursive: true });
 fs.mkdirSync(path.join(output, 'lib'), { recursive: true });
 fs.copyFileSync(path.join(root, 'lib/state-patch.js'), path.join(output, 'lib/state-patch.js'));

@@ -1,5 +1,9 @@
 # Marketizo Sign — launch and privacy operations
 
+## Direct-link flow update — 20 October 2026
+
+Owner requested one page: invitation link opens the exact PDF inline and the signature field, with no OTP step and no separate PDF tab. Acceptance still requires the signer to explicitly act. Access is recorded as `email_link` (not identity verification or an OTP check). A completed immutable PDF is automatically queued for email to every required signer after all signers finish; delivery has durable retry and a per-request/recipient unique job. Existing originals/receipts are never rewritten. Apply only the new `database/marketizo-sign-direct.sql` migration after the existing schema; do not rerun earlier migrations. The new notice version is `2026-10-20.1` at `/sign-privacy-20261020-link`; existing notices remain available. Earlier dated OTP setup/test sections below are historical. Keep new invitations disabled during this change.
+
 ## Current state
 
 The production private schema exists. Sending remains disabled. SMTP password presence was confirmed in Vercel without reading it. Two independent server keys were subsequently generated and saved as Production-only Secrets through Vercel MCP on 20 October 2026; fresh metadata reads confirm both entries. Values were not displayed or committed. The local mode-0600 recovery/import copy still needs independently protected backup and a restore drill. Issuer name/address are saved as Config. The public Marketizo Sign section is already published at https://marketizo.com/zastita-podataka/#marketizo-sign, version 2026-10-20. SIGN_PRIVACY_URL was corrected to that URL and checked after reloading Vercel settings. This updates project configuration for the next deployment; the running production revision still lacks Sign. Company identity is taken from the user's published Impressum, not independently certified against the register.

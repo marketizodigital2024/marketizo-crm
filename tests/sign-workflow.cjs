@@ -40,7 +40,7 @@ const { hash, canonical, seal, unseal, readiness, validateSignature, createWorkf
  await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, { ...doc, data: { ...doc.data, signatureMethod: 'qes' } }), /kvalifikovani/);
  await workflow.prepare('emp-miljan', { revision: 2, commandId: crypto.randomUUID(), review: { decision: 'ses_allowed', reviewedBy: 'Fixture reviewer', reference: 'Fixture legal review', pdfSha256: hash(pdf), pdfReviewed: true } }, doc);
  const request = rpcs.at(-1).p_data; assert.equal(rpcs.at(-1).p_action, 'prepare'); assert.equal(request.parties.length, 1);
- assert.deepEqual(request.issuer.privacyNotice, { version: '2026-10-20', url: 'https://app.marketizo.com/sign-privacy-20261020' });
+ assert.deepEqual(request.issuer.privacyNotice, { version: '2026-10-20.1', url: 'https://app.marketizo.com/sign-privacy-20261020' });
  const mail = unseal(request.parties[0].sealedMail); assert.ok(mail.text.includes(request.issuer.privacyNotice.url),'First invitation must link the same privacy notice retained in evidence'); const token = mail.text.match(/\/sign#([\w-]+)/)[1]; assert.equal(hash(token), request.parties[0].tokenSha256); assert.ok(!JSON.stringify(request).includes(token));
  assert.equal(helperCalls, 1, 'Send must use the already prepared PDF rather than rerendering');
  console.log('PASS: encrypted outbox, tamper detection, explicit SES/QES choice, form review, exact PDF preparation and random recipient-scoped invitation tokens.');

@@ -145,11 +145,13 @@ def render_final(payload):
         section = [Paragraph(plain(signer["name"], 160), s["heading"]),
                    Paragraph(plain(signer["email"], 254) + "<br/>" + plain(signer["acceptedAt"], 40), s["body"]),
                    Paragraph(plain(signer["consentText"], 2000), s["small"])]
+        if signer.get("authentication", {}).get("method") == "email_link":
+            section.append(Paragraph("Pristup preko pozivnog e-mail linka, bez dodatne provere identiteta.", s["small"]))
         if signer.get("strokes"):
             section.append(Drawing(signer["strokes"]))
         story.append(KeepTogether(section))
     story += [Spacer(1, 12), Paragraph("Dokazni manifest: " + plain(payload["manifestSha256"], 64), s["small"]),
-              Paragraph("Serverska evidencija čuva verziju dokumenta, OTP potvrdu, nameru potpisnika i vreme događaja. Pristup e-mail adresi sam po sebi nije potvrda građanskog identiteta ili ovlašćenja zastupnika.", s["small"])]
+              Paragraph("Serverska evidencija čuva verziju dokumenta, način pristupa, nameru potpisnika i vreme događaja. Pristup preko e-mail linka sam po sebi nije potvrda građanskog identiteta ili ovlašćenja zastupnika.", s["small"])]
     certificate = build_pdf("Evidencija prihvatanja", story)
     # Incremental append retains all original PDF bytes unchanged at the start.
     writer = PdfWriter(io.BytesIO(original), incremental=True)
@@ -177,6 +179,12 @@ def send_mail(payload):
     msg["Date"] = formatdate(localtime=False)
     msg["Message-ID"] = "<marketizo-sign-" + re.sub(r"[^a-zA-Z0-9-]", "", payload["id"]) + "@" + sender.split("@")[-1] + ">"
     msg.set_content(payload["text"])
+    if payload.get("attachment"):
+        attachment = payload["attachment"]
+        data = base64.b64decode(attachment["base64"].replace("\n", "").replace("\r", ""), validate=True)
+        if not data.startswith(b"%PDF-") or len(data) > 1500000 or hashlib.sha256(data).hexdigest() != attachment["sha256"]:
+            raise ValueError("Receipt attachment integrity mismatch")
+        msg.add_attachment(data, maintype="application", subtype="pdf", filename="Marketizo-potpisani-dokument.pdf")
     port = int(os.environ.get("SIGN_SMTP_PORT", "465"))
     if port not in [465, 587]:
         raise ValueError("Only encrypted SMTP is supported")
