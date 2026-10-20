@@ -90,3 +90,11 @@ The current main questionnaire updates are integrated by this merge. Production 
 The owner uses Save draft → Preview PDF → Email or link. PDF preview automatically validates and freezes the saved revision on the server, then prepares the exact PDF; there is no separate visible Freeze button or browser confirmation. Dirty drafts are saved first. CAS revisions and idempotent freeze commands remain enforced; a failed render can retry the frozen version.
 
 SIGN_SES_ENABLED remains the general gate. A separately authorized nonbinding test can use SIGN_TEST_DELIVERY JSON with documentId, email and expiresAt. It only permits that exact document with one exact recipient and a title starting TEST containing NEOBAVEZUJUĆE; expired/invalid scopes fail closed. Owner bootstrap exposes only the test document ID to enable its delivery button. Clear the test scope and redeploy after the invitation; general sending stays false throughout.
+
+## Mobile document reader
+
+The signing page uses the official pdfjs-dist 6.4.299 legacy build (npm tarball SHA512 verified) with upstream compatibility polyfills in both main and worker bundles. The source PDF, its hash, prepared stationery and signing evidence remain unchanged.
+
+Reader controls include page navigation/thumbnails, bounded lazy canvas rendering (at most three full-page canvases cached), contained PDF zoom, and a reflow reading mode derived exclusively from the hash-verified PDF text. Mobile starts in readable 18px text; PDF layout remains available. Jump to signature opens the existing signature dialog without accepting or sending anything. No OTP or separate verification is added. General sending and test scope remain disabled.
+
+CI runs real mobile WebKit against a multi-page fixture and deliberately removes modern JS builtins before loading the legacy reader/worker. This covers readable text, zoom, page navigation, signature access, and no accidental acceptance. Chromium retains the full API/database/signing/PDF/evidence/mail-fixture regression.
