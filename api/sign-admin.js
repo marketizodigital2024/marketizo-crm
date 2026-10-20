@@ -59,12 +59,18 @@ function createHandler(deps = {}) {
           }
           return json(res, 200, { ok: true, document: doc });
         }
+        if (action === 'dossiers') {
+          const offset = Number(query.get('offset') || 0);
+          if (!Number.isInteger(offset) || offset < 0 || offset > 100000) throw new SignError(400, 'Proveri stranicu rezultata.');
+          return json(res, 200, { ok: true, ...await store.dossiers(offset) });
+        }
         if (action !== 'list') throw new SignError(400, 'Nepoznata akcija.');
         const category = query.get('category') || '', status = query.get('status') || '';
         if ((category && !CATEGORIES.includes(category)) || (status && !STATUSES.includes(status))) throw new SignError(400, 'Proveri filtere.');
         const offset = Number(query.get('offset') || 0);
         if (!Number.isInteger(offset) || offset < 0 || offset > 100000) throw new SignError(400, 'Proveri stranicu rezultata.');
-        return json(res, 200, { ok: true, ...await store.list(kind, { category, status, offset, archived: query.get('archived') === 'true', search: String(query.get('search') || '').slice(0, 120) }) });
+        const dossier = query.get('dossier') ? requireId(query.get('dossier')).toLowerCase() : '';
+        return json(res, 200, { ok: true, ...await store.list(kind, { dossier, category, status, offset, archived: query.get('archived') === 'true', search: String(query.get('search') || '').slice(0, 120) }) });
       }
       const body = await readBody(req);
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new SignError(400, 'Zahtev nije ispravan.');
@@ -87,7 +93,14 @@ function createHandler(deps = {}) {
       const kind = body.kind === 'template' ? 'template' : 'document';
       const payload = { id: requireId(body.id), kind, revision: body.revision };
       if (!Number.isInteger(payload.revision) || payload.revision < 0) throw new SignError(400, 'Proveri verziju dokumenta.');
-      if (body.action === 'save') payload.data = validateDraft(body.data, kind);
+      if (body.action === 'save') {
+        payload.data = validateDraft(body.data, kind);
+        if (payload.data.parentDocumentId) {
+          if (payload.data.parentDocumentId === payload.id) throw new SignError(400, 'Dokument ne može biti sopstveni osnovni ugovor.');
+          const parent = await store.get('document', payload.data.parentDocumentId);
+          if (parent.data.dossier?.id !== payload.data.dossier.id || parent.data.parentDocumentId) throw new SignError(400, 'Osnovni ugovor mora biti iz istog dosijea i ne sme biti aneks drugog ugovora.');
+        }
+      }
       if (body.action === 'freeze') {
         if (kind !== 'document') throw new SignError(400, 'Šablon se ne zaključava za potpis.');
         const doc = await store.get(kind, payload.id);

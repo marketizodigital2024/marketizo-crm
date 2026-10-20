@@ -38,3 +38,32 @@ async function call(method = 'GET', url = '/api/sign-admin', body, headers = {})
   await assert.rejects(db.get('document', id), /nije pronađen/);
   console.log('PASS: Sign API protects all routes, minimizes CRM directory data, blocks sending, sanitizes search, preserves error confidentiality and sends only validated commands to the database.');
 })().catch(e => { console.error(e); process.exitCode = 1; });
+(async () => {
+  let url = '';
+  const db = createStore({ url: 'https://fixture.invalid', key: 'private-key', organization: 'tenant-a' }, async value => { url = value; return { ok: true, json: async () => [] }; });
+  const dossier = '12345678-1234-4234-8234-123456789012';
+  await db.list('document', { dossier, offset: 0, archived: true });
+  assert.equal(new URL(url).searchParams.get('data->dossier->>id'), 'eq.' + dossier);
+  assert.equal(new URL(url).searchParams.get('organization_id'), 'eq.tenant-a');
+  assert.equal(new URL(url).searchParams.get('archived_at'), 'not.is.null');
+  await db.dossiers(200);
+  assert.equal(new URL(url).searchParams.get('organization_id'), 'eq.tenant-a');
+  assert.equal(new URL(url).searchParams.get('offset'), '200');
+  assert.equal(new URL(url).searchParams.has('archived_at'), false);
+  const parent = { id, data: { dossier: { id: dossier }, parentDocumentId: null } };
+  let saved = 0;
+  const h = createHandler({ helpers: { supabaseConfig: () => ({ configured: true, key: 'fixture' }), readStoredState: async () => ({ payload: {} }), accessSession: () => ({ role: 'full-admin', employee: { id: 'emp-miljan' } }) }, createStore: () => ({ get: async () => parent, command: async () => { saved++; return { ok: true }; } }) });
+  async function save(parentId, folder) {
+    const res = { setHeader() {}, end(v) { this.body = JSON.parse(v); } };
+    await h({ method: 'POST', url: '/api/sign-admin', headers: { authorization: 'Bearer fixture', 'content-type': 'application/json' }, body: { action: 'save', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', commandId, revision: 0, data: { ...data, dossier: { id: folder, type: 'client', name: 'Test Client' }, parentDocumentId: parentId } } }, res);
+    return res;
+  }
+  assert.equal((await save(id, dossier)).statusCode, 200);
+  assert.equal(saved, 1);
+  assert.equal((await save(id, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')).statusCode, 400);
+  assert.equal((await save('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', dossier)).statusCode, 400);
+  parent.data.parentDocumentId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  assert.equal((await save(id, dossier)).statusCode, 400);
+  assert.equal(saved, 1);
+  console.log('PASS: dossier filters stay tenant scoped, archives remain discoverable, and annexes require a distinct root agreement in the same dossier.');
+})().catch(e => { console.error(e); process.exitCode = 1; });

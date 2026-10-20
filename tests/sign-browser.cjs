@@ -23,9 +23,11 @@ async function main(){
     else if(table==='marketizo_sign_flow')result=(await db.query('select marketizo_sign_flow($1,$2,$3::jsonb) r',[b.p_organization,b.p_action,JSON.stringify(b.p_data)])).rows[0].r;else throw Error('Unexpected RPC');
    }else{
     if(!allowedTables.has(table))throw Error('Unexpected test table');
-    const select=u.searchParams.get('select')||'*';if(!/^[a-zA-Z0-9_,*]+$/.test(select))throw Error('Unsafe selection');
+    let select=u.searchParams.get('select')||'*';
+    if(select==='id,title,status,archived_at,data->dossier,data->parentDocumentId') select=`id,title,status,archived_at,data->'dossier' as dossier,data->'parentDocumentId' as "parentDocumentId"`;
+    else if(!/^[a-zA-Z0-9_,*]+$/.test(select))throw Error('Unsafe selection');
     const values=[],where=[];
-    for(const [key,value]of u.searchParams){if(['select','order','limit','offset'].includes(key))continue;if(!/^[a-z_]+$/.test(key))throw Error('Unsafe column');
+    for(const [rawKey,value]of u.searchParams){let key=rawKey;if(['select','order','limit','offset'].includes(key))continue;if(key==='data->dossier->>id')key="data->'dossier'->>'id'";else if(!/^[a-z_]+$/.test(key))throw Error('Unsafe column');
      if(value==='is.null')where.push(key+' is null');else if(value==='not.is.null')where.push(key+' is not null');
      else if(value.startsWith('eq.')){values.push(value.slice(3));where.push(key+'=$'+values.length);}
      else if(value.startsWith('ilike.')){values.push(value.slice(6).replace(/\*/g,'%'));where.push(key+' ilike $'+values.length);}else throw Error('Unsupported filter');
@@ -76,11 +78,17 @@ async function main(){
   await until("document.querySelector('h1')?.textContent==='Zaštita podataka u Marketizo Sign-u'");
   assert.equal(await evaluate('document.scripts.length'),0,'Privacy notice must be readable without scripts or a signing session');
   await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);await until("document.getElementById('connectionStatus')?.textContent.includes('Jednostavan elektronski potpis') && !document.getElementById('newDocument').disabled");
-  await click('newDocument');await until("!document.getElementById('workspace').hidden");await fill('documentTitle','Browser fixture contract');
+  await click('newDocument');await until("!document.getElementById('workspace').hidden");await fill('documentTitle','Browser fixture contract');await fill('documentDossier','new');await fill('dossierName','Fixture Client Dossier');
   await evaluate("document.getElementById('contractEditor').textContent='Ugovor o uslugama. Čćžšđ ÄÖÜ.';document.getElementById('contractEditor').dispatchEvent(new Event('input',{bubbles:true}))");
   await click('addRecipient');
   await evaluate("for(const [k,v]of Object.entries({name:'Fixture Signer',email:'fixture@example.com',country:'AT'})){const e=document.querySelector('[data-field='+k+']');e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}");
   await click('saveDocument');await until("document.getElementById('dirtyLabel').textContent==='Izmene su sačuvane'");
+  await click('newAnnex');await until("document.getElementById('documentCategory').value==='annexes'");
+  assert.equal(await evaluate("document.getElementById('parentDocument').value.length"),36);
+  await click('saveDocument');await until("document.getElementById('dirtyLabel').textContent==='Izmene su sačuvane'");
+  const linked=(await db.query("select data from marketizo_sign_documents where category='annexes'")).rows[0].data;
+  assert.equal(linked.dossier.name,'Fixture Client Dossier');assert.ok(linked.parentDocumentId);
+  await evaluate("document.querySelector('#parentDocumentLabel button').click()");await until("document.getElementById('documentTitle').value==='Browser fixture contract'");
   await click('freezeDocument');await until("document.getElementById('contractEditor').contentEditable==='false' && !document.getElementById('previewPdf').disabled");
   await click('previewPdf');await until("document.getElementById('previewDialog').open");await click('closePreview');
   await until("!document.getElementById('sendDocument').disabled");await click('sendDocument');await fill('reviewerName','Fixture legal reviewer');await fill('reviewReference','Fixture form review for Austrian service agreement');
@@ -106,7 +114,16 @@ async function main(){
   require('../scripts/verify-sign-evidence.cjs').verify(packages.e,Buffer.from(packages.p));
   assert.equal(packages.e.manifest.issuer.privacyNotice.version,'2026-10-20','Final evidence must preserve the notice version sent with the request');
   assert.ok(packages.e.manifest.signers[0].strokes.some(stroke=>stroke.length>=3),'Drawn signature must survive browser, database and final evidence export');
-  assert.deepEqual(errors,[]);assert.equal((await db.query('select status from marketizo_sign_documents')).rows[0].status,'signed');
+  assert.deepEqual(errors,[]);assert.equal((await db.query("select status from marketizo_sign_documents where category='clients'")).rows[0].status,'signed');
+  await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);await until("document.querySelector('#dossierCards button')?.textContent.includes('Fixture Client Dossier')");
+  await evaluate("document.querySelector('#dossierCards button').click()");await until("document.querySelectorAll('#documentRows tr').length===2");
+  await fill('categoryFilter','annexes');await until("document.querySelectorAll('#documentRows tr').length===1");
+  await evaluate("document.querySelector('#documentRows button').click()");await until("document.getElementById('documentCategory').value==='annexes'");
+  await click('archiveDocument');await until("document.getElementById('archiveDocument').textContent==='Vrati iz arhive'");await click('backToLibrary');
+  await evaluate("document.querySelector('[data-library=archive]').click()");await until("document.querySelectorAll('#documentRows tr').length===1");
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false},sessionId);await sleep(300);
+  fs.writeFileSync(path.join(out,'sign-dossiers.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
+  assert.deepEqual(errors,[]);
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> OTP -> explicit acceptance -> final receipt -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');
  }finally{ws?.close();chrome?.kill();server?.closeAllConnections();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
 }

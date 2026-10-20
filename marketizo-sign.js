@@ -3,6 +3,7 @@
   const $ = id => document.getElementById(id);
   const categories = { clients: 'Klijenti', employees: 'Zaposleni', nda: 'NDA', annexes: 'Aneksi', other: 'Ostalo' };
   const statuses = { draft: 'Nacrt', ready: 'Zaključana verzija', sent: 'Poslat', viewed: 'Pregledan', signing: 'Potpisivanje', signed: 'Potpisan', declined: 'Odbijen', expired: 'Istekao', voided: 'Poništen' };
+  let dossierRows = [], dossierOffset = 0, selectedDossier = null, newDossierId = null;
   let people = [], templates = [], current = null, library = 'documents', offset = 0, hasMore = false;
   let preparedSha = '', sendingEnabled = false, sendPending = null;
   let dirty = false, busy = false, loading = 0, pending = null, previewUrl = null, searchTimer;
@@ -27,6 +28,9 @@
   function updateControls() {
     const editable = writable();
     $('documentTitle').disabled = !editable || busy; $('documentCategory').disabled = !editable || busy; $('documentNote').disabled = !editable || busy; $('documentSignatureMethod').disabled = !editable || busy;
+    document.querySelectorAll('#dossierDetails input, #dossierDetails select').forEach(el => el.disabled = !editable || busy);
+    $('dossierDetails').hidden = current?.kind === 'template';
+    $('newAnnex').disabled = busy || dirty || !current?.revision || !current?.data.dossier || !!current?.data.parentDocumentId || !!current?.archived_at;
     $('contractEditor').contentEditable = String(editable && !busy);
     document.querySelectorAll('.sign-toolbar button, #recipientRows input, #recipientRows select, #recipientRows button').forEach(el => el.disabled = !editable || busy);
     ['saveDocument', 'addRecipient', 'applyTemplate', 'templateSelect'].forEach(id => $(id).disabled = !editable || busy);
@@ -107,13 +111,53 @@
     remove.addEventListener('click', () => { row.remove(); setDirty(); });
     return row;
   }
+  function dossiers() {
+    const unique = new Map();
+    for (const row of dossierRows) if (row.dossier && !unique.has(row.dossier.id)) unique.set(row.dossier.id, row.dossier);
+    if (current?.data.dossier) unique.set(current.data.dossier.id, current.data.dossier);
+    return [...unique.values()];
+  }
+  function renderDossiers() {
+    const search = $('dossierSearch').value.trim().toLocaleLowerCase();
+    $('dossierCards').replaceChildren(...dossiers().filter(d => d.name.toLocaleLowerCase().includes(search)).map(d => {
+      const button = node('button', `${d.name} · ${d.type === 'employee' ? 'Zaposleni' : 'Klijent'}`, { type: 'button', class: 'secondary-button', 'aria-pressed': String(selectedDossier?.id === d.id) });
+      button.addEventListener('click', () => { selectedDossier = d; offset = 0; renderDossiers(); list(); }); return button;
+    }));
+    $('activeDossier').textContent = selectedDossier ? 'Dosije: ' + selectedDossier.name : 'Prikaz svih dokumenata';
+    $('clearDossier').hidden = !selectedDossier;
+  }
+  async function loadDossiers(reset = false) {
+    if (reset) { dossierOffset = 0; dossierRows = []; }
+    const r = await api({ action: 'dossiers', offset: String(dossierOffset) });
+    dossierRows.push(...r.items); dossierOffset += r.items.length; $('moreDossiers').hidden = !r.hasMore; renderDossiers();
+  }
+  function renderParents(value = '') {
+    const id = $('documentDossier').value;
+    const rows = dossierRows.filter(r => r.dossier?.id === id && !r.parentDocumentId && r.id !== current?.id);
+    $('parentDocument').replaceChildren(node('option', 'Samostalan dokument / osnovni ugovor', { value: '' }), ...rows.map(r => node('option', r.title + (r.archived_at ? ' · arhiviran' : ''), { value: r.id })));
+    if (value && !rows.some(r => r.id === value)) $('parentDocument').append(node('option', 'Osnovni ugovor · ' + value, { value }));
+    $('parentDocument').value = value;
+    $('parentDocumentLabel').replaceChildren();
+    if (value) { const open = node('button', 'Otvori osnovni ugovor', { type: 'button', class: 'sign-text-button' }); open.addEventListener('click', async () => { if (!leaveAllowed()) return; try { const r = await api({ action: 'get', id: value }); openDocument(r.document); } catch (e) { message(e.message, true); } }); $('parentDocumentLabel').append(open); }
+  }
+  function setupDossier(dossier, parent = '') {
+    newDossierId = null;
+    $('documentDossier').replaceChildren(node('option', 'Bez dosijea', { value: '' }), ...dossiers().map(d => node('option', `${d.name} · ${d.type === 'employee' ? 'Zaposleni' : 'Klijent'}`, { value: d.id })), node('option', '+ Novi dosije', { value: 'new' }));
+    $('documentDossier').value = dossier?.id || ''; $('newDossierFields').hidden = true; $('dossierName').value = ''; renderParents(parent);
+  }
+  function readDossier() {
+    const id = $('documentDossier').value;
+    if (id === 'new') { newDossierId ||= crypto.randomUUID(); return { id: newDossierId, name: $('dossierName').value, type: $('dossierType').value }; }
+    return dossiers().find(d => d.id === id) || null;
+  }
   function readDraft() {
-    return { ...blank(), title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
+    return { ...blank(), dossier: current.kind === 'template' ? null : readDossier(), parentDocumentId: $('parentDocument').value || null, title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
   }
   function leaveAllowed() { return !dirty || confirm('Postoje nesačuvane izmene. Napustiti ovaj nacrt?'); }
   function openDocument(doc, kind = 'document', isNew = false) {
     current = { ...doc, kind }; pending = null; preparedSha = ''; sendPending = null;
     $('documentTitle').value = doc.data.title; $('documentCategory').value = doc.data.category; $('documentNote').value = doc.data.note || '';
+    setupDossier(doc.data.dossier, doc.data.parentDocumentId || '');
     renderEditor(doc.data.content); $('recipientRows').replaceChildren(...doc.data.recipients.map(recipientRow));
     $('documentSignatureMethod').value = doc.data.signatureMethod || 'ses';
     $('templateSelect').value = ''; $('workspace').hidden = false; $('library').hidden = true; setDirty(isNew); updateControls(); message('');
@@ -121,7 +165,7 @@
   }
   async function list() {
     const sequence = ++loading;
-    const params = { action: 'list', kind: library === 'templates' || (library === 'archive' && $('archiveType').value === 'template') ? 'template' : 'document', category: $('categoryFilter').value, status: $('statusFilter').value, archived: String(library === 'archive'), search: $('signSearch').value, offset: String(offset) };
+    const params = { action: 'list', kind: library === 'templates' || (library === 'archive' && $('archiveType').value === 'template') ? 'template' : 'document', category: $('categoryFilter').value, status: $('statusFilter').value, archived: String(library === 'archive'), search: $('signSearch').value, ...(selectedDossier && library !== 'templates' ? { dossier: selectedDossier.id } : {}), offset: String(offset) };
     $('refreshList').disabled = true;
     try {
       const r = await api(params); if (sequence !== loading) return;
@@ -152,7 +196,14 @@
     try {
       const r = await api({}, { ...body, commandId: pending.commandId });
       current.revision = r.revision;
-      if (action === 'save') current.data = structuredClone(extra.data);
+      if (action === 'save') {
+        current.data = structuredClone(extra.data);
+        if (current.kind !== 'template') {
+          dossierRows = dossierRows.filter(r => r.id !== current.id);
+          dossierRows.unshift({ id: current.id, title: current.data.title, dossier: current.data.dossier, parentDocumentId: current.data.parentDocumentId, archived_at: current.archived_at });
+          setupDossier(current.data.dossier, current.data.parentDocumentId || ''); renderDossiers();
+        }
+      }
       if (action === 'freeze') { current.status = 'ready'; preparedSha = ''; }
       if (action === 'archive') current.archived_at = new Date().toISOString();
       if (action === 'restore') current.archived_at = null;
@@ -163,7 +214,7 @@
     } catch (e) { message(e.message, true); return false; }
     finally { busy = false; updateControls(); }
   }
-  $('newDocument').addEventListener('click', () => { if (!busy && leaveAllowed()) openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data: blank() }, library === 'templates' ? 'template' : 'document', true); });
+  $('newDocument').addEventListener('click', () => { if (!busy && leaveAllowed()) openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data: { ...blank(), dossier: selectedDossier } }, library === 'templates' ? 'template' : 'document', true); });
   $('backToLibrary').addEventListener('click', () => { if (leaveAllowed()) { current = null; setDirty(false); $('workspace').hidden = true; $('library').hidden = false; list(); } });
   $('saveDocument').addEventListener('click', () => mutate('save', { data: readDraft() }));
   $('freezeDocument').addEventListener('click', async () => {
@@ -177,7 +228,7 @@
     if (!confirm('Zameniti tekst i naziv trenutnog nacrta izabranim šablonom?')) return;
     try { const r = await api({ action: 'get', id: $('templateSelect').value, kind: 'template' }); renderEditor(r.document.data.content); $('documentTitle').value = r.document.title; $('documentCategory').value = r.document.category; setDirty(); } catch (e) { message(e.message, true); }
   });
-  function copy(kind) { const data = readDraft(); if (kind === 'template') data.recipients = []; data.title = (data.title || 'Novi dokument') + (kind === 'template' ? ' — šablon' : ' — kopija'); openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data }, kind, true); }
+  function copy(kind) { const data = readDraft(); if (kind === 'template') { data.recipients = []; data.dossier = null; data.parentDocumentId = null; } data.title = (data.title || 'Novi dokument') + (kind === 'template' ? ' — šablon' : ' — kopija'); openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data }, kind, true); }
   $('duplicateDocument').addEventListener('click', () => copy('document'));
   $('saveAsTemplate').addEventListener('click', () => { if (dirty && !confirm('Nesačuvan unos preneti u novi šablon? Original se neće promeniti.')) return; copy('template'); message('Šablon je pripremljen. Klikni „Sačuvaj šablon” da ga sačuvaš u bazi.'); });
   $('previewDocument').addEventListener('click', async () => {
@@ -205,6 +256,17 @@
     if (busy || !leaveAllowed()) return; library = button.dataset.library; current = null; offset = 0; $('archiveTypeLabel').hidden = library !== 'archive'; setDirty(false); $('workspace').hidden = true; $('library').hidden = false;
     document.querySelectorAll('[data-library]').forEach(b => { b.classList.toggle('selected', b === button); b.setAttribute('aria-pressed', String(b === button)); }); list();
   }));
+  $('documentDossier').addEventListener('change', () => { $('newDossierFields').hidden = $('documentDossier').value !== 'new'; newDossierId = null; renderParents(); });
+  $('parentDocument').addEventListener('change', () => renderParents($('parentDocument').value));
+  $('dossierSearch').addEventListener('input', renderDossiers);
+  $('clearDossier').addEventListener('click', () => { selectedDossier = null; offset = 0; renderDossiers(); list(); });
+  $('moreDossiers').addEventListener('click', async () => { $('moreDossiers').disabled = true; try { await loadDossiers(); } catch (e) { message(e.message, true); } finally { $('moreDossiers').disabled = false; } });
+  $('newAnnex').addEventListener('click', () => {
+    if (busy || dirty || !current?.revision || !current.data.dossier || current.data.parentDocumentId) return;
+    const original = current;
+    const data = { ...blank(), title: 'Aneks — ' + original.data.title, category: 'annexes', dossier: structuredClone(original.data.dossier), parentDocumentId: original.id, recipients: structuredClone(original.data.recipients) };
+    openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data }, 'document', true);
+  });
   $('refreshList').addEventListener('click', list);
   ['categoryFilter', 'statusFilter', 'archiveType'].forEach(id => $(id).addEventListener('change', () => { offset = 0; list(); }));
   $('signSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { offset = 0; list(); }, 300); });
@@ -249,7 +311,7 @@
   async function init() {
     $('newDocument').disabled = true;
     try { const r = await api({ action: 'bootstrap' }); people = r.people; sendingEnabled = r.integration.sendingEnabled; $('connectionStatus').textContent = r.integration.message;
-      await loadTemplates(); $('newDocument').disabled = false; await list();
+      await loadDossiers(true); await loadTemplates(); $('newDocument').disabled = false; await list();
     } catch (e) { $('connectionStatus').textContent = 'Marketizo Sign nije spreman za rad.'; message(e.message, true); }
   }
   init();
