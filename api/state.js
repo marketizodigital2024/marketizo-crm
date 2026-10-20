@@ -1,7 +1,7 @@
 const { hashPassword } = require("../lib/password.js");
 const dbFetch = (...args) => require("../lib/database-request.js").request(fetch, ...args);
 const tableName = process.env.SUPABASE_TABLE || "agency_crm_state";
-const rowId = process.env.CRM_STATE_ID || "marketizo-main";
+const rowId = (process.env.VERCEL_ENV === "preview" ? "marketizo-smm-preview-v1" : process.env.CRM_STATE_ID || "marketizo-main");
 const BACKUP_SLOTS = 30;
 const employeeAuthTable = "agency_crm_employee_auth";
 const crypto = require("node:crypto");
@@ -213,6 +213,7 @@ function viennaDateKey(date = new Date()) {
 }
 
 async function preserveDailyPrewriteBackup(config, current) {
+  if (process.env.VERCEL_ENV === "preview") return;
   if (!current?.payload || !current.updatedAt) return;
   const now = new Date();
   const backupDate = viennaDateKey(now);
@@ -274,6 +275,7 @@ async function readStoredState(config) {
 }
 
 async function readSessionState(config, session, compact = false) {
+  if (process.env.VERCEL_ENV === "preview") return readStoredState(config);
   const rpc = compact ? "marketizo_read_session_state_compact" : "marketizo_read_session_state";
   const response = await dbFetch(`${config.url}/rest/v1/rpc/${rpc}`, {
     method: "POST", headers: { ...supabaseHeaders(config.key), "Content-Type": "application/json" },

@@ -3662,6 +3662,7 @@ function showEmployeeProfileForm(employee = null) {
     setText("employeeProfileMode", "Izmena");
     form.elements.id.value = employee.id;
     form.elements.name.value = employee.name || "";
+    ensureEmployeePositionOption(form.elements.position, employee.position);
     form.elements.position.value = employee.position || "";
     form.elements.email.value = employee.email || "";
     form.elements.password.value = "";
@@ -3702,6 +3703,7 @@ function showEmployeeProfileForm(employee = null) {
     form.elements.status.value = "Aktivan";
     form.elements.startDate.value = currentDateKey();
   }
+  setEmployeePositions(form.elements.position, employee?.position || "");
   updateEmployeeMonthlyPreview();
   form.querySelector('input[name="name"]')?.focus();
 }
@@ -7230,4 +7232,81 @@ function applyInvoiceStartMonthV1() {
 
 // Legacy correction is available only as an explicit migration.
 
+
+
+
+function employeeRoles(value) {
+  const canonical = ['Social Media Manager','Scenarista','Editor','Lider editora','Snimatelj','Media Buyer','Founder / Strategija','Co-founder / Operativa'];
+  const input = Array.isArray(value) ? value : [value];
+  const result = [];
+  for (const item of input) {
+    if (typeof item !== 'string') continue;
+    let text = item;
+    const protectedTitles = [];
+    for (const title of ['Founder / Strategija','Co-founder / Operativa']) {
+      const pattern = new RegExp(title.replace(/\//g, '\\s*\\/\\s*'), 'gi');
+      text = text.replace(pattern, match => { protectedTitles.push(match); return '\u0001'+(protectedTitles.length-1)+'\u0001'; });
+    }
+    for (let part of text.split(/\s*[/,;|\n]\s*/)) {
+      part = part.replace(/\u0001(\d+)\u0001/g, (_,i) => protectedTitles[Number(i)]).trim();
+      if (!part) continue;
+      const normalized = part.toLowerCase().replace(/\s+/g,' ');
+      const role = normalized === 'smm' ? 'Social Media Manager' : canonical.find(r=>r.toLowerCase()===normalized) || part;
+      if (!result.some(r=>r.toLowerCase()===role.toLowerCase())) result.push(role);
+    }
+  }
+  return result;
+}
+function employeeHasSmm(value) { return employeeRoles(value).includes('Social Media Manager'); }
+
+// Multi-role UI keeps the existing position field/storage contract intact.
+var employeePositionPickers = new WeakMap();
+function ensureEmployeePositionOption() { /* Existing position values are preserved by setEmployeePositions. */ }
+function setEmployeePositions(input, value) {
+  const picker = employeePositionPickers.get(input);
+  if (!picker) return;
+  input.value = String(value || '');
+  const selected = employeeRoles(input.value);
+  const roles = [...new Set([...picker.roles, ...selected])];
+  picker.roles = roles;
+  picker.box.replaceChildren();
+  roles.forEach(role => {
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0;font-weight:500';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox'; checkbox.name = 'employeePositionChoice'; checkbox.value = role;
+    checkbox.checked = selected.includes(role); checkbox.style.width = 'auto';
+    label.append(checkbox, document.createTextNode(role)); picker.box.append(label);
+    checkbox.addEventListener('change', () => {
+      const checked = [...picker.box.querySelectorAll('input[type="checkbox"]')].filter(item=>item.checked).map(item=>item.value);
+      input.value = checked.join(' / ');
+      picker.box.querySelector('input')?.setCustomValidity(checked.length ? '' : 'Izaberi bar jednu poziciju.');
+      input.dispatchEvent(new Event('input', { bubbles:true }));
+    });
+  });
+  picker.box.querySelector('input')?.setCustomValidity(selected.length ? '' : 'Izaberi bar jednu poziciju.');
+}
+function setupEmployeePositionSelection() {
+  const canonical = ['Social Media Manager','Scenarista','Editor','Lider editora','Snimatelj','Media Buyer','Founder / Strategija','Co-founder / Operativa'];
+  document.querySelectorAll('input[name="position"]').forEach(input => {
+    if (employeePositionPickers.has(input)) return;
+    const existing = typeof state !== 'undefined' ? (state.employees || []).flatMap(e=>employeeRoles(e.position)) : [];
+    const roles = [...new Set([...canonical,...existing])];
+    const fieldset = document.createElement('fieldset');
+    fieldset.style.cssText = 'min-width:0;margin:0;border:1px solid var(--line,#dce3dd);border-radius:10px;padding:14px';
+    const legend = document.createElement('legend'); legend.textContent = 'Pozicije';
+    const box = document.createElement('div'); box.style.cssText = 'display:grid;gap:8px';
+    const note = document.createElement('small');
+    note.textContent = 'Možeš izabrati više pozicija. Svako ko ima Social Media Manager dobija Upitnike. Ostale dozvole ostaju nepromenjene.';
+    note.style.cssText='display:block;margin-top:12px;line-height:1.5';fieldset.append(legend,box,note);
+    const originalLabel = input.closest('label');
+    if (originalLabel) { originalLabel.hidden = true; originalLabel.insertAdjacentElement('afterend',fieldset); }
+    else input.insertAdjacentElement('afterend',fieldset);
+    input.type = 'hidden'; input.required = false;
+    employeePositionPickers.set(input,{roles,box});
+    setEmployeePositions(input,input.value);
+    input.form?.addEventListener('reset',()=>setTimeout(()=>setEmployeePositions(input,input.value),0));
+  });
+}
+setupEmployeePositionSelection();
 
