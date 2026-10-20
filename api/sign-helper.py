@@ -181,7 +181,9 @@ def render_original(payload):
         story.append(Paragraph(text or "<br/>", s["heading"] if block["type"] == "heading" else s["body"]))
     # No internal notes, signature metadata or disclaimer is added to the agreement.
     # The exact original bytes are what every signer previews and accepts.
-    issuer = payload.get("issuer", {})
+    issuer = dict(payload.get("issuer", {}))
+    if de and issuer.get("address", "").endswith("Austrija"):
+        issuer["address"] = issuer["address"][:-7] + "Österreich"
     details = doc.get("contractDetails", {})
     if "audience" not in details:
         details = dict(details, audience="employee" if doc.get("category") == "employees" else "client" if doc.get("category") == "clients" else "other")
@@ -193,7 +195,7 @@ def render_original(payload):
         story.append(SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
     data = build_pdf(doc["title"], story, issuer)
     writer = PdfWriter(io.BytesIO(data))
-    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer}, ensure_ascii=False)})
+    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr"}, ensure_ascii=False)})
     out = io.BytesIO(); writer.write(out); data = out.getvalue()
     return {"base64": base64.b64encode(data).decode(), "sha256": hashlib.sha256(data).hexdigest(), "renderer": VERSION}
 
@@ -320,7 +322,63 @@ def authorize(raw, timestamp, signature):
     return hmac.compare_digest(expected, signature)
 
 
+def preview_pdf(payload):
+    """Read the exact frozen PDF. Never reconstruct a contract from an editable draft."""
+    raw = base64.b64decode(payload.get("pdfBase64", ""), validate=True)
+    digest = hashlib.sha256(raw).hexdigest()
+    if len(raw) > 1500000 or digest != payload.get("pdfSha256") or not raw.startswith(b"%PDF-"):
+        raise ValueError("Preview integrity mismatch")
+    reader = PdfReader(io.BytesIO(raw))
+    if not 0 < len(reader.pages) <= 150:
+        raise ValueError("Unsupported page count")
+    layout = json.loads((reader.metadata or {}).get("/MarketizoLayout", "null") or "null") or {}
+    pages, full_text = [], []
+    issuer = layout.get("issuer", {})
+    title = " ".join(str((reader.metadata or {}).get("/Title", "")).split())
+    for index, page in enumerate(reader.pages):
+        raw_text = page.extract_text(extraction_mode="layout") or ""
+        full_text.append(raw_text)
+        lines = raw_text.splitlines()
+        # Remove only the repeated stationery, which the responsive page renders separately.
+        for value in [issuer.get("name"), issuer.get("address"), issuer.get("email")]:
+            if value:
+                for i, line in enumerate(lines[:8]):
+                    if line.strip() == value.strip():
+                        lines[i] = ""
+                        break
+        while lines and not lines[-1].strip(): lines.pop()
+        if lines and re.fullmatch(r"Marketizo Digital e\.U\.\s+\d+", lines[-1].strip()): lines.pop()
+        blocks, paragraph = [], []
+        def flush():
+            if paragraph:
+                value = " ".join(paragraph)
+                blocks.append({"text": value, "heading": bool(len(value) < 160 and re.match(r"^(Član|Artikel|Abschnitt|§|[0-9]+[.)])", value))})
+                paragraph.clear()
+        for line in lines:
+            value = line.strip()
+            if not value:
+                flush()
+            else:
+                columns = re.split(r"\s{3,}", value)
+                if len(columns) == 1 and len(line) - len(line.lstrip()) > 35:
+                    columns = ["", value]
+                if len(columns) > 1:
+                    flush()
+                    blocks.append({"text": " | ".join(columns), "columns": columns, "heading": False})
+                else:
+                    paragraph.append(value)
+        flush()
+        if index == 0 and blocks and blocks[0]["text"] == title:
+            blocks.pop(0)
+        pages.append(blocks)
+    # Older frozen PDFs predate explicit language metadata. Their fixed signature labels identify the language.
+    language = layout.get("language") or ("de" if "Unterzeichnet am:" in "\n".join(full_text) else "sr")
+    return {"pdfSha256": digest, "language": language, "pages": pages, "issuer": layout.get("issuer", {})}
+
+
 def dispatch(payload):
+    if payload.get("action") == "preview":
+        return preview_pdf(payload)
     if payload.get("action") == "render":
         return render_original(payload)
     if payload.get("action") == "finalize":

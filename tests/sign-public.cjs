@@ -4,8 +4,8 @@ const { createHandler } = require('../api/sign-public.js');
 const { hash, canonical, evidenceKey } = require('../lib/sign-workflow.js');
 const { verify } = require('../scripts/verify-sign-evidence.cjs');
 process.env.SIGN_INTERNAL_SECRET = 'i'.repeat(48); process.env.SIGN_EVIDENCE_SECRET = 'e'.repeat(48);
-let calls = [], fail = false;
-const flow = { async rpc(action, data) { calls.push({ action, data }); if(fail && action==='link_accept') throw Error('private fixture content');if(action==='link_view')return{ok:true,title:'Fixture',verified:false,email:'t***@example.com'};return{ok:true}; },async issueOtp(){return{ok:true,challengeId:crypto.randomUUID()};},async verifyOtp(){return{ok:true};},async drain(){return{done:0};} };
+let calls = [], fail = false, previewLanguage='sr'; const fixturePdf=Buffer.from('%PDF-preview-fixture');
+const flow = { async rpc(action, data) { calls.push({ action, data }); if(fail && action==='link_accept') throw Error('private fixture content');if(action==='pdf')return{pdfBase64:fixturePdf.toString('base64'),pdfSha256:hash(fixturePdf)};if(action==='link_view')return{ok:true,title:'Fixture',verified:false,email:'t***@example.com'};return{ok:true}; },async issueOtp(){return{ok:true,challengeId:crypto.randomUUID()};},async verifyOtp(){return{ok:true};},async helper(payload){calls.push({action:'helper',data:payload});return{pdfSha256:hash(fixturePdf),language:previewLanguage,pages:[[{text:'Frozen fixture'}]]};},async drain(){return{done:0};} };
 const handler = createHandler({ config:{configured:true,url:'https://fixture.invalid',key:'private'},origin:'https://app.marketizo.com',createWorkflow:()=>flow });
 async function call(method, body, extras={}) { const req={method,url:extras.url||'/api/sign-public',body,headers:{origin:'https://app.marketizo.com','content-type':'application/json','x-sign-request':'1',cookie:'__Host-marketizo_sign='+'s'.repeat(43),...extras.headers},socket:{remoteAddress:'127.0.0.1'}};const res={headers:{},setHeader(k,v){this.headers[k]=v;},end(x){this.raw=x;}};await handler(req,res);return{status:res.statusCode,headers:res.headers,body:JSON.parse(res.raw)}; }
 (async()=>{
@@ -17,6 +17,8 @@ async function call(method, body, extras={}) { const req={method,url:extras.url|
  assert.equal((await call('POST',{action:'accept',accepted:false})).status,400);
  const body={action:'accept',commandId:crypto.randomUUID(),pdfSha256:'a'.repeat(64),accepted:true,authority:true,signature:{name:'Fixture',strokes:[]}};
  const accepted=await call('POST',body);assert.equal(accepted.status,200);assert.ok(calls.find(x=>x.action==='link_accept').data.consentText.includes('jednostavnim'));
+ previewLanguage='de';assert.equal((await call('POST',body)).status,200);assert.ok(calls.filter(x=>x.action==='link_accept').at(-1).data.consentText.includes('elektronischen Signatur'));
+ const pv=await call('GET',undefined,{url:'/api/sign-public?action=preview'});assert.equal(pv.body.language,'de');assert.ok(pv.body.consentText.includes('Ich habe'));
  fail=true;const failure=await call('POST',body);assert.equal(failure.status,503);assert.ok(!JSON.stringify(failure.body).includes('private fixture'));
  const original=Buffer.from('%PDF-original'),final=Buffer.concat([original,Buffer.from('certificate')]),key=evidenceKey();
  const manifest={originalByteLength:original.length,originalSha256:hash(original),applicationKey:{publicKey:key.publicKey,fingerprint:key.fingerprint,algorithm:'Ed25519'}};
