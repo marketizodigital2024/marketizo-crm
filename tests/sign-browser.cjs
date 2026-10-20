@@ -88,10 +88,17 @@ async function main(){
   await click('requestOtp');await until("!document.getElementById('otpForm').hidden && !document.getElementById('otpCode').disabled");
   const code=mails.find(m=>m.subject.includes('kod')).text.match(/kod je: (\d{6})/)[1];await fill('otpCode',code);await evaluate("document.getElementById('otpForm').requestSubmit()");await until("!document.getElementById('agreement').hidden");
   await click('openPdf');await evaluate("fetch('/api/sign-public?action=pdf').then(r=>r.arrayBuffer()).then(b=>b.byteLength)");await fill('signerName','Fixture Signer');
+  await evaluate("document.getElementById('signatureCanvas').scrollIntoView({block:'center'})");
+  const rect=await evaluate("(()=>{const r=document.getElementById('signatureCanvas').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()");
+  const start={x:rect.x+rect.width*.15,y:rect.y+rect.height*.65};
+  await send('Input.dispatchMouseEvent',{type:'mousePressed',...start,button:'left',buttons:1,clickCount:1},sessionId);
+  for(const [x,y]of [[.3,.25],[.45,.7],[.6,.3],[.8,.55]])await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:rect.x+rect.width*x,y:rect.y+rect.height*y,button:'left',buttons:1},sessionId);
+  await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:rect.x+rect.width*.8,y:rect.y+rect.height*.55,button:'left',buttons:0,clickCount:1},sessionId);
   await evaluate("document.getElementById('acceptTerms').checked=true;document.getElementById('acceptAuthority').checked=true");await click('acceptDocument');
   await until("!document.getElementById('receiptLinks').hidden");
   const packages=await evaluate("Promise.all([fetch('/api/sign-public?action=evidence').then(r=>r.json()),fetch('/api/sign-public?action=receipt').then(r=>r.arrayBuffer()).then(b=>Array.from(new Uint8Array(b)))]).then(([e,p])=>({e,p}))");
   require('../scripts/verify-sign-evidence.cjs').verify(packages.e,Buffer.from(packages.p));
+  assert.ok(packages.e.manifest.signers[0].strokes.some(stroke=>stroke.length>=3),'Drawn signature must survive browser, database and final evidence export');
   const out=path.join(root,'browser-results');fs.mkdirSync(out,{recursive:true});
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false},sessionId);await sleep(300);assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth+1'),false);
   fs.writeFileSync(path.join(out,'sign-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true},sessionId)).data,'base64'));
