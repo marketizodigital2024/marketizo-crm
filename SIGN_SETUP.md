@@ -84,3 +84,9 @@ The connector's explicit teamId scope returned 403; the same verified unique pro
 The two newer questionnaire commits from main at 5958a121b95f706e333ed2c5aa9e2a806fee7aee are incorporated by this merge. Their five changed file paths do not overlap the Sign PR; each is retained byte-for-byte from main. Existing local untracked workspace files were not changed. CI must pass again for this combined revision before a release.
 
 Public DNS preparation check found two separate TXT records starting v=spf1 at marketizo.com: one includes _spf.google.com; the other includes spf.titan.email and _spf.mlsend.com with a/mx. Multiple SPF records are invalid; prepare one reviewed record preserving all still-required senders and check lookup limits before a DNS change. _dmarc.marketizo.com returned NXDOMAIN through Google Public DNS. Actual message DKIM/DMARC alignment, SMTP login/TLS and inbox receipt remain untested. These findings prevent a claim that the real-mail test prerequisites are all complete. No DNS records were changed.
+
+## Simplified preparation and one-document test
+
+The owner uses Save draft → Preview PDF → Email or link. PDF preview automatically validates and freezes the saved revision on the server, then prepares the exact PDF; there is no separate visible Freeze button or browser confirmation. Dirty drafts are saved first. CAS revisions and idempotent freeze commands remain enforced; a failed render can retry the frozen version.
+
+SIGN_SES_ENABLED remains the general gate. A separately authorized nonbinding test can use SIGN_TEST_DELIVERY JSON with documentId, email and expiresAt. It only permits that exact document with one exact recipient and a title starting TEST containing NEOBAVEZUJUĆE; expired/invalid scopes fail closed. Owner bootstrap exposes only the test document ID to enable its delivery button. Clear the test scope and redeploy after the invitation; general sending stays false throughout.

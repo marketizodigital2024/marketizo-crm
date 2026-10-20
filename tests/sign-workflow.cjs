@@ -50,6 +50,18 @@ const { hash, canonical, seal, unseal, readiness, validateSignature, createWorkf
  let jobs = [{ id: crypto.randomUUID(), kind: 'invitation', sealed_payload: linkRequest.parties[0].sealedMail }], smtpCalls = 0;
  const linkWorker = createWorkflow({ url: 'https://fixture.invalid', key: 'fixture', organization: 'marketizo-main' }, { fetch: async (url, options) => { const b=JSON.parse(options.body); return { ok: true, json: async () => b.p_action === 'claim' ? { ok:true, job:jobs.shift() || null } : { ok:true } }; }, helper: async () => { smtpCalls++; return {accepted:true}; } });
  await linkWorker.drain(2); assert.equal(smtpCalls,0,'Generating links must not send an invitation');
+ process.env.SIGN_SES_ENABLED = 'false';
+ process.env.SIGN_TEST_DELIVERY = JSON.stringify({documentId:doc.id,email:'test@example.com',expiresAt:new Date(Date.now()+600000).toISOString()});
+ const testDoc = {...doc,data:{...doc.data,title:'TEST — NEOBAVEZUJUĆE'}};
+ const testBody = { revision:2, commandId:crypto.randomUUID(), review:{decision:'ses_allowed',reviewedBy:'Fixture reviewer',reference:'Fixture nonbinding test',pdfSha256:hash(pdf),pdfReviewed:true} };
+ assert.equal(readiness().sendingEnabled,false);assert.equal(readiness().testDocumentId,doc.id);
+ await workflow.prepare('emp-miljan',testBody,testDoc);
+ await assert.rejects(workflow.prepare('emp-miljan',testBody,{...testDoc,id:crypto.randomUUID()}),/Slanje još nije uključeno/);
+ await assert.rejects(workflow.prepare('emp-miljan',testBody,{...testDoc,data:{...testDoc.data,recipients:[{...doc.data.recipients[0],email:'other@example.com'}]}}),/Slanje još nije uključeno/);
+ await assert.rejects(workflow.prepare('emp-miljan',testBody,doc),/Slanje još nije uključeno/);
+ process.env.SIGN_TEST_DELIVERY=JSON.stringify({documentId:doc.id,email:'test@example.com',expiresAt:'2000-01-01T00:00:00Z'});
+ await assert.rejects(workflow.prepare('emp-miljan',testBody,testDoc),/Slanje još nije uključeno/);delete process.env.SIGN_TEST_DELIVERY;
+ console.log('PASS: approved single-document test cannot enable general sending, other recipients or expired scopes.');
  console.log('PASS: manual links keep recipient-scoped tokens, encrypted storage and no invitation SMTP.');
  console.log('PASS: encrypted outbox, tamper detection, explicit SES/QES choice, form review, exact PDF preparation and random recipient-scoped invitation tokens.');
 })().catch(e => { console.error(e); process.exitCode = 1; });

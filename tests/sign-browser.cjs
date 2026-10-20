@@ -90,8 +90,8 @@ async function main(){
   const linked=(await db.query("select data from marketizo_sign_documents where category='annexes'")).rows[0].data;
   assert.equal(linked.dossier.name,'Fixture Client Dossier');assert.ok(linked.parentDocumentId);
   await evaluate("document.querySelector('#parentDocumentLabel button').click()");await until("document.getElementById('documentTitle').value==='Browser fixture contract'");
-  await click('freezeDocument');await until("document.getElementById('contractEditor').contentEditable==='false' && !document.getElementById('previewPdf').disabled");
-  await click('previewPdf');await until("document.getElementById('previewDialog').open");await click('closePreview');
+  assert.equal(await evaluate("document.getElementById('freezeDocument').hidden"),true);
+  await click('previewPdf');await until("document.getElementById('previewDialog').open && document.getElementById('contractEditor').contentEditable==='false'");await click('closePreview');
   await until("!document.getElementById('sendDocument').disabled");await click('sendDocument');await fill('reviewerName','Fixture legal reviewer');await fill('reviewReference','Fixture form review for Austrian service agreement');
   await evaluate("document.getElementById('confirmForm').checked=true;document.getElementById('confirmPdf').checked=true");await click('confirmSend');await until("!document.getElementById('sendDialog').open");
   assert.equal(mails.filter(m=>m.subject.includes('dokument za potpis')).length,1);
@@ -144,7 +144,7 @@ async function main(){
   await click('saveDocument');await until("document.getElementById('dirtyLabel').textContent==='Izmene su sačuvane'");
   const manual=(await db.query("select data from marketizo_sign_documents where title='Manual contractor link fixture'")).rows[0].data;
   assert.equal(manual.contractDetails.language,'de');assert.equal(manual.contractDetails.audience,'contractor');assert.equal(manual.recipients[0].taxId,'TEST-123');assert.equal(manual.dossier,null);
-  await click('freezeDocument');await until("!document.getElementById('previewPdf').disabled");await click('previewPdf');await until("document.getElementById('previewDialog').open");await click('closePreview');
+  await fill('contractPlace','Beograd');await click('previewPdf');await until("document.getElementById('previewDialog').open");await click('closePreview');
   await click('generateLink');await fill('reviewerName','Fixture reviewer');await fill('reviewReference','Fixture form review');await evaluate("document.getElementById('confirmForm').checked=true;document.getElementById('confirmPdf').checked=true");await click('confirmSend');
   await until("document.getElementById('linksDialog').open");
   assert.match(await evaluate("document.querySelector('#generatedLinks input').value"),/\/sign#[A-Za-z0-9_-]{43}$/);

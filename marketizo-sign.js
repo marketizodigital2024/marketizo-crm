@@ -6,7 +6,7 @@
   let deliveryMode = 'email';
   let dossierRows = [], dossierOffset = 0, selectedDossier = null, newDossierId = null;
   let people = [], templates = [], current = null, library = 'documents', offset = 0, hasMore = false;
-  let preparedSha = '', sendingEnabled = false, sendPending = null;
+  let preparedSha = '', sendingEnabled = false, testDocumentId = null, sendPending = null, pdfPending = null;
   let dirty = false, busy = false, loading = 0, pending = null, previewUrl = null, searchTimer;
   const blank = () => ({ title: '', category: 'clients', content: { version: 1, blocks: [{ type: 'paragraph', level: 1, runs: [{ text: '', bold: false, italic: false, underline: false }] }] }, recipients: [], contractDetails: { language: 'sr', audience: 'client', place: '', startDate: '' }, governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: '' });
   function node(tag, value, attrs = {}) { const n = document.createElement(tag); if (value !== null) n.textContent = value; Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v)); return n; }
@@ -46,8 +46,8 @@
     $('revisionLabel').textContent = current?.revision ? `${current.kind === 'template' ? 'Šablon' : statuses[current.status] || current.status} · verzija ${current.revision}` : 'Novi nacrt';
     $('saveDocument').textContent = current?.kind === 'template' ? 'Sačuvaj šablon' : 'Sačuvaj nacrt';
     $('archiveDocument').textContent = current?.archived_at ? 'Vrati iz arhive' : 'Arhiviraj';
-    $('previewPdf').disabled = busy || current?.kind === 'template' || current?.status !== 'ready';
-    $('sendDocument').disabled = busy || !sendingEnabled || !preparedSha || current?.status !== 'ready' || current?.data.signatureMethod !== 'ses';
+    $('previewPdf').disabled = busy || !current || current.kind === 'template' || !['draft','ready'].includes(current.status) || !!current.archived_at;
+    $('sendDocument').disabled = busy || !(sendingEnabled || current?.id === testDocumentId) || !preparedSha || current?.status !== 'ready' || current?.data.signatureMethod !== 'ses';
     $('generateLink').disabled = $('sendDocument').disabled;
     $('sendDocument').textContent = current?.data.signatureMethod === 'qes' ? 'Kvalifikovani potpis · poseban postupak' : 'Pošalji e-mail';
     $('downloadReceipt').disabled = busy || current?.status !== 'signed';
@@ -290,14 +290,18 @@
   $('nextPage').addEventListener('click', () => { if (hasMore) { offset += 40; list(); } });
   function pdfBlob(base64) { return new Blob([Uint8Array.from(atob(base64.replace(/\s/g, '')), c => c.charCodeAt(0))], { type: 'application/pdf' }); }
   $('previewPdf').addEventListener('click', async () => {
-    if (busy || !current) return; busy = true; updateControls(); message('Priprema tačnog PDF-a…');
+    if (busy || !current) return;
+    if (current.status === 'draft' && (dirty || !current.revision) && !await mutate('save', { data: readDraft() })) return;
+    const fingerprint = current.id + ':' + current.revision; if (!pdfPending || pdfPending.fingerprint !== fingerprint) pdfPending = { fingerprint, commandId: crypto.randomUUID() };
+    busy = true; updateControls(); message('Priprema tačnog PDF-a…');
     try {
-      const r = await api({}, { action: 'preparePdf', id: current.id, revision: current.revision }); preparedSha = r.pdfSha256;
+      const r = await api({}, { action: 'preparePdf', id: current.id, revision: current.revision, commandId: pdfPending.commandId }); preparedSha = r.pdfSha256;
+      if (r.document) current = { ...r.document, kind: 'document' }; pdfPending = null;
       if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(pdfBlob(r.pdfBase64));
-      $('previewFrame').removeAttribute('sandbox'); $('previewFrame').src = previewUrl; $('previewDialog').showModal(); message('Pripremljeni PDF je zaključan. Svi potpisnici dobijaju ovu istu verziju.');
-    } catch (e) { message(e.message, true); } finally { busy = false; updateControls(); }
+      $('previewFrame').removeAttribute('sandbox'); $('previewFrame').src = previewUrl; $('previewDialog').showModal(); message('PDF je spreman za pregled. Tačna verzija sačuvana je automatski. Dokument još nije poslat.');
+    } catch (e) { try { const latest = await api({ action: 'get', id: current.id }); current = { ...latest.document, kind: 'document' }; } catch {} message(e.message, true); } finally { busy = false; updateControls(); }
   });
-  function deliveryDialog(mode) { if (busy || !preparedSha || !sendingEnabled) return; deliveryMode = mode; $('deliveryTitle').textContent = mode === 'link' ? 'Generisanje linkova za potpisivanje' : 'Slanje poziva e-mailom'; $('confirmSend').textContent = mode === 'link' ? 'Potvrdi i generiši linkove' : 'Potvrdi i pošalji pozive'; $('sendDialog').showModal(); }
+  function deliveryDialog(mode) { if (busy || !preparedSha || !(sendingEnabled || current?.id === testDocumentId)) return; deliveryMode = mode; $('deliveryTitle').textContent = mode === 'link' ? 'Generisanje linkova za potpisivanje' : 'Slanje poziva e-mailom'; $('confirmSend').textContent = mode === 'link' ? 'Potvrdi i generiši linkove' : 'Potvrdi i pošalji pozive'; $('sendDialog').showModal(); }
   $('sendDocument').addEventListener('click', () => deliveryDialog('email'));
   $('generateLink').addEventListener('click', () => deliveryDialog('link'));
   $('closeLinks').addEventListener('click', () => { $('generatedLinks').replaceChildren(); $('linksDialog').close(); });
@@ -331,7 +335,7 @@
   });
   async function init() {
     $('newDocument').disabled = true;
-    try { const r = await api({ action: 'bootstrap' }); people = r.people; sendingEnabled = r.integration.sendingEnabled; $('connectionStatus').textContent = r.integration.message;
+    try { const r = await api({ action: 'bootstrap' }); people = r.people; sendingEnabled = r.integration.sendingEnabled; testDocumentId = r.integration.testDocumentId || null; $('connectionStatus').textContent = r.integration.message;
       await loadDossiers(true); await loadTemplates(); $('newDocument').disabled = false; await list();
     } catch (e) { $('connectionStatus').textContent = 'Marketizo Sign nije spreman za rad.'; message(e.message, true); }
   }
