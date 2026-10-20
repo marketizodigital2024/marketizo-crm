@@ -46,7 +46,7 @@ async function handle(req, res) {
     if (['public','draft','submit'].includes(action)) {
       if (!model.checkToken(body.id, body.token, secret())) fail(404,'Link nije dostupan.');
       let row = await read(body.id);
-      if (!row || row.payload.recordType !== 'invite' || row.payload.revoked || Date.parse(row.payload.expiresAt) <= Date.now()) fail(404,'Link je istekao ili nije dostupan.');
+      if (!row || row.payload.recordType !== 'invite' || row.payload.revoked || row.payload.deletedAt || Date.parse(row.payload.expiresAt) <= Date.now()) fail(404,'Link je istekao ili nije dostupan.');
       if (action === 'public') return json(res,200,model.publicView(row));
       if (row.payload.status === 'Popunjen') return json(res,200,{ok:true,submitted:true,revision:row.updated_at});
       if (body.revision !== row.updated_at) fail(409,'Upitnik je izmenjen na drugom uređaju. Sačuvajte tekst i osvežite stranicu.');
@@ -58,22 +58,22 @@ async function handle(req, res) {
     if (action === 'viewAnswers') {
       if (!model.checkAnswerToken(body.id,body.token,secret())) fail(404,'Link odgovora nije dostupan.');
       const row = await read(body.id); const p = row?.payload;
-      if (!p || p.recordType !== 'invite' || p.status !== 'Popunjen' || p.revoked) fail(404,'Link odgovora nije dostupan.');
+      if (!p || p.recordType !== 'invite' || p.status !== 'Popunjen' || p.revoked || p.deletedAt) fail(404,'Link odgovora nije dostupan.');
       return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:body.token});
     }
     const { employee, clients } = await actor(req);
     if (action === 'answers') {
       if (!model.uuid(body.id)) fail(400,'Neispravan link.');
       const row = await read(body.id);
-      if (!row || row.payload.recordType !== 'invite') fail(404,'Upitnik nije pronađen.');
+      if (!row || row.payload.recordType !== 'invite' || row.payload.deletedAt) fail(404,'Upitnik nije pronađen.');
       const p = row.payload;
       return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:p.status==='Popunjen'&&!p.revoked?model.answerToken(row.id,secret()):null});
     }
     if (!model.canManage(employee)) fail(403,'Slanje i uređivanje dostupni su SMM-u i administratorima.');
     if (action === 'list') {
       const ts = await Promise.all(Object.keys(defaults).map(template));
-      const rows = await request(`${TABLE}?${nsQuery()}&id=not.like.template:*&select=id,payload,updated_at&order=updated_at.desc&limit=501`);
-      const records = rows.filter(r=>r.payload.recordType==='invite').slice(0,500).map(r=>({...r.payload,id:r.id,revision:r.updated_at,token:model.publicToken(r.id,secret()),answerToken:r.payload.status==='Popunjen'&&!r.payload.revoked?model.answerToken(r.id,secret()):null}));
+      const rows = await request(`${TABLE}?${nsQuery()}&id=not.like.template:*&payload->>deletedAt=${body.deleted?'not.is.null':'is.null'}&select=id,payload,updated_at&order=updated_at.desc&limit=501`);
+      const records = rows.filter(r=>r.payload.recordType==='invite' && (!!r.payload.deletedAt === !!body.deleted)).slice(0,500).map(r=>({...r.payload,id:r.id,revision:r.updated_at,token:model.publicToken(r.id,secret()),answerToken:r.payload.status==='Popunjen'&&!r.payload.revoked?model.answerToken(r.id,secret()):null}));
       return json(res,200,{employee:{id:employee.id,name:employee.name},clients:clients.filter(c=>c.status!=='Arhiviran').map(c=>({id:c.id,name:c.name})),templates:Object.fromEntries(ts.map(t=>[t.id.slice(9),{...t.payload,revision:t.updated_at}])),records,hasMore:rows.length>500});
     }
     if (action === 'template') {
@@ -98,10 +98,18 @@ async function handle(req, res) {
       if (!(await insert(body.requestId,payload))) fail(409,'Zahtev se obrađuje. Pokušajte ponovo istim zahtevom.');
       return json(res,200,{ok:true,id:body.requestId});
     }
+    if (['delete','restore'].includes(action)) {
+      if (!model.uuid(body.id)) fail(400,'Neispravan upitnik.');
+      const row=await read(body.id);
+      if (!row || row.payload.recordType!=='invite') fail(404,'Upitnik nije dostupan.');
+      if (action==='delete' && !row.payload.deletedAt) await update(row,{...row.payload,deletedAt:new Date().toISOString(),deletedBy:employee.id});
+      if (action==='restore' && row.payload.deletedAt) { const {deletedAt,deletedBy,...payload}=row.payload; await update(row,payload); }
+      return json(res,200,{ok:true});
+    }
     if (['sent','revoke'].includes(action)) {
       if (!model.uuid(body.id)) fail(400,'Neispravan upitnik.');
       const row = await read(body.id);
-      if (!row || row.payload.recordType!=='invite') fail(404,'Upitnik nije dostupan.');
+      if (!row || row.payload.recordType!=='invite' || row.payload.deletedAt) fail(404,'Upitnik nije dostupan.');
       if (action==='revoke') await update(row,{...row.payload,revoked:true});
       else if (row.payload.status==='Kreiran') await update(row,{...row.payload,status:'Poslat'});
       return json(res,200,{ok:true});
@@ -110,3 +118,4 @@ async function handle(req, res) {
   } catch(e) { return json(res,e.status || 500,{error:e.status?e.message:'Upitnici trenutno nisu dostupni. Pokušajte ponovo.'}); }
 }
 module.exports = (req,res) => db.withRequestBudget(()=>handle(req,res));
+
