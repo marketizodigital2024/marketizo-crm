@@ -3662,6 +3662,7 @@ function showEmployeeProfileForm(employee = null) {
     setText("employeeProfileMode", "Izmena");
     form.elements.id.value = employee.id;
     form.elements.name.value = employee.name || "";
+    ensureEmployeePositionOption(form.elements.position, employee.position);
     form.elements.position.value = employee.position || "";
     form.elements.email.value = employee.email || "";
     form.elements.password.value = "";
@@ -7231,3 +7232,22 @@ function applyInvoiceStartMonthV1() {
 // Legacy correction is available only as an explicit migration.
 
 
+
+
+// Position selection is UI-only; privileges are checked again against the stored employee on the server.
+function ensureEmployeePositionOption(select, value) {
+  if (!select || select.tagName !== "SELECT" || !value || [...select.options].some(option => option.value === value)) return;
+  const option = document.createElement("option"); option.value = value; option.textContent = value; select.append(option);
+}
+function setupEmployeePositionSelection() {
+  const canonical = ["Social Media Manager", "Editor", "Lider editora", "Media Buyer", "Scenarista", "Snimatelj", "Snimatelj / Scenarista", "Founder / Strategija", "Co-founder / Operativa"];
+  document.querySelectorAll('input[name="position"]').forEach(input => {
+    const select = document.createElement("select"); select.name = input.name; select.id = input.id; select.required = input.required;
+    const placeholder = document.createElement("option"); placeholder.value = ""; placeholder.textContent = "Izaberi poziciju"; select.append(placeholder);
+    const existing = typeof state !== "undefined" ? (state.employees || []).map(employee => employee.position).filter(Boolean) : [];
+    [...new Set([...canonical, ...existing, input.value].filter(Boolean))].forEach(value => ensureEmployeePositionOption(select, value));
+    select.value = input.value; input.replaceWith(select);
+    const note = document.createElement("small"); note.textContent = "Social Media Manager dobija slanje i uređivanje upitnika. Ostali članovi tima mogu da pregledaju odgovore preko internog linka."; select.insertAdjacentElement("afterend", note);
+  });
+}
+setupEmployeePositionSelection();
