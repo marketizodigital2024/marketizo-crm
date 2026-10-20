@@ -34,7 +34,7 @@ class SignPdfTests(unittest.TestCase):
         self.assertIn("Čćžšđ ÄÖÜ", text)
         self.assertIn("2. Druga obaveza", text)
         self.assertGreater(len(first.pages), 1)
-        self.assertEqual(original["renderer"], "marketizo-pdf-3")
+        self.assertEqual(original["renderer"], "marketizo-pdf-4")
         self.assert_stationery(first)
         again = helper.render_original({"document": self.document()})
         self.assertEqual(original["sha256"], again["sha256"])
@@ -68,7 +68,7 @@ class SignPdfTests(unittest.TestCase):
                 self.assertLess(y, float(page.mediabox.height) - 40, text)
 
     def test_three_contract_audiences_and_paper_signatures(self):
-        for audience, expected in [('client', 'Klijent / Kunde'), ('employee', 'Zaposleni / Arbeitnehmer'), ('contractor', 'Saradnik / Auftragnehmer')]:
+        for audience, expected in [('client', 'Klijent'), ('employee', 'Zaposleni'), ('contractor', 'Saradnik')]:
             with self.subTest(audience=audience):
                 doc = self.document()
                 doc['content']['blocks'] = [{'type':'paragraph','runs':[{'text':'NEOBAVEZUJUĆI PRIMER / UNVERBINDLICHES MUSTER'}]}]
@@ -92,6 +92,17 @@ class SignPdfTests(unittest.TestCase):
                 signed = PdfReader(io.BytesIO(after))
                 self.assertEqual(len(signed.pages), 1, 'Signature belongs on the agreement, without a separate signature page')
                 self.assertIn('20.10.2026. 21:30', signed.pages[0].extract_text())
+
+    def test_document_language_is_not_bilingual(self):
+        for lang, labels in [('sr', ('Klijent', 'Mesto:', 'Datum potpisa:')), ('de', ('Kunde', 'Ort:', 'Unterzeichnet am:'))]:
+            doc = self.document()
+            doc['content']['blocks'] = [{'type':'paragraph','runs':[{'text':'Test'}]}]
+            doc['contractDetails'] = {'audience':'client','language':lang,'place':'Wien','startDate':'2026-11-01'}
+            original = helper.render_original({'document':doc})
+            text = '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(base64.b64decode(original['base64']))).pages)
+            for label in labels: self.assertIn(label, text)
+            for forbidden in (('Kunde', 'Unterzeichnet am:', 'Beginn der Zusammenarbeit') if lang=='sr' else ('Klijent', 'Datum potpisa:', 'Početak saradnje')):
+                self.assertNotIn(forbidden, text)
 
     def test_finalization_preserves_prebranding_original(self):
         # Previously frozen PDFs must never be re-rendered when branding changes.

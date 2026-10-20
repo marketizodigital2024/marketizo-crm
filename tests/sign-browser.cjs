@@ -137,13 +137,13 @@ async function main(){
   await evaluate("document.querySelector('[data-new-audience=contractor]').click()");
   await until("document.getElementById('contractAudience').value==='contractor' && document.getElementById('contractStartLabel').hidden");
   assert.equal(await evaluate("document.getElementById('documentDossier').value"),'','Manual sales contract needs no CRM dossier');
-  await fill('documentTitle','Manual contractor link fixture'); await fill('contractPlace','Wien');
+  await fill('contractLanguage','de'); await fill('documentTitle','Manual contractor link fixture'); await fill('contractPlace','Wien');
   await evaluate("document.getElementById('contractEditor').textContent='NEOBAVEZUJUĆI PRIMER / UNVERBINDLICHES MUSTER';document.getElementById('contractEditor').dispatchEvent(new Event('input',{bubbles:true}))");
   await click('addRecipient');
   await evaluate("for(const [k,v]of Object.entries({name:'Manual Recipient',email:'manual@example.invalid',company:'Manual PR',address:'Fixture address',taxId:'TEST-123',country:'RS'})){const e=document.querySelector('[data-field='+k+']');e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}");
   await click('saveDocument');await until("document.getElementById('dirtyLabel').textContent==='Izmene su sačuvane'");
   const manual=(await db.query("select data from marketizo_sign_documents where title='Manual contractor link fixture'")).rows[0].data;
-  assert.equal(manual.contractDetails.audience,'contractor');assert.equal(manual.recipients[0].taxId,'TEST-123');assert.equal(manual.dossier,null);
+  assert.equal(manual.contractDetails.language,'de');assert.equal(manual.contractDetails.audience,'contractor');assert.equal(manual.recipients[0].taxId,'TEST-123');assert.equal(manual.dossier,null);
   await click('freezeDocument');await until("!document.getElementById('previewPdf').disabled");await click('previewPdf');await until("document.getElementById('previewDialog').open");await click('closePreview');
   await click('generateLink');await fill('reviewerName','Fixture reviewer');await fill('reviewReference','Fixture form review');await evaluate("document.getElementById('confirmForm').checked=true;document.getElementById('confirmPdf').checked=true");await click('confirmSend');
   await until("document.getElementById('linksDialog').open");

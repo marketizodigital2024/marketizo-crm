@@ -28,7 +28,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, KeepTogether, Flowable
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "marketizo-pdf-3"
+VERSION = "marketizo-pdf-4"
 LOGO = ImageReader(str(Path(__file__).resolve().parents[1] / "marketizo-logo.png"))
 FONTS = Path(reportlab.__file__).parent / "fonts"
 for name, file in [("Sign", "Vera.ttf"), ("SignBold", "VeraBd.ttf"), ("SignItalic", "VeraIt.ttf"), ("SignBI", "VeraBI.ttf")]:
@@ -123,35 +123,37 @@ class SignatureBlock(Flowable):
 
     def draw(self):
         c = self.canv
+        de = self.details.get("language") == "de"
         audience = self.details.get("audience", "client")
-        labels = {"employee": ("Poslodavac / Arbeitgeber", "Zaposleni / Arbeitnehmer"), "contractor": ("Naručilac / Auftraggeber", "Saradnik / Auftragnehmer"), "client": ("Marketizo / Auftragnehmer", "Klijent / Kunde"), "other": ("Marketizo / Marketizo", "Ugovorna strana / Vertragspartei")}
+        labels = {"employee": ("Arbeitgeber" if de else "Poslodavac", "Arbeitnehmer" if de else "Zaposleni"), "contractor": ("Auftraggeber" if de else "Naručilac", "Auftragnehmer" if de else "Saradnik"), "client": ("Auftragnehmer" if de else "Marketizo", "Kunde" if de else "Klijent"), "other": ("Marketizo", "Vertragspartei" if de else "Ugovorna strana")}
         left, right = labels.get(audience, labels["other"])
         c.setStrokeColor(colors.HexColor("#F68B1F")); c.setLineWidth(.7); c.line(0, 233, self.width, 233)
         for p, label, offset in [(self.owner, left, 0), (self.other, right, 267)]:
             paper_text(c, label, offset, 219, bold=True)
             name = (p.get("name", "") if audience == "employee" and offset else p.get("company", "")) or (self.issuer.get("name", "Marketizo") if offset == 0 else p.get("name", ""))
             paper_text(c, name, offset, 201, bold=True, max_height=20)
-            paper_text(c, ("Ime i prezime / Vor- und Nachname: " if audience == "employee" and offset else "Zastupnik / Vertreten durch: ") + (p.get("name", "") or "________________"), offset, 178, size=7, max_height=24)
+            paper_text(c, (("Vor- und Nachname: " if de else "Ime i prezime: ") if audience == "employee" and offset else ("Vertreten durch: " if de else "Zastupnik: ")) + (p.get("name", "") or "________________"), offset, 178, size=7, max_height=24)
             paper_text(c, p.get("email", ""), offset, 153, size=7)
-            paper_text(c, "Potpis / Unterschrift", offset, 100, size=8)
+            paper_text(c, "Unterschrift" if de else "Potpis", offset, 100, size=8)
             c.setStrokeColor(colors.HexColor("#CBD1D9")); c.line(offset, 26, offset+230, 26)
-            paper_text(c, "Datum potpisa / Unterzeichnet am:", offset, 23, size=6.5)
-        paper_text(c, "Mesto / Ort: " + (self.details.get("place") or "________________"), 0, 134, size=8)
+            paper_text(c, "Unterzeichnet am:" if de else "Datum potpisa:", offset, 23, size=6.5)
+        paper_text(c, ("Ort: " if de else "Mesto: ") + (self.details.get("place") or "________________"), 0, 134, size=8)
         if audience == "client":
-            paper_text(c, "Početak saradnje / Beginn der Zusammenarbeit: " + display_date(self.details.get("startDate")), 267, 134, size=7)
+            paper_text(c, ("Beginn der Zusammenarbeit: " if de else "Početak saradnje: ") + display_date(self.details.get("startDate")), 267, 134, size=7)
 
 
 def render_original(payload):
     doc = payload["document"]
     s = styles()
+    de = doc.get("contractDetails", {}).get("language") == "de"
     story = [Paragraph(plain(doc["title"], 180), s["title"])]
     for recipient in doc.get("recipients", []):
         if recipient.get("role") == "marketizo" or not any(recipient.get(k) for k in ("address", "taxId", "registrationId")):
             continue
         info = [recipient.get("company") or recipient.get("name", "")]
-        if recipient.get("address"): info.append("Adresa / Anschrift: " + recipient["address"])
-        if recipient.get("taxId"): info.append("Poreski broj / Steuernummer: " + recipient["taxId"])
-        if recipient.get("registrationId"): info.append("Registracioni broj / Registernummer: " + recipient["registrationId"])
+        if recipient.get("address"): info.append(("Anschrift: " if de else "Adresa: ") + recipient["address"])
+        if recipient.get("taxId"): info.append(("Steuernummer: " if de else "Poreski broj: ") + recipient["taxId"])
+        if recipient.get("registrationId"): info.append(("Registernummer: " if de else "Registracioni broj: ") + recipient["registrationId"])
         story.append(Paragraph("<br/>".join(plain(v, 400) for v in info), s["small"]))
     blocks = doc["content"]["blocks"]
     if len(blocks) > 500:
