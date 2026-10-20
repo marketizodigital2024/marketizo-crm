@@ -55,8 +55,8 @@ try:
         assert not accepted, accepted
         assert not errors, errors
         out=ROOT/'browser-results';out.mkdir(exist_ok=True)
-        page.screenshot(path=str(out/'sign-webkit-mobile-reading.png'))
-        page.locator('#paperMode').click();page.locator('#fitWidth').click();page.screenshot(path=str(out/'sign-webkit-mobile-pdf.png'))
+        page.get_by_role('button',name='Strana 1',exact=True).click();page.wait_for_function("document.getElementById('pageCounter').textContent.startsWith('1 /')");page.screenshot(path=str(out/'sign-webkit-mobile-reading.png'))
+        page.locator('#paperMode').click();page.locator('#fitWidth').click();page.wait_for_function("document.querySelector('#documentPages canvas').width>1");page.screenshot(path=str(out/'sign-webkit-mobile-pdf.png'))
         browser.close()
         print(f'PASS: real mobile WebKit renders {count} PDF pages with missing modern builtins, readable text, zoom, page navigation and signature dialog; zero automatic accepts or emails.')
 finally:

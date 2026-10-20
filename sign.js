@@ -49,7 +49,7 @@ GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.legacy.min.mj
   if (mode === 'pdf') scheduleRender(p); updateReader();
  }
  async function renderPage(p) {
-  if (p.rendered || p.rendering || !pdfTask) return; p.rendering = true;
+  if (p.rendered) { p.lastRender=++renderClock; return; } if(p.rendering || !pdfTask)return; p.rendering=true;
   try {
    const width = Math.max(600, Math.min(1000, p.paper.clientWidth || 760));
    const viewport = p.page.getViewport({ scale: width / p.base.width * Math.min(devicePixelRatio || 1, 1.5) });
@@ -57,7 +57,7 @@ GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.legacy.min.mj
    await p.page.render({ canvasContext: p.sheet.getContext('2d'), viewport }).promise;
    p.rendered = true; p.lastRender = ++renderClock;
    const cached = pages.filter(x => x.rendered).sort((a,b) => b.lastRender-a.lastRender);
-   for (const old of cached.slice(3)) { if (old !== p && !old.rendering) { old.sheet.width=1; old.sheet.height=1; old.rendered=false; } }
+   for (const old of cached.slice(3)) { const rect=old.paper.getBoundingClientRect(),vp=$('documentViewport').getBoundingClientRect(),visible=mode==='pdf' && rect.bottom>vp.top && rect.top<vp.bottom; if(old!==p && !old.rendering && !visible){old.sheet.width=1;old.sheet.height=1;old.rendered=false;} }
   } finally { p.rendering = false; }
  }
  function scheduleRender(p) { const generation=renderGeneration; renderQueue=renderQueue.then(()=>generation===renderGeneration ? renderPage(p) : undefined).catch(()=>{if(generation===renderGeneration)message('Prikaz strane nije uspeo. Pokušajte osvežavanje ili izaberite Čitanje.',true);}); }
