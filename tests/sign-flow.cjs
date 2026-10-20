@@ -8,7 +8,7 @@ const { validateDraft } = require('../lib/sign-content.js');
  try {
   await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb);grant select on agency_crm_state to service_role;');
   const crm = { employees: [{ id: 'emp-miljan', active: true }], clients: [{ id: 'unchanged' }] }; await db.query('insert into agency_crm_state values($1,$2)', ['marketizo-main', JSON.stringify(crm)]);
-  for (const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-maintenance.sql']) await db.exec(fs.readFileSync(path.join(__dirname, '../database', file), 'utf8'));
+  for (const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-maintenance.sql','marketizo-sign-direct.sql']) await db.exec(fs.readFileSync(path.join(__dirname, '../database', file), 'utf8'));
   const draft = validateDraft({ title: 'SES fixture', category: 'clients', signatureMethod: 'ses', content: { version: 1, blocks: [{ type: 'paragraph', runs: [{ text: 'Agreed contract' }] }] }, recipients: [{ name: 'First Signer', email: 'first@example.com', country: 'AT' }, { name: 'Second Signer', email: 'second@example.com', country: 'DE' }] });
   const docId = crypto.randomUUID(), reqId = crypto.randomUUID(), commandId = crypto.randomUUID(), original = Buffer.from('%PDF-fixture-original'), originalSha = hash(original);
   const command = async (action, payload) => (await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r', ['marketizo-main','emp-miljan',crypto.randomUUID(),action,JSON.stringify(payload)])).rows[0].r;
