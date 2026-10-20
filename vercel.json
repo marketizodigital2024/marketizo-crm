@@ -47,6 +47,10 @@
     {
       "path": "/api/bank-reconcile",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/sign-jobs",
+      "schedule": "* * * * *"
     }
   ],
   "headers": [
@@ -70,6 +74,32 @@
           "value": "default-src 'self'; script-src 'self' 'sha256-dc+tNCcBKyY9AilOXQc5OKV7iFPNHd4e6eqjc1sBPlw=' 'sha256-hUPOgJMtLFx7gW8juCuiHHpp4jPaY5pbZTtjK+NALBk=' 'sha256-NR+CVkO+g0xRtqQOOr+rZnXsgWp64KgEruQrCuHpTNU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; media-src 'self' data: blob:; worker-src 'self'; frame-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
         }
       ]
+    },
+    {
+      "source": "/marketizo-sign(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    },
+    {
+      "source": "/sign(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
     }
   ],
   "regions": [
@@ -90,6 +120,19 @@
     },
     "api/finance-monthly-documents.js": {
       "maxDuration": 60
+    },
+    "api/sign-admin.js": {
+      "maxDuration": 120
+    },
+    "api/sign-public.js": {
+      "maxDuration": 120
+    },
+    "api/sign-jobs.js": {
+      "maxDuration": 300
+    },
+    "api/sign-helper.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{tests/**,work/**,public/**,.git/**}"
     }
   }
 }

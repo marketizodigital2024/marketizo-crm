@@ -50,7 +50,7 @@ self.addEventListener("fetch", (event) => {
 
   // Application data must always come from the server. Caching API responses
   // can make an installed PWA appear stale while an incognito tab looks current.
-  if (requestUrl.pathname.startsWith("/api/")) {
+  if (requestUrl.pathname.startsWith("/api/") || /^\/(marketizo-sign|sign)(?:\.html)?\/?$/.test(requestUrl.pathname)) {
     event.respondWith(fetch(event.request));
     return;
   }
@@ -92,4 +92,5 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
 

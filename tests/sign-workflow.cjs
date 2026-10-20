@@ -1,0 +1,45 @@
+'use strict';
+const assert = require('node:assert/strict'), crypto = require('node:crypto');
+const { hash, canonical, seal, unseal, readiness, validateSignature, createWorkflow, CONSENT } = require('../lib/sign-workflow.js');
+(async () => {
+ process.env.SIGN_INTERNAL_SECRET = 'i'.repeat(48); process.env.SIGN_EVIDENCE_SECRET = 'e'.repeat(48);
+ assert.equal(readiness().sendingEnabled, false);
+ const payload = { to: 'recipient@example.com', text: '123456 #invitation-secret' }, encrypted = seal(payload);
+ assert.ok(!encrypted.includes('123456')); assert.deepEqual(unseal(encrypted), payload);
+ const tampered = Buffer.from(encrypted, 'base64'); tampered[20] ^= 1; assert.throws(() => unseal(tampered.toString('base64')));
+ assert.equal(canonical({ b: 1, a: 2 }), canonical({ a: 2, b: 1 }));
+ assert.throws(() => validateSignature({ name: 'Test', strokes: [[[Infinity, 1]]] }));
+ assert.throws(() => validateSignature({ name: '', strokes: [] }));
+ assert.deepEqual(validateSignature({ name: ' Tester ', strokes: [] }), { name: 'Tester', strokes: [] });
+ assert.ok(CONSENT.includes('jednostavnim'));
+ let helperCalls = 0;
+ const rpcs = [];
+ const fetch = async (url, options) => {
+  const pathname = new URL(url).pathname;
+  if (pathname.endsWith('/marketizo_sign_versions')) return { ok: true, json: async () => [{ id: 'version' }] };
+  if (pathname.endsWith('/marketizo_sign_prepared_pdfs')) return { ok: true, json: async () => [] };
+  if (pathname.endsWith('/marketizo_sign_requests')) return { ok: true, json: async () => [] };
+  if (pathname.endsWith('/rpc/marketizo_sign_flow')) { const body = JSON.parse(options.body); rpcs.push(body); return { ok: true, json: async () => ({ ok: true, job: null }) }; }
+  throw Error('Unexpected test request');
+ };
+ const pdf = Buffer.from('%PDF-fixture');
+ const workflow = createWorkflow({ url: 'https://fixture.invalid', key: 'fixture', organization: 'marketizo-main' }, { fetch, helper: async () => { helperCalls++; return { base64: pdf.toString('base64'), sha256: hash(pdf), renderer: 'fixture' }; } });
+ const doc = { id: crypto.randomUUID(), revision: 2, status: 'ready', data: { title: 'Fixture', category: 'clients', signatureMethod: 'ses', content: { version: 1, blocks: [{ type: 'paragraph', runs: [{ text: 'Fixture' }] }] }, recipients: [{ name: 'Tester', email: 'test@example.com', country: 'AT' }] } };
+ await workflow.preparePdf('emp-miljan', doc); assert.equal(helperCalls, 1); assert.equal(rpcs[0].p_action, 'pdf_store');
+ await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, doc), /Slanje još nije uključeno/);
+ for (const key of ['SIGN_SMTP_HOST','SIGN_SMTP_USER','SIGN_SMTP_PASSWORD','SIGN_LEGAL_ENTITY','SIGN_LEGAL_ADDRESS','SIGN_PRIVACY_URL']) process.env[key] = 'fixture';
+ process.env.SIGN_PRIVACY_URL = 'https://app.marketizo.com/sign-privacy-20261020';
+ process.env.SIGN_SES_ENABLED = 'true'; process.env.SIGN_APP_ORIGIN = 'https://app.marketizo.com';
+ assert.equal(readiness().sendingEnabled, true);
+ process.env.SIGN_PRIVACY_URL='http://example.com/privacy';assert.equal(readiness().sendingEnabled,false,'Do not send with an insecure privacy URL');
+ process.env.SIGN_PRIVACY_URL='https://user:password@example.com/privacy';assert.equal(readiness().sendingEnabled,false,'Do not expose credentials in a privacy URL');
+ process.env.SIGN_PRIVACY_URL='https://app.marketizo.com/sign-privacy-20261020';
+ await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, doc), /dokumentovanu/);
+ await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, { ...doc, data: { ...doc.data, signatureMethod: 'qes' } }), /kvalifikovani/);
+ await workflow.prepare('emp-miljan', { revision: 2, commandId: crypto.randomUUID(), review: { decision: 'ses_allowed', reviewedBy: 'Fixture reviewer', reference: 'Fixture legal review', pdfSha256: hash(pdf), pdfReviewed: true } }, doc);
+ const request = rpcs.at(-1).p_data; assert.equal(rpcs.at(-1).p_action, 'prepare'); assert.equal(request.parties.length, 1);
+ assert.deepEqual(request.issuer.privacyNotice, { version: '2026-10-20', url: 'https://app.marketizo.com/sign-privacy-20261020' });
+ const mail = unseal(request.parties[0].sealedMail); assert.ok(mail.text.includes(request.issuer.privacyNotice.url),'First invitation must link the same privacy notice retained in evidence'); const token = mail.text.match(/\/sign#([\w-]+)/)[1]; assert.equal(hash(token), request.parties[0].tokenSha256); assert.ok(!JSON.stringify(request).includes(token));
+ assert.equal(helperCalls, 1, 'Send must use the already prepared PDF rather than rerendering');
+ console.log('PASS: encrypted outbox, tamper detection, explicit SES/QES choice, form review, exact PDF preparation and random recipient-scoped invitation tokens.');
+})().catch(e => { console.error(e); process.exitCode = 1; });
