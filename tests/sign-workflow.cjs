@@ -28,11 +28,13 @@ const { hash, canonical, seal, unseal, readiness, validateSignature, createWorkf
  await workflow.preparePdf('emp-miljan', doc); assert.equal(helperCalls, 1); assert.equal(rpcs[0].p_action, 'pdf_store');
  await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, doc), /Slanje još nije uključeno/);
  for (const key of ['SIGN_SMTP_HOST','SIGN_SMTP_USER','SIGN_SMTP_PASSWORD','SIGN_LEGAL_ENTITY','SIGN_LEGAL_ADDRESS','SIGN_PRIVACY_URL']) process.env[key] = 'fixture';
+ process.env.SIGN_PRIVACY_URL = 'https://app.marketizo.com/sign-privacy-20261020';
  process.env.SIGN_SES_ENABLED = 'true'; process.env.SIGN_APP_ORIGIN = 'https://app.marketizo.com';
  await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, doc), /dokumentovanu/);
  await assert.rejects(workflow.prepare('emp-miljan', { review: {} }, { ...doc, data: { ...doc.data, signatureMethod: 'qes' } }), /kvalifikovani/);
  await workflow.prepare('emp-miljan', { revision: 2, commandId: crypto.randomUUID(), review: { decision: 'ses_allowed', reviewedBy: 'Fixture reviewer', reference: 'Fixture legal review', pdfSha256: hash(pdf), pdfReviewed: true } }, doc);
  const request = rpcs.at(-1).p_data; assert.equal(rpcs.at(-1).p_action, 'prepare'); assert.equal(request.parties.length, 1);
+ assert.deepEqual(request.issuer.privacyNotice, { version: '2026-10-20', url: 'https://app.marketizo.com/sign-privacy-20261020' });
  const mail = unseal(request.parties[0].sealedMail); const token = mail.text.match(/\/sign#([\w-]+)/)[1]; assert.equal(hash(token), request.parties[0].tokenSha256); assert.ok(!JSON.stringify(request).includes(token));
  assert.equal(helperCalls, 1, 'Send must use the already prepared PDF rather than rerendering');
  console.log('PASS: encrypted outbox, tamper detection, explicit SES/QES choice, form review, exact PDF preparation and random recipient-scoped invitation tokens.');
