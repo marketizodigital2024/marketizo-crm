@@ -145,7 +145,7 @@ begin
       or coalesce(jsonb_typeof(v_data->'recipients'),'')<>'array'
       or coalesce(jsonb_typeof(v_data->'content'->'blocks'),'')<>'array'
       or octet_length(v_data::text)>300000
-      or coalesce(v_data->>'signatureMethod','')<>'qes' or coalesce(v_data->>'governingLaw','')<>'AT'
+      or coalesce(v_data->>'signatureMethod','') not in ('qes','ses') or coalesce(v_data->>'governingLaw','')<>'AT'
       or coalesce(v_data->>'legalReview','')<>'pending' then
       return jsonb_build_object('ok',false,'status',400,'error','Proveri sadržaj nacrta.');
     end if;

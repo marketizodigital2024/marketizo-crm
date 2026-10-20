@@ -47,6 +47,10 @@
     {
       "path": "/api/bank-reconcile",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/sign-jobs",
+      "schedule": "* * * * *"
     }
   ],
   "headers": [
@@ -116,6 +120,19 @@
     },
     "api/finance-monthly-documents.js": {
       "maxDuration": 60
+    },
+    "api/sign-admin.js": {
+      "maxDuration": 120
+    },
+    "api/sign-public.js": {
+      "maxDuration": 120
+    },
+    "api/sign-jobs.js": {
+      "maxDuration": 300
+    },
+    "api/sign-helper.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{tests/**,work/**,public/**,.git/**}"
     }
   }
 }

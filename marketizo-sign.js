@@ -4,14 +4,15 @@
   const categories = { clients: 'Klijenti', employees: 'Zaposleni', nda: 'NDA', annexes: 'Aneksi', other: 'Ostalo' };
   const statuses = { draft: 'Nacrt', ready: 'Zaključana verzija', sent: 'Poslat', viewed: 'Pregledan', signing: 'Potpisivanje', signed: 'Potpisan', declined: 'Odbijen', expired: 'Istekao', voided: 'Poništen' };
   let people = [], templates = [], current = null, library = 'documents', offset = 0, hasMore = false;
+  let preparedSha = '', sendingEnabled = false, sendPending = null;
   let dirty = false, busy = false, loading = 0, pending = null, previewUrl = null, searchTimer;
-  const blank = () => ({ title: '', category: 'clients', content: { version: 1, blocks: [{ type: 'paragraph', level: 1, runs: [{ text: '', bold: false, italic: false, underline: false }] }] }, recipients: [], governingLaw: 'AT', signatureMethod: 'qes', legalReview: 'pending', note: '' });
+  const blank = () => ({ title: '', category: 'clients', content: { version: 1, blocks: [{ type: 'paragraph', level: 1, runs: [{ text: '', bold: false, italic: false, underline: false }] }] }, recipients: [], governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: '' });
   function node(tag, value, attrs = {}) { const n = document.createElement(tag); if (value !== null) n.textContent = value; Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v)); return n; }
   function message(value, error = false) { $('signMessage').textContent = value; $('signMessage').classList.toggle('error', error); }
   function session() { try { const s = JSON.parse(localStorage.getItem('marketizoAdminSession') || 'null'); return s?.token && s.expiresAt > Date.now() ? s : null; } catch { return null; } }
   async function api(params, body, raw = false) {
     const s = session(); if (!s) { location.assign('/admin-login'); throw Error('Prijava je istekla.'); }
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 90000);
     try {
       const response = await fetch('/api/sign-admin?' + new URLSearchParams(params), { method: body ? 'POST' : 'GET', cache: 'no-store', signal: controller.signal, headers: { Authorization: 'Bearer ' + s.token, ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
       if (raw && response.ok) return response.text();
@@ -25,7 +26,7 @@
   function writable() { return current && current.status === 'draft' && !current.archived_at; }
   function updateControls() {
     const editable = writable();
-    $('documentTitle').disabled = !editable || busy; $('documentCategory').disabled = !editable || busy; $('documentNote').disabled = !editable || busy;
+    $('documentTitle').disabled = !editable || busy; $('documentCategory').disabled = !editable || busy; $('documentNote').disabled = !editable || busy; $('documentSignatureMethod').disabled = !editable || busy;
     $('contractEditor').contentEditable = String(editable && !busy);
     document.querySelectorAll('.sign-toolbar button, #recipientRows input, #recipientRows select, #recipientRows button').forEach(el => el.disabled = !editable || busy);
     ['saveDocument', 'addRecipient', 'applyTemplate', 'templateSelect'].forEach(id => $(id).disabled = !editable || busy);
@@ -40,7 +41,12 @@
     $('revisionLabel').textContent = current?.revision ? `${current.kind === 'template' ? 'Šablon' : statuses[current.status] || current.status} · verzija ${current.revision}` : 'Novi nacrt';
     $('saveDocument').textContent = current?.kind === 'template' ? 'Sačuvaj šablon' : 'Sačuvaj nacrt';
     $('archiveDocument').textContent = current?.archived_at ? 'Vrati iz arhive' : 'Arhiviraj';
-    $('sendDocument').disabled = true;
+    $('previewPdf').disabled = busy || current?.kind === 'template' || current?.status !== 'ready';
+    $('sendDocument').disabled = busy || !sendingEnabled || !preparedSha || current?.status !== 'ready' || current?.data.signatureMethod !== 'ses';
+    $('sendDocument').textContent = current?.data.signatureMethod === 'qes' ? 'Kvalifikovani potpis · poseban postupak' : 'Pošalji na naš potpis';
+    $('downloadReceipt').disabled = busy || current?.status !== 'signed';
+    $('downloadEvidence').disabled = busy || current?.status !== 'signed';
+    $('voidRequest').disabled = busy || !['sent', 'viewed', 'signing'].includes(current?.status);
   }
   function renderEditor(content) {
     $('contractEditor').replaceChildren();
@@ -102,13 +108,14 @@
     return row;
   }
   function readDraft() {
-    return { ...blank(), title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
+    return { ...blank(), title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
   }
   function leaveAllowed() { return !dirty || confirm('Postoje nesačuvane izmene. Napustiti ovaj nacrt?'); }
   function openDocument(doc, kind = 'document', isNew = false) {
-    current = { ...doc, kind }; pending = null;
+    current = { ...doc, kind }; pending = null; preparedSha = ''; sendPending = null;
     $('documentTitle').value = doc.data.title; $('documentCategory').value = doc.data.category; $('documentNote').value = doc.data.note || '';
     renderEditor(doc.data.content); $('recipientRows').replaceChildren(...doc.data.recipients.map(recipientRow));
+    $('documentSignatureMethod').value = doc.data.signatureMethod || 'ses';
     $('templateSelect').value = ''; $('workspace').hidden = false; $('library').hidden = true; setDirty(isNew); updateControls(); message('');
     $('workspace').scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
@@ -146,7 +153,7 @@
       const r = await api({}, { ...body, commandId: pending.commandId });
       current.revision = r.revision;
       if (action === 'save') current.data = structuredClone(extra.data);
-      if (action === 'freeze') current.status = 'ready';
+      if (action === 'freeze') { current.status = 'ready'; preparedSha = ''; }
       if (action === 'archive') current.archived_at = new Date().toISOString();
       if (action === 'restore') current.archived_at = null;
       pending = null; setDirty(false);
@@ -175,7 +182,7 @@
   $('saveAsTemplate').addEventListener('click', () => { if (dirty && !confirm('Nesačuvan unos preneti u novi šablon? Original se neće promeniti.')) return; copy('template'); message('Šablon je pripremljen. Klikni „Sačuvaj šablon” da ga sačuvaš u bazi.'); });
   $('previewDocument').addEventListener('click', async () => {
     if (dirty || !current?.revision) return message('Prvo sačuvaj nacrt za pregled.', true);
-    try { const html = await api({ action: 'preview', id: current.id, kind: current.kind }, null, true); if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' })); $('previewFrame').src = previewUrl; $('previewDialog').showModal(); } catch (e) { message(e.message, true); }
+    try { const html = await api({ action: 'preview', id: current.id, kind: current.kind }, null, true); if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' })); $('previewFrame').setAttribute('sandbox', ''); $('previewFrame').src = previewUrl; $('previewDialog').showModal(); } catch (e) { message(e.message, true); }
   });
   function clearPreview() { $('previewFrame').removeAttribute('src'); if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = null; }
   $('closePreview').addEventListener('click', () => $('previewDialog').close()); $('previewDialog').addEventListener('close', clearPreview);
@@ -203,9 +210,45 @@
   $('signSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { offset = 0; list(); }, 300); });
   $('previousPage').addEventListener('click', () => { offset = Math.max(0, offset - 40); list(); });
   $('nextPage').addEventListener('click', () => { if (hasMore) { offset += 40; list(); } });
+  function pdfBlob(base64) { return new Blob([Uint8Array.from(atob(base64.replace(/\s/g, '')), c => c.charCodeAt(0))], { type: 'application/pdf' }); }
+  $('previewPdf').addEventListener('click', async () => {
+    if (busy || !current) return; busy = true; updateControls(); message('Priprema tačnog PDF-a…');
+    try {
+      const r = await api({}, { action: 'preparePdf', id: current.id, revision: current.revision }); preparedSha = r.pdfSha256;
+      if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(pdfBlob(r.pdfBase64));
+      $('previewFrame').removeAttribute('sandbox'); $('previewFrame').src = previewUrl; $('previewDialog').showModal(); message('Pripremljeni PDF je zaključan. Svi potpisnici dobijaju ovu istu verziju.');
+    } catch (e) { message(e.message, true); } finally { busy = false; updateControls(); }
+  });
+  $('sendDocument').addEventListener('click', () => { if (!busy && preparedSha && sendingEnabled) $('sendDialog').showModal(); });
+  $('closeSend').addEventListener('click', () => { if (!busy) $('sendDialog').close(); });
+  $('sendDialog').addEventListener('cancel', e => { if (busy) e.preventDefault(); });
+  $('sendForm').addEventListener('submit', async e => {
+    e.preventDefault(); if (busy || !current || !preparedSha) return;
+    const body = { action: 'send', id: current.id, revision: current.revision, review: { decision: $('confirmForm').checked ? 'ses_allowed' : 'unknown', reviewedBy: $('reviewerName').value, reference: $('reviewReference').value, pdfSha256: preparedSha, pdfReviewed: $('confirmPdf').checked } };
+    const fingerprint = JSON.stringify(body); if (!sendPending || sendPending.fingerprint !== fingerprint) sendPending = { fingerprint, commandId: crypto.randomUUID() };
+    busy = true; updateControls(); $('confirmSend').disabled = true;
+    try { await api({}, { ...body, commandId: sendPending.commandId }); sendPending = null; const r = await api({ action: 'get', id: current.id }); current = { ...r.document, kind: 'document' }; preparedSha = ''; $('sendDialog').close(); message('Zahtev je sačuvan. Pozivi se šalju iz evidencije poslova; prihvatanje mail servera nije dokaz da je poruka pročitana.'); }
+    catch (error) { message(error.message, true); }
+    finally { busy = false; $('confirmSend').disabled = false; updateControls(); }
+  });
+  async function download(action) {
+    const s = session(); if (!s || !current) return;
+    try {
+      const r = await fetch('/api/sign-admin?' + new URLSearchParams({ action, id: current.id }), { headers: { Authorization: 'Bearer ' + s.token }, cache: 'no-store' });
+      if (!r.ok) { const err = await r.json(); throw Error(err.error); }
+      const blob = await r.blob(), url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = action === 'evidence' ? 'Marketizo-evidencija.json' : 'Marketizo-ugovor.pdf'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (e) { message(e.message, true); }
+  }
+  $('downloadReceipt').addEventListener('click', () => download('receipt'));
+  $('downloadEvidence').addEventListener('click', () => download('evidence'));
+  $('voidRequest').addEventListener('click', async () => {
+    if (busy || !confirm('Poništiti ovaj otvoren zahtev? Već zabeležene potvrde ostaju sačuvane, a novi potpisi se blokiraju.')) return;
+    busy = true; updateControls();
+    try { await api({}, { action: 'void', id: current.id }); const r = await api({ action: 'get', id: current.id }); current = { ...r.document, kind: 'document' }; message('Otvoren zahtev je poništen.'); } catch (e) { message(e.message, true); } finally { busy = false; updateControls(); }
+  });
   async function init() {
     $('newDocument').disabled = true;
-    try { const r = await api({ action: 'bootstrap' }); people = r.people; $('connectionStatus').textContent = r.integration.message;
+    try { const r = await api({ action: 'bootstrap' }); people = r.people; sendingEnabled = r.integration.sendingEnabled; $('connectionStatus').textContent = r.integration.message;
       await loadTemplates(); $('newDocument').disabled = false; await list();
     } catch (e) { $('connectionStatus').textContent = 'Marketizo Sign nije spreman za rad.'; message(e.message, true); }
   }

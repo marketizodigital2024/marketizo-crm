@@ -19,7 +19,7 @@ async function call(method = 'GET', url = '/api/sign-admin', body, headers = {})
   for (const value of ['employee', 'client', 'operational-admin', null]) { role = value; assert.equal((await call()).status, 403); }
   assert.equal(calls.length, 0); role = 'full-admin';
   const boot = await call('GET', '/api/sign-admin?action=bootstrap'); assert.equal(boot.result.integration.sendingEnabled, false); assert.ok(!boot.raw.includes('salary')); assert.ok(!boot.raw.includes('NEVER EXPOSE')); assert.equal(boot.headers['Cache-Control'], 'private, no-store');
-  assert.equal((await call('POST', undefined, { action: 'send' })).status, 503); assert.equal(calls.length, 0);
+  assert.equal((await call('POST', undefined, { action: 'send', id, commandId, revision: 1 })).status, 503); assert.equal(calls.length, 0);
   assert.equal((await call('POST', undefined, { action: 'save' }, { origin: 'https://evil.example' })).status, 403);
   assert.equal((await call('GET', '/api/sign-admin?offset=-1')).status, 400);
   assert.equal((await call('GET', '/api/sign-admin?category=wrong')).status, 400);
@@ -27,7 +27,7 @@ async function call(method = 'GET', url = '/api/sign-admin', body, headers = {})
   assert.equal((await call('POST', undefined, 'x'.repeat(300001))).status, 413);
   const payload = { action: 'save', kind: 'document', id, commandId, revision: 0, data: { ...data, legalReview: 'approved', signatureMethod: 'simple' } };
   assert.equal((await call('POST', undefined, payload)).status, 200);
-  assert.equal(calls[0].payload.data.signatureMethod, 'qes'); assert.equal(calls[0].payload.data.legalReview, 'pending'); assert.equal(calls[0].actor, 'emp-miljan');
+  assert.equal(calls[0].payload.data.signatureMethod, 'ses'); assert.equal(calls[0].payload.data.legalReview, 'pending'); assert.equal(calls[0].actor, 'emp-miljan');
   saveError = true; const failed = await call('POST', undefined, payload); assert.equal(failed.status, 503); assert.ok(!failed.raw.includes('private upstream')); saveError = false;
   assert.equal((await call('POST', undefined, { action: 'freeze', kind: 'document', id, commandId, revision: 1 })).status, 200);
   const preview = await call('GET', `/api/sign-admin?action=preview&id=${id}`); assert.equal(preview.status, 200); assert.ok(preview.headers['Content-Security-Policy'].includes('sandbox')); assert.ok(preview.raw.includes('NACRT'));
