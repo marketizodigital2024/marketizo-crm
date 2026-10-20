@@ -70,7 +70,7 @@ def page_footer(canvas, doc):
     canvas.line(48, 44, A4[0] - 48, 44)
     canvas.setFont("Sign", 7)
     canvas.setFillColor(colors.HexColor("#647184"))
-    canvas.drawString(48, 32, "Marketizo Sign | " + doc.title[:60])
+    canvas.drawString(48, 32, "Marketizo Digital e.U.")
     canvas.drawRightString(A4[0] - 48, 32, str(doc.page))
     canvas.restoreState()
 
