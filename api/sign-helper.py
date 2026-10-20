@@ -13,6 +13,8 @@ from email.message import EmailMessage
 from email.utils import formatdate
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from xml.sax.saxutils import escape
 
 import reportlab
@@ -26,7 +28,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, KeepTogether, Flowable
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "marketizo-pdf-2"
+VERSION = "marketizo-pdf-3"
 LOGO = ImageReader(str(Path(__file__).resolve().parents[1] / "marketizo-logo.png"))
 FONTS = Path(reportlab.__file__).parent / "fonts"
 for name, file in [("Sign", "Vera.ttf"), ("SignBold", "VeraBd.ttf"), ("SignItalic", "VeraIt.ttf"), ("SignBI", "VeraBI.ttf")]:
@@ -57,6 +59,11 @@ def page_footer(canvas, doc):
     # Shared, print-friendly stationery for agreements and acceptance receipts.
     # Keep all branding outside the document text frame on every page.
     canvas.drawImage(LOGO, 20, A4[1] - 104, width=144, height=81, mask="auto")
+    issuer = getattr(doc, "issuer", {})
+    info = "<b>" + plain(issuer.get("name", "Marketizo"), 180) + "</b><br/>" + plain(issuer.get("address", ""), 300) + "<br/>" + plain(issuer.get("email", "office@marketizo.com"), 254)
+    heading = Paragraph(info, ParagraphStyle("issuer", fontName="Sign", fontSize=7.5, leading=11, alignment=2))
+    _, ih = heading.wrap(300, 70)
+    heading.drawOn(canvas, A4[0] - 348, A4[1] - 90)
     canvas.setStrokeColor(colors.HexColor("#F68B1F"))
     canvas.setLineWidth(1)
     canvas.line(48, A4[1] - 110, A4[0] - 48, A4[1] - 110)
@@ -68,9 +75,10 @@ def page_footer(canvas, doc):
     canvas.restoreState()
 
 
-def build_pdf(title, story):
+def build_pdf(title, story, issuer=None):
     output = io.BytesIO()
     doc = SimpleDocTemplate(output, pagesize=A4, rightMargin=48, leftMargin=48, topMargin=132, bottomMargin=60, title=title, author="Marketizo Sign", invariant=1)
+    doc.issuer = issuer or {}
     doc.build(story, onFirstPage=page_footer, onLaterPages=page_footer)
     data = output.getvalue()
     if len(data) > 1000000:
@@ -78,10 +86,73 @@ def build_pdf(title, story):
     return data
 
 
+
+def display_date(value):
+    if not value:
+        return "________________"
+    return datetime.fromisoformat(value).strftime("%d.%m.%Y.")
+
+
+def signed_date(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Vienna")).strftime("%d.%m.%Y. %H:%M")
+
+
+def paper_text(canvas, value, x, y, width=230, size=8, bold=False, max_height=24):
+    p = Paragraph(plain(value, 1000), ParagraphStyle("paper", fontName="SignBold" if bold else "Sign", fontSize=size, leading=size+3))
+    _, height = p.wrap(width, 200)
+    while height > max_height and size > 5.5:
+        size -= .5
+        p.style.fontSize = size; p.style.leading = size + 2
+        _, height = p.wrap(width, 200)
+    p.drawOn(canvas, x, y-height)
+
+
+class SignatureBlock(Flowable):
+    def __init__(self, details, issuer, owner, other, layouts):
+        Flowable.__init__(self)
+        self.width, self.height = A4[0]-96, 238
+        self.details, self.issuer, self.owner, self.other, self.layouts = details, issuer, owner, other, layouts
+
+    def wrap(self, availWidth, availHeight):
+        return self.width, max(self.height, availHeight)
+
+    def drawOn(self, canvas, x, y, _sW=0):
+        self.layouts.append({"page": canvas.getPageNumber(), "x": x, "y": y, "width": self.width, "height": self.height,
+            "slots": [{"email": p.get("email", ""), "name": p.get("name", ""), "role": role, "x": x+offset, "y": y+28, "width": 230, "height": 55, "dateY": y+13} for p, role, offset in [(self.owner, "marketizo", 0), (self.other, "counterparty", 267)]]})
+        super().drawOn(canvas, x, y, _sW)
+
+    def draw(self):
+        c = self.canv
+        audience = self.details.get("audience", "client")
+        labels = {"employee": ("Poslodavac / Arbeitgeber", "Zaposleni / Arbeitnehmer"), "contractor": ("Naručilac / Auftraggeber", "Saradnik / Auftragnehmer"), "client": ("Marketizo / Auftragnehmer", "Klijent / Kunde"), "other": ("Marketizo / Marketizo", "Ugovorna strana / Vertragspartei")}
+        left, right = labels.get(audience, labels["other"])
+        c.setStrokeColor(colors.HexColor("#F68B1F")); c.setLineWidth(.7); c.line(0, 233, self.width, 233)
+        for p, label, offset in [(self.owner, left, 0), (self.other, right, 267)]:
+            paper_text(c, label, offset, 219, bold=True)
+            name = (p.get("name", "") if audience == "employee" and offset else p.get("company", "")) or (self.issuer.get("name", "Marketizo") if offset == 0 else p.get("name", ""))
+            paper_text(c, name, offset, 201, bold=True, max_height=20)
+            paper_text(c, ("Ime i prezime / Vor- und Nachname: " if audience == "employee" and offset else "Zastupnik / Vertreten durch: ") + (p.get("name", "") or "________________"), offset, 178, size=7, max_height=24)
+            paper_text(c, p.get("email", ""), offset, 153, size=7)
+            paper_text(c, "Potpis / Unterschrift", offset, 100, size=8)
+            c.setStrokeColor(colors.HexColor("#CBD1D9")); c.line(offset, 26, offset+230, 26)
+            paper_text(c, "Datum potpisa / Unterzeichnet am:", offset, 23, size=6.5)
+        paper_text(c, "Mesto / Ort: " + (self.details.get("place") or "________________"), 0, 134, size=8)
+        if audience == "client":
+            paper_text(c, "Početak saradnje / Beginn der Zusammenarbeit: " + display_date(self.details.get("startDate")), 267, 134, size=7)
+
+
 def render_original(payload):
     doc = payload["document"]
     s = styles()
     story = [Paragraph(plain(doc["title"], 180), s["title"])]
+    for recipient in doc.get("recipients", []):
+        if recipient.get("role") == "marketizo" or not any(recipient.get(k) for k in ("address", "taxId", "registrationId")):
+            continue
+        info = [recipient.get("company") or recipient.get("name", "")]
+        if recipient.get("address"): info.append("Adresa / Anschrift: " + recipient["address"])
+        if recipient.get("taxId"): info.append("Poreski broj / Steuernummer: " + recipient["taxId"])
+        if recipient.get("registrationId"): info.append("Registracioni broj / Registernummer: " + recipient["registrationId"])
+        story.append(Paragraph("<br/>".join(plain(v, 400) for v in info), s["small"]))
     blocks = doc["content"]["blocks"]
     if len(blocks) > 500:
         raise ValueError("Too many blocks")
@@ -108,7 +179,20 @@ def render_original(payload):
         story.append(Paragraph(text or "<br/>", s["heading"] if block["type"] == "heading" else s["body"]))
     # No internal notes, signature metadata or disclaimer is added to the agreement.
     # The exact original bytes are what every signer previews and accepts.
-    data = build_pdf(doc["title"], story)
+    issuer = payload.get("issuer", {})
+    details = doc.get("contractDetails", {})
+    if "audience" not in details:
+        details = dict(details, audience="employee" if doc.get("category") == "employees" else "client" if doc.get("category") == "clients" else "other")
+    parties = doc.get("recipients", [])
+    owners = [p for p in parties if p.get("role") == "marketizo"]
+    others = [p for p in parties if p.get("role") != "marketizo"] or [{}]
+    layouts = []
+    for other in others:
+        story.append(SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
+    data = build_pdf(doc["title"], story, issuer)
+    writer = PdfWriter(io.BytesIO(data))
+    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer}, ensure_ascii=False)})
+    out = io.BytesIO(); writer.write(out); data = out.getvalue()
     return {"base64": base64.b64encode(data).decode(), "sha256": hashlib.sha256(data).hexdigest(), "renderer": VERSION}
 
 
@@ -152,11 +236,31 @@ def render_final(payload):
         story.append(KeepTogether(section))
     story += [Spacer(1, 12), Paragraph("Dokazni manifest: " + plain(payload["manifestSha256"], 64), s["small"]),
               Paragraph("Serverska evidencija čuva verziju dokumenta, način pristupa, nameru potpisnika i vreme događaja. Pristup preko e-mail linka sam po sebi nije potvrda građanskog identiteta ili ovlašćenja zastupnika.", s["small"])]
-    certificate = build_pdf("Evidencija prihvatanja", story)
+    certificate = build_pdf("Evidencija prihvatanja", story, evidence.get("issuer", {}))
     # Incremental append retains all original PDF bytes unchanged at the start.
     writer = PdfWriter(io.BytesIO(original), incremental=True)
-    for page in PdfReader(io.BytesIO(certificate)).pages:
-        writer.add_page(page)
+    layout_raw = PdfReader(io.BytesIO(original)).metadata.get("/MarketizoLayout")
+    if layout_raw:
+        layout = json.loads(layout_raw)
+        for block in layout["blocks"]:
+            overlay = io.BytesIO()
+            from reportlab.pdfgen.canvas import Canvas
+            c = Canvas(overlay, pagesize=A4, invariant=1)
+            for slot in block["slots"]:
+                signer = next((s for s in evidence["signers"] if s.get("email", "").lower() == slot["email"].lower() and slot["email"]), None)
+                if not signer:
+                    continue
+                if signer.get("strokes"):
+                    drawing = Drawing(signer["strokes"]); drawing.width, drawing.height = slot["width"], slot["height"]
+                    drawing.drawOn(c, slot["x"], slot["y"])
+                else:
+                    paper_text(c, signer["name"], slot["x"]+5, slot["y"]+35, width=slot["width"]-10, size=14)
+                paper_text(c, signed_date(signer["acceptedAt"]), slot["x"], slot["dateY"]-4, width=230, size=7)
+            c.save()
+            writer.pages[block["page"]-1].merge_page(PdfReader(io.BytesIO(overlay.getvalue())).pages[0])
+    if not layout_raw:
+        for page in PdfReader(io.BytesIO(certificate)).pages:
+            writer.add_page(page)
     output = io.BytesIO()
     writer.write(output)
     final = output.getvalue()

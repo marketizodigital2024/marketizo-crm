@@ -3,11 +3,12 @@
   const $ = id => document.getElementById(id);
   const categories = { clients: 'Klijenti', employees: 'Zaposleni', nda: 'NDA', annexes: 'Aneksi', other: 'Ostalo' };
   const statuses = { draft: 'Nacrt', ready: 'Zaključana verzija', sent: 'Poslat', viewed: 'Pregledan', signing: 'Potpisivanje', signed: 'Potpisan', declined: 'Odbijen', expired: 'Istekao', voided: 'Poništen' };
+  let deliveryMode = 'email';
   let dossierRows = [], dossierOffset = 0, selectedDossier = null, newDossierId = null;
   let people = [], templates = [], current = null, library = 'documents', offset = 0, hasMore = false;
   let preparedSha = '', sendingEnabled = false, sendPending = null;
   let dirty = false, busy = false, loading = 0, pending = null, previewUrl = null, searchTimer;
-  const blank = () => ({ title: '', category: 'clients', content: { version: 1, blocks: [{ type: 'paragraph', level: 1, runs: [{ text: '', bold: false, italic: false, underline: false }] }] }, recipients: [], governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: '' });
+  const blank = () => ({ title: '', category: 'clients', content: { version: 1, blocks: [{ type: 'paragraph', level: 1, runs: [{ text: '', bold: false, italic: false, underline: false }] }] }, recipients: [], contractDetails: { audience: 'client', place: '', startDate: '' }, governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: '' });
   function node(tag, value, attrs = {}) { const n = document.createElement(tag); if (value !== null) n.textContent = value; Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v)); return n; }
   function message(value, error = false) { $('signMessage').textContent = value; $('signMessage').classList.toggle('error', error); }
   function session() { try { const s = JSON.parse(localStorage.getItem('marketizoAdminSession') || 'null'); return s?.token && s.expiresAt > Date.now() ? s : null; } catch { return null; } }
@@ -28,7 +29,7 @@
   function updateControls() {
     const editable = writable();
     $('documentTitle').disabled = !editable || busy; $('documentCategory').disabled = !editable || busy; $('documentNote').disabled = !editable || busy; $('documentSignatureMethod').disabled = !editable || busy;
-    document.querySelectorAll('#dossierDetails input, #dossierDetails select').forEach(el => el.disabled = !editable || busy);
+    document.querySelectorAll('#dossierDetails input, #dossierDetails select, #contractDetails input, #contractDetails select').forEach(el => el.disabled = !editable || busy);
     $('dossierDetails').hidden = current?.kind === 'template';
     $('newAnnex').disabled = busy || dirty || !current?.revision || !current?.data.dossier || !!current?.data.parentDocumentId || !!current?.archived_at;
     $('contractEditor').contentEditable = String(editable && !busy);
@@ -47,7 +48,8 @@
     $('archiveDocument').textContent = current?.archived_at ? 'Vrati iz arhive' : 'Arhiviraj';
     $('previewPdf').disabled = busy || current?.kind === 'template' || current?.status !== 'ready';
     $('sendDocument').disabled = busy || !sendingEnabled || !preparedSha || current?.status !== 'ready' || current?.data.signatureMethod !== 'ses';
-    $('sendDocument').textContent = current?.data.signatureMethod === 'qes' ? 'Kvalifikovani potpis · poseban postupak' : 'Pošalji na naš potpis';
+    $('generateLink').disabled = $('sendDocument').disabled;
+    $('sendDocument').textContent = current?.data.signatureMethod === 'qes' ? 'Kvalifikovani potpis · poseban postupak' : 'Pošalji e-mail';
     $('downloadReceipt').disabled = busy || current?.status !== 'signed';
     $('downloadEvidence').disabled = busy || current?.status !== 'signed';
     $('voidRequest').disabled = busy || !['sent', 'viewed', 'signing'].includes(current?.status);
@@ -104,10 +106,12 @@
     chooser.append(node('option', 'Ručni unos · novi primalac', { value: '' }));
     people.forEach((p, i) => chooser.append(node('option', `${p.name} · ${p.kind === 'client' ? 'klijent' : 'zaposleni'}`, { value: String(i) })));
     chooserLabel.append(chooser); row.append(chooserLabel);
-    row.append(field('Ime i prezime', 'name', r.name, { maxlength: '160', autocomplete: 'off' }), field('E-mail', 'email', r.email, { type: 'email', maxlength: '254', autocomplete: 'off' }), field('Firma', 'company', r.company, { maxlength: '180' }), field('Funkcija / ovlašćenje', 'capacity', r.capacity, { maxlength: '120' }), field('Zemlja (AT, DE, US…)', 'country', r.country, { maxlength: '2', autocomplete: 'off' }));
+    const roleLabel = node('label', 'Potpisuje kao / Unterzeichnet als'), role = node('select', null, { 'data-field': 'role' });
+    [['counterparty', 'Druga strana / Andere Vertragspartei'], ['marketizo', 'Marketizo / Arbeitgeber']].forEach(([v,t]) => role.append(node('option', t, { value: v }))); role.value = r.role || 'counterparty'; roleLabel.append(role); row.append(roleLabel);
+    row.append(field('Ime i prezime', 'name', r.name, { maxlength: '160', autocomplete: 'off' }), field('E-mail', 'email', r.email, { type: 'email', maxlength: '254', autocomplete: 'off' }), field('Firma', 'company', r.company, { maxlength: '180' }), field('Adresa / Anschrift', 'address', r.address, { maxlength: '300' }), field('Poreski broj / Steuernummer', 'taxId', r.taxId, { maxlength: '80' }), field('Registracioni broj / Registernummer', 'registrationId', r.registrationId, { maxlength: '80' }), field('Funkcija / ovlašćenje', 'capacity', r.capacity, { maxlength: '120' }), field('Zemlja (AT, DE, US…)', 'country', r.country, { maxlength: '2', autocomplete: 'off' }));
     const typeLabel = node('label', 'Ugovorna strana'), type = node('select', null, { 'data-field': 'partyType' });
     [['business', 'Firma / B2B'], ['consumer', 'Potrošač'], ['employee', 'Zaposleni']].forEach(([v, t]) => type.append(node('option', t, { value: v }))); type.value = r.partyType || 'business'; typeLabel.append(type); row.append(typeLabel);
-    chooser.addEventListener('change', () => { const p = people[Number(chooser.value)]; if (chooser.value !== '' && p) { row.querySelector('[data-field=name]').value = p.name; row.querySelector('[data-field=email]').value = p.email; type.value = p.kind === 'employee' ? 'employee' : 'business'; setDirty(); } });
+    chooser.addEventListener('change', () => { const p = people[Number(chooser.value)]; if (chooser.value !== '' && p) { row.querySelector('[data-field=name]').value = p.name; row.querySelector('[data-field=email]').value = p.email; row.querySelector('[data-field=company]').value = p.company || (p.kind === 'client' ? p.name : ''); type.value = p.kind === 'employee' ? 'employee' : 'business'; setDirty(); } });
     remove.addEventListener('click', () => { row.remove(); setDirty(); });
     return row;
   }
@@ -150,8 +154,11 @@
     if (id === 'new') { newDossierId ||= crypto.randomUUID(); return { id: newDossierId, name: $('dossierName').value, type: $('dossierType').value }; }
     return dossiers().find(d => d.id === id) || null;
   }
+  function updateContractFields() { $('contractStartLabel').hidden = $('contractAudience').value !== 'client'; }
+  $('contractAudience').addEventListener('change', updateContractFields);
+  $('documentCategory').addEventListener('change', () => { $('contractAudience').value = $('documentCategory').value === 'employees' ? 'employee' : $('documentCategory').value === 'clients' ? 'client' : 'other'; updateContractFields(); });
   function readDraft() {
-    return { ...blank(), dossier: current.kind === 'template' ? null : readDossier(), parentDocumentId: $('parentDocument').value || null, title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
+    return { ...blank(), dossier: current.kind === 'template' ? null : readDossier(), parentDocumentId: $('parentDocument').value || null, title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, contractDetails: { audience: $('contractAudience').value, place: $('contractPlace').value, startDate: $('contractAudience').value === 'client' ? $('contractStartDate').value : '' }, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
   }
   function leaveAllowed() { return !dirty || confirm('Postoje nesačuvane izmene. Napustiti ovaj nacrt?'); }
   function openDocument(doc, kind = 'document', isNew = false) {
@@ -160,6 +167,8 @@
     setupDossier(doc.data.dossier, doc.data.parentDocumentId || '');
     renderEditor(doc.data.content); $('recipientRows').replaceChildren(...doc.data.recipients.map(recipientRow));
     $('documentSignatureMethod').value = doc.data.signatureMethod || 'ses';
+    $('contractAudience').value = doc.data.contractDetails?.audience === 'contractor' ? 'contractor' : doc.data.category === 'employees' || doc.data.dossier?.type === 'employee' ? 'employee' : doc.data.contractDetails?.audience || (doc.data.category === 'clients' ? 'client' : 'other');
+    $('contractPlace').value = doc.data.contractDetails?.place || ''; $('contractStartDate').value = doc.data.contractDetails?.startDate || ''; updateContractFields();
     $('templateSelect').value = ''; $('workspace').hidden = false; $('library').hidden = true; setDirty(isNew); updateControls(); message('');
     $('workspace').scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
@@ -214,6 +223,12 @@
     } catch (e) { message(e.message, true); return false; }
     finally { busy = false; updateControls(); }
   }
+  document.querySelectorAll('[data-new-audience]').forEach(button => button.addEventListener('click', () => {
+    if (busy || !leaveAllowed()) return;
+    const audience = button.dataset.newAudience;
+    const data = { ...blank(), category: audience === 'client' ? 'clients' : 'employees', contractDetails: { audience, place: '', startDate: '' }, dossier: null };
+    openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data }, library === 'templates' ? 'template' : 'document', true);
+  }));
   $('newDocument').addEventListener('click', () => { if (!busy && leaveAllowed()) openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data: { ...blank(), dossier: selectedDossier } }, library === 'templates' ? 'template' : 'document', true); });
   $('backToLibrary').addEventListener('click', () => { if (leaveAllowed()) { current = null; setDirty(false); $('workspace').hidden = true; $('library').hidden = false; list(); } });
   $('saveDocument').addEventListener('click', () => mutate('save', { data: readDraft() }));
@@ -226,7 +241,7 @@
   $('applyTemplate').addEventListener('click', async () => {
     if (!$('templateSelect').value) return;
     if (!confirm('Zameniti tekst i naziv trenutnog nacrta izabranim šablonom?')) return;
-    try { const r = await api({ action: 'get', id: $('templateSelect').value, kind: 'template' }); renderEditor(r.document.data.content); $('documentTitle').value = r.document.title; $('documentCategory').value = r.document.category; setDirty(); } catch (e) { message(e.message, true); }
+    try { const r = await api({ action: 'get', id: $('templateSelect').value, kind: 'template' }); renderEditor(r.document.data.content); $('documentTitle').value = r.document.title; $('documentCategory').value = r.document.category; $('contractAudience').value = r.document.data.contractDetails?.audience || (r.document.category === 'employees' ? 'employee' : r.document.category === 'clients' ? 'client' : 'other'); $('contractPlace').value = r.document.data.contractDetails?.place || ''; $('contractStartDate').value = r.document.data.contractDetails?.startDate || ''; updateContractFields(); setDirty(); } catch (e) { message(e.message, true); }
   });
   function copy(kind) { const data = readDraft(); if (kind === 'template') { data.recipients = []; data.dossier = null; data.parentDocumentId = null; } data.title = (data.title || 'Novi dokument') + (kind === 'template' ? ' — šablon' : ' — kopija'); openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data }, kind, true); }
   $('duplicateDocument').addEventListener('click', () => copy('document'));
@@ -264,7 +279,7 @@
   $('newAnnex').addEventListener('click', () => {
     if (busy || dirty || !current?.revision || !current.data.dossier || current.data.parentDocumentId) return;
     const original = current;
-    const data = { ...blank(), title: 'Aneks — ' + original.data.title, category: 'annexes', dossier: structuredClone(original.data.dossier), parentDocumentId: original.id, recipients: structuredClone(original.data.recipients) };
+    const data = { ...blank(), title: 'Aneks — ' + original.data.title, category: 'annexes', dossier: structuredClone(original.data.dossier), parentDocumentId: original.id, recipients: structuredClone(original.data.recipients), contractDetails: structuredClone(original.data.contractDetails || blank().contractDetails) };
     openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data }, 'document', true);
   });
   $('refreshList').addEventListener('click', list);
@@ -281,15 +296,20 @@
       $('previewFrame').removeAttribute('sandbox'); $('previewFrame').src = previewUrl; $('previewDialog').showModal(); message('Pripremljeni PDF je zaključan. Svi potpisnici dobijaju ovu istu verziju.');
     } catch (e) { message(e.message, true); } finally { busy = false; updateControls(); }
   });
-  $('sendDocument').addEventListener('click', () => { if (!busy && preparedSha && sendingEnabled) $('sendDialog').showModal(); });
+  function deliveryDialog(mode) { if (busy || !preparedSha || !sendingEnabled) return; deliveryMode = mode; $('deliveryTitle').textContent = mode === 'link' ? 'Generisanje linkova za potpisivanje' : 'Slanje poziva e-mailom'; $('confirmSend').textContent = mode === 'link' ? 'Potvrdi i generiši linkove' : 'Potvrdi i pošalji pozive'; $('sendDialog').showModal(); }
+  $('sendDocument').addEventListener('click', () => deliveryDialog('email'));
+  $('generateLink').addEventListener('click', () => deliveryDialog('link'));
+  $('closeLinks').addEventListener('click', () => { $('generatedLinks').replaceChildren(); $('linksDialog').close(); });
   $('closeSend').addEventListener('click', () => { if (!busy) $('sendDialog').close(); });
   $('sendDialog').addEventListener('cancel', e => { if (busy) e.preventDefault(); });
   $('sendForm').addEventListener('submit', async e => {
     e.preventDefault(); if (busy || !current || !preparedSha) return;
-    const body = { action: 'send', id: current.id, revision: current.revision, review: { decision: $('confirmForm').checked ? 'ses_allowed' : 'unknown', reviewedBy: $('reviewerName').value, reference: $('reviewReference').value, pdfSha256: preparedSha, pdfReviewed: $('confirmPdf').checked } };
+    const body = { action: 'send', ...(deliveryMode === 'link' ? { delivery: 'link' } : {}), id: current.id, revision: current.revision, review: { decision: $('confirmForm').checked ? 'ses_allowed' : 'unknown', reviewedBy: $('reviewerName').value, reference: $('reviewReference').value, pdfSha256: preparedSha, pdfReviewed: $('confirmPdf').checked } };
     const fingerprint = JSON.stringify(body); if (!sendPending || sendPending.fingerprint !== fingerprint) sendPending = { fingerprint, commandId: crypto.randomUUID() };
     busy = true; updateControls(); $('confirmSend').disabled = true;
-    try { await api({}, { ...body, commandId: sendPending.commandId }); sendPending = null; const r = await api({ action: 'get', id: current.id }); current = { ...r.document, kind: 'document' }; preparedSha = ''; $('sendDialog').close(); message('Zahtev je sačuvan. Pozivi se šalju iz evidencije poslova; prihvatanje mail servera nije dokaz da je poruka pročitana.'); }
+    try { const deliveryResult = await api({}, { ...body, commandId: sendPending.commandId }); sendPending = null; const r = await api({ action: 'get', id: current.id }); current = { ...r.document, kind: 'document' }; preparedSha = ''; $('sendDialog').close(); if (deliveryMode === 'link') {
+      $('generatedLinks').replaceChildren(...(deliveryResult.links || []).map(link => { const label = node('label', link.name + ' · ' + link.email), input = node('input', null, { readonly: '', type: 'text', 'aria-label': 'Link za ' + link.name }); input.value = link.url; label.append(input); return label; })); $('linksDialog').showModal(); message('Linkovi su generisani. Pozivni e-mail nije poslat.');
+     } else message('Zahtev je sačuvan. Pozivi se šalju iz evidencije poslova; prihvatanje mail servera nije dokaz da je poruka pročitana.'); }
     catch (error) { message(error.message, true); }
     finally { busy = false; $('confirmSend').disabled = false; updateControls(); }
   });

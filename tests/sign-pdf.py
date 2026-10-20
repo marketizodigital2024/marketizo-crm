@@ -19,7 +19,7 @@ spec.loader.exec_module(helper)
 
 class SignPdfTests(unittest.TestCase):
     def document(self):
-        return {"title": "Ugovor o uslugama - Čćžšđ ÄÖÜ", "content": {"version": 1, "blocks": [
+        return {"recipients": [{"name":"Test Potpisnik","email":"test@example.com"},{"name":"Drugi Potpisnik","email":"other@example.com"}], "title": "Ugovor o uslugama - Čćžšđ ÄÖÜ", "content": {"version": 1, "blocks": [
             {"type": "heading", "runs": [{"text": "Član 1. Predmet ugovora", "bold": True}]},
             {"type": "paragraph", "runs": [{"text": "Test dokument. Ovo nije ugovor sa stvarnim klijentom. " * 12}]},
             {"type": "ordered", "runs": [{"text": "Prva obaveza"}]},
@@ -34,7 +34,7 @@ class SignPdfTests(unittest.TestCase):
         self.assertIn("Čćžšđ ÄÖÜ", text)
         self.assertIn("2. Druga obaveza", text)
         self.assertGreater(len(first.pages), 1)
-        self.assertEqual(original["renderer"], "marketizo-pdf-2")
+        self.assertEqual(original["renderer"], "marketizo-pdf-3")
         self.assert_stationery(first)
         again = helper.render_original({"document": self.document()})
         self.assertEqual(original["sha256"], again["sha256"])
@@ -46,7 +46,7 @@ class SignPdfTests(unittest.TestCase):
         final_bytes = base64.b64decode(final["base64"])
         self.assertTrue(final_bytes.startswith(original_bytes))
         reader = PdfReader(io.BytesIO(final_bytes))
-        self.assertGreater(len(reader.pages), len(first.pages))
+        self.assertEqual(len(reader.pages), len(first.pages))
         self.assert_stationery(reader)
         self.assertIn("Test Potpisnik", "\n".join(p.extract_text() for p in reader.pages))
         self.assertEqual(hashlib.sha256(final_bytes).hexdigest(), final["sha256"])
@@ -65,7 +65,33 @@ class SignPdfTests(unittest.TestCase):
                               positions.append((text, cm[5])) if text.strip() and cm[5] else None)
             for text, y in positions:
                 self.assertGreater(y, 44, text)
-                self.assertLess(y, float(page.mediabox.height) - 110, text)
+                self.assertLess(y, float(page.mediabox.height) - 40, text)
+
+    def test_three_contract_audiences_and_paper_signatures(self):
+        for audience, expected in [('client', 'Klijent / Kunde'), ('employee', 'Zaposleni / Arbeitnehmer'), ('contractor', 'Saradnik / Auftragnehmer')]:
+            with self.subTest(audience=audience):
+                doc = self.document()
+                doc['content']['blocks'] = [{'type':'paragraph','runs':[{'text':'NEOBAVEZUJUĆI PRIMER / UNVERBINDLICHES MUSTER'}]}]
+                doc['contractDetails'] = {'audience':audience,'place':'Wien','startDate':'2026-11-01'}
+                doc['recipients'] = [{'name':'Owner Test','email':'owner@example.invalid','role':'marketizo'}, {'name':'Recipient Test','email':'other@example.invalid','company':'Example PR'}]
+                original = helper.render_original({'document':doc, 'issuer':{'name':'Marketizo fixture','address':'Fixture address','email':'office@example.invalid'}})
+                before = base64.b64decode(original['base64'])
+                reader = PdfReader(io.BytesIO(before))
+                self.assertEqual(len(reader.pages), 1)
+                text = reader.pages[0].extract_text()
+                self.assertIn(expected, text)
+                self.assertEqual('Početak saradnje' in text, audience == 'client')
+                self.assertNotIn('21:30', text, 'No signing date before actual acceptance')
+                layout = json.loads(reader.metadata['/MarketizoLayout'])
+                self.assertEqual(len(layout['blocks'][0]['slots']), 2)
+                self.assertGreater(layout['blocks'][0]['slots'][0]['y'], 44)
+                final = helper.render_final({'originalBase64':original['base64'], 'originalSha256':original['sha256'], 'manifestSha256':'a'*64,
+                    'evidence':{'title':doc['title'],'requestId':'fixture','signers':[{'name':'Owner Test','email':'owner@example.invalid','acceptedAt':'2026-10-20T19:30:00Z','consentText':'Fixture only','strokes':[]} ]}})
+                after = base64.b64decode(final['base64'])
+                self.assertTrue(after.startswith(before))
+                signed = PdfReader(io.BytesIO(after))
+                self.assertEqual(len(signed.pages), 1, 'Signature belongs on the agreement, without a separate signature page')
+                self.assertIn('20.10.2026. 21:30', signed.pages[0].extract_text())
 
     def test_finalization_preserves_prebranding_original(self):
         # Previously frozen PDFs must never be re-rendered when branding changes.
