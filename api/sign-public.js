@@ -34,7 +34,7 @@ function createHandler(deps = {}) {
     const source = await flow.rpc(receipt ? 'receipt' : 'pdf', { sessionDigest: digest });
     const bytes = Buffer.from(source.pdfBase64 || '', 'base64');
     if (bytes.length > 1500000 || hash(bytes) !== source.pdfSha256) throw new SignError(503, 'PDF nije potvrđen.');
-    const result = await flow.helper({ action: 'preview', pdfBase64: source.pdfBase64, pdfSha256: source.pdfSha256 });
+    const result = await flow.helper({ action: 'preview', pdfBase64: bytes.toString('base64'), pdfSha256: source.pdfSha256 });
     if (result.pdfSha256 !== source.pdfSha256) throw new SignError(503, 'PDF nije potvrđen.');
     return { ...result, consentText: result.language === 'de' ? CONSENT_DE : CONSENT };
    }
