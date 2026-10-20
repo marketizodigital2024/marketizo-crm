@@ -97,7 +97,7 @@ async function main(){
   assert.equal(mails.filter(m=>m.subject.includes('dokument za potpis')).length,1);
   const invitation=mails.find(m=>m.subject.includes('dokument za potpis')),token=invitation.text.match(/\/sign#([\w-]+)/)[1];
   await send('Page.navigate',{url:origin+'/sign#'+token},sessionId);
-  await until("document.querySelectorAll('#documentPages canvas').length>0 && document.getElementById('documentPages').getAttribute('aria-busy')==='false' && !document.getElementById('acceptDocument').disabled && document.getElementById('title').textContent==='Browser fixture contract' && document.getElementById('message').textContent===''");
+  await until("document.querySelectorAll('#documentPages .document-page-text').length>0 && document.getElementById('documentPages').getAttribute('aria-busy')==='false' && !document.getElementById('acceptDocument').disabled && document.getElementById('title').textContent==='Browser fixture contract' && document.getElementById('message').textContent===''");
   assert.equal(await evaluate("document.getElementById('signatureSection').classList.contains('on-paper')"),true,'Signature pad must sit on the agreement');
   assert.equal(mails.some(m=>m.subject.includes('kod')),false,'No OTP must be sent');
   assert.equal(await evaluate("document.getElementById('requestOtp')!==null"),false,'No verification step');
