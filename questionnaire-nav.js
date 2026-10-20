@@ -1,7 +1,7 @@
 // Additive navigation only: never submit, reset, or replace employee forms.
 (() => {
 function employeeRoles(value) {
-  const canonical = ['Social Media Manager','Scenarista','Editor','Lider editora','Snimatelj','Media Buyer','Founder / Strategija','Co-founder / Operativa'];
+  const canonical = ['Editor','Lider editora','Scenario','Scenario Leader','Snimatelj','Snimatelj Leader','Social Media Manager','Social Media Manager Leader','Founder','Co Founder','Direktor'];
   const input = Array.isArray(value) ? value : [value];
   const result = [];
   for (const item of input) {
@@ -16,13 +16,14 @@ function employeeRoles(value) {
       part = part.replace(/\u0001(\d+)\u0001/g, (_,i) => protectedTitles[Number(i)]).trim();
       if (!part) continue;
       const normalized = part.toLowerCase().replace(/\s+/g,' ');
-      const role = normalized === 'smm' ? 'Social Media Manager' : canonical.find(r=>r.toLowerCase()===normalized) || part;
+      const aliases = {'smm':'Social Media Manager','smm leader':'Social Media Manager Leader','scenarista':'Scenario','founder / strategija':'Founder','co-founder / operativa':'Co Founder','co founer':'Co Founder'};
+      const role = aliases[normalized] || canonical.find(r=>r.toLowerCase()===normalized) || part;
       if (!result.some(r=>r.toLowerCase()===role.toLowerCase())) result.push(role);
     }
   }
   return result;
 }
-function employeeHasSmm(value) { return employeeRoles(value).includes('Social Media Manager'); }
+function employeeHasSmm(value) { return employeeRoles(value).some(role => ['Social Media Manager','Social Media Manager Leader','Scenario','Scenario Leader'].includes(role)); }
 
   function sync() {
     const app = document.getElementById('employeeApp');

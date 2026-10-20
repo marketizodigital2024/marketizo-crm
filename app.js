@@ -7236,7 +7236,7 @@ function applyInvoiceStartMonthV1() {
 
 
 function employeeRoles(value) {
-  const canonical = ['Social Media Manager','Scenarista','Editor','Lider editora','Snimatelj','Media Buyer','Founder / Strategija','Co-founder / Operativa'];
+  const canonical = ['Editor','Lider editora','Scenario','Scenario Leader','Snimatelj','Snimatelj Leader','Social Media Manager','Social Media Manager Leader','Founder','Co Founder','Direktor'];
   const input = Array.isArray(value) ? value : [value];
   const result = [];
   for (const item of input) {
@@ -7251,13 +7251,14 @@ function employeeRoles(value) {
       part = part.replace(/\u0001(\d+)\u0001/g, (_,i) => protectedTitles[Number(i)]).trim();
       if (!part) continue;
       const normalized = part.toLowerCase().replace(/\s+/g,' ');
-      const role = normalized === 'smm' ? 'Social Media Manager' : canonical.find(r=>r.toLowerCase()===normalized) || part;
+      const aliases = {'smm':'Social Media Manager','smm leader':'Social Media Manager Leader','scenarista':'Scenario','founder / strategija':'Founder','co-founder / operativa':'Co Founder','co founer':'Co Founder'};
+      const role = aliases[normalized] || canonical.find(r=>r.toLowerCase()===normalized) || part;
       if (!result.some(r=>r.toLowerCase()===role.toLowerCase())) result.push(role);
     }
   }
   return result;
 }
-function employeeHasSmm(value) { return employeeRoles(value).includes('Social Media Manager'); }
+function employeeHasSmm(value) { return employeeRoles(value).some(role => ['Social Media Manager','Social Media Manager Leader','Scenario','Scenario Leader'].includes(role)); }
 
 // Multi-role UI keeps the existing position field/storage contract intact.
 var employeePositionPickers = new WeakMap();
@@ -7290,7 +7291,7 @@ function setEmployeePositions(input, value) {
   picker.box.querySelector('input')?.setCustomValidity(selected.length ? '' : 'Izaberi bar jednu poziciju.');
 }
 function setupEmployeePositionSelection() {
-  const canonical = ['Social Media Manager','Scenarista','Editor','Lider editora','Snimatelj','Media Buyer','Founder / Strategija','Co-founder / Operativa'];
+  const canonical = ['Editor','Lider editora','Scenario','Scenario Leader','Snimatelj','Snimatelj Leader','Social Media Manager','Social Media Manager Leader','Founder','Co Founder','Direktor'];
   document.querySelectorAll('input[name="position"]').forEach(input => {
     if (employeePositionPickers.has(input)) return;
     const existing = typeof state !== 'undefined' ? (state.employees || []).flatMap(e=>employeeRoles(e.position)) : [];
@@ -7300,7 +7301,7 @@ function setupEmployeePositionSelection() {
     const legend = document.createElement('legend'); legend.textContent = 'Pozicije'; legend.style.cssText = 'padding:0;margin-bottom:10px;font-size:14px;font-weight:600;color:#405448';
     const box = document.createElement('div'); box.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:10px';
     const note = document.createElement('small');
-    note.textContent = 'Izaberi jednu ili više pozicija. SMM pozicija uključuje pristup Upitnicima.';
+    note.textContent = 'Izaberi jednu ili više pozicija. SMM i Scenario imaju pristup Upitnicima, uključujući Leader pozicije.';
     note.style.cssText='display:block;margin-top:9px;font-size:12px;font-weight:400;color:#66776d;line-height:1.5';fieldset.append(legend,box,note);
     const originalLabel = input.closest('label');
     if (originalLabel) { originalLabel.hidden = true; originalLabel.insertAdjacentElement('afterend',fieldset); }
