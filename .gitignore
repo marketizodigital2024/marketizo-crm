@@ -1,0 +1,11 @@
+node_modules/
+.venv/
+public/
+browser-results/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+.vercel/
+work/
