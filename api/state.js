@@ -109,6 +109,67 @@ function hideEmployeeState(payload, employee) {
   return copy;
 }
 
+/**
+ * Read-only projection of saved work entries. Never changes, creates or removes
+ * employeeWorkLogs or balance adjustments; callers retain the stored revision.
+ */
+function refreshWorkSummaries(payload) {
+  if (!payload) return payload;
+  const costs = require("../cost-calculation.js");
+  const employees = new Map((payload.employees || []).map(employee => [employee.id, employee]));
+  const days = new Map();
+  for (const log of payload.employeeWorkLogs || []) {
+    const key = JSON.stringify([log.employeeId, log.date]);
+    if (!days.has(key)) days.set(key, { minutes: 0, activities: new Map() });
+    const day = days.get(key), minutes = costs.minutes(log);
+    day.minutes += minutes;
+    const label = `${log.activityName || "Aktivnost"} · ${log.clientName || "Bez klijenta"}`;
+    day.activities.set(label, (day.activities.get(label) || 0) + minutes);
+  }
+  const dayFor = (employeeId, date) => days.get(JSON.stringify([employeeId, date])) || { minutes: 0, activities: new Map() };
+  const reports = (payload.employeeReports || []).map(report => {
+    // Manually authored reports, questionnaire answers and feedback are not totals.
+    if (report.isAutomaticRollup !== true || !employees.has(report.employeeId)) return report;
+    const day = dayFor(report.employeeId, report.date);
+    const minutes = Math.round(day.minutes);
+    const summary = [...day.activities].sort((a, b) => b[1] - a[1])
+      .map(([label, value]) => `${label}: ${Math.round(value)} min`).join("; ")
+      || "Nema upisanih aktivnosti do 17:30.";
+    const expected = Number(report.expectedMinutes);
+    const missing = Number.isFinite(expected) ? Math.max(0, expected - minutes) : report.missingMinutes;
+    const generatedNegative = /^Nedostaje \d+ min do dnevne kvote\.$/.test(report.negative || "");
+    return {
+      ...report, minutes, hours: Math.round(minutes / 60 * 10000) / 10000,
+      missingMinutes: missing, autoSummary: summary,
+      // Preserve any note/feedback explicitly edited by a person.
+      note: report.note === report.autoSummary || report.note === "Nema upisanih aktivnosti do 17:30." ? summary : report.note,
+      negative: generatedNegative ? (missing > 0 ? `Nedostaje ${missing} min do dnevne kvote.` : "") : report.negative,
+    };
+  });
+  const notifications = (payload.notifications || []).flatMap(notification => {
+    const match = /^employee-hours-shortage-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(notification.key || "");
+    if (!match) return [notification];
+    const [, employeeId, date] = match, employee = employees.get(employeeId);
+    // A scoped session may not include every employee. Do not infer zero hours.
+    if (!employee) return [notification];
+    if (employee.status === "Neaktivan" || employee.active === false
+      || (employee.startDate && date < employee.startDate)
+      || (employee.endDate && date > employee.endDate)) return [];
+    if ((payload.employeeAbsences || []).some(absence => absence.employeeId === employeeId
+      && absence.status === "Odobreno" && absence.startDate <= date && absence.endDate >= date)) return [];
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+    const weeklyHours = costs.weeklyHours(employee, date.slice(0, 7));
+    // Keep the existing attendance policy; this change only refreshes its totals.
+    const expected = weekday >= 1 && weekday <= 5
+      ? weeklyHours >= 38 ? (weekday === 5 ? 390 : 510) : Math.round(weeklyHours * 60 / 5) : 0;
+    const minutes = dayFor(employeeId, date).minutes;
+    if (!Number.isFinite(expected) || expected <= 0 || minutes >= expected) return [];
+    const formatted = date.split("-").reverse().join(".") + ".";
+    return [{ ...notification, message: `${employee.name}: za ${formatted} upisano je ${minutes}/${expected} min. Nedostaje ${expected - minutes} min.` }];
+  });
+  return { ...payload, employeeReports: reports, notifications };
+}
+
 function hideClientState(payload, client) {
   const safeClient = { ...client };
   delete safeClient.loginPassword;
@@ -381,6 +442,7 @@ module.exports = async function handler(req, res) {
       const row = await readSessionState(config, session, compact);
       const access = accessSession(req, row.payload, config.key);
       if (!access) return json(res, 401, { configured: true, error: "Prijava je obavezna.", payload: null });
+      row.payload = refreshWorkSummaries(row.payload);
       const visiblePayload = access.role === "full-admin" ? hidePasswords(row.payload || null)
         : access.role === "operational-admin" ? hideOperationalFinancials(row.payload)
           : access.role === "employee" ? hideEmployeeState(row.payload, access.employee)
@@ -516,7 +578,7 @@ module.exports = async function handler(req, res) {
 };
 
 
-module.exports.helpers = { accessSession, verifyAccessToken, readStoredState, supabaseConfig, supabaseHeaders, preserveDailyPrewriteBackup };
+module.exports.helpers = { refreshWorkSummaries, accessSession, verifyAccessToken, readStoredState, supabaseConfig, supabaseHeaders, preserveDailyPrewriteBackup };
 
 const originalHandler = module.exports;
 module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);
