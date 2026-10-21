@@ -115,6 +115,8 @@ async function main(){
   await click('closeSignatureDialog');
   await evaluate("document.getElementById('acceptTerms').checked=true");await click('acceptDocument');
   await until("!document.getElementById('receiptLinks').hidden");
+  assert.equal(await evaluate("document.getElementById('refreshStatus')===null"),true);
+  assert.equal(await evaluate("[...document.querySelectorAll('a[href*=sign-public]')].filter(a=>a.getClientRects().length>0).length"),1,'Only one PDF download action is visible after signing');
   const packages=await evaluate("Promise.all([fetch('/api/sign-public?action=evidence').then(r=>r.json()),fetch('/api/sign-public?action=receipt').then(r=>r.arrayBuffer()).then(b=>Array.from(new Uint8Array(b)))]).then(([e,p])=>({e,p}))");
   require('../scripts/verify-sign-evidence.cjs').verify(packages.e,Buffer.from(packages.p));
   assert.equal(packages.e.manifest.issuer.privacyNotice.version,'2026-10-20.1','Final evidence must preserve the notice version sent with the request');
