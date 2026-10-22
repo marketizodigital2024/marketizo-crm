@@ -27,6 +27,9 @@ async function call(method, body, extras={}) { const req={method,url:extras.url|
  for(const action of ['pdf','receipt']){const result=await call('GET',undefined,{url:'/api/sign-public?action='+action});assert.equal(result.status,200);assert.deepEqual(result.body,fixturePdf);assert.equal(calls.at(-1).action,'receipt','Legacy PDF URLs return only the signed receipt');}
  assert.equal((await call('POST',{action:'decline'})).status,400);assert.equal(calls.some(c=>c.action==='decline'),false);
  fail=true;const failure=await call('POST',body);assert.equal(failure.status,503);assert.ok(!JSON.stringify(failure.body).includes('private fixture'));
+ assert.equal((await call('POST',{action:'complete_details',fields:{price:'0'}})).status,400);
+ assert.equal((await call('POST',{action:'complete_details',fields:{country:'rs',address:'Fixture Street'}})).status,200);
+ assert.deepEqual(calls.find(c=>c.action==='completion_submit').data.fields,{country:'RS',address:'Fixture Street'});
  const original=Buffer.from('%PDF-original'),final=Buffer.concat([original,Buffer.from('certificate')]),key=evidenceKey();
  const manifest={originalByteLength:original.length,originalSha256:hash(original),applicationKey:{publicKey:key.publicKey,fingerprint:key.fingerprint,algorithm:'Ed25519'}};
  const manifestSha256=hash(canonical(manifest));const evidence={manifest,manifestSha256,finalSha256:hash(final),seal:crypto.sign(null,Buffer.from(manifestSha256,'hex'),key.privateKey).toString('base64')};
