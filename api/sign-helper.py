@@ -357,10 +357,13 @@ def preview_pdf(payload):
         while lines and not lines[-1].strip(): lines.pop()
         if lines and re.fullmatch(r"Marketizo Digital e\.U\.\s+\d+", lines[-1].strip()): lines.pop()
         blocks, paragraph = [], []
+        clause_heading = re.compile(r"^(?:Član|Klauzula|Klausel|Artikel|Abschnitt|Article|§)\s*\d+", re.I)
+        numbered_item = re.compile(r"^\d+(?:\.\d+)+(?:[.)])?\s|^\d+[.)]\s")
+        in_contract_body = False
         def flush():
             if paragraph:
                 value = " ".join(paragraph)
-                blocks.append({"text": value, "heading": bool(len(value) < 160 and re.match(r"^(Član|Artikel|Abschnitt|§|[0-9]+[.)])", value))})
+                blocks.append({"text": value, "heading": bool(len(value) < 160 and clause_heading.match(value))})
                 paragraph.clear()
         for line in lines:
             value = line.strip()
@@ -374,7 +377,22 @@ def preview_pdf(payload):
                     flush()
                     blocks.append({"text": " | ".join(columns), "columns": columns, "heading": False})
                 else:
-                    paragraph.append(value)
+                    # PDF line breaks carry the clause/list structure. Blank lines alone
+                    # are insufficient: compact templates have no empty line between items.
+                    is_heading = bool(len(value) < 160 and clause_heading.match(value))
+                    if is_heading:
+                        flush()
+                        blocks.append({"text": value, "heading": True})
+                        in_contract_body = True
+                    elif numbered_item.match(value):
+                        flush()
+                        paragraph.append(value)
+                    elif not in_contract_body:
+                        # Keep the title and party particulars on their original lines.
+                        flush()
+                        blocks.append({"text": value, "heading": value.isupper() and ':' not in value and sum(c.isalpha() for c in value) >= 25})
+                    else:
+                        paragraph.append(value)
         flush()
         if index == 0 and blocks and blocks[0]["text"] == title:
             blocks.pop(0)
