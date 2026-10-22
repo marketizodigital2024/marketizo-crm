@@ -34,7 +34,7 @@ class SignPdfTests(unittest.TestCase):
         self.assertIn("Čćžšđ ÄÖÜ", text)
         self.assertIn("2. Druga obaveza", text)
         self.assertGreater(len(first.pages), 1)
-        self.assertEqual(original["renderer"], "marketizo-pdf-4")
+        self.assertEqual(original["renderer"], "marketizo-pdf-5")
         self.assert_stationery(first)
         again = helper.render_original({"document": self.document()})
         self.assertEqual(original["sha256"], again["sha256"])
