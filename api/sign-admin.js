@@ -39,7 +39,7 @@ function createHandler(deps = {}) {
         const action = query.get('action') || 'list';
         const kind = query.get('kind') === 'template' ? 'template' : 'document';
         if (action === 'bootstrap') return json(res, 200, { ok: true, categories: CATEGORIES, signatureMethod: 'ses',
-          integration: readiness(),
+          integration: readiness(), sender: { name: access.employee.name || (current.payload.employees || []).find(e => e.id === access.employee.id)?.name || '' },
           people: [...(current.payload.clients || []).filter(c => c.status !== 'Arhiviran').map(c => ({ id: c.id, kind: 'client', name: c.name, email: c.email || '' })), ...(current.payload.employees || []).filter(e => e.active !== false && e.status !== 'Neaktivan').map(e => ({ id: e.id, kind: 'employee', name: e.name, email: e.email || '' }))] });
         if (['original', 'receipt', 'evidence', 'requestStatus'].includes(action)) {
           const id = requireId(query.get('id')); await store.get('document', id);
@@ -48,6 +48,15 @@ function createHandler(deps = {}) {
           if (action === 'evidence' || action === 'requestStatus') return json(res, 200, data);
           if (hash(data.bytes) !== data.sha256) throw new SignError(503, 'PDF integritet nije potvrđen.');
           res.statusCode = 200; res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', 'inline; filename="Marketizo-ugovor.pdf"'); return res.end(data.bytes);
+        }
+        if (action === 'preparedPreview') {
+          const doc = await store.get('document', requireId(query.get('id')));
+          if (doc.archived_at || doc.status !== 'ready') throw new SignError(409, 'Prvo pripremi ugovor za pregled.');
+          const flow = (deps.createWorkflow || createWorkflow)({ ...config, organization: process.env.CRM_STATE_ID || 'marketizo-main' });
+          const prepared = await flow.preparePdf(access.employee.id, doc);
+          const preview = await flow.helper({ action: 'preview', pdfBase64: prepared.pdfBase64.replace(/\s/g, ''), pdfSha256: prepared.pdfSha256 });
+          if (preview.pdfSha256 !== prepared.pdfSha256) throw new SignError(503, 'Pregled ugovora nije potvrđen.');
+          return json(res, 200, { ok: true, ...preview });
         }
         if (action === 'get' || action === 'preview' || action === 'audit') {
           const id = requireId(query.get('id')), doc = await store.get(kind, id);
