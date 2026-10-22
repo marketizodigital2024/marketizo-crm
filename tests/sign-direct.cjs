@@ -7,7 +7,7 @@ const {hash}=require('../lib/sign-workflow.js');const {validateDraft}=require('.
  try{
   await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb);grant select on agency_crm_state to service_role;');
   await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify({employees:[{id:'emp-miljan',active:true}]})]);
-  for(const name of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../database',name),'utf8'));
+  for(const name of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../database',name),'utf8'));
   await db.exec('set role service_role');
   const flow=async(action,data={},org='marketizo-main')=>(await db.query('select marketizo_sign_flow($1,$2,$3::jsonb) r',[org,action,JSON.stringify(data)])).rows[0].r;
   const command=async(action,payload)=>(await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r',['marketizo-main','emp-miljan',crypto.randomUUID(),action,JSON.stringify(payload)])).rows[0].r;
