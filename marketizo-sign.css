@@ -5,3 +5,6 @@
 #sendForm{display:grid;gap:16px}#sendForm label{display:grid;gap:7px;font-size:13px}#sendForm input:not([type=checkbox]),#sendForm textarea{width:100%;padding:10px;border:1px solid #d7dfe9;border-radius:8px;font:inherit}#sendForm textarea{min-height:100px}.sign-send-check{display:flex!important;align-items:flex-start;gap:10px!important;line-height:1.7}.sign-send-check input{margin-top:5px}
 
 .sign-dossiers{padding:20px;border:1px solid #dbe4ea;border-radius:16px;margin:18px 0;background:#fff}.sign-dossiers input{max-width:420px}.sign-dossiers #dossierCards{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.sign-dossiers [aria-pressed="true"]{outline:2px solid #277c69}.sign-dossiers p{color:#526475}.sign-dossiers label{display:grid;gap:6px}
+
+/* Compact contract typography matches the PDF stationery. */
+.sign-editor{font:14px/1.45 Arial,sans-serif;white-space:normal}.sign-editor p,.sign-editor div{margin:0 0 6px;white-space:pre-wrap}.sign-editor p:empty,.sign-editor div:empty{display:none}.sign-editor h2,.sign-editor h3{font-size:16px;line-height:1.35;color:#F68B1F;margin:14px 0 6px}.sign-editor ul,.sign-editor ol{margin:4px 0 8px;padding-left:22px}
