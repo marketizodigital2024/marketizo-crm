@@ -148,9 +148,13 @@ def render_original(payload):
     de = doc.get("contractDetails", {}).get("language") == "de"
     story = [Paragraph(plain(doc["title"], 180), s["title"])]
     for recipient in doc.get("recipients", []):
-        if recipient.get("role") == "marketizo" or not any(recipient.get(k) for k in ("address", "taxId", "registrationId")):
+        if recipient.get("role") == "marketizo" or (not doc.get("recipientCompletion") and not any(recipient.get(k) for k in ("address", "taxId", "registrationId"))):
             continue
         info = [recipient.get("company") or recipient.get("name", "")]
+        if recipient.get("company") and recipient.get("name"): info.append(("Vertreten durch: " if de else "Zastupnik: ") + recipient["name"])
+        if recipient.get("country"): info.append(("Land: " if de else "Zemlja: ") + recipient["country"])
+        if recipient.get("personalId"): info.append(("Identifikationsnummer: " if de else "JMBG / identifikacioni broj: ") + recipient["personalId"])
+        if recipient.get("capacity"): info.append(("Funktion: " if de else "Funkcija: ") + recipient["capacity"])
         if recipient.get("address"): info.append(("Anschrift: " if de else "Adresa: ") + recipient["address"])
         if recipient.get("taxId"): info.append(("Steuernummer: " if de else "Poreski broj: ") + recipient["taxId"])
         if recipient.get("registrationId"): info.append(("Registernummer: " if de else "Registracioni broj: ") + recipient["registrationId"])
