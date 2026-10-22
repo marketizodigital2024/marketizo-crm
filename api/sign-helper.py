@@ -390,7 +390,7 @@ def preview_pdf(payload):
                     elif not in_contract_body:
                         # Keep the title and party particulars on their original lines.
                         flush()
-                        blocks.append({"text": value, "heading": value.isupper() and len(value) > 20})
+                        blocks.append({"text": value, "heading": value.isupper() and ':' not in value and sum(c.isalpha() for c in value) >= 25})
                     else:
                         paragraph.append(value)
         flush()
