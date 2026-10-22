@@ -14,6 +14,10 @@ async function main(){
  await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb);grant select on agency_crm_state to service_role;');
  const crm={employees:[{id:'emp-miljan',name:'Fixture Owner',active:true}],clients:[]};await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify(crm)]);
  for(const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql'])await db.exec(fs.readFileSync(path.join(root,'database',file),'utf8'));
+ for(const [title,category] of [['Starter fixture','clients'],['Editor fixture','employees'],['NDA fixture','nda']]){
+  const data={title,category,content:{version:1,blocks:[{type:'paragraph',level:1,runs:[{text:'Unverbindliche Vorlage',bold:false,italic:false,underline:false}]}]},recipients:[],contractDetails:{language:'sr',audience:category==='clients'?'client':'contractor',place:'',startDate:''},governingLaw:'AT',signatureMethod:'ses',legalReview:'pending',note:''};
+  const saved=(await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r',['marketizo-main','emp-miljan',crypto.randomUUID(),'save',JSON.stringify({id:crypto.randomUUID(),kind:'template',revision:0,data})])).rows[0].r;assert.equal(saved.ok,true);
+ }
  const mails=[],errors=[];let server,chrome,ws,origin;
  const allowedTables=new Set(['marketizo_sign_documents','marketizo_sign_templates','marketizo_sign_events','marketizo_sign_versions','marketizo_sign_prepared_pdfs','marketizo_sign_requests','marketizo_sign_receipts','marketizo_sign_outbox']);
  async function fetchDb(url,options={}){
@@ -79,6 +83,10 @@ async function main(){
   assert.equal(await evaluate('document.scripts.length'),0,'Privacy notice must be readable without scripts or a signing session');
   await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);await until("document.getElementById('connectionStatus')?.textContent.includes('Jednostavan elektronski potpis') && !document.getElementById('newDocument').disabled");
   assert.equal(await evaluate("document.querySelectorAll('[data-new-audience]').length"),3);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('#templateSelect optgroup')].map(g=>g.label)"),['Klijenti','Zaposleni i saradnici','NDA']);
+  await evaluate("document.querySelector('[data-library=templates]').click()");await until("document.querySelectorAll('#documentRows .sign-template-category').length===3");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('#documentRows .sign-template-category th')].map(g=>g.textContent)"),['Klijenti','Zaposleni i saradnici','NDA']);
+  await evaluate("document.querySelector('[data-library=documents]').click()");await until("document.querySelectorAll('#documentRows tr').length===0");
   await click('newDocument');await until("!document.getElementById('workspace').hidden");await fill('documentTitle','Browser fixture contract');await fill('documentDossier','new');await fill('dossierName','Fixture Client Dossier');
   await evaluate("document.getElementById('contractEditor').textContent='Ugovor o uslugama. Čćžšđ ÄÖÜ.';document.getElementById('contractEditor').dispatchEvent(new Event('input',{bubbles:true}))");
   await click('addRecipient');
@@ -101,6 +109,9 @@ async function main(){
   assert.equal(await evaluate("document.getElementById('signatureSection').classList.contains('on-paper')"),true,'Signature pad must sit on the agreement');
   assert.equal(mails.some(m=>m.subject.includes('kod')),false,'No OTP must be sent');
   assert.equal(await evaluate("document.getElementById('requestOtp')!==null"),false,'No verification step');
+  assert.equal(await evaluate("document.getElementById('declineDocument')!==null"),false,'The signing screen has no decline action');
+  assert.equal(await evaluate("[...document.querySelectorAll('a[href*=sign-public]')].some(a=>a.getClientRects().length>0)"),false,'No PDF download is visible before signing');
+  assert.deepEqual(await evaluate("Promise.all(['pdf','receipt'].map(action=>fetch('/api/sign-public?action='+action).then(r=>r.status)))"),[403,403],'Direct download URLs are blocked before signing');
   assert.equal((await db.query("select count(*)::int n from marketizo_sign_parties where accepted_at is not null")).rows[0].n,0,'Opening the link cannot sign');
   const out=path.join(root,'browser-results');fs.mkdirSync(out,{recursive:true});
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false},sessionId);await sleep(300);assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth+1'),false);
