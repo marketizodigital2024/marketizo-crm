@@ -57,7 +57,10 @@
   function renderEditor(content) {
     $('contractEditor').replaceChildren();
     for (const block of content.blocks) {
-      const el = node(block.type === 'heading' ? (block.level === 2 ? 'h3' : 'h2') : block.type === 'bullet' || block.type === 'ordered' ? 'li' : 'p', null);
+      const blockText = block.runs.map(run => run.text).join('').trim();
+      if (!blockText) continue;
+      const clauseHeading = blockText.length < 160 && /^(?:Član|Artikel|Abschnitt|Article|§)\s*\d+/.test(blockText);
+      const el = node(block.type === 'heading' || clauseHeading ? (block.level === 2 ? 'h3' : 'h2') : block.type === 'bullet' || block.type === 'ordered' ? 'li' : 'p', null);
       for (const run of block.runs) {
         let text = document.createTextNode(run.text);
         for (const [mark, tag] of [['underline', 'u'], ['italic', 'em'], ['bold', 'strong']]) if (run[mark]) { const wrapper = node(tag, null); wrapper.append(text); text = wrapper; }
