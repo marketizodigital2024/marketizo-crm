@@ -45,7 +45,11 @@ function createHandler(deps = {}) {
      const identity = data.verified ? await flow.rpc('otp_target', { sessionDigest: digest }) : {};
      return json(res, 200, { ...data, signerEmail: identity.email, consentText: CONSENT, privacyUrl: data.issuer?.privacyNotice?.url || process.env.SIGN_PRIVACY_URL || null });
     }
-    if (action === 'pdf' || action === 'receipt') return pdf(res, await flow.rpc(action, { sessionDigest: digest }));
+    if (action === 'pdf' || action === 'receipt') {
+     const view = await flow.rpc('link_view', { sessionDigest: digest });
+     if (!view.accepted || view.status !== 'signed') throw new SignError(403, 'Preuzimanje PDF-a je dostupno nakon završenog potpisivanja.');
+     return pdf(res, await flow.rpc('receipt', { sessionDigest: digest }));
+    }
     if (action === 'preview' || action === 'receipt_preview') return json(res, 200, { ok: true, ...await preview(digest, action === 'receipt_preview') });
     if (action === 'evidence') { res.setHeader('Content-Disposition', 'attachment; filename="Marketizo-evidencija.json"'); return json(res, 200, await flow.rpc('evidence', { sessionDigest: digest })); }
     throw new SignError(400, 'Nepoznata radnja.');
@@ -66,7 +70,6 @@ function createHandler(deps = {}) {
     const r = await flow.rpc('link_accept', { ...payload, sessionDigest: digest, payloadSha256: hash(canonical(payload)) });
     await flow.drain(3).catch(() => {}); return json(res, 200, r);
    }
-   if (body.action === 'decline') return json(res, 200, await flow.rpc('decline', { sessionDigest: digest, reason: String(body.reason || '').slice(0, 1000) }));
    throw new SignError(400, 'Nepoznata radnja.');
   } catch (e) { return json(res, e instanceof SignError ? e.status : 503, { ok: false, error: e instanceof SignError ? e.message : 'Sign servis trenutno nije dostupan. Pokušaj ponovo.' }); }
  };

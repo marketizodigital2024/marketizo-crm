@@ -2,6 +2,9 @@
 (() => {
   const $ = id => document.getElementById(id);
   const categories = { clients: 'Klijenti', employees: 'Zaposleni', nda: 'NDA', annexes: 'Aneksi', other: 'Ostalo' };
+  const templateCategories = { ...categories, employees: 'Zaposleni i saradnici' };
+  const templateCategory = doc => Object.hasOwn(templateCategories, doc.category) ? doc.category : 'other';
+  function sortedTemplates(items) { return items.slice().sort((a, b) => Object.keys(templateCategories).indexOf(templateCategory(a)) - Object.keys(templateCategories).indexOf(templateCategory(b)) || a.title.localeCompare(b.title, 'sr-Latn')); }
   const statuses = { draft: 'Nacrt', ready: 'Zaključana verzija', sent: 'Poslat', viewed: 'Pregledan', signing: 'Potpisivanje', signed: 'Potpisan', declined: 'Odbijen', expired: 'Istekao', voided: 'Poništen' };
   let deliveryMode = 'email';
   let dossierRows = [], dossierOffset = 0, selectedDossier = null, newDossierId = null;
@@ -183,7 +186,15 @@
     try {
       const r = await api(params); if (sequence !== loading) return;
       hasMore = r.hasMore; $('documentRows').replaceChildren();
-      for (const doc of r.items) {
+      let previousCategory = '';
+      const items = params.kind === 'template' ? sortedTemplates(r.items) : r.items;
+      for (const doc of items) {
+        if (params.kind === 'template' && templateCategory(doc) !== previousCategory) {
+          previousCategory = templateCategory(doc);
+          const groupRow = node('tr', null, { class: 'sign-template-category' });
+          groupRow.append(node('th', templateCategories[previousCategory], { colspan: '6', scope: 'rowgroup' }));
+          $('documentRows').append(groupRow);
+        }
         const tr = node('tr', null), title = node('td', null), recipients = node('td', null), status = node('td', null), action = node('td', null), open = node('button', 'Otvori →', { type: 'button', class: 'sign-open', 'aria-label': 'Otvori ' + doc.title });
         title.append(node('strong', doc.title), node('small', 'Verzija ' + doc.revision)); recipients.append(node('span', doc.recipient_names || 'Još nema potpisnika'), node('small', doc.recipient_emails || ''));
         status.append(node('span', statuses[doc.status] || doc.status, { class: 'sign-status ' + doc.status }));
@@ -197,8 +208,19 @@
     finally { if (sequence === loading) $('refreshList').disabled = false; }
   }
   async function loadTemplates() {
-    const r = await api({ action: 'list', kind: 'template', offset: '0' }); templates = r.items;
-    $('templateSelect').replaceChildren(node('option', 'Prazan dokument', { value: '' }), ...templates.map(t => node('option', t.title, { value: t.id })));
+    const loaded = [];
+    let pageOffset = 0, more;
+    do {
+      const r = await api({ action: 'list', kind: 'template', offset: String(pageOffset) });
+      loaded.push(...r.items); pageOffset += r.items.length; more = r.hasMore && r.items.length > 0;
+    } while (more);
+    templates = sortedTemplates(loaded);
+    const groups = Object.keys(templateCategories).map(category => {
+      const group = node('optgroup', null, { label: templateCategories[category] });
+      group.append(...templates.filter(t => templateCategory(t) === category).map(t => node('option', t.title, { value: t.id })));
+      return group;
+    }).filter(group => group.children.length);
+    $('templateSelect').replaceChildren(node('option', 'Prazan dokument', { value: '' }), ...groups);
   }
   async function mutate(action, extra = {}) {
     if (!current || busy) return;
