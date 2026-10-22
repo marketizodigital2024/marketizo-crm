@@ -16,6 +16,7 @@ do $$ declare tbl text; begin
  foreach tbl in array array['marketizo_sign_completion_requests','marketizo_sign_completed_parties','marketizo_sign_completed_pdfs'] loop
   execute format('alter table public.%I enable row level security',tbl);
   execute format('revoke all on public.%I from public,anon,authenticated',tbl);
+  execute format('revoke all on public.%I from service_role',tbl);
   execute format('grant select,insert on public.%I to service_role',tbl);
   execute format('create policy sign_service on public.%I for all to service_role using(true) with check(true)',tbl);
   execute format('create trigger completion_immutable before update or delete on public.%I for each row execute function public.marketizo_sign_immutable()',tbl);
