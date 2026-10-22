@@ -28,7 +28,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, KeepTogether, Flowable
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "marketizo-pdf-4"
+VERSION = "marketizo-pdf-5"
 LOGO = ImageReader(str(Path(__file__).resolve().parents[1] / "marketizo-logo.png"))
 FONTS = Path(reportlab.__file__).parent / "fonts"
 for name, file in [("Sign", "Vera.ttf"), ("SignBold", "VeraBd.ttf"), ("SignItalic", "VeraIt.ttf"), ("SignBI", "VeraBI.ttf")]:
@@ -47,9 +47,9 @@ def plain(value, limit=100000):
 
 def styles():
     return {
-        "body": ParagraphStyle("body", fontName="Sign", fontSize=10, leading=16, spaceAfter=9, alignment=TA_LEFT, splitLongWords=True),
-        "title": ParagraphStyle("title", fontName="SignBold", fontSize=21, leading=28, spaceAfter=22, keepWithNext=True),
-        "heading": ParagraphStyle("heading", fontName="SignBold", fontSize=13, leading=19, spaceBefore=12, spaceAfter=9, keepWithNext=True),
+        "body": ParagraphStyle("body", fontName="Sign", fontSize=10, leading=13.5, spaceAfter=4, alignment=TA_LEFT, splitLongWords=True),
+        "title": ParagraphStyle("title", fontName="SignBold", fontSize=18, leading=23, spaceAfter=12, keepWithNext=True),
+        "heading": ParagraphStyle("heading", fontName="SignBold", fontSize=11, leading=15, spaceBefore=9, spaceAfter=4, keepWithNext=True, textColor=colors.HexColor("#F68B1F")),
         "small": ParagraphStyle("small", fontName="Sign", fontSize=8, leading=12, spaceAfter=8, textColor=colors.HexColor("#556071")),
     }
 
@@ -160,6 +160,10 @@ def render_original(payload):
         raise ValueError("Too many blocks")
     count = 0
     for block in blocks:
+        # Imported templates can contain empty Word paragraphs; keep only visible content.
+        block_text = "".join(run["text"] for run in block["runs"]).strip()
+        if not block_text:
+            continue
         parts = []
         for run in block["runs"]:
             text = plain(run["text"], 10000)
@@ -178,7 +182,7 @@ def render_original(payload):
             count = 0
             if block["type"] == "bullet":
                 text = "• " + text
-        story.append(Paragraph(text or "<br/>", s["heading"] if block["type"] == "heading" else s["body"]))
+        story.append(Paragraph(text or "<br/>", s["heading"] if block["type"] == "heading" or (len(block_text) < 160 and re.match(r"^(?:Član|Artikel|Abschnitt|Article|§)\s*\d+", block_text)) else s["body"]))
     # No internal notes, signature metadata or disclaimer is added to the agreement.
     # The exact original bytes are what every signer previews and accepts.
     issuer = dict(payload.get("issuer", {}))
