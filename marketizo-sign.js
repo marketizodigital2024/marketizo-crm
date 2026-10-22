@@ -11,7 +11,7 @@
   let people = [], templates = [], current = null, library = 'documents', offset = 0, hasMore = false;
   let preparedSha = '', sendingEnabled = false, testDocumentId = null, sendPending = null, pdfPending = null;
   let dirty = false, busy = false, loading = 0, pending = null, previewUrl = null, searchTimer;
-  const blank = () => ({ title: '', category: 'clients', content: { version: 1, blocks: [{ type: 'paragraph', level: 1, runs: [{ text: '', bold: false, italic: false, underline: false }] }] }, recipients: [], contractDetails: { language: 'sr', audience: 'client', place: '', startDate: '' }, governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: '' });
+  const blank = () => ({ title: '', category: 'clients', recipientCompletion: true, content: { version: 1, blocks: [{ type: 'paragraph', level: 1, runs: [{ text: '', bold: false, italic: false, underline: false }] }] }, recipients: [], contractDetails: { language: 'sr', audience: 'client', place: '', startDate: '' }, governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: '' });
   function node(tag, value, attrs = {}) { const n = document.createElement(tag); if (value !== null) n.textContent = value; Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v)); return n; }
   function message(value, error = false) { $('signMessage').textContent = value; $('signMessage').classList.toggle('error', error); }
   function session() { try { const s = JSON.parse(localStorage.getItem('marketizoAdminSession') || 'null'); return s?.token && s.expiresAt > Date.now() ? s : null; } catch { return null; } }
@@ -106,6 +106,7 @@
     const wrapper = node('label', label), input = node('input', null, { 'data-field': name, ...attrs }); input.value = value || ''; wrapper.append(input); return wrapper;
   }
   function recipientRow(r = {}) {
+    r = { partyType: $('contractAudience').value === 'employee' ? 'employee' : $('contractAudience').value === 'contractor' ? 'individual' : 'business', ...r }; 
     const row = node('div', null, { class: 'sign-recipient' }), head = node('div', null, { class: 'sign-recipient-head' }), remove = node('button', 'Ukloni', { type: 'button', class: 'sign-text-button' });
     head.append(node('span', 'Potpisnik'), remove); row.append(head);
     const chooserLabel = node('label', 'Iz CRM-a ili novi primalac'), chooser = node('select', null, { 'aria-label': 'Izbor primaoca' });
@@ -114,9 +115,9 @@
     chooserLabel.append(chooser); row.append(chooserLabel);
     const roleLabel = node('label', 'Potpisuje kao / Unterzeichnet als'), role = node('select', null, { 'data-field': 'role' });
     [['counterparty', 'Druga strana / Andere Vertragspartei'], ['marketizo', 'Marketizo / Vertretung']].forEach(([v,t]) => role.append(node('option', t, { value: v }))); role.value = r.role || 'counterparty'; roleLabel.append(role); row.append(roleLabel);
-    row.append(field('Ime i prezime', 'name', r.name, { maxlength: '160', autocomplete: 'off' }), field('E-mail', 'email', r.email, { type: 'email', maxlength: '254', autocomplete: 'off' }), field('Firma', 'company', r.company, { maxlength: '180' }), field('Adresa / Anschrift', 'address', r.address, { maxlength: '300' }), field('Poreski broj / Steuernummer', 'taxId', r.taxId, { maxlength: '80' }), field('Registracioni broj / Registernummer', 'registrationId', r.registrationId, { maxlength: '80' }), field('Funkcija / ovlašćenje', 'capacity', r.capacity, { maxlength: '120' }), field('Zemlja (AT, DE, US…)', 'country', r.country, { maxlength: '2', autocomplete: 'off' }));
+    row.append(field('Ime i prezime', 'name', r.name, { maxlength: '160', autocomplete: 'off' }), field('E-mail', 'email', r.email, { type: 'email', maxlength: '254', autocomplete: 'off' }), field('Firma', 'company', r.company, { maxlength: '180' }), field('Adresa / Anschrift', 'address', r.address, { maxlength: '300' }), field('Poreski broj / Steuernummer', 'taxId', r.taxId, { maxlength: '80' }), field('Registracioni broj / Registernummer', 'registrationId', r.registrationId, { maxlength: '80' }), field('JMBG / identifikacioni broj (ako ga ugovor traži)', 'personalId', r.personalId, { maxlength: '80' }), field('Funkcija / ovlašćenje', 'capacity', r.capacity, { maxlength: '120' }), field('Zemlja (AT, DE, US…)', 'country', r.country, { maxlength: '2', autocomplete: 'off' }));
     const typeLabel = node('label', 'Ugovorna strana'), type = node('select', null, { 'data-field': 'partyType' });
-    [['business', 'Firma / B2B'], ['consumer', 'Potrošač'], ['employee', 'Zaposleni']].forEach(([v, t]) => type.append(node('option', t, { value: v }))); type.value = r.partyType || 'business'; typeLabel.append(type); row.append(typeLabel);
+    [['business', 'Firma / B2B'], ['individual', 'Fizičko lice / saradnik'], ['consumer', 'Potrošač'], ['employee', 'Zaposleni']].forEach(([v, t]) => type.append(node('option', t, { value: v }))); type.value = r.partyType || 'business'; typeLabel.append(type); row.append(typeLabel);
     chooser.addEventListener('change', () => { const p = people[Number(chooser.value)]; if (chooser.value !== '' && p) { row.querySelector('[data-field=name]').value = p.name; row.querySelector('[data-field=email]').value = p.email; row.querySelector('[data-field=company]').value = p.company || (p.kind === 'client' ? p.name : ''); type.value = p.kind === 'employee' ? 'employee' : 'business'; setDirty(); } });
     remove.addEventListener('click', () => { row.remove(); setDirty(); });
     return row;

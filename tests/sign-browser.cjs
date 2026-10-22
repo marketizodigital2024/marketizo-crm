@@ -13,7 +13,7 @@ async function main(){
  const db=new PGlite();await db.waitReady;
  await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb);grant select on agency_crm_state to service_role;');
  const crm={employees:[{id:'emp-miljan',name:'Fixture Owner',active:true}],clients:[]};await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify(crm)]);
- for(const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql'])await db.exec(fs.readFileSync(path.join(root,'database',file),'utf8'));
+ for(const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql'])await db.exec(fs.readFileSync(path.join(root,'database',file),'utf8'));
  for(const [title,category] of [['Starter fixture','clients'],['Editor fixture','employees'],['NDA fixture','nda']]){
   const data={title,category,content:{version:1,blocks:[{type:'paragraph',level:1,runs:[{text:'Unverbindliche Vorlage',bold:false,italic:false,underline:false}]}]},recipients:[],contractDetails:{language:'sr',audience:category==='clients'?'client':'contractor',place:'',startDate:''},governingLaw:'AT',signatureMethod:'ses',legalReview:'pending',note:''};
   const saved=(await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r',['marketizo-main','emp-miljan',crypto.randomUUID(),'save',JSON.stringify({id:crypto.randomUUID(),kind:'template',revision:0,data})])).rows[0].r;assert.equal(saved.ok,true);
@@ -105,7 +105,12 @@ async function main(){
   assert.equal(mails.filter(m=>m.subject.includes('dokument za potpis')).length,1);
   const invitation=mails.find(m=>m.subject.includes('dokument za potpis')),token=invitation.text.match(/\/sign#([\w-]+)/)[1];
   await send('Page.navigate',{url:origin+'/sign#'+token},sessionId);
+  await until("!document.getElementById('detailsSection').hidden && !document.getElementById('completeDetails').disabled");
+  assert.equal(await evaluate("document.querySelector('[data-detail=name]').readOnly"),true);
+  assert.equal(await evaluate("document.getElementById('signatureSection').hidden"),true);
+  await evaluate("document.querySelector('[data-detail=company]').value='Fixture Client Ltd';document.querySelector('[data-detail=address]').value='Fixture Street 12';document.querySelector('[data-detail=taxId]').value='TEST-TAX';document.getElementById('completeDetails').click()");
   await until("document.querySelectorAll('#documentPages .document-page-text').length>0 && document.getElementById('documentPages').getAttribute('aria-busy')==='false' && !document.getElementById('acceptDocument').disabled && document.getElementById('title').textContent==='Browser fixture contract' && document.getElementById('message').textContent===''");
+  assert.ok(await evaluate("document.getElementById('documentPages').textContent.includes('Fixture Street 12')"));
   assert.equal(await evaluate("document.getElementById('signatureSection').classList.contains('on-paper')"),true,'Signature pad must sit on the agreement');
   assert.equal(mails.some(m=>m.subject.includes('kod')),false,'No OTP must be sent');
   assert.equal(await evaluate("document.getElementById('requestOtp')!==null"),false,'No verification step');
@@ -131,6 +136,8 @@ async function main(){
   const packages=await evaluate("Promise.all([fetch('/api/sign-public?action=evidence').then(r=>r.json()),fetch('/api/sign-public?action=receipt').then(r=>r.arrayBuffer()).then(b=>Array.from(new Uint8Array(b)))]).then(([e,p])=>({e,p}))");
   require('../scripts/verify-sign-evidence.cjs').verify(packages.e,Buffer.from(packages.p));
   assert.equal(packages.e.manifest.issuer.privacyNotice.version,'2026-10-20.1','Final evidence must preserve the notice version sent with the request');
+  assert.ok(packages.e.manifest.personalization.reviewedSourceSha256);
+  assert.notEqual(packages.e.manifest.personalization.reviewedSourceSha256,packages.e.manifest.originalSha256);
   assert.ok(packages.e.manifest.signers[0].strokes.some(stroke=>stroke.length>=3),'Drawn signature must survive browser, database and final evidence export');
   const delivered=mails.filter(m=>m.subject==='Marketizo Sign: potpisani dokument');
   assert.equal(delivered.length,1,'One final email per recipient');assert.equal(delivered[0].to,'fixture@example.com');
@@ -162,6 +169,12 @@ async function main(){
   await until("document.getElementById('linksDialog').open");
   assert.match(await evaluate("document.querySelector('#generatedLinks input').value"),/\/sign#[A-Za-z0-9_-]{43}$/);
   assert.equal(mails.length,beforeLinkMails,'Manual link generation cannot send an invitation');
+  const manualUrl=await evaluate("document.querySelector('#generatedLinks input').value");
+  await send('Page.navigate',{url:manualUrl},sessionId);
+  await until("document.querySelectorAll('#documentPages .document-page-text').length>0 && !document.getElementById('acceptDocument').disabled");
+  assert.equal(await evaluate("document.getElementById('detailsSection').hidden"),true,'Fully prefilled recipients skip data entry');
+  assert.equal(await evaluate("document.documentElement.lang"),'de');
+  assert.ok(await evaluate("document.getElementById('documentPages').textContent.includes('Fixture address')"));
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> inline PDF without OTP -> explicit acceptance -> final receipt email -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');
  }finally{ws?.close();chrome?.kill();server?.closeAllConnections();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
 }
