@@ -16,3 +16,6 @@
 .sign-table td .sign-version{display:none}
 
 .quick-preview .party-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;font-size:13px}.quick-preview .party-row span{min-width:0;overflow-wrap:anywhere}.quick-preview-issuer{font-size:12px;color:#5e6876;line-height:1.7;padding:0 10px}
+
+/* Clear contract hierarchy in the exact-PDF text preview. */
+.quick-preview-page h3{font-size:17px;color:#ed7a23;font-weight:700;margin:24px 0 10px;padding-bottom:8px;border-bottom:1px solid #f4d4b9}.quick-preview-page p{margin-bottom:10px;line-height:1.7}.quick-preview-page .quick-page-number{margin-bottom:20px}.quick-preview-page>h3:first-of-type{margin-top:8px}
