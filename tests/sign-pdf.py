@@ -26,6 +26,31 @@ class SignPdfTests(unittest.TestCase):
             {"type": "ordered", "runs": [{"text": "Druga obaveza", "italic": True}]},
         ] + [{"type": "paragraph", "runs": [{"text": "Dogovoreni uslovi i precizne obaveze. " * 24}]} for _ in range(9)]}}
 
+    def test_preview_preserves_compact_german_and_serbian_structure(self):
+        for heading in ['Klausel 1: Leistungsbeschreibung', 'Klauzula 1: Opis usluga']:
+            doc = self.document()
+            doc['content']['blocks'] = [
+                {'type': 'paragraph', 'runs': [{'text': heading}]},
+                {'type': 'paragraph', 'runs': [{'text': '1.1 Kreativni dizajn i strategija.'}]},
+                {'type': 'paragraph', 'runs': [{'text': '1.2 Produkcija i objavljivanje. ' * 12}]},
+                {'type': 'paragraph', 'runs': [{'text': heading.replace('1:', '2:')}]},
+                {'type': 'paragraph', 'runs': [{'text': '2.1 Sledeca obaveza klijenta.'}]},
+            ]
+            rendered = helper.render_original({'document': doc})
+            raw = base64.b64decode(rendered['base64'])
+            preview = helper.preview_pdf({'pdfBase64': rendered['base64'], 'pdfSha256': rendered['sha256']})
+            blocks = [b for page in preview['pages'] for b in page]
+            self.assertTrue(any(b['text'] == heading and b['heading'] for b in blocks))
+            self.assertTrue(any(b['text'] == '1.1 Kreativni dizajn i strategija.' and not b['heading'] for b in blocks))
+            self.assertTrue(any(b['text'].startswith('1.2 Produkcija') for b in blocks))
+            # Formatting may only change whitespace, never add, omit or reorder words.
+            extracted = '\n'.join(p.extract_text(extraction_mode='layout') for p in PdfReader(io.BytesIO(raw)).pages)
+            visible = ' '.join(b['text'] for b in blocks)
+            for item in doc['content']['blocks']:
+                text = item['runs'][0]['text']
+                self.assertIn(''.join(text.split()), ''.join(visible.split()))
+            self.assertEqual(preview['pdfSha256'], hashlib.sha256(raw).hexdigest())
+
     def test_pdf_and_incremental_receipt(self):
         original = helper.render_original({"document": self.document()})
         original_bytes = base64.b64decode(original["base64"])
