@@ -20,7 +20,7 @@ async function call(method = 'GET', url = '/api/sign-admin', body, headers = {})
   assert.equal((await call('GET', undefined, undefined, { authorization: '' })).status, 401);
   for (const value of ['employee', 'client', 'operational-admin', null]) { role = value; assert.equal((await call()).status, 403); }
   assert.equal(calls.length, 0); role = 'full-admin';
-  const boot = await call('GET', '/api/sign-admin?action=bootstrap'); assert.equal(boot.result.integration.sendingEnabled, false); assert.ok(!boot.raw.includes('salary')); assert.ok(!boot.raw.includes('NEVER EXPOSE')); assert.equal(boot.headers['Cache-Control'], 'private, no-store');
+  const boot = await call('GET', '/api/sign-admin?action=bootstrap'); assert.equal(boot.result.integration.sendingEnabled, false); assert.equal(boot.result.sender.name, 'Test Owner'); assert.ok(!boot.raw.includes('salary')); assert.ok(!boot.raw.includes('NEVER EXPOSE')); assert.equal(boot.headers['Cache-Control'], 'private, no-store');
   assert.equal((await call('POST', undefined, { action: 'send', id, commandId, revision: 1 })).status, 503); assert.equal(calls.length, 0);
   assert.equal((await call('POST', undefined, { action: 'save' }, { origin: 'https://evil.example' })).status, 403);
   assert.equal((await call('GET', '/api/sign-admin?offset=-1')).status, 400);
@@ -69,3 +69,14 @@ async function call(method = 'GET', url = '/api/sign-admin', body, headers = {})
   assert.equal(saved, 1);
   console.log('PASS: dossier filters stay tenant scoped, archives remain discoverable, and annexes require a distinct root agreement in the same dossier.');
 })().catch(e => { console.error(e); process.exitCode = 1; });
+
+(async () => {
+ const bytes=Buffer.from('%PDF-readonly-preview'),digest=require('node:crypto').createHash('sha256').update(bytes).digest('hex');
+ let status='ready',wrong=false,prepared=0;
+ const handler=createHandler({helpers:{supabaseConfig:()=>({configured:true}),readStoredState:async()=>({payload:{}}),accessSession:()=>({role:'full-admin',employee:{id:'emp-miljan'}})},createStore:()=>({get:async()=>({id,status,data:{},archived_at:null})}),createWorkflow:()=>({preparePdf:async()=>{prepared++;return{pdfBase64:bytes.toString('base64'),pdfSha256:digest};},helper:async input=>{assert.equal(input.pdfSha256,digest);assert.deepEqual(Buffer.from(input.pdfBase64,'base64'),bytes);return{pages:[[{text:'Exact prepared contract'}]],pdfSha256:wrong?'f'.repeat(64):digest};}})});
+ async function preview(){const res={setHeader(){},end(value){this.body=JSON.parse(value);}};await handler({method:'GET',url:'/api/sign-admin?action=preparedPreview&id='+id,headers:{authorization:'Bearer fixture'}},res);return res;}
+ assert.equal((await preview()).body.pages[0][0].text,'Exact prepared contract');
+ wrong=true;assert.equal((await preview()).statusCode,503,'A preview of different bytes must be rejected');
+ status='draft';const before=prepared;assert.equal((await preview()).statusCode,409);assert.equal(prepared,before,'Reading a draft preview cannot silently freeze it');
+ console.log('PASS: the simple sending preview uses the exact prepared PDF and rejects a different digest or an unprepared draft.');
+})().catch(e=>{console.error(e);process.exitCode=1;});
