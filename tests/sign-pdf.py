@@ -31,7 +31,7 @@ class SignPdfTests(unittest.TestCase):
             doc = self.document()
             doc['content']['blocks'] = [
                 {'type': 'paragraph', 'runs': [{'text': heading}]},
-                {'type': 'paragraph', 'runs': [{'text': '1.1 Kreativni dizajn i strategija.'}]},
+                {'type': 'paragraph', 'runs': [{'text': '1.1 Kreativni dizajn i strategija. 1.2 Druga inline obaveza.'}]},
                 {'type': 'paragraph', 'runs': [{'text': '1.2 Produkcija i objavljivanje. ' * 12}]},
                 {'type': 'paragraph', 'runs': [{'text': heading.replace('1:', '2:')}]},
                 {'type': 'paragraph', 'runs': [{'text': '2.1 Sledeca obaveza klijenta.'}]},
@@ -43,6 +43,7 @@ class SignPdfTests(unittest.TestCase):
             self.assertTrue(any(b['text'] == heading and b['heading'] for b in blocks))
             self.assertTrue(any(b['text'] == '1.1 Kreativni dizajn i strategija.' and not b['heading'] for b in blocks))
             self.assertTrue(any(b['text'].startswith('1.2 Produkcija') for b in blocks))
+            self.assertTrue(any(b['text'] == '1.2 Druga inline obaveza.' for b in blocks))
             # Formatting may only change whitespace, never add, omit or reorder words.
             extracted = '\n'.join(p.extract_text(extraction_mode='layout') for p in PdfReader(io.BytesIO(raw)).pages)
             visible = ' '.join(b['text'] for b in blocks)
