@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const { withRequestBudget } = require('../lib/database-request.js');
 const { SignError } = require('../lib/sign-content.js');
+const { validateFields } = require('../lib/sign-personalization.js');
 const { createWorkflow, hash, mac, context, origin, validateSignature, canonical, CONSENT, evidenceKey } = require('../lib/sign-workflow.js');
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const TOKEN = /^[a-zA-Z0-9_-]{43}$/;
@@ -41,7 +42,11 @@ function createHandler(deps = {}) {
    if (req.method === 'GET') {
     const action = params.get('action') || 'view', digest = sessionDigest(req);
     if (action === 'view') {
-     const data = await flow.rpc('link_view', { sessionDigest: digest });
+     let data = await flow.rpc('link_view', { sessionDigest: digest });
+     if (data.completion?.allComplete && !data.completion.ready) {
+      await flow.completePdf(digest);
+      data = await flow.rpc('link_view', { sessionDigest: digest });
+     }
      const identity = data.verified ? await flow.rpc('otp_target', { sessionDigest: digest }) : {};
      return json(res, 200, { ...data, signerEmail: identity.email, consentText: CONSENT, privacyUrl: data.issuer?.privacyNotice?.url || process.env.SIGN_PRIVACY_URL || null });
     }
@@ -63,6 +68,11 @@ function createHandler(deps = {}) {
     return json(res, 200, { ok: true });
    }
    const digest = sessionDigest(req);
+   if (body.action === 'complete_details') {
+    const fields=validateFields(body.fields);
+    const result=await flow.rpc('completion_submit',{sessionDigest:digest,fields});
+    return json(res,200,result);
+   }
    if (body.action === 'accept') {
     if (!UUID.test(body.commandId || '') || !/^[a-f0-9]{64}$/.test(body.pdfSha256 || '') || body.accepted !== true || body.authority !== true) throw new SignError(400, 'Potvrdi dokument, nameru i ovlašćenje.');
     const documentPreview = await preview(digest);
