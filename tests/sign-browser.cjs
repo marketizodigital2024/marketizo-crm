@@ -87,6 +87,7 @@ async function main(){
   await evaluate("document.querySelector('[data-library=templates]').click()");await until("document.querySelectorAll('#documentRows .sign-template-category').length===3");
   assert.deepEqual(await evaluate("[...document.querySelectorAll('#documentRows .sign-template-category th')].map(g=>g.textContent)"),['Klijenti','Zaposleni i saradnici','NDA']);
   await evaluate("document.querySelector('[data-library=documents]').click()");await until("document.querySelectorAll('#documentRows tr').length===0");
+  await evaluate("document.getElementById('libraryAdvanced').open=true");
   await click('newDocument');await until("!document.getElementById('workspace').hidden");await fill('documentTitle','Browser fixture contract');await fill('documentDossier','new');await fill('dossierName','Fixture Client Dossier');
   await evaluate("document.getElementById('contractEditor').textContent='Ugovor o uslugama. Čćžšđ ÄÖÜ.';document.getElementById('contractEditor').dispatchEvent(new Event('input',{bubbles:true}))");
   await click('addRecipient');
@@ -175,6 +176,45 @@ async function main(){
   assert.equal(await evaluate("document.getElementById('detailsSection').hidden"),true,'Fully prefilled recipients skip data entry');
   assert.equal(await evaluate("document.documentElement.lang"),'de');
   assert.ok(await evaluate("document.getElementById('documentPages').textContent.includes('Fixture address')"));
+  // Everyday sending uses the short flow; no editor, dossier or separate freeze step.
+  await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);
+  await until("document.querySelectorAll('[data-quick-audience]:not(:disabled)').length===2");
+  assert.equal(await evaluate("document.getElementById('libraryAdvanced').open"),false);
+  await evaluate("document.querySelector('[data-quick-audience=client]').click()");
+  await until("!document.getElementById('quickChoose').hidden && document.querySelectorAll('#quickTemplates button').length===1");
+  assert.equal(await evaluate("document.querySelector('#quickTemplates button').textContent.includes('Starter fixture')"),true);
+  await evaluate("document.querySelector('#quickTemplates button').click()");await click('quickChooseNext');
+  await until("!document.getElementById('quickRecipient').hidden && !document.getElementById('quickPrepare').disabled");
+  assert.equal(await evaluate("document.getElementById('quickPrefill').open"),false);
+  await fill('quickEmail','quick@example.invalid');await click('quickPrepare');
+  await until("!document.getElementById('quickReview').hidden && !document.getElementById('quickReviewBack').disabled");
+  assert.ok(await evaluate("document.getElementById('quickPreview').textContent.includes('Unverbindliche Vorlage')"));
+  assert.equal(await evaluate("document.getElementById('quickSendEmail').disabled"),true,'Sending requires an explicit review confirmation');
+  await click('quickReviewBack');await until("!document.getElementById('quickRecipient').hidden && !document.getElementById('quickPrepare').disabled");
+  assert.equal(await evaluate("document.getElementById('quickEmail').value"),'quick@example.invalid');
+  await fill('quickEmail','quick-changed@example.invalid');await click('quickPrepare');
+  await until("!document.getElementById('quickReview').hidden && !document.getElementById('quickReviewBack').disabled");
+  const quickRecords=(await db.query("select id,status,archived_at from marketizo_sign_documents where title='Starter fixture'")).rows;
+  assert.equal(quickRecords.filter(r=>r.archived_at).length,1,'Replacing an unsent preview archives the previous copy');
+  assert.equal(quickRecords.filter(r=>!r.archived_at).length,1);
+  const beforeQuickInvites=mails.filter(m=>m.subject.includes('dokument za potpis')).length;
+  await evaluate("(()=>{const e=document.getElementById('quickConfirm');e.checked=true;e.dispatchEvent(new Event('change'));const original=window.fetch;let lost=false;window.fetch=async(...args)=>{const response=await original(...args);if(!lost&&args[1]?.body&&JSON.parse(args[1].body).action==='send'){lost=true;throw new TypeError('fixture lost response');}return response;};})()");
+  await click('quickSendEmail');await until("document.getElementById('quickMessage').classList.contains('error') && !document.getElementById('quickSendEmail').disabled");
+  assert.equal(await evaluate("document.getElementById('quickReviewBack').disabled"),true,'An uncertain send cannot change the contract');
+  assert.equal(await evaluate("document.getElementById('quickCreateLink').disabled"),true,'An uncertain send cannot switch delivery mode');
+  await click('quickSendEmail');await until("!document.getElementById('quickSuccess').hidden");
+  assert.equal(mails.filter(m=>m.subject.includes('dokument za potpis')).length,beforeQuickInvites+1,'Retry after a lost response cannot send a duplicate invitation');
+  assert.equal(mails.filter(m=>m.subject.includes('dokument za potpis')).at(-1).to,'quick-changed@example.invalid');
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false},sessionId);
+  assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth+1'),false,'The sending flow fits a phone');
+  fs.writeFileSync(path.join(out,'sign-quick-send.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
+  await click('quickDone');await evaluate("document.querySelector('[data-quick-audience=employee]').click()");
+  await until("!document.getElementById('quickChoose').hidden && document.querySelectorAll('#quickTemplates button').length===1");
+  assert.equal(await evaluate("document.querySelector('#quickTemplates button').textContent.includes('Editor fixture')"),true);
+  await evaluate("document.querySelector('#quickTemplates button').click()");await click('quickChooseNext');
+  await until("!document.getElementById('quickRecipient').hidden && !document.getElementById('quickPrepare').disabled");
+  assert.equal(await evaluate("document.getElementById('quickPartyType').value"),'individual');
+  await click('quickCancel');assert.deepEqual(errors,[]);
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> inline PDF without OTP -> explicit acceptance -> final receipt email -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');
  }finally{ws?.close();chrome?.kill();server?.closeAllConnections();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
 }

@@ -5,7 +5,7 @@
   const templateCategories = { ...categories, employees: 'Zaposleni i saradnici' };
   const templateCategory = doc => Object.hasOwn(templateCategories, doc.category) ? doc.category : 'other';
   function sortedTemplates(items) { return items.slice().sort((a, b) => Object.keys(templateCategories).indexOf(templateCategory(a)) - Object.keys(templateCategories).indexOf(templateCategory(b)) || a.title.localeCompare(b.title, 'sr-Latn')); }
-  const statuses = { draft: 'Nacrt', ready: 'Zaključana verzija', sent: 'Poslat', viewed: 'Pregledan', signing: 'Potpisivanje', signed: 'Potpisan', declined: 'Odbijen', expired: 'Istekao', voided: 'Poništen' };
+  const statuses = { draft: 'Nacrt', ready: 'Spreman za slanje', sent: 'Čeka potpis', viewed: 'Pregledan', signing: 'Potpisivanje', signed: 'Potpisan', declined: 'Odbijen', expired: 'Istekao', voided: 'Poništen' };
   let deliveryMode = 'email';
   let dossierRows = [], dossierOffset = 0, selectedDossier = null, newDossierId = null;
   let people = [], templates = [], current = null, library = 'documents', offset = 0, hasMore = false;
@@ -56,6 +56,16 @@
     $('downloadReceipt').disabled = busy || current?.status !== 'signed';
     $('downloadEvidence').disabled = busy || current?.status !== 'signed';
     $('voidRequest').disabled = busy || !['sent', 'viewed', 'signing'].includes(current?.status);
+    const simple = current && current.kind !== 'template';
+    $('workspaceSummary').hidden = !simple;
+    $('summaryTitle').textContent = current?.data.title || '';
+    $('summaryPeople').textContent = (current?.data.recipients || []).map(r => [r.name, r.email].filter(Boolean).join(' · ')).join(', ');
+    $('summaryStatus').textContent = current?.archived_at ? 'Ugovor je u arhivi.' : ({draft:'Nacrt — još nije poslat.',ready:'Ugovor je spreman za pregled i slanje.',sent:'Ugovor je predat na slanje. Čekamo potpis.',viewed:'Primalac je otvorio ugovor. Čekamo potpis.',signing:'Potpisivanje je u toku.',signed:'Potpisivanje je završeno. Potpisani PDF je spreman.',expired:'Link je istekao.',voided:'Slanje je poništeno.',declined:'Zahtev je zatvoren.'})[current?.status] || '';
+    $('continueQuickSend').hidden = !simple || !['draft','ready'].includes(current?.status) || !!current?.archived_at;
+    $('continueQuickSend').disabled = busy || !(sendingEnabled || current?.id === testDocumentId);
+    $('continueQuickSend').textContent = (current?.data.recipients || []).length > 1 || current?.data.signatureMethod === 'qes' ? 'Otvori napredno uređivanje' : 'Pregledaj i pošalji';
+    $('quickDownloadReceipt').hidden = current?.status !== 'signed'; $('quickDownloadReceipt').disabled = busy;
+
   }
   function renderEditor(content) {
     $('contractEditor').replaceChildren();
@@ -169,6 +179,7 @@
   }
   function leaveAllowed() { return !dirty || confirm('Postoje nesačuvane izmene. Napustiti ovaj nacrt?'); }
   function openDocument(doc, kind = 'document', isNew = false) {
+    $('workspaceAdvanced').open = kind === 'template' || isNew;
     current = { ...doc, kind }; pending = null; preparedSha = ''; sendPending = null;
     $('documentTitle').value = doc.data.title; $('documentCategory').value = doc.data.category; $('documentNote').value = doc.data.note || '';
     setupDossier(doc.data.dossier, doc.data.parentDocumentId || '');
@@ -197,7 +208,7 @@
           $('documentRows').append(groupRow);
         }
         const tr = node('tr', null), title = node('td', null), recipients = node('td', null), status = node('td', null), action = node('td', null), open = node('button', 'Otvori →', { type: 'button', class: 'sign-open', 'aria-label': 'Otvori ' + doc.title });
-        title.append(node('strong', doc.title), node('small', 'Verzija ' + doc.revision)); recipients.append(node('span', doc.recipient_names || 'Još nema potpisnika'), node('small', doc.recipient_emails || ''));
+        title.append(node('strong', doc.title), node('small', 'Verzija ' + doc.revision, { class: 'sign-version' })); recipients.append(node('span', doc.recipient_names || 'Još nema potpisnika'), node('small', doc.recipient_emails || ''));
         status.append(node('span', statuses[doc.status] || doc.status, { class: 'sign-status ' + doc.status }));
         open.addEventListener('click', async () => { open.disabled = true; try { const r = await api({ action: 'get', id: doc.id, kind: params.kind }); openDocument(r.document, params.kind); } catch (e) { message(e.message, true); } finally { open.disabled = false; } });
         action.append(open); tr.append(title, recipients, node('td', categories[doc.category]), status, node('td', new Date(doc.updated_at).toLocaleDateString('sr-Latn-RS', { timeZone: 'Europe/Vienna' })), action); $('documentRows').append(tr);
@@ -216,6 +227,7 @@
       loaded.push(...r.items); pageOffset += r.items.length; more = r.hasMore && r.items.length > 0;
     } while (more);
     templates = sortedTemplates(loaded);
+    window.MarketizoQuickSign?.setTemplates?.(templates);
     const groups = Object.keys(templateCategories).map(category => {
       const group = node('optgroup', null, { label: templateCategories[category] });
       group.append(...templates.filter(t => templateCategory(t) === category).map(t => node('option', t.title, { value: t.id })));
@@ -256,6 +268,13 @@
     const data = { ...blank(), category: audience === 'client' ? 'clients' : 'employees', contractDetails: { language: 'sr', audience, place: '', startDate: '' }, dossier: null };
     openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data }, library === 'templates' ? 'template' : 'document', true);
   }));
+  $('continueQuickSend').addEventListener('click', () => {
+    if (busy || !current) return;
+    if (current.data.recipients.length > 1 || current.data.recipients.some(r => r.role === 'marketizo') || current.data.signatureMethod === 'qes') { $('workspaceAdvanced').open = true; return; }
+    const doc = { ...current, data: dirty ? readDraft() : structuredClone(current.data) };
+    window.MarketizoQuickSign.resume(doc);
+  });
+  $('quickDownloadReceipt').addEventListener('click', () => download('receipt'));
   $('newDocument').addEventListener('click', () => { if (!busy && leaveAllowed()) openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data: { ...blank(), dossier: selectedDossier } }, library === 'templates' ? 'template' : 'document', true); });
   $('backToLibrary').addEventListener('click', () => { if (leaveAllowed()) { current = null; setDirty(false); $('workspace').hidden = true; $('library').hidden = false; list(); } });
   $('saveDocument').addEventListener('click', () => mutate('save', { data: readDraft() }));
@@ -361,8 +380,14 @@
   });
   async function init() {
     $('newDocument').disabled = true;
-    try { const r = await api({ action: 'bootstrap' }); people = r.people; sendingEnabled = r.integration.sendingEnabled; testDocumentId = r.integration.testDocumentId || null; $('connectionStatus').textContent = r.integration.message;
-      await loadDossiers(true); await loadTemplates(); $('newDocument').disabled = false; await list();
+    try { const r = await api({ action: 'bootstrap' }); people = r.people; sendingEnabled = r.integration.sendingEnabled; testDocumentId = r.integration.testDocumentId || null; $('connectionStatus').textContent = r.integration.message; $('connectionStatus').hidden = r.integration.sendingEnabled;
+      await loadDossiers(true); await loadTemplates(); $('newDocument').disabled = false;
+      window.MarketizoQuickSign?.init({ templates, people, sender:r.sender || {}, sendingEnabled,
+        onOpen() { current = null; setDirty(false); $('library').hidden = true; $('workspace').hidden = true; message(''); },
+        onExit() { current = null; setDirty(false); $('workspace').hidden = true; $('library').hidden = false; list(); },
+        onEdit(doc) { openDocument(doc, 'document', true); }
+      });
+      await list();
     } catch (e) { $('connectionStatus').textContent = 'Marketizo Sign nije spreman za rad.'; message(e.message, true); }
   }
   init();
