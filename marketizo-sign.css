@@ -8,3 +8,5 @@
 
 /* Compact contract typography matches the PDF stationery. */
 .sign-editor{font:14px/1.45 Arial,sans-serif;white-space:normal}.sign-editor p,.sign-editor div{margin:0 0 6px;white-space:pre-wrap}.sign-editor p:empty,.sign-editor div:empty{display:none}.sign-editor h2,.sign-editor h3{font-size:16px;line-height:1.35;color:#F68B1F;margin:14px 0 6px}.sign-editor ul,.sign-editor ol{margin:4px 0 8px;padding-left:22px}
+
+.sign-template-category th { text-align:left; padding:12px 16px; color:#a84f0b; background:#fff3e6; border-top:1px solid #f2d7bb; font-size:13px; }
