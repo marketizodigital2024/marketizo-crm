@@ -148,6 +148,19 @@ class SignPdfTests(unittest.TestCase):
         self.assertEqual(len(reader.pages[0].images), 0)
         self.assertGreater(len(reader.pages[-1].images), 0)
 
+    def test_codeks_acknowledgement_reuses_signature_without_contract_identity(self):
+        doc = {"title": "TEST Kodeks Marketizo · v1", "category": "other", "note": "marketizo-codeks:v1|fixture", "recipientCompletion": True,
+               "contractDetails": {"language": "sr", "audience": "other"}, "recipients": [{"name": "Test Član", "email": "test@example.invalid", "role": "counterparty"}],
+               "content": {"version": 1, "blocks": [{"type": "heading", "runs": [{"text": "1. Profesionalno ponašanje"}]}, {"type": "paragraph", "runs": [{"text": "NEOBAVEZUJUĆE · Test dokument. Poštujemo kolege i privatnost."}]}]}}
+        rendered = helper.render_original({"document": doc, "issuer": {"name": "Marketizo Fixture"}})
+        preview = helper.preview_pdf({"pdfBase64": rendered["base64"], "pdfSha256": rendered["sha256"]})
+        self.assertEqual(preview["purpose"], "codeks")
+        text = "\n".join(p.extract_text() for p in PdfReader(io.BytesIO(base64.b64decode(rendered["base64"]))).pages)
+        self.assertIn("Član tima", text)
+        self.assertNotIn("Zastupnik:", text)
+        self.assertNotIn("JMBG", text)
+        self.assertNotIn("Mesto:", text)
+
     def test_safe_text_and_font_failures(self):
         self.assertEqual(helper.plain("<img src=x>"), "&lt;img src=x&gt;")
         with self.assertRaises(ValueError):

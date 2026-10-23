@@ -31,9 +31,10 @@ async function main(){
     if(select==='id,title,status,archived_at,data->dossier,data->parentDocumentId') select=`id,title,status,archived_at,data->'dossier' as dossier,data->'parentDocumentId' as "parentDocumentId"`;
     else if(!/^[a-zA-Z0-9_,*]+$/.test(select))throw Error('Unsafe selection');
     const values=[],where=[];
-    for(const [rawKey,value]of u.searchParams){let key=rawKey;if(['select','order','limit','offset'].includes(key))continue;if(key==='data->dossier->>id')key="data->'dossier'->>'id'";else if(!/^[a-z_]+$/.test(key))throw Error('Unsafe column');
+    for(const [rawKey,value]of u.searchParams){let key=rawKey;if(['select','order','limit','offset'].includes(key))continue;if(key==='data->dossier->>id')key="data->'dossier'->>'id'";else if(key==='data->>note')key="data->>'note'";else if(!/^[a-z_]+$/.test(key))throw Error('Unsafe column');
      if(value==='is.null')where.push(key+' is null');else if(value==='not.is.null')where.push(key+' is not null');
      else if(value.startsWith('eq.')){values.push(value.slice(3));where.push(key+'=$'+values.length);}
+     else if(value.startsWith('not.like.')){values.push(value.slice(9).replace(/\*/g,'%'));where.push(key+' not like $'+values.length);}
      else if(value.startsWith('ilike.')){values.push(value.slice(6).replace(/\*/g,'%'));where.push(key+' ilike $'+values.length);}else throw Error('Unsupported filter');
     }
     let sql='select '+select+' from '+table+(where.length?' where '+where.join(' and '):'');

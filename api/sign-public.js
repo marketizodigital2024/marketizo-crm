@@ -7,6 +7,7 @@ const { createWorkflow, hash, mac, context, origin, validateSignature, canonical
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const TOKEN = /^[a-zA-Z0-9_-]{43}$/;
 const COOKIE = '__Host-marketizo_sign';
+const CODEKS_CONSENT = 'Pročitao/la sam prikazanu verziju Kodeksa ponašanja Marketizo tima i potvrđujem da sam upoznat/a sa njenim pravilima i da ću ih primenjivati u okviru svog angažovanja. Želim da ovu potvrdu potpišem jednostavnim elektronskim potpisom. Upisano ime i priloženi crtež, ako postoji, predstavljaju moj potpis.';
 const CONSENT_DE = 'Ich habe die angezeigte PDF-Fassung des Vertrags gelesen und akzeptiere ihre Bestimmungen. Ich möchte diesen Vertrag mit einer einfachen elektronischen Signatur unterzeichnen. Der eingetragene Name und eine gegebenenfalls beigefügte Zeichnung stellen meine Unterschrift dar. Ich bestätige, dass ich für mich selbst unterzeichne oder zur Vertretung der angegebenen Vertragspartei berechtigt bin.';
 function sessionDigest(req) { const m = String(req.headers?.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith(COOKIE + '=')); const token = m?.slice(COOKIE.length + 1) || ''; if (!TOKEN.test(token)) throw new SignError(401, 'Ponovo otvori link iz poziva.'); return hash(token); }
 function json(res, status, data) { res.statusCode = status; res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify(data)); }
@@ -37,7 +38,7 @@ function createHandler(deps = {}) {
     if (bytes.length > 1500000 || hash(bytes) !== source.pdfSha256) throw new SignError(503, 'PDF nije potvrđen.');
     const result = await flow.helper({ action: 'preview', pdfBase64: bytes.toString('base64'), pdfSha256: source.pdfSha256 });
     if (result.pdfSha256 !== source.pdfSha256) throw new SignError(503, 'PDF nije potvrđen.');
-    return { ...result, consentText: result.language === 'de' ? CONSENT_DE : CONSENT };
+    return { ...result, consentText: result.purpose === 'codeks' ? CODEKS_CONSENT : result.language === 'de' ? CONSENT_DE : CONSENT };
    }
    if (req.method === 'GET') {
     const action = params.get('action') || 'view', digest = sessionDigest(req);
