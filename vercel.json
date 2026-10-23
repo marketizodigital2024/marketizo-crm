@@ -100,6 +100,19 @@
           "value": "no-referrer"
         }
       ]
+    },
+    {
+      "source": "/kodeks(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
     }
   ],
   "regions": [
@@ -134,6 +147,9 @@
       "maxDuration": 60,
       "includeFiles": "marketizo-logo.png",
       "excludeFiles": "{tests/**,work/**,public/**,.git/**}"
+    },
+    "api/codeks.js": {
+      "maxDuration": 120
     }
   }
 }
