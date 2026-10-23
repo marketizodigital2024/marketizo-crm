@@ -85,7 +85,7 @@ function createHandler(deps={}){return async(req,res)=>{
    if(d.data.recipients[0].email!==employee.email.trim().toLowerCase()||d.data.recipients[0].name!==employee.name.trim())throw new SignError(409,'Podaci zaposlenog su promenjeni. Sačuvaj novu verziju kodeksa pre slanja.');
    if(d.status==='draft'){await store.command(actor,stableId(documentId+':freeze'),'freeze',{id:documentId,kind:'document',revision:d.revision});d=await store.get('document',documentId);}
    if(d.status!=='ready')return json(res,200,{ok:true,id:d.id,alreadySent:true});
-   const pdf=await flow.preparePdf(actor,d),preview=await flow.helper({action:'preview',pdfBase64:pdf.pdfBase64,pdfSha256:pdf.pdfSha256});
+   const pdf=await flow.preparePdf(actor,d),preview=await flow.helper({action:'preview',pdfBase64:pdf.pdfBase64.replace(/\s/g,''),pdfSha256:pdf.pdfSha256});
    if(preview.pdfSha256!==pdf.pdfSha256||!Array.isArray(preview.pages)||!preview.pages.length)throw new SignError(503,'Pregled kodeksa nije potvrđen.');
    return json(res,200,{ok:true,id:d.id,pdfSha256:pdf.pdfSha256,pages:preview.pages});
   }
