@@ -1,0 +1,85 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const crypto = require('node:crypto');
+const path = require('node:path');
+const source = fs.readFileSync(path.join(__dirname, '../employee-portal.js'), 'utf8');
+const apiSource = fs.readFileSync(path.join(__dirname, '../api/employee-report.js'), 'utf8');
+const clone = value => structuredClone(value);
+const env = { SUPABASE_URL: 'https://fixture.invalid', SUPABASE_SERVICE_ROLE_KEY: 'fixture', EMPLOYEE_SESSION_SECRET: 'fixture' };
+let row = { updated_at: 'initial', payload: {
+  employees: [{ id: 'leader', name: 'Lead', isLeader: true, status: 'Aktivan' }, { id: 'worker', name: 'Worker', leaderId: 'leader', status: 'Aktivan' }, { id: 'other', name: 'Other', leaderId: 'elsewhere', status: 'Aktivan' }, { id: 'inactive', status: 'Neaktivan', isLeader: true }],
+  employeeWorkLogs: [{ id: 'existing', employeeId: 'worker', date: '2026-10-23', minutes: 60 }],
+  employeeReports: [{ id: 'weekly', employeeId: 'worker', recipientId: 'leader', isWeeklyQuestionnaire: true, status: 'sent', weekKey: '2026-10-19' }, { id: 'foreign', employeeId: 'other', isWeeklyQuestionnaire: true }],
+  unrelated: { preserve: 'exactly' }
+} };
+let dbCalls = [], race = false, patches = 0;
+async function fakeFetch(input, options = {}) {
+  const url = new URL(input); assert.equal(url.hostname, 'fixture.invalid');
+  dbCalls.push({ method: options.method || 'GET', select: url.searchParams.get('select') });
+  if (options.method === 'PATCH') {
+    patches++;
+    if (race) { race = false; row.payload.employeeWorkLogs.push({ id: 'coworker-new', employeeId: 'other', minutes: 20 }); row.updated_at = 'concurrent'; return reply(200, []); }
+    assert.equal(url.searchParams.get('updated_at'), `eq.${row.updated_at}`);
+    const body = JSON.parse(options.body); row = { payload: body.payload, updated_at: body.updated_at }; return reply(200, [{ updated_at: row.updated_at }]);
+  }
+  if (url.searchParams.get('select').includes('employees:')) return reply(200, [{ employees: row.payload.employees, reports: row.payload.employeeReports, workLogs: row.payload.employeeWorkLogs, updated_at: row.updated_at }]);
+  return reply(200, [clone(row)]);
+}
+function reply(status, data) { return { ok: status < 300, status, json: async () => clone(data) }; }
+const apiCtx = { module: { exports: {} }, require: id => require(require.resolve(id, { paths: [path.join(__dirname, '../api')] })), process: { env }, fetch: fakeFetch, Buffer, Date, console };
+vm.createContext(apiCtx); vm.runInContext(apiSource, apiCtx);
+function token(id) { const encoded = Buffer.from(JSON.stringify({ employeeId: id, role: 'employee', exp: Date.now() + 3600000 })).toString('base64url'); return encoded + '.' + crypto.createHmac('sha256', 'fixture').update(encoded).digest('base64url'); }
+async function call(method, actor, body = {}) { let result; await apiCtx.module.exports({ method, body, headers: { authorization: actor ? `Bearer ${token(actor)}` : '' } }, { setHeader() {}, end(text) { result = { status: this.statusCode, body: JSON.parse(text) }; } }); return result; }
+function named(name) { const start = source.indexOf(`function ${name}(`); assert.ok(start >= 0, name); const asyncStart = source.slice(start - 6, start) === 'async ' ? start - 6 : start; return source.slice(asyncStart, source.indexOf('\n}', start) + 2); }
+(async () => {
+  assert.equal((await call('GET', '')).status, 401); assert.equal(dbCalls.length, 0);
+  assert.deepEqual((await call('GET', 'worker')).body.reports.map(r => r.id), ['weekly']);
+  assert.deepEqual((await call('GET', 'leader')).body.reports.map(r => r.id), ['weekly']);
+  assert.equal((await call('GET', 'inactive')).status, 403);
+  assert.ok(dbCalls.every(c => c.method !== 'GET' || !c.select.includes('select=payload')));
+  const answers = ['one', 'two', 'three', 'four', 'five'];
+  assert.equal((await call('POST', 'other', { action: 'submitWeeklyQuestionnaire', employeeId: 'other', reportId: 'weekly', answers })).status, 403);
+  race = true;
+  let r = await call('POST', 'worker', { action: 'submitWeeklyQuestionnaire', employeeId: 'worker', reportId: 'weekly', answers });
+  assert.equal(r.status, 200); assert.equal(r.body.report.status, 'completed'); assert.ok(row.payload.employeeWorkLogs.some(l => l.id === 'coworker-new')); assert.deepEqual(row.payload.unrelated, { preserve: 'exactly' });
+  assert.equal((await call('POST', 'other', { action: 'acknowledgeWeeklyQuestionnaire', leaderId: 'other', reportId: 'weekly' })).status, 403);
+  r = await call('POST', 'leader', { action: 'acknowledgeWeeklyQuestionnaire', leaderId: 'leader', reportId: 'weekly' }); const ack = r.body.report.acknowledgedAt, submitted = r.body.report.submittedAt, beforePatches = patches;
+  r = await call('POST', 'worker', { action: 'submitWeeklyQuestionnaire', employeeId: 'worker', reportId: 'weekly', answers });
+  assert.equal(r.body.duplicate, true); assert.equal(r.body.report.acknowledgedAt, ack); assert.equal(r.body.report.submittedAt, submitted); assert.equal(patches, beforePatches);
+  r = await call('POST', 'worker', { action: 'submitWeeklyQuestionnaire', employeeId: 'worker', reportId: 'weekly', answers: [...answers.slice(0, 4), 'edited'] }); assert.equal(r.body.report.acknowledgedAt, null);
+  row.payload.employeeReports.push({ id: 'auto', employeeId: 'worker', recipientId: 'leader', date: '2026-10-23', isFinalDailyReport: true, isAutomaticRollup: true, acknowledgedAt: 'old', acknowledgedBy: 'leader', minutes: 0, note: 'automatic' });
+  r = await call('POST', 'worker', { employeeId: 'worker', recipientId: 'other', date: '2026-10-23', note: 'manual summary', positive: 'good', negative: 'blocked' });
+  assert.equal(r.body.report.recipientId, 'leader'); assert.equal(r.body.report.minutes, 60); assert.equal(r.body.report.isAutomaticRollup, false); assert.equal(r.body.report.acknowledgedAt, null);
+  r = await call('POST', 'leader', { action: 'acknowledge', leaderId: 'leader', reportId: 'auto' }); const dailyAck = r.body.report.acknowledgedAt;
+  r = await call('POST', 'worker', { employeeId: 'worker', date: '2026-10-23', note: 'manual summary', positive: 'good', negative: 'blocked' }); assert.equal(r.body.duplicate, true); assert.equal(r.body.report.acknowledgedAt, dailyAck);
+  // Run the real report renderer with today/old/other/already-read records.
+  let inbox;
+  const elements = { leaderReportsNav: {}, employeeReportsTab: {}, leaderLiveReportDate: { value: '2026-10-23' }, leaderLiveReportEmployee: { value: '' } };
+  const ui = { state: { employees: row.payload.employees, employeeWorkLogs: [], employeeReports: [ { id: 'today', employeeId: 'worker', date: '2026-10-23', isFinalDailyReport: true }, { id: 'old', employeeId: 'worker', date: '2026-10-22', isFinalDailyReport: true }, { id: 'read', employeeId: 'worker', isFinalDailyReport: true, acknowledgedAt: 'yes' }, { id: 'foreign', employeeId: 'other', isFinalDailyReport: true } ] }, activeEmployee: row.payload.employees[0], document: { getElementById: id => elements[id], querySelectorAll: () => [] }, window: { MarketizoCosts: { minutes: l => l.minutes } }, Date, Intl, setText() {}, formatNumber: String, formatDate: String, escapePortalText: String, currentDateKey: () => '2026-10-23', renderLeaderReportInbox: reports => inbox = reports, renderWeeklyQuestionnaires() {} };
+  vm.createContext(ui); vm.runInContext(named('leaderReportPeople') + '\n' + named('weeklyReportsForLeader') + '\n' + named('renderLeaderReportStatus') + '\n' + named('renderLeaderReportsPage'), ui); ui.renderLeaderReportsPage(); assert.deepEqual(Array.from(inbox, r => r.id), ['today', 'old']); assert.equal(elements.leaderReportsNav.textContent, 'Izveštaji (2)');
+  // Actual form handler: failed submission retains answers; double clicks issue one request.
+  let submit, release, calls = 0, resets = 0, toasts = [];
+  const fields = Object.fromEntries(answers.map((a, i) => [`answer${i + 1}`, a]));
+  const button = {}, form = { dataset: { reportId: 'weekly' }, querySelector: () => button, reset() { resets++; } };
+  const formUi = { state: { employeeReports: [] }, activeEmployee: { id: 'worker' }, document: { getElementById: id => id === 'weeklyQuestionnaireForm' ? { addEventListener(type, fn) { submit = fn; } } : { close() {} } }, FormData: class { get(key) { return fields[key]; } }, postEmployeeReport() { calls++; return new Promise(resolve => release = resolve); }, saveState() {}, showToast: (...args) => toasts.push(args) };
+  vm.createContext(formUi); const start = source.indexOf('document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit"'); const end = source.indexOf('\ndocument.getElementById("leaderLiveReportEmployee")', start); vm.runInContext(source.slice(start, end), formUi);
+  const event = { currentTarget: form, preventDefault() {} }; const sending = submit(event); assert.equal(form.inert, true); await submit(event); assert.equal(calls, 1); release({ ok: false, error: 'busy' }); await sending; assert.equal(resets, 0); assert.equal(form.inert, false); assert.equal(button.disabled, false); assert.equal(fields.answer5, 'five');
+  const retry = submit(event); release({ ok: true, report: { id: 'weekly', submittedAt: 'now' } }); await retry; assert.equal(resets, 1); assert.equal(formUi.state.employeeReports.length, 1);
+  // A slow inbox read cannot overlap, overwrite other collections or undo a new confirmation.
+  let readRelease, reads = 0, renders = 0, editing = false;
+  const refreshUi = { activeEmployee: { id: 'leader', isLeader: true }, state: { employeeReports: [], employeeWorkLogs: [{ id: 'keep' }] }, reportRefreshInFlight: false, reportInboxRevision: 0, document: { hidden: false, activeElement: { matches: () => editing }, querySelector: () => null }, window: { setTimeout: () => 1, clearTimeout() {} }, AbortController, employeeApiHeaders: () => ({}), renderLeaderReportStatus: () => renders++, showToast() {}, fetch: () => { reads++; return new Promise(resolve => readRelease = resolve); } };
+  vm.createContext(refreshUi); vm.runInContext(named('refreshReportInbox'), refreshUi);
+  const pendingRead = refreshUi.refreshReportInbox(); await refreshUi.refreshReportInbox(); assert.equal(reads, 1);
+  readRelease(reply(200, { ok: true, reports: [{ id: 'new' }] })); await pendingRead; assert.equal(renders, 1); assert.equal(refreshUi.state.employeeWorkLogs[0].id, 'keep');
+  const staleRead = refreshUi.refreshReportInbox(); refreshUi.reportInboxRevision++; refreshUi.state.employeeReports = [{ id: 'new', acknowledgedAt: 'confirmed' }]; readRelease(reply(200, { ok: true, reports: [{ id: 'new' }] })); await staleRead; assert.equal(refreshUi.state.employeeReports[0].acknowledgedAt, 'confirmed');
+  const beforeEditing = refreshUi.refreshReportInbox(); editing = true; readRelease(reply(200, { ok: true, reports: [{ id: 'later' }] })); await beforeEditing; assert.equal(refreshUi.state.employeeReports[0].id, 'new');
+  await refreshUi.refreshReportInbox(); assert.equal(reads, 3, 'No read while a form is being edited');
+  // The bounded request returns control on a network timeout, without a false success.
+  let abortRequest;
+  const postUi = { reportInboxRevision: 0, window: { setTimeout: fn => { abortRequest = fn; return 1; }, clearTimeout() {} }, AbortController, employeeApiHeaders: () => ({}), fetch: (url, options) => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(Object.assign(new Error(), { name: 'AbortError' })))) };
+  vm.createContext(postUi); vm.runInContext(named('postEmployeeReport'), postUi); const timedPost = postUi.postEmployeeReport({}); abortRequest(); const timedResult = await timedPost; assert.equal(timedResult.ok, false); assert.match(timedResult.error, /zadržani/);
+  // Closing the notification is a UI-only close; only the explicit button acknowledges.
+  const closeStart = source.indexOf('document.getElementById("closeWeeklyCompletedDialog")'); const closeCode = source.slice(closeStart, source.indexOf('\n', closeStart)); assert.ok(!closeCode.includes('acknowledgeWeeklyQuestionnaire')); assert.match(closeCode, /\.close\(\)/);
+  console.log('PASS: same-day leader inbox, team isolation, live report read without writes, concurrent staff-entry preservation, safe/idempotent retries, changed report unread status, bounded forms retain failed answers, and explicit-only read confirmations.');
+})().catch(error => { console.error(error); process.exitCode = 1; });
