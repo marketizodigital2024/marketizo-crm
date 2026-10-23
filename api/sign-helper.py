@@ -396,7 +396,20 @@ def preview_pdf(payload):
         flush()
         if index == 0 and blocks and blocks[0]["text"] == title:
             blocks.pop(0)
-        pages.append(blocks)
+        readable = []
+        for block in blocks:
+            if block.get("columns") or block["heading"]:
+                readable.append(block)
+                continue
+            # Some imported Word templates put all numbered obligations in one
+            # ReportLab paragraph, so even the PDF lines have inline item numbers.
+            # Insert display boundaries only; retain every word in its original order.
+            value = block["text"]
+            boundaries = r"(?<!\S)(?=\d{1,2}\.\d{1,2}\s+[A-ZÄÖÜČĆŽŠĐ])|(?<!\S)(?=•\s)"
+            if index == 0 and not any(clause_heading.match(b["text"]) for b in readable):
+                boundaries += r"|(?=Zwischen:|Adresse:|Firmenbuchnummer:|UID:|Inhaber:|Bank:|IBAN:|und Kunde:|Anschrift:|Vertreten durch:|Vertragsgegenstand:|Između:|Adresa:|Matični broj firme:|Vlasnik:|Banka:|Predmet ugovora:)"
+            readable.extend({"text": part.strip(), "heading": False} for part in re.split(boundaries, value) if part.strip())
+        pages.append(readable)
     # Older frozen PDFs predate explicit language metadata. Their fixed signature labels identify the language.
     language = layout.get("language") or ("de" if "Unterzeichnet am:" in "\n".join(full_text) else "sr")
     return {"pdfSha256": digest, "language": language, "pages": pages, "issuer": layout.get("issuer", {})}
