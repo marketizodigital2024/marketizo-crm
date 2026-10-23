@@ -4850,7 +4850,7 @@ function setupStructuredOneOnOneForm() {
   grid.prepend(dateField, employeeField);
   const questions = document.createElement("section");
   questions.className = "one-on-one-questionnaire span-2";
-  questions.innerHTML = `<h3>Pitanja za 1:1</h3><p>Otvori pitanje i upiši odgovor.</p>${oneOnOneQuestions.map((question, index) => `<details class="one-on-one-question" ${index === 0 ? "open" : ""}><summary><span>${index + 1}.</span>${escapeInvoiceText(question)}</summary><label>Odgovor<textarea name="oneOnOneAnswer${index}" rows="4" required placeholder="Upiši odgovor..."></textarea></label></details>`).join("")}`;
+  questions.innerHTML = `<h3>Pitanja za 1:1</h3><p>Pitanja nisu obavezna. Popuni odgovore koje imaš i sačuvaj belešku.</p>${oneOnOneQuestions.map((question, index) => `<details class="one-on-one-question" ${index === 0 ? "open" : ""}><summary><span>${index + 1}.</span>${escapeInvoiceText(question)}</summary><label>Odgovor<textarea name="oneOnOneAnswer${index}" rows="4" placeholder="Upiši odgovor..."></textarea></label></details>`).join("")}`;
   grid.append(questions, titleField);
 
   const history = document.getElementById("employeeOneOnOneRows");
