@@ -20,7 +20,6 @@ function headers(key, prefer = "") {
 }
 
 function isOwnerLeader(employee) {
-  const name = String(employee?.name || "").toLowerCase();
   return employee?.id === "emp-miljan" || employee?.id === "emp-ivana";
 }
 
@@ -66,18 +65,31 @@ async function readRow(url, key) {
 
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
   if (req.method === "OPTIONS") return json(res, 200, { ok: true });
-  if (req.method !== "POST") return json(res, 405, { ok: false, error: "Metod nije podržan." });
+  if (!["GET", "POST"].includes(req.method)) return json(res, 405, { ok: false, error: "Metod nije podržan." });
 
   const url = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!url || !key) return json(res, 503, { ok: false, error: "Online baza nije povezana." });
 
   try {
-    const body = await readBody(req);
     const session = verifySession(req, process.env.EMPLOYEE_SESSION_SECRET || key);
+    if (!session) return json(res, 401, { ok: false, error: "Prijava je obavezna." });
+    if (req.method === "GET") {
+      // Read only the report inbox and assignment data, never the complete CRM.
+      const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=employees:payload->employees,reports:payload->employeeReports,workLogs:payload->employeeWorkLogs,updated_at`, { headers: headers(key) });
+      if (!response.ok) throw new Error(`Čitanje izveštaja nije uspelo (${response.status}).`);
+      const row = (await response.json())[0];
+      if (!row) return json(res, 404, { ok: false, error: "Izveštaji nisu dostupni." });
+      const actor = (row.employees || []).find((employee) => employee.id === session.employeeId && employee.status !== "Neaktivan");
+      if (!actor) return json(res, 403, { ok: false, error: "Nalog nije aktivan." });
+      const visibleIds = new Set((row.employees || []).filter((employee) => employee.id === actor.id || (employee.status !== "Neaktivan" && canLead(actor, employee))).map((employee) => employee.id));
+      const reports = require("./state.js").helpers.refreshWorkSummaries({ employees: row.employees || [], employeeReports: row.reports || [], employeeWorkLogs: row.workLogs || [] }).employeeReports;
+      return json(res, 200, { ok: true, reports: reports.filter((report) => visibleIds.has(report.employeeId)), updatedAt: row.updated_at });
+    }
+    const body = await readBody(req);
     const actorId = String(body.leaderId || body.employeeId || "");
     if (!session || (session.role !== "full-admin" && session.employeeId !== actorId)) {
       return json(res, 401, { ok: false, error: "Prijava je obavezna." });
@@ -144,6 +156,9 @@ module.exports = async function handler(req, res) {
         const employee = (payload.employees || []).find((item) => item.id === employeeId && item.status !== "Neaktivan");
         const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.employeeId === employeeId && item.isWeeklyQuestionnaire === true);
         if (!employee || !report) return json(res, 403, { ok: false, error: "Upitnik nije pronađen za ovog zaposlenog." });
+        if (report.submittedAt && JSON.stringify(report.answers) === JSON.stringify(answers)) {
+          return json(res, 200, { ok: true, report, updatedAt: row.updated_at, duplicate: true });
+        }
         Object.assign(report, { answers, status: "completed", submittedAt: new Date().toISOString(), acknowledgedAt: null, acknowledgedBy: null });
         const updatedAt = new Date().toISOString();
         const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
@@ -166,6 +181,7 @@ module.exports = async function handler(req, res) {
         const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.isWeeklyQuestionnaire === true && item.submittedAt);
         const employee = (payload.employees || []).find((item) => item.id === report?.employeeId);
         if (!leader || !report || !canLead(leader, employee)) return json(res, 403, { ok: false, error: "Ovaj izveštaj nije dodeljen tom lideru." });
+        if (report.acknowledgedAt) return json(res, 200, { ok: true, report, updatedAt: row.updated_at, duplicate: true });
         report.acknowledgedAt = new Date().toISOString();
         report.acknowledgedBy = leaderId;
         const updatedAt = new Date().toISOString();
@@ -193,6 +209,7 @@ module.exports = async function handler(req, res) {
         if (!leader || !report || (!ownerLeader && report.recipientId !== leaderId && reportEmployee?.leaderId !== leaderId)) {
           return json(res, 403, { ok: false, error: "Ovaj izveštaj nije dodeljen tom lideru." });
         }
+        if (report.acknowledgedAt) return json(res, 200, { ok: true, report, updatedAt: row.updated_at, duplicate: true });
         report.acknowledgedAt = new Date().toISOString();
         report.acknowledgedBy = leaderId;
         const updatedAt = new Date().toISOString();
@@ -228,13 +245,17 @@ module.exports = async function handler(req, res) {
       payload.employeeReports = Array.isArray(payload.employeeReports) ? payload.employeeReports : [];
       let report = payload.employeeReports.find((item) => item.employeeId === employeeId && item.date === date && item.isFinalDailyReport === true);
       const now = new Date().toISOString();
+      const recipientId = employee.leaderId || "admin";
       if (report) {
-        Object.assign(report, { recipientId: body.recipientId || employee.leaderId || "", minutes, hours: Math.round((minutes / 60) * 10000) / 10000, note, positive, negative, updatedAt: now });
+        if (!report.isAutomaticRollup && report.note === note && report.positive === positive && report.negative === negative && report.minutes === minutes && report.recipientId === recipientId) {
+          return json(res, 200, { ok: true, report, updatedAt: row.updated_at, duplicate: true });
+        }
+        Object.assign(report, { recipientId, minutes, hours: Math.round((minutes / 60) * 10000) / 10000, note, positive, negative, updatedAt: now, isAutomaticRollup: false, acknowledgedAt: null, acknowledgedBy: null });
       } else {
         report = {
           id: `daily-report-${employeeId}-${date}`,
           employeeId,
-          recipientId: body.recipientId || employee.leaderId || "",
+          recipientId,
           date,
           title: "Dnevni izveštaj za lidera",
           activityName: "Završni dnevni izveštaj",

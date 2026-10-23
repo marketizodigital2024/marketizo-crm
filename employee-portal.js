@@ -48,6 +48,8 @@ let onlineHydrationPromise = null;
 let leaderReportInboxShown = false;
 let weeklyPromptShown = false;
 let weeklyCompletionShown = false;
+let reportRefreshInFlight = false;
+let reportInboxRevision = 0;
 const employeeSessionKey = "marketizoEmployeeSession";
 const employeeSessionDuration = 24 * 60 * 60 * 1000;
 
@@ -735,7 +737,6 @@ function leaderTeam() {
 }
 
 function reportRecipientId() {
-  if (activeEmployee.isLeader) return "admin";
   return activeEmployee.leaderId || "admin";
 }
 
@@ -1731,9 +1732,7 @@ function renderLeaderPanel() {
 
 function leaderReportPeople() {
   if (!activeEmployee?.isLeader) return [];
-  const activeName = String(activeEmployee.name || "").trim().toLowerCase();
-  const isOwnerLeader = activeEmployee.id === "emp-miljan" || activeEmployee.id === "emp-ivana"
-    || activeName.includes("miljan") || activeName.includes("ivana");
+  const isOwnerLeader = activeEmployee.id === "emp-miljan" || activeEmployee.id === "emp-ivana";
   if (isOwnerLeader) return (state.employees || []).filter((employee) => employee.id !== activeEmployee.id && employee.status !== "Neaktivan");
   return (state.employees || []).filter((employee) => employee.leaderId === activeEmployee.id && employee.status !== "Neaktivan");
 }
@@ -1816,9 +1815,9 @@ function renderWeeklyQuestionnaires() {
   if (list) {
     list.innerHTML = currentReports.length ? currentReports.map((report) => {
       const employee = (state.employees || []).find((item) => item.id === report.employeeId);
-      const status = report.submittedAt ? "Popunjeno" : "Čeka odgovor";
+      const status = report.acknowledgedAt ? "Pročitano" : report.submittedAt ? "Popunjeno · čeka čitanje" : "Čeka odgovor";
       const answers = report.submittedAt ? `<details class="weekly-answer-details"><summary>Prikaži odgovore</summary>${weeklyQuestions.map((question, index) => `<p><strong>${index + 1}. ${escapePortalText(question)}</strong><br />${escapePortalText(report.answers?.[index] || "")}</p>`).join("")}</details>` : "";
-      return `<div class="setup-item weekly-report-row"><strong>${escapePortalText(employee?.name || "Zaposleni")}</strong><span><b>${status}</b>${report.submittedAt ? ` · ${new Intl.DateTimeFormat("sr-RS", { hour: "2-digit", minute: "2-digit" }).format(new Date(report.submittedAt))}` : ""}${answers}</span></div>`;
+      return `<div class="setup-item weekly-report-row"><strong>${escapePortalText(employee?.name || "Zaposleni")}</strong><span><b>${status}</b>${report.submittedAt ? ` · ${new Intl.DateTimeFormat("sr-RS", { hour: "2-digit", minute: "2-digit" }).format(new Date(report.submittedAt))}` : ""}${answers}${report.submittedAt && !report.acknowledgedAt ? `<button type="button" class="primary-button weekly-report-ack" data-report-id="${escapePortalText(report.id)}">Pročitao/la sam izveštaj</button>` : ""}</span></div>`;
     }).join("") : `<div class="empty-state">Upitnik za ovu nedelju još nije poslat.</div>`;
   }
 
@@ -1831,13 +1830,12 @@ function renderWeeklyQuestionnaires() {
   const next = unread[0];
   const completedDialog = document.getElementById("weeklyCompletedDialog");
   if (next && completedDialog && !weeklyCompletionShown) {
-    weeklyCompletionShown = true;
     completedDialog.dataset.reportId = next.id;
     const employee = (state.employees || []).find((item) => item.id === next.employeeId);
     setText("weeklyCompletedTitle", `${employee?.name || "Zaposleni"} je popunio/la izveštaj`);
     const content = document.getElementById("weeklyCompletedContent");
-    if (content) content.innerHTML = `<p>Nedeljni upitnik je popunjen i odgovori se vide u delu Izveštaji.</p>`;
-    window.setTimeout(() => { if (!completedDialog.open) completedDialog.showModal(); }, 350);
+    if (content) content.innerHTML = weeklyQuestions.map((question, index) => `<p><strong>${index + 1}. ${escapePortalText(question)}</strong><br />${escapePortalText(next.answers?.[index] || "")}</p>`).join("");
+    window.setTimeout(() => { if (!completedDialog.open && !document.querySelector("dialog[open]")) { weeklyCompletionShown = true; completedDialog.showModal(); } }, 350);
   }
 
   if (!activeEmployee?.isLeader) {
@@ -1858,9 +1856,8 @@ async function sendWeeklyQuestionnaires() {
   button.textContent = "Slanje...";
   const windowInfo = currentWeeklyWindow();
   try {
-    const response = await fetch("/api/employee-report", { method: "POST", headers: employeeApiHeaders(), body: JSON.stringify({ action: "sendWeeklyQuestionnaire", leaderId: activeEmployee.id, weekKey: windowInfo.weekKey, dueDate: windowInfo.dueDate }) });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) throw new Error(result.error || "Upitnik nije poslat.");
+    const result = await postEmployeeReport({ action: "sendWeeklyQuestionnaire", leaderId: activeEmployee.id, weekKey: windowInfo.weekKey, dueDate: windowInfo.dueDate });
+    if (!result.ok) throw new Error(result.error || "Upitnik nije poslat.");
     const ids = new Set((result.invitations || []).map((report) => report.id));
     state.employeeReports = (state.employeeReports || []).filter((report) => !ids.has(report.id));
     state.employeeReports.unshift(...(result.invitations || []));
@@ -1876,20 +1873,18 @@ async function sendWeeklyQuestionnaires() {
   }
 }
 
-async function acknowledgeWeeklyQuestionnaire() {
+async function acknowledgeWeeklyQuestionnaire(reportId = document.getElementById("weeklyCompletedDialog")?.dataset.reportId || "") {
   const dialog = document.getElementById("weeklyCompletedDialog");
-  const reportId = dialog?.dataset.reportId || "";
   if (!reportId || !activeEmployee?.id) return;
   try {
-    const response = await fetch("/api/employee-report", { method: "POST", headers: employeeApiHeaders(), body: JSON.stringify({ action: "acknowledgeWeeklyQuestionnaire", reportId, leaderId: activeEmployee.id }) });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) throw new Error(result.error || "Potvrda nije sačuvana.");
+    const result = await postEmployeeReport({ action: "acknowledgeWeeklyQuestionnaire", reportId, leaderId: activeEmployee.id });
+    if (!result.ok) throw new Error(result.error || "Potvrda nije sačuvana.");
     const report = (state.employeeReports || []).find((item) => item.id === reportId);
     if (report) Object.assign(report, result.report || {});
     saveState({ remote: false });
-    dialog.close();
+    dialog?.close();
     weeklyCompletionShown = false;
-    renderWeeklyQuestionnaires();
+    renderLeaderReportStatus();
   } catch (error) {
     showToast("Nije potvrđeno", error?.message || "Pokušaj ponovo.", "danger");
   }
@@ -1952,10 +1947,17 @@ function renderLeaderReportsPage() {
       : `<div class="empty-state">Za izabrani datum zaposleni još nema sačuvane aktivnosti.</div>`;
   }
 
+  renderLeaderReportStatus();
+}
+
+function renderLeaderReportStatus() {
+  const nav = document.getElementById("leaderReportsNav");
+  const peopleIds = new Set(leaderReportPeople().map((employee) => employee.id));
   const unreadReports = (state.employeeReports || [])
     .filter((report) => report.isFinalDailyReport === true && peopleIds.has(report.employeeId) && !report.acknowledgedAt)
-    .filter((report) => String(report.date || "") < currentDateKey())
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const unreadWeeklyCount = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).length;
+  if (nav) nav.textContent = `Izveštaji${unreadReports.length + unreadWeeklyCount ? ` (${unreadReports.length + unreadWeeklyCount})` : ""}`;
   renderLeaderReportInbox(unreadReports);
   document.querySelectorAll(".leader-report-ack").forEach((button) => {
     button.addEventListener("click", () => acknowledgeLeaderReport(button.dataset.reportId, button));
@@ -1963,18 +1965,72 @@ function renderLeaderReportsPage() {
   renderWeeklyQuestionnaires();
 }
 
-async function refreshLeaderReportsFromRemote() {
-  if (!activeEmployee?.isLeader || !window.MarketizoRemote?.load) return;
-  setText("leaderLiveReportUpdated", "osvežavanje...");
+// Report-only reads never replace work entries, balances or an employee's draft.
+async function refreshReportInbox(force = false) {
+  if (!activeEmployee?.isLeader || reportRefreshInFlight || document.hidden) return;
+  if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']")) return;
+  if (document.querySelector("form[data-saving='true']")) return;
+  const openDialog = document.querySelector("dialog[open]");
+  if (openDialog && !["leaderReportsDialog", "weeklyCompletedDialog"].includes(openDialog.id)) return;
+  const actorId = activeEmployee.id;
+  const revision = reportInboxRevision;
+  reportRefreshInFlight = true;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 12000);
   try {
-    const result = await window.MarketizoRemote.load();
-    if (result?.payload) {
-      const activeId = activeEmployee.id;
+    const response = await fetch("/api/employee-report", { cache: "no-store", headers: employeeApiHeaders(), signal: controller.signal });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok || !Array.isArray(result.reports)) throw new Error(result.error || "Izveštaji nisu osveženi.");
+    // A read started before a confirmation must not undo that confirmation.
+    if (activeEmployee?.id !== actorId || revision !== reportInboxRevision) return;
+    const changed = JSON.stringify(state.employeeReports) !== JSON.stringify(result.reports);
+    if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']") || document.querySelector("form[data-saving='true']")) return;
+    const currentDialog = document.querySelector("dialog[open]");
+    if (currentDialog && !["leaderReportsDialog", "weeklyCompletedDialog"].includes(currentDialog.id)) return;
+    if (changed) state.employeeReports = result.reports;
+    if (changed || force) renderLeaderReportStatus();
+  } catch (error) {
+    if (force) showToast("Izveštaji nisu osveženi", error?.message || "Pokušaj ponovo.", "warn");
+  } finally {
+    window.clearTimeout(timer);
+    reportRefreshInFlight = false;
+  }
+}
+
+async function refreshLeaderReportsFromRemote() {
+  leaderReportInboxShown = false;
+  weeklyCompletionShown = false;
+  if (!activeEmployee?.isLeader || document.querySelector("form[data-saving='true']")) return;
+  const actorId = activeEmployee.id;
+  const revision = reportInboxRevision;
+  try {
+    const result = await window.MarketizoRemote?.load?.();
+    if (result?.payload && activeEmployee?.id === actorId && revision === reportInboxRevision) {
       state = loadState(result.payload);
-      activeEmployee = (state.employees || []).find((employee) => employee.id === activeId) || activeEmployee;
+      activeEmployee = (state.employees || []).find((employee) => employee.id === actorId) || activeEmployee;
+      renderLeaderReportsPage();
     }
   } finally {
-    renderLeaderReportsPage();
+    await refreshReportInbox(true);
+  }
+}
+
+window.setInterval(() => refreshReportInbox(), 10000);
+window.addEventListener("focus", () => refreshReportInbox());
+
+async function postEmployeeReport(body) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 20000);
+  reportInboxRevision += 1;
+  try {
+    const response = await fetch("/api/employee-report", { method: "POST", headers: employeeApiHeaders(), body: JSON.stringify(body), signal: controller.signal });
+    const result = await response.json().catch(() => ({}));
+    return { ...result, ok: response.ok && result.ok === true, error: result.error || (response.ok ? "" : `Slanje nije potvrđeno (${response.status}). Odgovori su zadržani; pokušaj ponovo.`) };
+  } catch (error) {
+    return { ok: false, error: error?.name === "AbortError" ? "Slanje nije potvrđeno na vreme. Odgovori su zadržani; pokušaj ponovo." : "Veza je prekinuta. Odgovori su zadržani; pokušaj ponovo." };
+  } finally {
+    reportInboxRevision += 1;
+    window.clearTimeout(timer);
   }
 }
 
@@ -1985,11 +2041,10 @@ function renderLeaderReportInbox(reports) {
   list.innerHTML = reports.map((report) => {
     const employee = (state.employees || []).find((item) => item.id === report.employeeId);
     const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
-    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}<br /><button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam i slažem se</button></span></div>`;
+    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}<br /><button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button></span></div>`;
   }).join("");
   if (reports.length && !leaderReportInboxShown) {
-    leaderReportInboxShown = true;
-    window.setTimeout(() => { if (!dialog.open) dialog.showModal(); }, 250);
+    window.setTimeout(() => { if (!dialog.open && !document.querySelector("dialog[open]")) { leaderReportInboxShown = true; dialog.showModal(); } }, 250);
   }
 }
 
@@ -1999,27 +2054,22 @@ async function acknowledgeLeaderReport(reportId, button) {
   button.textContent = "Čuvanje...";
   let result = { ok: false, error: "Potvrda nije sačuvana." };
   try {
-    const response = await fetch("/api/employee-report", {
-      method: "POST",
-      headers: employeeApiHeaders(),
-      body: JSON.stringify({ action: "acknowledge", reportId, leaderId: activeEmployee.id }),
-    });
-    result = await response.json().catch(() => ({}));
-    result.ok = response.ok && result.ok;
+    result = await postEmployeeReport({ action: "acknowledge", reportId, leaderId: activeEmployee.id });
   } catch (error) {
     result = { ok: false, error: error?.message || "Potvrda nije sačuvana." };
   }
   if (!result.ok) {
     button.disabled = false;
-    button.textContent = "Pročitao/la sam i slažem se";
+    button.textContent = "Pročitao/la sam izveštaj";
     showToast("Nije potvrđeno", result.error || "Pokušaj ponovo.", "danger");
     return;
   }
   const report = (state.employeeReports || []).find((item) => item.id === reportId);
   if (report) Object.assign(report, result.report || {});
   saveState({ remote: false });
-  renderLeaderPanel();
-  const remaining = (state.employeeReports || []).filter((item) => item.isFinalDailyReport === true && item.recipientId === activeEmployee.id && !item.acknowledgedAt).length;
+  renderLeaderReportsPage();
+  const peopleIds = new Set(leaderReportPeople().map((employee) => employee.id));
+  const remaining = (state.employeeReports || []).filter((item) => item.isFinalDailyReport === true && peopleIds.has(item.employeeId) && !item.acknowledgedAt).length;
   if (!remaining) document.getElementById("leaderReportsDialog")?.close();
   showToast("Potvrđeno", "Sačuvano je da si pročitao/la izveštaj.", "ok");
 }
@@ -2425,8 +2475,12 @@ document.getElementById("dailyReportLater")?.addEventListener("click", () => {
 document.getElementById("dailyReportForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  if (form.dataset.saving === "true") return;
+  const actorId = activeEmployee?.id;
   const date = form.dataset.reportDate || "";
   const formData = new FormData(form);
+  form.dataset.saving = "true";
+  form.inert = true;
   const submitButton = form.querySelector('button[type="submit"]');
   if (submitButton) {
     submitButton.disabled = true;
@@ -2434,27 +2488,23 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   }
   let result = { ok: false, error: "Online čuvanje nije uspelo." };
   try {
-    const response = await fetch("/api/employee-report", {
-      method: "POST",
-      headers: employeeApiHeaders(),
-      body: JSON.stringify({
-        employeeId: activeEmployee.id,
-        recipientId: reportRecipientId(),
-        date,
-        note: String(formData.get("summary") || "").trim(),
-        positive: String(formData.get("positive") || "").trim(),
-        negative: String(formData.get("negative") || "").trim(),
-      }),
+    result = await postEmployeeReport({
+      employeeId: activeEmployee.id,
+      date,
+      note: String(formData.get("summary") || "").trim(),
+      positive: String(formData.get("positive") || "").trim(),
+      negative: String(formData.get("negative") || "").trim(),
     });
-    result = await response.json().catch(() => ({}));
-    result.ok = response.ok && result.ok;
   } catch (error) {
     result = { ok: false, error: error?.message || "Online čuvanje nije uspelo." };
   }
+  delete form.dataset.saving;
+  form.inert = false;
   if (submitButton) {
     submitButton.disabled = false;
     submitButton.textContent = "Pošalji lideru";
   }
+  if (activeEmployee?.id !== actorId) return;
   if (!result.ok) {
     showToast("Izveštaj nije poslat", result.error || "Pokušaj ponovo.", "danger");
     return;
@@ -2548,20 +2598,28 @@ document.getElementById("sendWeeklyQuestionnaire")?.addEventListener("click", ()
 document.getElementById("closeWeeklySendDialog")?.addEventListener("click", () => document.getElementById("weeklySendDialog")?.close());
 document.getElementById("confirmSendWeeklyQuestionnaire")?.addEventListener("click", sendWeeklyQuestionnaires);
 document.getElementById("closeWeeklyQuestionnaireDialog")?.addEventListener("click", () => document.getElementById("weeklyQuestionnaireDialog")?.close());
-document.getElementById("ackWeeklyCompleted")?.addEventListener("click", acknowledgeWeeklyQuestionnaire);
-document.getElementById("closeWeeklyCompletedDialog")?.addEventListener("click", acknowledgeWeeklyQuestionnaire);
+document.getElementById("ackWeeklyCompleted")?.addEventListener("click", () => acknowledgeWeeklyQuestionnaire());
+document.getElementById("closeWeeklyCompletedDialog")?.addEventListener("click", () => document.getElementById("weeklyCompletedDialog")?.close());
+document.getElementById("leaderWeeklyReportList")?.addEventListener("click", (event) => {
+  const button = event.target.closest?.(".weekly-report-ack");
+  if (button) acknowledgeWeeklyQuestionnaire(button.dataset.reportId);
+});
 document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  if (form.dataset.saving === "true") return;
+  const actorId = activeEmployee?.id;
   const submitButton = form.querySelector('button[type="submit"]');
   const answers = [1, 2, 3, 4, 5].map((index) => String(new FormData(form).get(`answer${index}`) || "").trim());
   if (answers.some((answer) => !answer)) return showToast("Popuni sva pitanja", "Svih pet odgovora su obavezna.", "warn");
+  form.dataset.saving = "true";
+  form.inert = true;
   submitButton.disabled = true;
   submitButton.textContent = "Slanje...";
   try {
-    const response = await fetch("/api/employee-report", { method: "POST", headers: employeeApiHeaders(), body: JSON.stringify({ action: "submitWeeklyQuestionnaire", employeeId: activeEmployee.id, reportId: form.dataset.reportId, answers }) });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) throw new Error(result.error || "Izveštaj nije poslat.");
+    const result = await postEmployeeReport({ action: "submitWeeklyQuestionnaire", employeeId: activeEmployee.id, reportId: form.dataset.reportId, answers });
+    if (!result.ok) throw new Error(result.error || "Izveštaj nije poslat.");
+    if (activeEmployee?.id !== actorId) return;
     const report = (state.employeeReports || []).find((item) => item.id === result.report.id);
     if (report) Object.assign(report, result.report);
     else state.employeeReports.unshift(result.report);
@@ -2572,6 +2630,8 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
   } catch (error) {
     showToast("Izveštaj nije poslat", error?.message || "Pokušaj ponovo.", "danger");
   } finally {
+    delete form.dataset.saving;
+    form.inert = false;
     submitButton.disabled = false;
     submitButton.textContent = "Pošalji lideru";
   }
@@ -2738,5 +2798,5 @@ document.addEventListener("click", (event) => {
   if (!target) return;
   document.querySelectorAll("[data-employee-tab]").forEach((item) => item.classList.toggle("active", item === button));
   document.querySelectorAll(".client-tab").forEach((item) => item.classList.toggle("active", item === target));
-  setText("employeePageTitle", button.textContent.trim());
+  setText("employeePageTitle", button.dataset.employeeTab === "employeeReportsTab" ? "Izveštaji" : button.textContent.trim());
 });
