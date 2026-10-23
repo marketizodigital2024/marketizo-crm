@@ -125,19 +125,23 @@ class SignatureBlock(Flowable):
         c = self.canv
         de = self.details.get("language") == "de"
         audience = self.details.get("audience", "client")
-        labels = {"employee": ("Arbeitgeber" if de else "Poslodavac", "Arbeitnehmer" if de else "Zaposleni"), "contractor": ("Auftraggeber" if de else "Naručilac", "Auftragnehmer" if de else "Saradnik"), "client": ("Auftragnehmer" if de else "Marketizo", "Kunde" if de else "Klijent"), "other": ("Marketizo", "Vertragspartei" if de else "Ugovorna strana")}
+        labels = {"employee": ("Arbeitgeber" if de else "Poslodavac", "Arbeitnehmer" if de else "Zaposleni"), "contractor": ("Auftraggeber" if de else "Naručilac", "Auftragnehmer" if de else "Saradnik"), "client": ("Auftragnehmer" if de else "Marketizo", "Kunde" if de else "Klijent"), "other": ("Marketizo", "Vertragspartei" if de else "Ugovorna strana"), "codeks": ("Marketizo", "Mitglied des Teams" if de else "Član tima")}
         left, right = labels.get(audience, labels["other"])
         c.setStrokeColor(colors.HexColor("#F68B1F")); c.setLineWidth(.7); c.line(0, 233, self.width, 233)
         for p, label, offset in [(self.owner, left, 0), (self.other, right, 267)]:
+            if audience == "codeks" and offset == 0:
+                paper_text(c, self.issuer.get("name", "Marketizo"), 0, 201, bold=True)
+                continue
             paper_text(c, label, offset, 219, bold=True)
-            name = (p.get("name", "") if audience == "employee" and offset else p.get("company", "")) or (self.issuer.get("name", "Marketizo") if offset == 0 else p.get("name", ""))
+            name = (p.get("name", "") if audience in ("employee", "codeks") and offset else p.get("company", "")) or (self.issuer.get("name", "Marketizo") if offset == 0 else p.get("name", ""))
             paper_text(c, name, offset, 201, bold=True, max_height=20)
-            paper_text(c, (("Vor- und Nachname: " if de else "Ime i prezime: ") if audience == "employee" and offset else ("Vertreten durch: " if de else "Zastupnik: ")) + (p.get("name", "") or "________________"), offset, 178, size=7, max_height=24)
+            paper_text(c, (("Vor- und Nachname: " if de else "Ime i prezime: ") if audience in ("employee", "codeks") and offset else ("Vertreten durch: " if de else "Zastupnik: ")) + (p.get("name", "") or "________________"), offset, 178, size=7, max_height=24)
             paper_text(c, p.get("email", ""), offset, 153, size=7)
             paper_text(c, "Unterschrift" if de else "Potpis", offset, 100, size=8)
             c.setStrokeColor(colors.HexColor("#CBD1D9")); c.line(offset, 26, offset+230, 26)
             paper_text(c, "Unterzeichnet am:" if de else "Datum potpisa:", offset, 23, size=6.5)
-        paper_text(c, ("Ort: " if de else "Mesto: ") + (self.details.get("place") or "________________"), 0, 134, size=8)
+        if audience != "codeks":
+            paper_text(c, ("Ort: " if de else "Mesto: ") + (self.details.get("place") or "________________"), 0, 134, size=8)
         if audience == "client":
             paper_text(c, ("Beginn der Zusammenarbeit: " if de else "Početak saradnje: ") + display_date(self.details.get("startDate")), 267, 134, size=7)
 
@@ -195,6 +199,8 @@ def render_original(payload):
     details = doc.get("contractDetails", {})
     if "audience" not in details:
         details = dict(details, audience="employee" if doc.get("category") == "employees" else "client" if doc.get("category") == "clients" else "other")
+    if doc.get("category") == "other" and doc.get("note", "").startswith("marketizo-codeks:v1|"):
+        details = dict(details, audience="codeks")
     parties = doc.get("recipients", [])
     owners = [p for p in parties if p.get("role") == "marketizo"]
     others = [p for p in parties if p.get("role") != "marketizo"] or [{}]
@@ -203,7 +209,7 @@ def render_original(payload):
         story.append(SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
     data = build_pdf(doc["title"], story, issuer)
     writer = PdfWriter(io.BytesIO(data))
-    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr"}, ensure_ascii=False)})
+    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr", "purpose": "codeks" if doc.get("category") == "other" and doc.get("note", "").startswith("marketizo-codeks:v1|") else "contract"}, ensure_ascii=False)})
     out = io.BytesIO(); writer.write(out); data = out.getvalue()
     return {"base64": base64.b64encode(data).decode(), "sha256": hashlib.sha256(data).hexdigest(), "renderer": VERSION}
 
@@ -412,7 +418,7 @@ def preview_pdf(payload):
         pages.append(readable)
     # Older frozen PDFs predate explicit language metadata. Their fixed signature labels identify the language.
     language = layout.get("language") or ("de" if "Unterzeichnet am:" in "\n".join(full_text) else "sr")
-    return {"pdfSha256": digest, "language": language, "pages": pages, "issuer": layout.get("issuer", {})}
+    return {"pdfSha256": digest, "language": language, "pages": pages, "issuer": layout.get("issuer", {}), "purpose": layout.get("purpose", "contract")}
 
 
 def dispatch(payload):
