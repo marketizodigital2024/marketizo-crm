@@ -15,6 +15,8 @@ Saving edits creates a new template revision. Sending it produces new immutable 
 
 Apply `database/marketizo-codeks.sql` after the existing Sign completion SQL. This replaces only `marketizo_sign_required_fields`: Kodeks acknowledgements require a name, while contracts retain their country/address/business/personal-ID requirements. No tables, client-side permissions or credentials are added. The function remains SECURITY INVOKER and executable only by service_role. The UI checks this capability and leaves dispatch disabled until it is installed.
 
+Then apply `database/marketizo-codeks-portal.sql`. Its service-role-only capability table lets authenticated assigned employees reopen their own pending request after the delivery worker scrubs its temporary payload. Portal links use a stable server-derived token; the existing invitation identity and signature evidence remain immutable. The Sign exchange recognizes that additional capability and retains existing expiration and request-state checks.
+
 The existing Sign environment and jobs must be enabled. No new provider or secrets are needed. The final signed PDF uses existing Sign email delivery. No actual employees or live dispatches are needed for validation.
 
 ## Verification

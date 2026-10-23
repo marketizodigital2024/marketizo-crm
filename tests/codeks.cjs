@@ -11,10 +11,10 @@ const {PREFIX,TEMPLATE_ID,metadata,stableId,DEFAULT_TEXT}=require('../lib/codeks
  await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb);grant select on agency_crm_state to service_role;');
  const crm={employees:[{id:'emp-miljan',name:'Owner Fixture',email:'owner@example.invalid',active:true},{id:'emp-one',name:'First Fixture',email:'first@example.invalid',password:'NEVER-SHARE',salary:9000},{id:'emp-two',name:'Second Fixture',email:'second@example.invalid'},{id:'emp-disabled',name:'Disabled',email:'disabled@example.invalid',active:false}]};
  await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify(crm)]);
- for(const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql','marketizo-codeks.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../database',file),'utf8'));
+ for(const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql','marketizo-codeks.sql','marketizo-codeks-portal.sql'])await db.exec(fs.readFileSync(path.join(__dirname,'../database',file),'utf8'));
  await db.exec('set role service_role');
  const rpc=async(name,params)=>{
-  const names=Object.keys(params);if(!['marketizo_sign_command','marketizo_sign_flow','marketizo_sign_required_fields'].includes(name))throw Error('Unexpected RPC');
+  const names=Object.keys(params);if(!['marketizo_sign_command','marketizo_sign_flow','marketizo_sign_required_fields','marketizo_codeks_portal_link'].includes(name))throw Error('Unexpected RPC');
   return(await db.query('select '+name+'('+names.map((key,i)=>key+' => $'+(i+1)).join(',')+') result',Object.values(params).map(v=>v&&typeof v==='object'?JSON.stringify(v):v))).rows[0].result;
  };
  async function fetchDb(url,options={}){
@@ -78,12 +78,18 @@ const {PREFIX,TEMPLATE_ID,metadata,stableId,DEFAULT_TEXT}=require('../lib/codeks
   assert.equal((await db.query('select count(*)::int c from marketizo_sign_requests')).rows[0].c,1);
   assert.equal((await store.list('document',{offset:0})).items.length,0,'Kodeks is separate from Sign library');
   role='employee';employee=crm.employees[2];assert.deepEqual((await call()).body.items,[]);assert.equal((await call('POST','',{action:'open',id:a.body.id})).status,404);assert.equal((await call('GET','?action=receipt&id='+a.body.id)).status,404);
+  // The delivery worker scrubs invitation payloads before the employee opens the portal.
+  await db.query("update marketizo_sign_outbox set state='done',sealed_payload=null where kind='invitation'");
   employee=crm.employees[1];const own=await call();assert.equal(own.body.items[0].status,'pending');assert.ok(!JSON.stringify(own).includes('email'));const opened=await call('POST','',{action:'open',id:a.body.id});assert.equal(opened.status,200,JSON.stringify(opened));assert.match(opened.body.url,/\/sign#[A-Za-z0-9_-]{43}$/);
+  assert.equal((await call('POST','',{action:'open',id:a.body.id})).body.url,opened.body.url,'Repeated portal opens retain the same valid link');
+  assert.equal((await rpc('marketizo_codeks_portal_link',{p_organization:'marketizo-main',p_document:a.body.id,p_employee:'emp-two',p_digest:hash('wrong')})).status,404);
+  assert.equal((await rpc('marketizo_codeks_portal_link',{p_organization:'other-org',p_document:a.body.id,p_employee:'emp-one',p_digest:hash('wrong')})).status,404);
   const invitation=new URL(opened.body.url).hash.slice(1),digest=hash(crypto.randomUUID());assert.equal((await flow.rpc('link_exchange',{invitationDigest:hash(invitation),sessionDigest:digest,context:{ip:'127.0.0.1'}})).ok,true);
   const view=await flow.rpc('link_view',{sessionDigest:digest});assert.deepEqual(view.completion.required,['name']);assert.equal(view.completion.allComplete,true,'No address or civil ID requested');
   await flow.completePdf(digest);const document=await flow.rpc('pdf',{sessionDigest:digest});
   const accept=await flow.rpc('link_accept',{sessionDigest:digest,commandId:crypto.randomUUID(),pdfSha256:document.pdfSha256,signature:{name:'First Fixture',strokes:[]},accepted:true,authority:true,consentText:'NEOBAVEZUJUĆE · Test potvrde kodeksa',payloadSha256:hash('fixture-accept')});assert.equal(accept.ok,true,JSON.stringify(accept));
   assert.equal((await call()).body.items[0].status,'processing');
+  assert.equal((await call('POST','',{action:'open',id:a.body.id})).status,409,'Accepted signatures cannot be reopened for signing');
   await flow.finalize(sent.body.requestId);assert.equal((await call()).body.items[0].status,'signed');assert.equal((await call('GET','?action=receipt&id='+a.body.id)).headers['Content-Type'],'application/pdf');
   role='full-admin';employee=crm.employees[0];
   const next=await call('POST','',{...save,revision:1,commandId:crypto.randomUUID(),text:DEFAULT_TEXT+'\n\nNova test verzija.'});assert.equal(next.body.template.revision,2);
@@ -91,6 +97,7 @@ const {PREFIX,TEMPLATE_ID,metadata,stableId,DEFAULT_TEXT}=require('../lib/codeks
   const original=await store.get('document',a.body.id);assert.equal(metadata(original).version,1);assert.ok(!JSON.stringify(original.data).includes('Nova test verzija'));
   assert.deepEqual(await rpc('marketizo_sign_required_fields',{rec:{partyType:'employee'},doc:{category:'employees',content:{blocks:[{text:'JMBG'}]}}}),['name','country','address','personalId'],'Contract identity requirements unchanged');
   await db.exec('reset role;set role anon');await assert.rejects(db.query('select * from marketizo_sign_documents'),/permission denied/);await assert.rejects(db.query('select marketizo_sign_required_fields($1,$2)',[{},{}]),/permission denied/);
+  await assert.rejects(db.query('select marketizo_codeks_portal_link($1,$2,$3,$4)',['marketizo-main',a.body.id,'emp-one',hash('anon')]),/permission denied/);
   console.log('PASS: Kodeks owner authorization, employee isolation, no premature notification, immutable versions, exact PDF binding, idempotent retries, own signing link, minimal identity and unchanged contract requirements.');
  }finally{await db.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
