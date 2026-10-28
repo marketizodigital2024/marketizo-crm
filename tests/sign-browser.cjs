@@ -15,7 +15,7 @@ async function main(){
  const crm={employees:[{id:'emp-miljan',name:'Fixture Owner',active:true}],clients:[]};await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify(crm)]);
  for(const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql'])await db.exec(fs.readFileSync(path.join(root,'database',file),'utf8'));
  for(const [title,category] of [['Starter fixture','clients'],['Editor fixture','employees'],['NDA fixture','nda']]){
-  const data={title,category,content:{version:1,blocks:[{type:'paragraph',level:1,runs:[{text:'Unverbindliche Vorlage',bold:false,italic:false,underline:false}]}]},recipients:[],contractDetails:{language:'sr',audience:category==='clients'?'client':'contractor',place:'',startDate:''},governingLaw:'AT',signatureMethod:'ses',legalReview:'pending',note:''};
+  const data={title,category,content:{version:1,blocks:[{type:'paragraph',level:1,runs:[{text:category==='employees'?'Naknada: [MESEČNA NAKNADA U EUR]. Bonus: [BONUS I USLOVI]':'Unverbindliche Vorlage',bold:false,italic:false,underline:false}]}]},recipients:[],contractDetails:{language:'sr',audience:category==='clients'?'client':'contractor',place:'',startDate:''},governingLaw:'AT',signatureMethod:'ses',legalReview:'pending',note:''};
   const saved=(await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r',['marketizo-main','emp-miljan',crypto.randomUUID(),'save',JSON.stringify({id:crypto.randomUUID(),kind:'template',revision:0,data})])).rows[0].r;assert.equal(saved.ok,true);
  }
  const mails=[],errors=[];let server,chrome,ws,origin;
@@ -216,6 +216,15 @@ async function main(){
   await evaluate("document.querySelector('#quickTemplates button').click()");await click('quickChooseNext');
   await until("!document.getElementById('quickRecipient').hidden && !document.getElementById('quickPrepare').disabled");
   assert.equal(await evaluate("document.getElementById('quickPartyType').value"),'business');
+  assert.equal(await evaluate("document.getElementById('quickContractorTerms').hidden"),false);
+  await fill('quickEmail','contractor@example.invalid');await fill('quickMonthlyFee','1200,50');await fill('quickBonus','Nema ugovorenog bonusa.');
+  fs.writeFileSync(path.join(out,'sign-contractor-terms.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
+  await click('quickPrepare');await until("!document.getElementById('quickReview').hidden && !document.getElementById('quickReviewBack').disabled");
+  assert.ok(await evaluate("document.getElementById('quickPreview').textContent.includes('1200,50 EUR')"));
+  assert.ok(await evaluate("document.getElementById('quickPreview').textContent.includes('Nema ugovorenog bonusa.')"));
+  const contractorSaved=(await db.query("select data from marketizo_sign_documents where title='Editor fixture' and archived_at is null")).rows[0].data;
+  assert.deepEqual(contractorSaved.contractDetails.compensation,{monthlyFee:'1200.50',bonus:'Nema ugovorenog bonusa.'});
+  assert.equal(mails.some(m=>m.to==='contractor@example.invalid'),false,'Preparing a contractor PDF never sends it');
   await click('quickCancel');assert.deepEqual(errors,[]);
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> inline PDF without OTP -> explicit acceptance -> final receipt email -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');
  }finally{ws?.close();chrome?.kill();server?.closeAllConnections();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
