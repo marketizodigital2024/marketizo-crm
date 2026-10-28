@@ -2,8 +2,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const categories = { clients: 'Klijenti', employees: 'Zaposleni', nda: 'NDA', annexes: 'Aneksi', other: 'Ostalo' };
-  const templateCategories = { ...categories, employees: 'Zaposleni i saradnici' };
-  const templateCategory = doc => Object.hasOwn(templateCategories, doc.category) ? doc.category : 'other';
+  const templateCategories = { ...categories, employees: 'Zaposleni', contractors: 'Saradnici' };
+  const templateCategory = doc => doc.category === 'employees' && doc.contractDetails?.audience === 'contractor' ? 'contractors' : Object.hasOwn(templateCategories, doc.category) ? doc.category : 'other';
   function sortedTemplates(items) { return items.slice().sort((a, b) => Object.keys(templateCategories).indexOf(templateCategory(a)) - Object.keys(templateCategories).indexOf(templateCategory(b)) || a.title.localeCompare(b.title, 'sr-Latn')); }
   const statuses = { draft: 'Nacrt', ready: 'Spreman za slanje', sent: 'Čeka potpis', viewed: 'Pregledan', signing: 'Potpisivanje', signed: 'Potpisan', declined: 'Odbijen', expired: 'Istekao', voided: 'Poništen' };
   let deliveryMode = 'email';
@@ -116,7 +116,7 @@
     const wrapper = node('label', label), input = node('input', null, { 'data-field': name, ...attrs }); input.value = value || ''; wrapper.append(input); return wrapper;
   }
   function recipientRow(r = {}) {
-    r = { partyType: $('contractAudience').value === 'employee' ? 'employee' : $('contractAudience').value === 'contractor' ? 'individual' : 'business', ...r }; 
+    r = { partyType: $('contractAudience').value === 'employee' ? 'employee' : 'business', ...r };
     const row = node('div', null, { class: 'sign-recipient' }), head = node('div', null, { class: 'sign-recipient-head' }), remove = node('button', 'Ukloni', { type: 'button', class: 'sign-text-button' });
     head.append(node('span', 'Potpisnik'), remove); row.append(head);
     const chooserLabel = node('label', 'Iz CRM-a ili novi primalac'), chooser = node('select', null, { 'aria-label': 'Izbor primaoca' });
@@ -175,7 +175,7 @@
   $('contractAudience').addEventListener('change', updateContractFields);
   $('documentCategory').addEventListener('change', () => { $('contractAudience').value = $('documentCategory').value === 'employees' ? 'employee' : $('documentCategory').value === 'clients' ? 'client' : 'other'; updateContractFields(); });
   function readDraft() {
-    return { ...blank(), dossier: current.kind === 'template' ? null : readDossier(), parentDocumentId: $('parentDocument').value || null, title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, contractDetails: { language: $('contractLanguage').value, audience: $('contractAudience').value, place: $('contractPlace').value, startDate: $('contractAudience').value === 'client' ? $('contractStartDate').value : '' }, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
+    return { ...blank(), dossier: current.kind === 'template' ? null : readDossier(), parentDocumentId: $('parentDocument').value || null, title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, contractDetails: { ...current.data.contractDetails, language: $('contractLanguage').value, audience: $('contractAudience').value, place: $('contractPlace').value, startDate: $('contractAudience').value === 'client' ? $('contractStartDate').value : '' }, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
   }
   function leaveAllowed() { return !dirty || confirm('Postoje nesačuvane izmene. Napustiti ovaj nacrt?'); }
   function openDocument(doc, kind = 'document', isNew = false) {
@@ -211,7 +211,7 @@
         title.append(node('strong', doc.title), node('small', 'Verzija ' + doc.revision, { class: 'sign-version' })); recipients.append(node('span', doc.recipient_names || 'Još nema potpisnika'), node('small', doc.recipient_emails || ''));
         status.append(node('span', statuses[doc.status] || doc.status, { class: 'sign-status ' + doc.status }));
         open.addEventListener('click', async () => { open.disabled = true; try { const r = await api({ action: 'get', id: doc.id, kind: params.kind }); openDocument(r.document, params.kind); } catch (e) { message(e.message, true); } finally { open.disabled = false; } });
-        action.append(open); tr.append(title, recipients, node('td', categories[doc.category]), status, node('td', new Date(doc.updated_at).toLocaleDateString('sr-Latn-RS', { timeZone: 'Europe/Vienna' })), action); $('documentRows').append(tr);
+        action.append(open); tr.append(title, recipients, node('td', templateCategories[templateCategory(doc)]), status, node('td', new Date(doc.updated_at).toLocaleDateString('sr-Latn-RS', { timeZone: 'Europe/Vienna' })), action); $('documentRows').append(tr);
       }
       $('signEmpty').hidden = r.items.length !== 0;
       $('emptyText').textContent = library === 'archive' ? 'Arhivirani dokumenti će se prikazati ovde.' : 'Kreiraj prvi dokument ili promeni filtere pretrage.';

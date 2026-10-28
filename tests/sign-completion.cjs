@@ -12,9 +12,9 @@ const {personalizeDocument,validateFields}=require('../lib/sign-personalization.
   await db.exec('set role service_role');
   const flow=async(action,data={},org='marketizo-main')=>(await db.query('select marketizo_sign_flow($1,$2,$3::jsonb) r',[org,action,JSON.stringify(data)])).rows[0].r;
   const command=async(action,payload)=>(await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r',['marketizo-main','emp-miljan',crypto.randomUUID(),action,JSON.stringify(payload)])).rows[0].r;
-  async function fixture(recipients,body='997 € mesečno. Isti uslovi.',category='clients'){
+  async function fixture(recipients,body='997 € mesečno. Isti uslovi.',category='clients',contractDetails={}){
    const id=crypto.randomUUID(),requestId=crypto.randomUUID(),original=Buffer.from('%PDF-reviewed-'+id),sha=hash(original);
-   const draft=validateDraft({title:'Completion fixture',category,recipientCompletion:true,signatureMethod:'ses',content:{version:1,blocks:[{type:'paragraph',runs:[{text:body}]}]},recipients});assertReady(draft);
+   const draft=validateDraft({title:'Completion fixture',category,contractDetails,recipientCompletion:true,signatureMethod:'ses',content:{version:1,blocks:[{type:'paragraph',runs:[{text:body}]}]},recipients});assertReady(draft);
    assert.equal((await command('save',{id,kind:'document',revision:0,data:draft})).ok,true);
    assert.equal((await command('freeze',{id,kind:'document',revision:1})).ok,true,'Email-only recipients can freeze in completion mode');
    await flow('pdf_store',{actor:'emp-miljan',documentId:id,revision:2,pdfBase64:original.toString('base64'),pdfSha256:sha,renderer:'fixture'});
@@ -63,6 +63,13 @@ const {personalizeDocument,validateFields}=require('../lib/sign-personalization.
   assert.equal((await flow('completion_submit',{sessionDigest:employee.sessions[0],fields:{name:'Different',personalId:'TEST-ID'}})).status,409,'Owner supplied fields cannot be changed');
   assert.equal((await flow('completion_submit',{sessionDigest:employee.sessions[0],fields:{personalId:'TEST-ID'}})).ok,true);
   const empDoc=personalizeDocument((await flow('completion_render_data',{sessionDigest:employee.sessions[0]})).document);assert.match(empDoc.content.blocks[0].runs[0].text,/Employee Test, JMBG TEST-ID, sa adresom Test 2/);
+  const contractor=await fixture([{email:'contractor@example.com',partyType:'business'}], 'Naknada: [MESEČNA NAKNADA U EUR]. Bonus: [BONUS I USLOVI]', 'employees', {audience:'contractor',compensation:{monthlyFee:'1500',bonus:'Nema ugovorenog bonusa.'}});
+  const contractorSession=contractor.sessions[0];
+  assert.equal((await flow('completion_submit',{sessionDigest:contractorSession,fields:{monthlyFee:'1',bonus:'99%'}})).status,400);
+  assert.equal((await flow('completion_submit',{sessionDigest:contractorSession,fields:{name:'Test Contractor',company:'Test PR',taxId:'TEST',address:'Fixture 1',country:'RS'}})).ok,true);
+  const contractorInput=(await flow('completion_render_data',{sessionDigest:contractorSession})).document;
+  assert.deepEqual(contractorInput.contractDetails.compensation,{monthlyFee:'1500',bonus:'Nema ugovorenog bonusa.'});
+  assert.equal(personalizeDocument(validateDraft(contractorInput)).content.blocks[0].runs[0].text,'Naknada: 1500 EUR. Bonus: Nema ugovorenog bonusa.');
   const prefilled=await fixture([{name:'Complete Test',email:'filled@example.com',country:'AT',address:'Already filled 4',company:'Complete Ltd',taxId:'TEST-TAX',partyType:'business'}]);
   const fullView=await flow('link_view',{sessionDigest:prefilled.sessions[0]});assert.equal(fullView.completion.complete,true,'All admin supplied fields skip form');assert.equal(fullView.completion.allComplete,true);
   const multi=await fixture([{name:'',email:'a@example.com',country:'',partyType:'employee'},{name:'',email:'b@example.com',country:'',partyType:'employee'}]);

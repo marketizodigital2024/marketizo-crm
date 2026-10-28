@@ -20,9 +20,9 @@
  function show(){config.onOpen();$('quickSend').hidden=false;$('quickSuccessLinks').replaceChildren();$('quickConfirm').checked=false;$('quickReference').value='';$('quickReviewer').value=config.sender?.name||'';}
  function templates(){
   const lang=$('quickLanguage').value;
-  const items=config.templates.filter(t=>t.category===(state.audience==='client'?'clients':'employees')&&(/(?:—|-)\s*DE\s*$/i.test(t.title)?'de':'sr')===lang);
+  const items=config.templates.filter(t=>t.category===(state.audience==='client'?'clients':'employees')&&(state.audience==='client'||(t.contractDetails?.audience==='contractor'?'contractor':'employee')===state.audience)&&(/(?:—|-)\s*DE\s*$/i.test(t.title)?'de':'sr')===lang);
   if(!items.some(t=>t.id===state.templateId))state.templateId='';
-  $('quickTemplates').replaceChildren(...items.map(t=>{const b=node('button',null,{type:'button',class:'quick-template','aria-pressed':String(t.id===state.templateId)});b.append(node('strong',t.title),node('span',t.category==='clients'?'Ugovor za klijenta':'Ugovor za zaposlenog ili saradnika'));b.addEventListener('click',()=>{state.templateId=t.id;templates();});return b;}));
+  $('quickTemplates').replaceChildren(...items.map(t=>{const b=node('button',null,{type:'button',class:'quick-template','aria-pressed':String(t.id===state.templateId)});b.append(node('strong',t.title),node('span',t.category==='clients'?'Ugovor za klijenta':state.audience==='contractor'?'Ugovor za saradnika':'Ugovor za zaposlenog'));b.addEventListener('click',()=>{state.templateId=t.id;templates();});return b;}));
   $('quickNoTemplates').hidden=items.length>0;controls(false);
  }
  function identity(values={}){
@@ -32,7 +32,12 @@
   const source=state.source,recipient=source.recipients?.[0]||{};
   $('quickChosenTemplate').textContent=source.title;$('quickEmail').value=recipient.email||'';
   const audience=source.contractDetails?.audience;
-  $('quickPartyType').value=recipient.partyType||(audience==='employee'?'employee':audience==='contractor'?'individual':state.audience==='client'?'business':'individual');
+  $('quickPartyType').value=recipient.partyType||(audience==='employee'?'employee':audience==='contractor'?'business':state.audience==='client'?'business':'individual');
+  const contractor=audience==='contractor';
+  $('quickContractorTerms').hidden=!contractor;
+  $('quickMonthlyFee').required=contractor;$('quickBonus').required=contractor;
+  $('quickMonthlyFee').value=source.contractDetails?.compensation?.monthlyFee||'';
+  $('quickBonus').value=source.contractDetails?.compensation?.bonus||'';
   identity(recipient);$('quickPrefill').open=false;$('quickPlace').value=source.contractDetails?.place||'';$('quickStartDate').value=source.contractDetails?.startDate||'';$('quickStartLabel').hidden=audience!=='client';
   state.contacts=config.people.filter(p=>p.kind===(state.audience==='client'?'client':'employee'));
   $('quickContact').replaceChildren(node('option','Ručni unos mejla',{value:''}),...state.contacts.map((p,i)=>node('option',p.name+(p.email?' · '+p.email:''),{value:String(i)})));
@@ -41,7 +46,7 @@
  function data(){
   const recipient={...(state.source.recipients?.[0]||{}),role:'counterparty',email:$('quickEmail').value.trim().toLowerCase(),partyType:$('quickPartyType').value};
   document.querySelectorAll('[data-quick-field]').forEach(e=>recipient[e.dataset.quickField]=e.value.trim());recipient.country=recipient.country.toUpperCase();
-  return {...structuredClone(state.source),recipientCompletion:true,recipients:[recipient],contractDetails:{...state.source.contractDetails,place:$('quickPlace').value.trim(),startDate:$('quickStartDate').value}};
+  return {...structuredClone(state.source),recipientCompletion:true,recipients:[recipient],contractDetails:{...state.source.contractDetails,place:$('quickPlace').value.trim(),startDate:$('quickStartDate').value,...(state.source.contractDetails?.audience==='contractor'?{compensation:{monthlyFee:$('quickMonthlyFee').value.trim(),bonus:$('quickBonus').value.trim()}}:{})}};
  }
  async function archivePrepared(){
   if(!state.record||state.sendPending)return;
@@ -106,7 +111,7 @@
  async function start(audience){if(busy||!config)return;state={audience,templateId:'',step:1};show();$('quickEmail').value='';$('quickLanguage').value='sr';templates();phase(1);}
  async function resume(doc){
   if(busy||!config)return;
-  state={audience:doc.data.category==='clients'?'client':'employee',source:structuredClone(doc.data),record:structuredClone(doc),resumed:true,templateId:'',frozenFingerprint:fingerprint(doc.data)};show();recipientStep();
+  state={audience:doc.data.contractDetails?.audience==='contractor'?'contractor':doc.data.category==='clients'?'client':'employee',source:structuredClone(doc.data),record:structuredClone(doc),resumed:true,templateId:'',frozenFingerprint:fingerprint(doc.data)};show();recipientStep();
   if(doc.status==='ready'){
    controls(true);
    try{await api({action:'requestStatus',id:doc.id});state.sent=true;$('quickSuccessTitle').textContent='Ugovor je već predat na potpisivanje.';$('quickSuccessText').textContent='Vrati se na listu ugovora da proveriš njegov status.';phase(4);return;}
@@ -115,7 +120,7 @@
   }
  }
  $('quickLanguage').addEventListener('change',templates);
- $('quickChooseNext').addEventListener('click',async()=>{if(busy||!state.templateId)return;controls(true);message('Učitavamo izabrani ugovor…');try{const r=await api({action:'get',kind:'template',id:state.templateId});state.source={...r.document.data,dossier:null,parentDocumentId:null,recipients:structuredClone(state.recipientDraft||[]),recipientCompletion:true};recipientStep();}catch(e){message(e.message,true);}finally{controls(false);}});
+ $('quickChooseNext').addEventListener('click',async()=>{if(busy||!state.templateId)return;controls(true);message('Učitavamo izabrani ugovor…');try{const r=await api({action:'get',kind:'template',id:state.templateId});if(state.audience!=='client'&&(r.document.data.contractDetails?.audience==='contractor'?'contractor':'employee')!==state.audience)throw Error('Izaberi šablon za odgovarajuću vrstu angažovanja.');state.source={...r.document.data,dossier:null,parentDocumentId:null,recipients:structuredClone(state.recipientDraft||[]),recipientCompletion:true};recipientStep();}catch(e){message(e.message,true);}finally{controls(false);}});
  $('quickContact').addEventListener('change',()=>{const p=state.contacts[Number($('quickContact').value)];if($('quickContact').value===''||!p)return;$('quickEmail').value=p.email||'';identity(p.kind==='client'?{company:p.company||p.name}:{name:p.name});$('quickPrefill').open=true;});
  $('quickRecipient').addEventListener('submit',e=>{e.preventDefault();review();});
  $('quickRecipientBack').addEventListener('click',()=>{state.recipientDraft=data().recipients;phase(1);});
