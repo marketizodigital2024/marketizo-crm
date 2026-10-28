@@ -28,7 +28,7 @@ const {PREFIX,TEMPLATE_ID,metadata,stableId,DEFAULT_TEXT}=require('../lib/codeks
     else if(value.startsWith('in.(')){const set=value.slice(4,-1).split(',');where.push(key+' in ('+set.map(v=>{values.push(v);return '$'+values.length;}).join(',')+')');}
     else{const prefix=value.startsWith('not.like.')?'not.like.':value.split('.')[0]+'.',op=prefix==='eq.'?'=':prefix==='like.'?'like':prefix==='not.like.'?'not like':null;if(!op)throw Error('Unexpected operator');values.push(value.slice(prefix.length).replace(/\*/g,'%'));where.push(key+' '+op+' $'+values.length);}
    }
-   const select=u.searchParams.get('select')||'*';if(!/^[a-z0-9_,*]+$/.test(select))throw Error('Unexpected select');
+   let select=u.searchParams.get('select')||'*';if(select.endsWith(',contractDetails:data->contractDetails'))select=select.replace(',contractDetails:data->contractDetails',",data->'contractDetails' as \"contractDetails\"");else if(!/^[a-z0-9_,*]+$/.test(select))throw Error('Unexpected select');
    let sql='select '+select+' from '+table+(where.length?' where '+where.join(' and '):'');const order=u.searchParams.get('order');if(order){if(!/^[a-z_,.]+$/.test(order))throw Error('Unexpected order');sql+=' order by '+order.split(',').map(s=>s.replace('.',' ')).join(',');}
    if(u.searchParams.has('limit'))sql+=' limit '+Number(u.searchParams.get('limit'));if(u.searchParams.has('offset'))sql+=' offset '+Number(u.searchParams.get('offset'));
    result=(await db.query(sql,values)).rows.map(row=>Object.fromEntries(Object.entries(row).map(([k,v])=>[k,v instanceof Uint8Array?'\\x'+Buffer.from(v).toString('hex'):v])));

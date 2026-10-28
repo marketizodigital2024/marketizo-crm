@@ -15,7 +15,7 @@ async function main(){
  const crm={employees:[{id:'emp-miljan',name:'Fixture Owner',active:true}],clients:[]};await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify(crm)]);
  for(const file of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql'])await db.exec(fs.readFileSync(path.join(root,'database',file),'utf8'));
  for(const [title,category] of [['Starter fixture','clients'],['Editor fixture','employees'],['NDA fixture','nda']]){
-  const data={title,category,content:{version:1,blocks:[{type:'paragraph',level:1,runs:[{text:'Unverbindliche Vorlage',bold:false,italic:false,underline:false}]}]},recipients:[],contractDetails:{language:'sr',audience:category==='clients'?'client':'contractor',place:'',startDate:''},governingLaw:'AT',signatureMethod:'ses',legalReview:'pending',note:''};
+  const data={title,category,content:{version:1,blocks:[{type:'paragraph',level:1,runs:[{text:category==='employees'?'Naknada: [MESEČNA NAKNADA U EUR]. Bonus: [BONUS I USLOVI]':'Unverbindliche Vorlage',bold:false,italic:false,underline:false}]}]},recipients:[],contractDetails:{language:'sr',audience:category==='clients'?'client':'contractor',place:'',startDate:''},governingLaw:'AT',signatureMethod:'ses',legalReview:'pending',note:''};
   const saved=(await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r',['marketizo-main','emp-miljan',crypto.randomUUID(),'save',JSON.stringify({id:crypto.randomUUID(),kind:'template',revision:0,data})])).rows[0].r;assert.equal(saved.ok,true);
  }
  const mails=[],errors=[];let server,chrome,ws,origin;
@@ -29,6 +29,7 @@ async function main(){
     if(!allowedTables.has(table))throw Error('Unexpected test table');
     let select=u.searchParams.get('select')||'*';
     if(select==='id,title,status,archived_at,data->dossier,data->parentDocumentId') select=`id,title,status,archived_at,data->'dossier' as dossier,data->'parentDocumentId' as "parentDocumentId"`;
+    else if(select.endsWith(',contractDetails:data->contractDetails')) select=select.replace(',contractDetails:data->contractDetails',",data->'contractDetails' as \"contractDetails\"");
     else if(!/^[a-zA-Z0-9_,*]+$/.test(select))throw Error('Unsafe selection');
     const values=[],where=[];
     for(const [rawKey,value]of u.searchParams){let key=rawKey;if(['select','order','limit','offset'].includes(key))continue;if(key==='data->dossier->>id')key="data->'dossier'->>'id'";else if(key==='data->>note')key="data->>'note'";else if(!/^[a-z_]+$/.test(key))throw Error('Unsafe column');
@@ -84,9 +85,9 @@ async function main(){
   assert.equal(await evaluate('document.scripts.length'),0,'Privacy notice must be readable without scripts or a signing session');
   await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);await until("document.getElementById('connectionStatus')?.textContent.includes('Jednostavan elektronski potpis') && !document.getElementById('newDocument').disabled");
   assert.equal(await evaluate("document.querySelectorAll('[data-new-audience]').length"),3);
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('#templateSelect optgroup')].map(g=>g.label)"),['Klijenti','Zaposleni i saradnici','NDA']);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('#templateSelect optgroup')].map(g=>g.label)"),['Klijenti','NDA','Saradnici']);
   await evaluate("document.querySelector('[data-library=templates]').click()");await until("document.querySelectorAll('#documentRows .sign-template-category').length===3");
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('#documentRows .sign-template-category th')].map(g=>g.textContent)"),['Klijenti','Zaposleni i saradnici','NDA']);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('#documentRows .sign-template-category th')].map(g=>g.textContent)"),['Klijenti','NDA','Saradnici']);
   await evaluate("document.querySelector('[data-library=documents]').click()");await until("document.querySelectorAll('#documentRows tr').length===0");
   await evaluate("document.getElementById('libraryAdvanced').open=true");
   await click('newDocument');await until("!document.getElementById('workspace').hidden");await fill('documentTitle','Browser fixture contract');await fill('documentDossier','new');await fill('dossierName','Fixture Client Dossier');
@@ -179,7 +180,7 @@ async function main(){
   assert.ok(await evaluate("document.getElementById('documentPages').textContent.includes('Fixture address')"));
   // Everyday sending uses the short flow; no editor, dossier or separate freeze step.
   await send('Page.navigate',{url:origin+'/marketizo-sign'},sessionId);
-  await until("document.querySelectorAll('[data-quick-audience]:not(:disabled)').length===2");
+  await until("document.querySelectorAll('[data-quick-audience]:not(:disabled)').length===3");
   assert.equal(await evaluate("document.getElementById('libraryAdvanced').open"),false);
   await evaluate("document.querySelector('[data-quick-audience=client]').click()");
   await until("!document.getElementById('quickChoose').hidden && document.querySelectorAll('#quickTemplates button').length===1");
@@ -209,12 +210,21 @@ async function main(){
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false},sessionId);
   assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth+1'),false,'The sending flow fits a phone');
   fs.writeFileSync(path.join(out,'sign-quick-send.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
-  await click('quickDone');await evaluate("document.querySelector('[data-quick-audience=employee]').click()");
+  await click('quickDone');await evaluate("document.querySelector('[data-quick-audience=contractor]').click()");
   await until("!document.getElementById('quickChoose').hidden && document.querySelectorAll('#quickTemplates button').length===1");
   assert.equal(await evaluate("document.querySelector('#quickTemplates button').textContent.includes('Editor fixture')"),true);
   await evaluate("document.querySelector('#quickTemplates button').click()");await click('quickChooseNext');
   await until("!document.getElementById('quickRecipient').hidden && !document.getElementById('quickPrepare').disabled");
-  assert.equal(await evaluate("document.getElementById('quickPartyType').value"),'individual');
+  assert.equal(await evaluate("document.getElementById('quickPartyType').value"),'business');
+  assert.equal(await evaluate("document.getElementById('quickContractorTerms').hidden"),false);
+  await fill('quickEmail','contractor@example.invalid');await fill('quickMonthlyFee','1200,50');await fill('quickBonus','Nema ugovorenog bonusa.');
+  fs.writeFileSync(path.join(out,'sign-contractor-terms.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
+  await click('quickPrepare');await until("!document.getElementById('quickReview').hidden && !document.getElementById('quickReviewBack').disabled");
+  assert.ok(await evaluate("document.getElementById('quickPreview').textContent.includes('1200,50 EUR')"));
+  assert.ok(await evaluate("document.getElementById('quickPreview').textContent.includes('Nema ugovorenog bonusa.')"));
+  const contractorSaved=(await db.query("select data from marketizo_sign_documents where title='Editor fixture' and archived_at is null")).rows[0].data;
+  assert.deepEqual(contractorSaved.contractDetails.compensation,{monthlyFee:'1200.50',bonus:'Nema ugovorenog bonusa.'});
+  assert.equal(mails.some(m=>m.to==='contractor@example.invalid'),false,'Preparing a contractor PDF never sends it');
   await click('quickCancel');assert.deepEqual(errors,[]);
   console.log('PASS: real Chrome -> real API -> PostgreSQL -> PDF -> encrypted invitation -> inline PDF without OTP -> explicit acceptance -> final receipt email -> offline evidence verification, including mobile width; SMTP and owner login are isolated fixtures.');
  }finally{ws?.close();chrome?.kill();server?.closeAllConnections();await new Promise(resolve=>server?server.close(resolve):resolve());await db.close();}
