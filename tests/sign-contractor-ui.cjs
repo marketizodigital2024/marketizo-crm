@@ -28,5 +28,11 @@ window.MarketizoQuickSign.init({templates,people:[],sender:{name:'Fixture'},send
   if(i===2){assert.deepEqual(JSON.parse(JSON.stringify(edited.data.contractDetails.compensation)),{monthlyFee:'1200',bonus:'Nema bonusa.'});assert.equal(edited.data.recipients[0].partyType,'business');}
   else assert.equal(edited.data.contractDetails.compensation,undefined);
  }
+ const variants=[{id:'full',title:'SMM full-time — SR',category:'employees',contractDetails:{audience:'contractor',engagement:'full_time'}},{id:'part',title:'SMM part-time — SR',category:'employees',contractDetails:{audience:'contractor',engagement:'part_time'}},{id:'legacy',title:'Scenarista, 20 sati — SR',category:'employees',contractDetails:{audience:'contractor'}}];
+ window.MarketizoQuickSign.setTemplates(variants);await buttons[2].click();
+ get('quickEngagement').value='part_time';get('quickEngagement').listeners.change();assert.equal(get('quickTemplates').children.length,2);
+ get('quickEngagement').value='full_time';get('quickEngagement').listeners.change();assert.equal(get('quickTemplates').children.length,1);
+ assert.equal(get('quickTemplates').children[0].children[0].textContent,'SMM full-time — SR');
+ assert.equal(get('quickIdentityFields').children.some(w=>w.children[0]['data-quick-field']==='capacity'),false);
  console.log('PASS separate client/employee/contractor selectors and admin-only compensation payload');
 })().catch(e=>{console.error(e);process.exitCode=1;});

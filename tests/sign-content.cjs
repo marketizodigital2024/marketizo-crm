@@ -26,3 +26,11 @@ assert.throws(() => validateDraft({ ...organized, dossier: { ...organized.dossie
 assert.throws(() => validateDraft({ ...organized, dossier: null }));
 assert.throws(() => validateDraft({ ...organized, dossier: { ...organized.dossier, type: 'unknown' } }));
 assert.equal(validateDraft(fixture()).dossier, null); // Existing documents remain readable.
+
+{
+ const fixture={title:'Variant fixture',category:'employees',content:{version:1,blocks:[]},recipients:[],contractDetails:{audience:'contractor',engagement:'part_time'}};
+ assert.equal(validateDraft(fixture,'template').contractDetails.engagement,'part_time');
+ assert.equal(validateDraft({...fixture,contractDetails:{audience:'employee',engagement:'full_time'}}).contractDetails.engagement,'full_time');
+ assert.throws(()=>validateDraft({...fixture,contractDetails:{audience:'contractor',engagement:'other'}}));
+ assert.equal(validateDraft({...fixture,category:'clients',contractDetails:{audience:'client',engagement:'full_time'}}).contractDetails.engagement,undefined);
+}

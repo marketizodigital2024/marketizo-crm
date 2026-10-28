@@ -1,7 +1,7 @@
 'use strict';
 (() => {
  const $=id=>document.getElementById(id);
- const fieldLabels={name:'Ime i prezime',company:'Naziv firme',address:'Adresa',taxId:'Poreski broj / PIB',registrationId:'Registracioni broj firme',personalId:'JMBG / identifikacioni broj',country:'Zemlja (AT, DE, RS…)',capacity:'Funkcija / ovlašćenje'};
+ const fieldLabels={name:'Ime i prezime',company:'Naziv firme',address:'Adresa',taxId:'Poreski broj / PIB',registrationId:'Registracioni broj firme',personalId:'JMBG / identifikacioni broj',country:'Zemlja (AT, DE, RS…)'};
  let config=null,state=null,busy=false;
  function fingerprint(value){if(Array.isArray(value))return '['+value.map(fingerprint).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+fingerprint(value[k])).join(',')+'}';return JSON.stringify(value);}
  function node(tag,text,attrs={}){const e=document.createElement(tag);if(text!==null)e.textContent=text;for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;}
@@ -18,15 +18,17 @@
  }
  function phase(step){state.step=step;for(const [id,n]of [['quickChoose',1],['quickRecipient',2],['quickReview',3],['quickSuccess',4]])$(id).hidden=n!==step;$('quickProgress').textContent=step===4?'Slanje je pripremljeno':`${step} / 3 · ${['','Izbor ugovora','Primalac','Pregled i slanje'][step]}`;message('');controls(false);$('quickSend').scrollIntoView({block:'start',behavior:'smooth'});}
  function show(){config.onOpen();$('quickSend').hidden=false;$('quickSuccessLinks').replaceChildren();$('quickConfirm').checked=false;$('quickReference').value='';$('quickReviewer').value=config.sender?.name||'';}
+ function engagement(template){return template.contractDetails?.engagement||(/\b(?:part[ -]?time|20\s*(?:sati|h))\b/i.test(template.title)?'part_time':/\bfull[ -]?time\b/i.test(template.title)?'full_time':'unspecified');}
+ function engagementLabel(template){return ({full_time:'Full-time',part_time:'Part-time',unspecified:'Još nije razvrstano'})[engagement(template)];}
  function templates(){
-  const lang=$('quickLanguage').value;
-  const items=config.templates.filter(t=>t.category===(state.audience==='client'?'clients':'employees')&&(state.audience==='client'||(t.contractDetails?.audience==='contractor'?'contractor':'employee')===state.audience)&&(/(?:—|-)\s*DE\s*$/i.test(t.title)?'de':'sr')===lang);
+  const lang=$('quickLanguage').value,variant=state.audience==='client'?'':$('quickEngagement').value;$('quickEngagementLabel').hidden=state.audience==='client';
+  const items=config.templates.filter(t=>t.category===(state.audience==='client'?'clients':'employees')&&(state.audience==='client'||(t.contractDetails?.audience==='contractor'?'contractor':'employee')===state.audience)&&(!variant||engagement(t)===variant)&&(/(?:—|-)\s*DE\s*$/i.test(t.title)?'de':'sr')===lang);
   if(!items.some(t=>t.id===state.templateId))state.templateId='';
-  $('quickTemplates').replaceChildren(...items.map(t=>{const b=node('button',null,{type:'button',class:'quick-template','aria-pressed':String(t.id===state.templateId)});b.append(node('strong',t.title),node('span',t.category==='clients'?'Ugovor za klijenta':state.audience==='contractor'?'Ugovor za saradnika':'Ugovor za zaposlenog'));b.addEventListener('click',()=>{state.templateId=t.id;templates();});return b;}));
-  $('quickNoTemplates').hidden=items.length>0;controls(false);
+  $('quickTemplates').replaceChildren(...items.map(t=>{const b=node('button',null,{type:'button',class:'quick-template','aria-pressed':String(t.id===state.templateId)});b.append(node('strong',t.title),node('span',t.category==='clients'?'Ugovor za klijenta':(state.audience==='contractor'?'Ugovor za saradnika':'Ugovor za zaposlenog')+' · '+engagementLabel(t)));b.addEventListener('click',()=>{state.templateId=t.id;templates();});return b;}));
+  $('quickNoTemplates').textContent=variant?'Nema šablona za izabranu varijantu. Izaberi drugu varijantu ili sačuvaj poseban šablon.':'Nema šablona na izabranom jeziku. Promeni jezik ili dodaj šablon u biblioteci.';$('quickNoTemplates').hidden=items.length>0;controls(false);
  }
  function identity(values={}){
-  $('quickIdentityFields').replaceChildren(...Object.entries(fieldLabels).map(([key,label])=>{const wrap=node('label',label),input=node('input',null,{id:'quickField-'+key,type:'text','data-quick-field':key,maxlength:String(({name:160,company:180,address:300,capacity:120,country:2})[key]||80)});input.value=values[key]||'';if(key==='country')input.pattern='[A-Za-z]{2}';wrap.append(input);return wrap;}));
+  $('quickIdentityFields').replaceChildren(...Object.entries(fieldLabels).map(([key,label])=>{const wrap=node('label',label),input=node('input',null,{id:'quickField-'+key,type:'text','data-quick-field':key,maxlength:String(({name:160,company:180,address:300,capacity:120,country:2})[key]||80)});input.value=values[key]||'';input.placeholder=({name:'Npr. Marko Marković',company:'Npr. Marko Marković PR Studio Primer',address:'Npr. Ulica primera 12, 11000 Beograd',taxId:'Npr. 123456789',registrationId:'Npr. 12345678',personalId:'JMBG / identifikacioni broj',country:'Npr. RS'})[key]||'';if(key==='country')input.pattern='[A-Za-z]{2}';wrap.append(input);return wrap;}));
  }
  function recipientStep(){
   const source=state.source,recipient=source.recipients?.[0]||{};
@@ -108,7 +110,7 @@
   controls(true);
   try{if(!state?.sent&&!state?.resumed&&!state?.sendPending)await archivePrepared();$('quickSend').hidden=true;state=null;config.onExit();}catch(e){message(e.message,true);}finally{controls(false);}
  }
- async function start(audience){if(busy||!config)return;state={audience,templateId:'',step:1};show();$('quickEmail').value='';$('quickLanguage').value='sr';templates();phase(1);}
+ async function start(audience){if(busy||!config)return;state={audience,templateId:'',step:1};show();$('quickEmail').value='';$('quickLanguage').value='sr';$('quickEngagement').value='';templates();phase(1);}
  async function resume(doc){
   if(busy||!config)return;
   state={audience:doc.data.contractDetails?.audience==='contractor'?'contractor':doc.data.category==='clients'?'client':'employee',source:structuredClone(doc.data),record:structuredClone(doc),resumed:true,templateId:'',frozenFingerprint:fingerprint(doc.data)};show();recipientStep();
@@ -119,8 +121,8 @@
    await review(true);
   }
  }
- $('quickLanguage').addEventListener('change',templates);
- $('quickChooseNext').addEventListener('click',async()=>{if(busy||!state.templateId)return;controls(true);message('Učitavamo izabrani ugovor…');try{const r=await api({action:'get',kind:'template',id:state.templateId});if(state.audience!=='client'&&(r.document.data.contractDetails?.audience==='contractor'?'contractor':'employee')!==state.audience)throw Error('Izaberi šablon za odgovarajuću vrstu angažovanja.');state.source={...r.document.data,dossier:null,parentDocumentId:null,recipients:structuredClone(state.recipientDraft||[]),recipientCompletion:true};recipientStep();}catch(e){message(e.message,true);}finally{controls(false);}});
+ $('quickLanguage').addEventListener('change',templates);$('quickEngagement').addEventListener('change',templates);
+ $('quickChooseNext').addEventListener('click',async()=>{if(busy||!state.templateId)return;controls(true);message('Učitavamo izabrani ugovor…');try{const r=await api({action:'get',kind:'template',id:state.templateId});if(state.audience!=='client'&&(r.document.data.contractDetails?.audience==='contractor'?'contractor':'employee')!==state.audience)throw Error('Izaberi šablon za odgovarajuću vrstu angažovanja.');state.source={...r.document.data,contractDetails:{...r.document.data.contractDetails,...(state.audience!=='client'&&engagement(r.document.data)!=='unspecified'?{engagement:engagement(r.document.data)}:{})},dossier:null,parentDocumentId:null,recipients:structuredClone(state.recipientDraft||[]),recipientCompletion:true};recipientStep();}catch(e){message(e.message,true);}finally{controls(false);}});
  $('quickContact').addEventListener('change',()=>{const p=state.contacts[Number($('quickContact').value)];if($('quickContact').value===''||!p)return;$('quickEmail').value=p.email||'';identity(p.kind==='client'?{company:p.company||p.name}:{name:p.name});$('quickPrefill').open=true;});
  $('quickRecipient').addEventListener('submit',e=>{e.preventDefault();review();});
  $('quickRecipientBack').addEventListener('click',()=>{state.recipientDraft=data().recipients;phase(1);});

@@ -110,6 +110,10 @@ async function main(){
   await send('Page.navigate',{url:origin+'/sign#'+token},sessionId);
   await until("!document.getElementById('detailsSection').hidden && !document.getElementById('completeDetails').disabled");
   assert.equal(await evaluate("document.querySelector('[data-detail=name]').readOnly"),true);
+  assert.equal(await evaluate("document.querySelector('[data-detail=capacity]')===null"),true);
+  assert.equal(await evaluate("document.querySelector('[data-detail=company]').placeholder.length>0"),true);
+  assert.equal(await evaluate("document.querySelector('#signSteps [aria-current=step]').textContent"),'1. Popunite podatke');
+  const detailsOut=path.join(root,'browser-results');fs.mkdirSync(detailsOut,{recursive:true});fs.writeFileSync(path.join(detailsOut,'sign-details-guided.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
   assert.equal(await evaluate("document.getElementById('signatureSection').hidden"),true);
   await evaluate("document.querySelector('[data-detail=company]').value='Fixture Client Ltd';document.querySelector('[data-detail=address]').value='Fixture Street 12';document.querySelector('[data-detail=taxId]').value='TEST-TAX';document.getElementById('completeDetails').click()");
   await until("document.querySelectorAll('#documentPages .document-page-text').length>0 && document.getElementById('documentPages').getAttribute('aria-busy')==='false' && !document.getElementById('acceptDocument').disabled && document.getElementById('title').textContent==='Browser fixture contract' && document.getElementById('message').textContent===''");
@@ -124,6 +128,9 @@ async function main(){
   const out=path.join(root,'browser-results');fs.mkdirSync(out,{recursive:true});
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false},sessionId);await sleep(300);assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth+1'),false);
   fs.writeFileSync(path.join(out,'sign-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
+  assert.equal(await evaluate("document.getElementById('signatureSection').hidden"),true,'Read the agreement before entering the signature step');
+  await click('startSigning');
+  assert.equal(await evaluate("document.querySelector('#signSteps [aria-current=step]').textContent"),'3. Potpišite');
   await fill('signerName','Fixture Signer');
   await click('enlargeSignature'); assert.equal(await evaluate("document.getElementById('signatureDialog').open"),true);
   const rect=await evaluate("(()=>{const r=document.getElementById('largeSignatureCanvas').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()");
