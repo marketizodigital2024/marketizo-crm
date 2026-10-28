@@ -59,6 +59,8 @@ try:
             assert page.locator('#startSigning').inner_text()==('Pređi na potpis' if language=='sr' else 'Zur Unterschrift')
             assert ('Unterschrift' not in page.locator('#signatureSection').inner_text()) if language=='sr' else ('potpis' not in page.locator('#signatureSection').inner_text())
             page.screenshot(path=str(out/f'sign-webkit-mobile-{language}.png'))
+            assert not page.locator('#signatureSection').is_visible()
+            assert page.locator('#signSteps [aria-current=step]').inner_text()==('2. Pročitajte ugovor' if language=='sr' else '2. Vertrag lesen')
             page.locator('#startSigning').click();page.locator('#enlargeSignature').click();assert page.locator('#signatureDialog').is_visible()
             page.locator('#closeSignatureDialog').click()
             assert page.locator('#acceptTerms').is_checked()==False
