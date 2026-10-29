@@ -39,7 +39,7 @@ class SignPdfTests(unittest.TestCase):
 
     def test_client_email_added_after_reading_keeps_signature_on_one_page(self):
         doc = self.document()
-        doc.update(note="marketizo-onboarding:v3", category="clients", recipientCompletion=False,
+        doc.update(note="marketizo-onboarding:v3", category="clients", recipientCompletion=True,
                    recipients=[{"name":"Marketizo Test", "company":"TEST", "email":"", "role":"counterparty"}],
                    content={"version":1,"blocks":[{"type":"paragraph","runs":[{"text":"NEOBAVEZUJUĆI TEST"}]}]})
         original = helper.render_original({"document":doc})

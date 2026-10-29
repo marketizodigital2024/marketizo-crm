@@ -171,7 +171,7 @@ class OnboardingSignatureBlock(Flowable):
             paper_text(c, "Naziv firme", 267, 123, size=9, bold=True)
             paper_text(c, p.get("name") or "________________", 0, 107, size=10.5, max_height=25)
             paper_text(c, p.get("company") or "________________", 267, 107, size=10.5, max_height=25)
-            paper_text(c, p.get("email", ""), 0, 76, width=self.width, size=9)
+            paper_text(c, " · ".join(v for v in [p.get("email", ""), ("Zemlja: " + p["country"]) if p.get("country") else ""] if v), 0, 76, width=self.width, size=9)
             paper_text(c, "Potpis klijenta", 0, 56, size=9, bold=True)
             paper_text(c, "Datum potpisa", 300, 56, width=190, size=9, bold=True)
             c.setStrokeColor(colors.HexColor("#CBD1D9")); c.line(0, 18, 270, 18)
@@ -202,7 +202,7 @@ def render_original(payload):
     de = doc.get("contractDetails", {}).get("language") == "de"
     story = [Paragraph(plain(doc["title"], 180), s["title"])]
     for recipient in doc.get("recipients", []):
-        if recipient.get("role") == "marketizo" or (not doc.get("recipientCompletion") and not any(recipient.get(k) for k in ("address", "taxId", "registrationId"))):
+        if onboarding or recipient.get("role") == "marketizo" or (not doc.get("recipientCompletion") and not any(recipient.get(k) for k in ("address", "taxId", "registrationId"))):
             continue
         info = [recipient.get("company") or recipient.get("name", "")]
         if recipient.get("company") and recipient.get("name"): info.append(("Vertreten durch: " if de else "Zastupnik: ") + recipient["name"])
