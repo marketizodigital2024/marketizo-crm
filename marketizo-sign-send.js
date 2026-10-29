@@ -34,6 +34,7 @@
  }
  function recipientStep(){
   const source=state.source,recipient=source.recipients?.[0]||{};
+  $('quickEmail').required=!onboarding();$('quickEmailLabel').textContent=onboarding()?'Mejl klijenta (opciono — klijent ga dopunjava pre potpisa)':'Mejl primaoca';$('quickSendEmail').hidden=onboarding();
   $('quickChosenTemplate').textContent=source.title;$('quickEmail').value=recipient.email||'';
   const audience=source.contractDetails?.audience;
   $('quickPartyType').value=recipient.partyType||(audience==='employee'?'employee':audience==='contractor'?'business':state.audience==='client'?'business':'individual');
@@ -45,7 +46,7 @@
   identity(recipient);$('quickPrefill').open=false;$('quickPlace').value=source.contractDetails?.place||'';$('quickStartDate').value=source.contractDetails?.startDate||'';$('quickStartLabel').hidden=audience!=='client';
   $('quickPrefill').open=onboarding();$('quickStartLabel').hidden=onboarding()||audience!=='client';
   $('quickRecipientTitle').textContent=onboarding()?'2. Podaci klijenta sa onboarding sastanka':'2. Kome šalješ ugovor?';
-  $('quickRecipientHint').textContent=onboarding()?'Zajedno sa klijentom unesite ime, firmu, mejl i zemlju. Datum i potpis beleže se pri potpisivanju.':'Dovoljan je mejl. Primalac sam dopunjava podatke koji nedostaju, pregleda ceo ugovor i potpisuje.';
+  $('quickRecipientHint').textContent=onboarding()?'Unesite ime, firmu i zemlju. Mejl nije potreban za link: klijent ga sam unosi ili potvrđuje pre potpisa. Datum i potpis beleže se pri potpisivanju.':'Dovoljan je mejl. Primalac sam dopunjava podatke koji nedostaju, pregleda ceo ugovor i potpisuje.';
   $('quickPrefillTitle').textContent=onboarding()?'Podaci klijenta · obavezno':'Unesi podatke unapred (opciono)';
   state.contacts=config.people.filter(p=>p.kind===(state.audience==='client'?'client':'employee'));
   $('quickContact').replaceChildren(node('option','Ručni unos mejla',{value:''}),...state.contacts.map((p,i)=>node('option',p.name+(p.email?' · '+p.email:''),{value:String(i)})));
@@ -88,7 +89,7 @@
    state.record=prepared.document;state.preparedSha=prepared.pdfSha256;state.frozenFingerprint=stamp;state.pdfPending=null;
    const preview=await api({action:'preparedPreview',id:state.record.id});
    if(preview.pdfSha256!==state.preparedSha)throw Error('Pregled ne odgovara poslednjem ugovoru. Pokušaj ponovo.');
-   renderPreview(preview);$('quickDeliverySummary').textContent=state.record.title+' → '+state.record.data.recipients[0].email;
+   renderPreview(preview);$('quickDeliverySummary').textContent=state.record.title+' → '+(state.record.data.recipients[0].email||state.record.data.recipients[0].name);
    $('quickReviewHint').textContent=onboarding()?'Prođite ceo dokument sa klijentom. Zatim napravite njegov link i otvorite ga za potpis pre završetka sastanka.':'Ovo je ceo ugovor koji šalješ. Primalac će dopuniti prazne lične podatke pre potpisa.';
    $('quickConfirm').checked=false;$('quickReviewDetails').open=!$('quickReviewer').value;phase(3);
   }catch(e){if(state.record?.revision){try{const latest=await api({action:'get',id:state.record.id});state.record=latest.document;if(state.record.status==='ready')state.frozenFingerprint=fingerprint(state.record.data);}catch{}}message(e.message,true);}finally{controls(false);}

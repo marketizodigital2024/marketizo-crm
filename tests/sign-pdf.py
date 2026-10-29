@@ -37,6 +37,22 @@ class SignPdfTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'one A4 page'):
             helper.render_original({"document":doc})
 
+    def test_client_email_added_after_reading_keeps_signature_on_one_page(self):
+        doc = self.document()
+        doc.update(note="marketizo-onboarding:v3", category="clients", recipientCompletion=False,
+                   recipients=[{"name":"Marketizo Test", "company":"TEST", "email":"", "role":"counterparty"}],
+                   content={"version":1,"blocks":[{"type":"paragraph","runs":[{"text":"NEOBAVEZUJUĆI TEST"}]}]})
+        original = helper.render_original({"document":doc})
+        result = helper.render_final({"originalBase64":original['base64'], "originalSha256":original['sha256'],
+            "manifestSha256":"a"*64, "evidence":{"title":doc['title'], "requestId":"00000000-0000-4000-8000-000000000001", "signers":[
+                {"name":"Marketizo Test", "email":"", "receiptEmail":"office@example.com", "acceptedAt":"2026-10-29T18:30:00Z", "consentText":"NEOBAVEZUJUĆI TEST", "strokes":[]}
+            ]}})
+        raw=base64.b64decode(result['base64'])
+        self.assertTrue(raw.startswith(base64.b64decode(original['base64'])))
+        reader=PdfReader(io.BytesIO(raw))
+        self.assertEqual(len(reader.pages),1)
+        self.assertIn('29.10.2026.',reader.pages[0].extract_text())
+
     def test_onboarding_readability_and_single_client_signature(self):
         doc = self.document()
         doc.update(note="marketizo-onboarding:v1", category="clients", recipientCompletion=False,

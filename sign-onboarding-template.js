@@ -20,10 +20,10 @@
         block('Potvrđujem da sam pročitao/la pravila, da su mi objašnjena i da sam imao/la priliku da postavim pitanja. Razumem i prihvatam navedene obaveze.')
       ] },
       recipients: [], contractDetails: { language: 'sr', audience: 'client', place: '', startDate: '' },
-      governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: 'marketizo-onboarding:v2', dossier: null, parentDocumentId: null
+      governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: 'marketizo-onboarding:v3', dossier: null, parentDocumentId: null
     };
   }
-  const template = { create, isDocument: doc => /^marketizo-onboarding:v[12]$/.test(doc?.note || '') };
+  const template = { create, isDocument: doc => /^marketizo-onboarding:v[123]$/.test(doc?.note || '') };
   if (typeof module !== 'undefined') module.exports = template;
   else window.MarketizoOnboarding = template;
 })();

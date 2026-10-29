@@ -190,8 +190,8 @@ class OnboardingSignatureBlock(Flowable):
 def render_original(payload):
     doc = payload["document"]
     s = styles()
-    onboarding = bool(re.fullmatch(r"marketizo-onboarding:v[12]", doc.get("note", "")))
-    compact_onboarding = doc.get("note") == "marketizo-onboarding:v2"
+    onboarding = bool(re.fullmatch(r"marketizo-onboarding:v[123]", doc.get("note", "")))
+    compact_onboarding = doc.get("note") in ("marketizo-onboarding:v2", "marketizo-onboarding:v3")
     if onboarding:
         s["body"] = ParagraphStyle("onboarding-body", parent=s["body"], fontSize=11.5, leading=16.5, spaceAfter=7)
         s["heading"] = ParagraphStyle("onboarding-heading", parent=s["heading"], fontSize=12.5, leading=17, spaceBefore=12, spaceAfter=5)
@@ -324,6 +324,10 @@ def render_final(payload):
             c = Canvas(overlay, pagesize=A4, invariant=1)
             for slot in block["slots"]:
                 signer = next((s for s in evidence["signers"] if s.get("email", "").lower() == slot["email"].lower() and slot["email"]), None)
+                if not signer and layout.get("purpose") == "onboarding" and not slot["email"] and len(evidence["signers"]) == 1:
+                    candidate = evidence["signers"][0]
+                    if candidate.get("name", "").strip().casefold() == slot.get("name", "").strip().casefold():
+                        signer = candidate
                 if not signer:
                     continue
                 if signer.get("strokes"):

@@ -77,7 +77,7 @@ function createHandler(deps = {}) {
    if (body.action === 'accept') {
     if (!UUID.test(body.commandId || '') || !/^[a-f0-9]{64}$/.test(body.pdfSha256 || '') || body.accepted !== true || body.authority !== true) throw new SignError(400, 'Potvrdi dokument, nameru i ovlašćenje.');
     const documentPreview = await preview(digest);
-    const signature = validateSignature(body.signature), payload = { commandId: body.commandId, pdfSha256: body.pdfSha256, signature, accepted: true, authority: true, consentText: documentPreview.consentText };
+    const signature = validateSignature(body.signature), payload = { commandId: body.commandId, pdfSha256: body.pdfSha256, signature, ...(body.receiptEmail!==undefined?{receiptEmail:typeof body.receiptEmail==='string'?body.receiptEmail.trim().toLowerCase():null}:{}), accepted: true, authority: true, consentText: documentPreview.consentText };
     const r = await flow.rpc('link_accept', { ...payload, sessionDigest: digest, payloadSha256: hash(canonical(payload)) });
     await flow.drain(3).catch(() => {}); return json(res, 200, r);
    }
