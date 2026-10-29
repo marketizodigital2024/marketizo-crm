@@ -389,6 +389,13 @@
         onEdit(doc) { openDocument(doc, 'document', true); }
       });
       await list();
+      $('startOnboarding').disabled = !sendingEnabled;
+      $('startOnboarding').addEventListener('click', () => window.MarketizoQuickSign.startOnboarding());
+      $('copyOnboardingLink').addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText($('onboardingAdminLink').value); message('Link do onboarding šablona je kopiran. Otvaranje zahteva admin pristup.'); }
+        catch { $('onboardingAdminLink').focus(); $('onboardingAdminLink').select(); message('Označen je link do šablona. Kopiraj ga.'); }
+      });
+      if (new URLSearchParams(location.search).get('onboarding') === '1') window.MarketizoQuickSign.startOnboarding();
     } catch (e) { $('connectionStatus').textContent = 'Marketizo Sign nije spreman za rad.'; message(e.message, true); }
   }
   init();

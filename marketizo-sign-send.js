@@ -3,6 +3,7 @@
  const $=id=>document.getElementById(id);
  const fieldLabels={name:'Ime i prezime',company:'Naziv firme',address:'Adresa',taxId:'Poreski broj / PIB',registrationId:'Registracioni broj firme',personalId:'JMBG / identifikacioni broj',country:'Zemlja (AT, DE, RS…)'};
  let config=null,state=null,busy=false;
+ function onboarding(){return window.MarketizoOnboarding?.isDocument(state?.source)===true;}
  function fingerprint(value){if(Array.isArray(value))return '['+value.map(fingerprint).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+fingerprint(value[k])).join(',')+'}';return JSON.stringify(value);}
  function node(tag,text,attrs={}){const e=document.createElement(tag);if(text!==null)e.textContent=text;for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;}
  function message(value,error=false){$('quickMessage').textContent=value;$('quickMessage').classList.toggle('error',error);}
@@ -29,6 +30,7 @@
  }
  function identity(values={}){
   $('quickIdentityFields').replaceChildren(...Object.entries(fieldLabels).map(([key,label])=>{const wrap=node('label',label),input=node('input',null,{id:'quickField-'+key,type:'text','data-quick-field':key,maxlength:String(({name:160,company:180,address:300,capacity:120,country:2})[key]||80)});input.value=values[key]||'';input.placeholder=({name:'Npr. Marko Marković',company:'Npr. Marko Marković PR Studio Primer',address:'Npr. Ulica primera 12, 11000 Beograd',taxId:'Npr. 123456789',registrationId:'Npr. 12345678',personalId:'JMBG / identifikacioni broj',country:'Npr. RS'})[key]||'';if(key==='country')input.pattern='[A-Za-z]{2}';wrap.append(input);return wrap;}));
+  if(onboarding()) document.querySelectorAll('[data-quick-field]').forEach(input=>{const needed=['name','company','country'].includes(input.dataset.quickField);input.required=needed;input.parentElement.hidden=!needed;});
  }
  function recipientStep(){
   const source=state.source,recipient=source.recipients?.[0]||{};
@@ -41,6 +43,10 @@
   $('quickMonthlyFee').value=source.contractDetails?.compensation?.monthlyFee||'';
   $('quickBonus').value=source.contractDetails?.compensation?.bonus||'';
   identity(recipient);$('quickPrefill').open=false;$('quickPlace').value=source.contractDetails?.place||'';$('quickStartDate').value=source.contractDetails?.startDate||'';$('quickStartLabel').hidden=audience!=='client';
+  $('quickPrefill').open=onboarding();$('quickStartLabel').hidden=onboarding()||audience!=='client';
+  $('quickRecipientTitle').textContent=onboarding()?'2. Podaci klijenta sa onboarding sastanka':'2. Kome šalješ ugovor?';
+  $('quickRecipientHint').textContent=onboarding()?'Zajedno sa klijentom unesite ime, firmu, mejl i zemlju. Datum i potpis beleže se pri potpisivanju.':'Dovoljan je mejl. Primalac sam dopunjava podatke koji nedostaju, pregleda ceo ugovor i potpisuje.';
+  $('quickPrefillTitle').textContent=onboarding()?'Podaci klijenta · obavezno':'Unesi podatke unapred (opciono)';
   state.contacts=config.people.filter(p=>p.kind===(state.audience==='client'?'client':'employee'));
   $('quickContact').replaceChildren(node('option','Ručni unos mejla',{value:''}),...state.contacts.map((p,i)=>node('option',p.name+(p.email?' · '+p.email:''),{value:String(i)})));
   $('quickRecipientBack').hidden=!!state.resumed;phase(2);
@@ -48,7 +54,7 @@
  function data(){
   const recipient={...(state.source.recipients?.[0]||{}),role:'counterparty',email:$('quickEmail').value.trim().toLowerCase(),partyType:$('quickPartyType').value};
   document.querySelectorAll('[data-quick-field]').forEach(e=>recipient[e.dataset.quickField]=e.value.trim());recipient.country=recipient.country.toUpperCase();
-  return {...structuredClone(state.source),recipientCompletion:true,recipients:[recipient],contractDetails:{...state.source.contractDetails,place:$('quickPlace').value.trim(),startDate:$('quickStartDate').value,...(state.source.contractDetails?.audience==='contractor'?{compensation:{monthlyFee:$('quickMonthlyFee').value.trim(),bonus:$('quickBonus').value.trim()}}:{})}};
+  return {...structuredClone(state.source),recipientCompletion:!onboarding(),recipients:[recipient],contractDetails:{...state.source.contractDetails,place:$('quickPlace').value.trim(),startDate:$('quickStartDate').value,...(state.source.contractDetails?.audience==='contractor'?{compensation:{monthlyFee:$('quickMonthlyFee').value.trim(),bonus:$('quickBonus').value.trim()}}:{})}};
  }
  async function archivePrepared(){
   if(!state.record||state.sendPending)return;
@@ -83,6 +89,7 @@
    const preview=await api({action:'preparedPreview',id:state.record.id});
    if(preview.pdfSha256!==state.preparedSha)throw Error('Pregled ne odgovara poslednjem ugovoru. Pokušaj ponovo.');
    renderPreview(preview);$('quickDeliverySummary').textContent=state.record.title+' → '+state.record.data.recipients[0].email;
+   $('quickReviewHint').textContent=onboarding()?'Prođite ceo dokument sa klijentom. Zatim napravite njegov link i otvorite ga za potpis pre završetka sastanka.':'Ovo je ceo ugovor koji šalješ. Primalac će dopuniti prazne lične podatke pre potpisa.';
    $('quickConfirm').checked=false;$('quickReviewDetails').open=!$('quickReviewer').value;phase(3);
   }catch(e){if(state.record?.revision){try{const latest=await api({action:'get',id:state.record.id});state.record=latest.document;if(state.record.status==='ready')state.frozenFingerprint=fingerprint(state.record.data);}catch{}}message(e.message,true);}finally{controls(false);}
  }
@@ -102,6 +109,10 @@
    $('quickSuccessTitle').textContent=linkMode?'Link za potpis je spreman.':'Ugovor je predat na slanje.';
    $('quickSuccessText').textContent=linkMode?'Kopiraj ovaj link i podeli ga samo sa primaocem. Pozivni mejl nije poslat.':`Primalac: ${state.record.data.recipients[0].email}. Dopuniće podatke koji nedostaju, pregledati ugovor i potpisati. Završni PDF dobija mejlom kada svi potpišu.`;
    $('quickSuccessLinks').replaceChildren(...(result.links||[]).map(link=>{const label=node('label',link.email),input=node('input',null,{readonly:'',type:'text'});input.value=link.url;label.append(input);return label;}));
+   if(linkMode&&onboarding()){
+    $('quickSuccessText').textContent='Otvorite klijentov link na sastanku i prepustite mu da sam pregleda i potpiše dokument. Kreiran link još ne znači da je dokument potpisan. Potpisani PDF čuva se u Marketizo Sign-u i šalje klijentu nakon završetka.';
+    for(const link of result.links||[]){const url=new URL(link.url);if(url.origin===location.origin&&url.pathname==='/sign'&&/^#[A-Za-z0-9_-]{43}$/.test(url.hash))$('quickSuccessLinks').append(node('a','Otvori dokument za potpis na sastanku →',{href:url.href,target:'_blank',rel:'noopener noreferrer',class:'primary-button'}));}
+   }
    phase(4);
   }catch(e){if(e.status>=400&&e.status<500&&e.status!==409)state.sendPending=null;message(e.message+(state.sendPending?' Podaci su zadržani. Ponovi slanje da proverimo isti zahtev.':''),true);}finally{controls(false);}
  }
@@ -133,5 +144,5 @@
  $('quickCancel').addEventListener('click',exit);$('quickDone').addEventListener('click',exit);
  $('quickEditText').addEventListener('click',()=>{if(busy)return;const doc={...(state.record||{id:crypto.randomUUID(),revision:0,status:'draft',archived_at:null}),data:data()};$('quickSend').hidden=true;state=null;config.onEdit(doc);});
  window.addEventListener('beforeunload',e=>{if(busy||(state&&!state.sent&&$('quickEmail').value.trim())){e.preventDefault();e.returnValue='';}});
- window.MarketizoQuickSign={init(options){config=options;document.querySelectorAll('[data-quick-audience]').forEach(button=>{button.disabled=!options.sendingEnabled;button.addEventListener('click',()=>start(button.dataset.quickAudience));});},setTemplates(items){if(config)config.templates=items;},resume};
+ window.MarketizoQuickSign={init(options){config=options;document.querySelectorAll('[data-quick-audience]').forEach(button=>{button.disabled=!options.sendingEnabled;button.addEventListener('click',()=>start(button.dataset.quickAudience));});},setTemplates(items){if(config)config.templates=items;},resume,startOnboarding(){if(busy||!config?.sendingEnabled)return;state={audience:'client',source:window.MarketizoOnboarding.create(),templateId:'',resumed:true};show();recipientStep();}};
 })();
