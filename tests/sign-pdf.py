@@ -28,6 +28,8 @@ class SignPdfTests(unittest.TestCase):
             {"type":"paragraph", "runs":[{"text":"Pročitajte scenarije najmanje tri dana pre snimanja."}]},
         ]
         original = helper.render_original({"document":doc})
+        preview = helper.preview_pdf({"pdfBase64":original['base64'], "pdfSha256":original['sha256']})
+        self.assertTrue(any(b['heading'] and b['text']=='1. Scenariji i izmene' for page in preview['pages'] for b in page))
         raw = base64.b64decode(original['base64'])
         reader = PdfReader(io.BytesIO(raw))
         layout = json.loads(reader.metadata['/MarketizoLayout'])

@@ -247,7 +247,7 @@ def render_original(payload):
         story.append(OnboardingSignatureBlock(other, layouts) if onboarding else SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
     data = build_pdf(doc["title"], story, issuer)
     writer = PdfWriter(io.BytesIO(data))
-    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr", "purpose": "codeks" if doc.get("category") == "other" and doc.get("note", "").startswith("marketizo-codeks:v1|") else "contract"}, ensure_ascii=False)})
+    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr", "purpose": "onboarding" if onboarding else "codeks" if doc.get("category") == "other" and doc.get("note", "").startswith("marketizo-codeks:v1|") else "contract"}, ensure_ascii=False)})
     out = io.BytesIO(); writer.write(out); data = out.getvalue()
     return {"base64": base64.b64encode(data).decode(), "sha256": hashlib.sha256(data).hexdigest(), "renderer": VERSION}
 
@@ -402,8 +402,10 @@ def preview_pdf(payload):
         if lines and re.fullmatch(r"Marketizo Digital e\.U\.\s+\d+", lines[-1].strip()): lines.pop()
         blocks, paragraph = [], []
         clause_heading = re.compile(r"^(?:Član|Klauzula|Klausel|Artikel|Abschnitt|Article|§)\s*\d+", re.I)
+        if layout.get("purpose") == "onboarding":
+            clause_heading = re.compile(r"^(?:[1-9]\.\s+[^\n]{1,100}|Potvrda sa onboarding sastanka)$")
         numbered_item = re.compile(r"^\d+(?:\.\d+)+(?:[.)])?\s|^\d+[.)]\s")
-        in_contract_body = False
+        in_contract_body = layout.get("purpose") == "onboarding"
         def flush():
             if paragraph:
                 value = " ".join(paragraph)
