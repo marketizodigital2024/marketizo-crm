@@ -34,7 +34,7 @@
  }
  function recipientStep(){
   const source=state.source,recipient=source.recipients?.[0]||{};
-  $('quickEmail').parentElement.hidden=onboarding();$('quickContact').parentElement.hidden=onboarding();$('quickPartyType').parentElement.hidden=onboarding();$('quickPrefill').hidden=onboarding();$('quickEmail').required=!onboarding();$('quickEmailLabel').textContent=onboarding()?'Mejl klijenta (opciono — klijent ga dopunjava pre potpisa)':'Mejl primaoca';$('quickSendEmail').hidden=onboarding();
+  for(const id of ['quickEmail','quickContact','quickPartyType'])if($(id).parentElement)$(id).parentElement.hidden=onboarding();$('quickPrefill').hidden=onboarding();$('quickEmail').required=!onboarding();$('quickEmailLabel').textContent=onboarding()?'Mejl klijenta (opciono — klijent ga dopunjava pre potpisa)':'Mejl primaoca';$('quickSendEmail').hidden=onboarding();
   $('quickChosenTemplate').textContent=source.title;$('quickEmail').value=recipient.email||'';
   const audience=source.contractDetails?.audience;
   $('quickPartyType').value=recipient.partyType||(audience==='employee'?'employee':audience==='contractor'?'business':state.audience==='client'?'business':'individual');
