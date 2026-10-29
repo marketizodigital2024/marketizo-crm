@@ -1,0 +1,20 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const source=fs.readFileSync(require.resolve('../sign.js'),'utf8');
+const start=source.indexOf(' async function renderExactPdf('),end=source.indexOf('\n }',start)+3;
+assert.ok(start>0&&end>start);
+const bytes=Buffer.from('%PDF-exact-frozen-fixture'),digest=crypto.createHash('sha256').update(bytes).digest('hex');
+let supplied,rendered=0,destroyed=0;
+const pdfjs={GlobalWorkerOptions:{},getDocument(options){supplied=options;return{promise:Promise.resolve({numPages:2,async getPage(){return{getViewport:({scale})=>({width:600*scale,height:800*scale}),render(){rendered++;return{promise:Promise.resolve()};},cleanup(){}};},async destroy(){destroyed++;}})};}};
+const ctx={crypto:crypto.webcrypto,Uint8Array,atob,devicePixelRatio:2,language:'sr',fixturePdfJs:pdfjs,text:()=> 'PDF integrity error',$:()=>({clientWidth:760}),document:{createElement:()=>({children:[],style:{},setAttribute(){},getContext:()=>({}),append(...values){this.children.push(...values);}})}};
+vm.createContext(ctx);vm.runInContext(source.slice(start,end).replace("import('/vendor/pdfjs/pdf.legacy.min.mjs')",'Promise.resolve(fixturePdfJs)'),ctx);
+(async()=>{
+ const pages=await ctx.renderExactPdf({pdfBase64:bytes.toString('base64'),pdfSha256:digest});
+ assert.equal(pages.children.length,2);assert.equal(rendered,2);assert.equal(destroyed,1);
+ assert.deepEqual(Buffer.from(supplied.data),bytes);assert.equal(supplied.isEvalSupported,false);
+ assert.equal(pdfjs.GlobalWorkerOptions.workerSrc,'/vendor/pdfjs/pdf.worker.legacy.min.mjs');
+ assert.equal(pages.children[0].width,1520);assert.equal(pages.children[0].style.width,'760px');
+ await assert.rejects(ctx.renderExactPdf({pdfBase64:bytes.toString('base64'),pdfSha256:'0'.repeat(64)}),/PDF integrity error/);
+ assert.equal(rendered,2,'Changed bytes cannot render a signable preview');
+ console.log('PASS: exact PDF bytes, SHA-256 verification before rendering, every page, high-resolution canvases and local worker');
+})().catch(e=>{console.error(e);process.exitCode=1;});

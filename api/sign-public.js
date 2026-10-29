@@ -38,7 +38,7 @@ function createHandler(deps = {}) {
     if (bytes.length > 1500000 || hash(bytes) !== source.pdfSha256) throw new SignError(503, 'PDF nije potvrđen.');
     const result = await flow.helper({ action: 'preview', pdfBase64: bytes.toString('base64'), pdfSha256: source.pdfSha256 });
     if (result.pdfSha256 !== source.pdfSha256) throw new SignError(503, 'PDF nije potvrđen.');
-    return { ...result, consentText: result.purpose === 'codeks' ? CODEKS_CONSENT : result.language === 'de' ? CONSENT_DE : CONSENT };
+    return { ...result, pdfBase64: bytes.toString('base64'), consentText: result.purpose === 'codeks' ? CODEKS_CONSENT : result.language === 'de' ? CONSENT_DE : CONSENT };
    }
    if (req.method === 'GET') {
     const action = params.get('action') || 'view', digest = sessionDigest(req);

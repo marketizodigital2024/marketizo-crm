@@ -19,6 +19,8 @@ async function call(method, body, extras={}) { const req={method,url:extras.url|
  const accepted=await call('POST',body);assert.equal(accepted.status,200);assert.ok(calls.find(x=>x.action==='link_accept').data.consentText.includes('jednostavnim'));
  previewLanguage='de';assert.equal((await call('POST',body)).status,200);assert.ok(calls.filter(x=>x.action==='link_accept').at(-1).data.consentText.includes('elektronischen Signatur'));
  const pv=await call('GET',undefined,{url:'/api/sign-public?action=preview'});assert.equal(pv.body.language,'de');assert.ok(pv.body.consentText.includes('Ich habe'));
+ assert.deepEqual(Buffer.from(pv.body.pdfBase64,'base64'),fixturePdf,'The reading view receives the exact immutable PDF, not a reconstructed document');
+ assert.equal(hash(Buffer.from(pv.body.pdfBase64,'base64')),pv.body.pdfSha256);
  for(const state of [{accepted:false,status:'open'},{accepted:true,status:'signing'},{accepted:false,status:'signed'}]){
   downloadState=state;
   for(const action of ['pdf','receipt'])assert.equal((await call('GET',undefined,{url:'/api/sign-public?action='+action})).status,403,'Unsigned or unfinished requests cannot download a PDF');
