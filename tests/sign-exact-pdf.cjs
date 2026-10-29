@@ -5,7 +5,7 @@ const start=source.indexOf(' async function renderExactPdf('),end=source.indexOf
 assert.ok(start>0&&end>start);
 const bytes=Buffer.from('%PDF-exact-frozen-fixture'),digest=crypto.createHash('sha256').update(bytes).digest('hex');
 let supplied,rendered=0,destroyed=0;
-const pdfjs={GlobalWorkerOptions:{},getDocument(options){supplied=options;return{promise:Promise.resolve({numPages:2,async getPage(){return{getViewport:({scale})=>({width:600*scale,height:800*scale}),render(){rendered++;return{promise:Promise.resolve()};},cleanup(){}};},async destroy(){destroyed++;}})};}};
+const pdfjs={GlobalWorkerOptions:{},getDocument(options){supplied=options;return{promise:Promise.resolve({numPages:2,async getPage(){return{getViewport:({scale})=>({width:600*scale,height:800*scale}),render(){rendered++;return{promise:Promise.resolve()};},cleanup(){}};}}),async destroy(){destroyed++;}};}};
 const ctx={crypto:crypto.webcrypto,Uint8Array,atob,devicePixelRatio:2,language:'sr',fixturePdfJs:pdfjs,text:()=> 'PDF integrity error',$:()=>({clientWidth:760}),document:{createElement:()=>({children:[],style:{},setAttribute(){},getContext:()=>({}),append(...values){this.children.push(...values);}})}};
 vm.createContext(ctx);vm.runInContext(source.slice(start,end).replace("import('/vendor/pdfjs/pdf.legacy.min.mjs')",'Promise.resolve(fixturePdfJs)'),ctx);
 (async()=>{

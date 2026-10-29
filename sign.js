@@ -35,7 +35,7 @@
   if(digest!==source.pdfSha256)throw Error(text('error'));
   const pdfjs=await import('/vendor/pdfjs/pdf.legacy.min.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc='/vendor/pdfjs/pdf.worker.legacy.min.mjs';
-  const pdf=await pdfjs.getDocument({data:bytes,isEvalSupported:false,useSystemFonts:true}).promise;
+  const loadingTask=pdfjs.getDocument({data:bytes,isEvalSupported:false,useSystemFonts:true}),pdf=await loadingTask.promise;
   const pages=document.createElement('div');pages.className='document-pdf-pages';
   const width=Math.max($('documentPages').clientWidth||760,600),ratio=Math.min(devicePixelRatio||1,2);
   try{
@@ -45,7 +45,7 @@
     await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;pages.append(canvas);page.cleanup();
    }
    return pages;
-  }finally{await pdf.destroy();}
+  }finally{await loadingTask.destroy();}
  }
  async function refresh(){
   state=await api('view');if(!state.verified)throw Error(text('error'));

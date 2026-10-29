@@ -148,10 +148,10 @@ class SignatureBlock(Flowable):
 
 class OnboardingSignatureBlock(Flowable):
     """One client, one signature; no unused agency or cooperation-date fields."""
-    def __init__(self, recipient, layouts):
+    def __init__(self, recipient, layouts, compact=False):
         Flowable.__init__(self)
-        self.recipient, self.layouts = recipient, layouts
-        self.width, self.height = A4[0] - 96, 180
+        self.recipient, self.layouts, self.compact = recipient, layouts, compact
+        self.width, self.height = A4[0] - 96, 140 if compact else 180
 
     def wrap(self, availWidth, availHeight):
         return self.width, max(self.height, availHeight)
@@ -159,12 +159,23 @@ class OnboardingSignatureBlock(Flowable):
     def drawOn(self, canvas, x, y, _sW=0):
         self.layouts.append({"page": canvas.getPageNumber(), "x": x, "y": y, "width": self.width, "height": self.height,
             "slots": [{"email": self.recipient.get("email", ""), "name": self.recipient.get("name", ""), "role": "counterparty",
-                       "x": x, "y": y + 28, "width": 270, "height": 44,
+                       "x": x, "y": y + (20 if self.compact else 28), "width": 270, "height": 30 if self.compact else 44,
                        "dateX": x + 300, "dateY": y + 34, "dateFontSize": 10, "dateWidth": 190}]})
         super().drawOn(canvas, x, y, _sW)
 
     def draw(self):
         c, p = self.canv, self.recipient
+        if self.compact:
+            c.setStrokeColor(colors.HexColor("#F68B1F")); c.setLineWidth(.7); c.line(0, 137, self.width, 137)
+            paper_text(c, "Ime i prezime", 0, 123, size=9, bold=True)
+            paper_text(c, "Naziv firme", 267, 123, size=9, bold=True)
+            paper_text(c, p.get("name") or "________________", 0, 107, size=10.5, max_height=25)
+            paper_text(c, p.get("company") or "________________", 267, 107, size=10.5, max_height=25)
+            paper_text(c, p.get("email", ""), 0, 76, width=self.width, size=9)
+            paper_text(c, "Potpis klijenta", 0, 56, size=9, bold=True)
+            paper_text(c, "Datum potpisa", 300, 56, width=190, size=9, bold=True)
+            c.setStrokeColor(colors.HexColor("#CBD1D9")); c.line(0, 18, 270, 18)
+            return
         c.setStrokeColor(colors.HexColor("#F68B1F")); c.setLineWidth(.7); c.line(0, 177, self.width, 177)
         paper_text(c, "Ime i prezime", 0, 159, size=9, bold=True)
         paper_text(c, "Naziv firme", 267, 159, size=9, bold=True)
@@ -179,11 +190,15 @@ class OnboardingSignatureBlock(Flowable):
 def render_original(payload):
     doc = payload["document"]
     s = styles()
-    onboarding = doc.get("note") == "marketizo-onboarding:v1"
+    onboarding = bool(re.fullmatch(r"marketizo-onboarding:v[12]", doc.get("note", "")))
+    compact_onboarding = doc.get("note") == "marketizo-onboarding:v2"
     if onboarding:
         s["body"] = ParagraphStyle("onboarding-body", parent=s["body"], fontSize=11.5, leading=16.5, spaceAfter=7)
         s["heading"] = ParagraphStyle("onboarding-heading", parent=s["heading"], fontSize=12.5, leading=17, spaceBefore=12, spaceAfter=5)
         s["title"] = ParagraphStyle("onboarding-title", parent=s["title"], fontSize=20, leading=26, spaceAfter=15)
+        if compact_onboarding:
+            s["body"] = ParagraphStyle("onboarding-one-page-body", parent=s["body"], fontSize=11, leading=14.5, spaceAfter=7)
+            s["title"] = ParagraphStyle("onboarding-one-page-title", parent=s["title"], fontSize=18, leading=22, spaceAfter=10)
     de = doc.get("contractDetails", {}).get("language") == "de"
     story = [Paragraph(plain(doc["title"], 180), s["title"])]
     for recipient in doc.get("recipients", []):
@@ -244,9 +259,11 @@ def render_original(payload):
     others = [p for p in parties if p.get("role") != "marketizo"] or [{}]
     layouts = []
     for other in others:
-        story.append(OnboardingSignatureBlock(other, layouts) if onboarding else SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
+        story.append(OnboardingSignatureBlock(other, layouts, compact_onboarding) if onboarding else SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
     data = build_pdf(doc["title"], story, issuer)
     writer = PdfWriter(io.BytesIO(data))
+    if compact_onboarding and len(writer.pages) != 1:
+        raise ValueError("Onboarding rules must fit on one A4 page")
     writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr", "purpose": "onboarding" if onboarding else "codeks" if doc.get("category") == "other" and doc.get("note", "").startswith("marketizo-codeks:v1|") else "contract"}, ensure_ascii=False)})
     out = io.BytesIO(); writer.write(out); data = out.getvalue()
     return {"base64": base64.b64encode(data).decode(), "sha256": hashlib.sha256(data).hexdigest(), "renderer": VERSION}

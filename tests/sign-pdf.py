@@ -18,6 +18,25 @@ spec.loader.exec_module(helper)
 
 
 class SignPdfTests(unittest.TestCase):
+    def test_compact_onboarding_stays_one_page_with_bold_clauses(self):
+        doc = self.document()
+        doc.update(note="marketizo-onboarding:v2", category="clients", recipientCompletion=False,
+                   contractDetails={"language":"sr", "audience":"client"},
+                   recipients=[{"name":"Marketizo Test", "company":"Test Firma", "email":"test@example.invalid", "role":"counterparty"}])
+        doc['content']['blocks'] = [{"type":"paragraph", "runs":[{"text":f"{i}. Pravilo. ", "bold":True},
+            {"text":"Dogovoreni uslovi saradnje i odgovornost klijenta. "*3}]} for i in range(1,9)]
+        result = helper.render_original({"document":doc})
+        reader = PdfReader(io.BytesIO(base64.b64decode(result['base64'])))
+        self.assertEqual(len(reader.pages),1)
+        layout = json.loads(reader.metadata['/MarketizoLayout'])
+        self.assertEqual(layout['purpose'],'onboarding')
+        sizes=[]
+        reader.pages[0].extract_text(visitor_text=lambda text,cm,tm,font,size: sizes.append(size) if 'Dogovoreni uslovi' in text else None)
+        self.assertTrue(sizes and min(sizes)>=11)
+        doc['content']['blocks'] *= 5
+        with self.assertRaisesRegex(ValueError,'one A4 page'):
+            helper.render_original({"document":doc})
+
     def test_onboarding_readability_and_single_client_signature(self):
         doc = self.document()
         doc.update(note="marketizo-onboarding:v1", category="clients", recipientCompletion=False,
