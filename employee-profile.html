@@ -21,7 +21,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
     <link rel="stylesheet" href="styles.css?v=20261015-overhead-r16d" />
-  </head>
+  <link rel="stylesheet" href="sign-nav.css?v=20261029-menu">
+</head>
   <body class="employee-profile-page">
     <div class="app-shell">
       <aside class="sidebar">
@@ -37,7 +38,7 @@
           <button class="nav-item" data-view="clients" type="button">Klijenti</button>
           <button class="nav-item" data-view="employees" type="button">Zaposleni</button>
           <a class="nav-item" href="/kpi.html">KPI i ocene klijenata</a>
-          <a class="nav-item" href="/marketizo-sign">Marketizo Sign</a><a class="nav-item" href="/kodeks">Kodeks</a>
+          <details class="sign-nav-menu"><summary class="nav-item">Marketizo Sign</summary><div class="sign-nav-children"><a class="nav-item" href="/marketizo-sign">Ugovori i potpisi</a><a class="nav-item" href="/marketizo-sign?onboarding=1">Pravila saradnje · onboarding</a></div></details><a class="nav-item" href="/kodeks">Kodeks</a>
           <button class="nav-item" data-view="calendar" type="button">Kalendar</button>
           <button class="nav-item" data-view="reports" type="button">Računi</button>
         </nav>
