@@ -30,8 +30,8 @@ function expectedMinutes(employee, date) {
   if (!require("../lib/business-calendar.js").isWorkingDay(date)) return 0;
   const month = date.slice(0, 7);
   const weeklyHours = require("../cost-calculation.js").weeklyHours(employee, month);
-  // Full-time schedule: Mon-Thu 8.5h including the break, Friday 6.5h total.
-  if (weeklyHours >= 38) return day === 5 ? 390 : 510;
+  // Full-time schedule: Mon-Thu 8.5h including the break, Friday 7h from 2026-10-30 (previously 6.5h).
+  if (weeklyHours >= 38) return day === 5 ? (date >= "2026-10-30" ? 420 : 390) : 510;
   return Math.round((weeklyHours * 60) / 5);
 }
 
