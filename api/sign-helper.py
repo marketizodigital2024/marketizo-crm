@@ -146,9 +146,44 @@ class SignatureBlock(Flowable):
             paper_text(c, ("Beginn der Zusammenarbeit: " if de else "Početak saradnje: ") + display_date(self.details.get("startDate")), 267, 134, size=7)
 
 
+class OnboardingSignatureBlock(Flowable):
+    """One client, one signature; no unused agency or cooperation-date fields."""
+    def __init__(self, recipient, layouts):
+        Flowable.__init__(self)
+        self.recipient, self.layouts = recipient, layouts
+        self.width, self.height = A4[0] - 96, 180
+
+    def wrap(self, availWidth, availHeight):
+        return self.width, max(self.height, availHeight)
+
+    def drawOn(self, canvas, x, y, _sW=0):
+        self.layouts.append({"page": canvas.getPageNumber(), "x": x, "y": y, "width": self.width, "height": self.height,
+            "slots": [{"email": self.recipient.get("email", ""), "name": self.recipient.get("name", ""), "role": "counterparty",
+                       "x": x, "y": y + 28, "width": 270, "height": 44,
+                       "dateX": x + 300, "dateY": y + 34, "dateFontSize": 10, "dateWidth": 190}]})
+        super().drawOn(canvas, x, y, _sW)
+
+    def draw(self):
+        c, p = self.canv, self.recipient
+        c.setStrokeColor(colors.HexColor("#F68B1F")); c.setLineWidth(.7); c.line(0, 177, self.width, 177)
+        paper_text(c, "Ime i prezime", 0, 159, size=9, bold=True)
+        paper_text(c, "Naziv firme", 267, 159, size=9, bold=True)
+        paper_text(c, p.get("name") or "________________", 0, 140, size=11, max_height=30)
+        paper_text(c, p.get("company") or "________________", 267, 140, size=11, max_height=30)
+        paper_text(c, p.get("email", ""), 0, 101, width=self.width, size=10)
+        paper_text(c, "Potpis klijenta", 0, 81, size=9, bold=True)
+        paper_text(c, "Datum potpisa", 300, 61, width=190, size=9, bold=True)
+        c.setStrokeColor(colors.HexColor("#CBD1D9")); c.line(0, 26, 270, 26)
+
+
 def render_original(payload):
     doc = payload["document"]
     s = styles()
+    onboarding = doc.get("note") == "marketizo-onboarding:v1"
+    if onboarding:
+        s["body"] = ParagraphStyle("onboarding-body", parent=s["body"], fontSize=11.5, leading=16.5, spaceAfter=7)
+        s["heading"] = ParagraphStyle("onboarding-heading", parent=s["heading"], fontSize=12.5, leading=17, spaceBefore=12, spaceAfter=5)
+        s["title"] = ParagraphStyle("onboarding-title", parent=s["title"], fontSize=20, leading=26, spaceAfter=15)
     de = doc.get("contractDetails", {}).get("language") == "de"
     story = [Paragraph(plain(doc["title"], 180), s["title"])]
     for recipient in doc.get("recipients", []):
@@ -190,7 +225,10 @@ def render_original(payload):
             count = 0
             if block["type"] == "bullet":
                 text = "• " + text
-        story.append(Paragraph(text or "<br/>", s["heading"] if block["type"] == "heading" or (len(block_text) < 160 and re.match(r"^(?:Član|Artikel|Abschnitt|Article|§)\s*\d+", block_text)) else s["body"]))
+        is_heading = block["type"] == "heading" or (len(block_text) < 160 and re.match(r"^(?:Član|Artikel|Abschnitt|Article|§)\s*\d+", block_text))
+        if onboarding and (re.match(r"^[1-9]\.\s+[^\n]{1,100}$", block_text) or block_text == "Potvrda sa onboarding sastanka"):
+            is_heading = True
+        story.append(Paragraph(text or "<br/>", s["heading"] if is_heading else s["body"]))
     # No internal notes, signature metadata or disclaimer is added to the agreement.
     # The exact original bytes are what every signer previews and accepts.
     issuer = dict(payload.get("issuer", {}))
@@ -206,7 +244,7 @@ def render_original(payload):
     others = [p for p in parties if p.get("role") != "marketizo"] or [{}]
     layouts = []
     for other in others:
-        story.append(SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
+        story.append(OnboardingSignatureBlock(other, layouts) if onboarding else SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
     data = build_pdf(doc["title"], story, issuer)
     writer = PdfWriter(io.BytesIO(data))
     writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr", "purpose": "codeks" if doc.get("category") == "other" and doc.get("note", "").startswith("marketizo-codeks:v1|") else "contract"}, ensure_ascii=False)})
@@ -276,7 +314,7 @@ def render_final(payload):
                     drawing.drawOn(c, slot["x"], slot["y"])
                 else:
                     paper_text(c, signer["name"], slot["x"]+5, slot["y"]+35, width=slot["width"]-10, size=14)
-                paper_text(c, signed_date(signer["acceptedAt"]), slot["x"], slot["dateY"]-4, width=230, size=7)
+                paper_text(c, signed_date(signer["acceptedAt"]), slot.get("dateX", slot["x"]), slot["dateY"]-4, width=slot.get("dateWidth", 230), size=slot.get("dateFontSize", 7))
             c.save()
             writer.pages[block["page"]-1].merge_page(PdfReader(io.BytesIO(overlay.getvalue())).pages[0])
     if not layout_raw:

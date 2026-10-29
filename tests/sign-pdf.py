@@ -18,6 +18,38 @@ spec.loader.exec_module(helper)
 
 
 class SignPdfTests(unittest.TestCase):
+    def test_onboarding_readability_and_single_client_signature(self):
+        doc = self.document()
+        doc.update(note="marketizo-onboarding:v1", category="clients", recipientCompletion=False,
+                   contractDetails={"language":"sr", "audience":"client"},
+                   recipients=[{"name":"Marketizo Test", "company":"Test Firma", "email":"test@example.invalid", "role":"counterparty"}])
+        doc['content']['blocks'] = [
+            {"type":"paragraph", "runs":[{"text":"1. Scenariji i izmene"}]},
+            {"type":"paragraph", "runs":[{"text":"Pročitajte scenarije najmanje tri dana pre snimanja."}]},
+        ]
+        original = helper.render_original({"document":doc})
+        raw = base64.b64decode(original['base64'])
+        reader = PdfReader(io.BytesIO(raw))
+        layout = json.loads(reader.metadata['/MarketizoLayout'])
+        slots = [slot for block in layout['blocks'] for slot in block['slots']]
+        self.assertEqual(len(slots), 1)
+        self.assertEqual(slots[0]['email'], 'test@example.invalid')
+        text = '\n'.join(page.extract_text() for page in reader.pages)
+        self.assertIn('Ime i prezime', text)
+        self.assertIn('Naziv firme', text)
+        self.assertNotIn('Početak saradnje:', text)
+        sizes = []
+        for page in reader.pages:
+            page.extract_text(visitor_text=lambda text,cm,tm,font,size: sizes.append(size) if 'Pročitajte scenarije' in text else None)
+        self.assertTrue(sizes and min(sizes) >= 11.5)
+        result = helper.render_final({"originalBase64":original['base64'], "originalSha256":original['sha256'],
+            "manifestSha256":"a"*64, "evidence":{"title":doc['title'], "requestId":"00000000-0000-4000-8000-000000000001", "signers":[
+                {"name":"Marketizo Test", "email":"test@example.invalid", "acceptedAt":"2026-10-29T18:30:00Z", "consentText":"NEOBAVEZUJUĆI TEST", "strokes":[[[.1,.2],[.3,.2],[.2,.8]]]}
+            ]}})
+        final = base64.b64decode(result['base64'])
+        self.assertTrue(final.startswith(raw))
+        self.assertIn('29.10.2026.', '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(final)).pages))
+
     def document(self):
         return {"recipients": [{"name":"Test Potpisnik","email":"test@example.com"},{"name":"Drugi Potpisnik","email":"other@example.com"}], "title": "Ugovor o uslugama - Čćžšđ ÄÖÜ", "content": {"version": 1, "blocks": [
             {"type": "heading", "runs": [{"text": "Član 1. Predmet ugovora", "bold": True}]},
