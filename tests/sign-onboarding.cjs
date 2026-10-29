@@ -11,7 +11,7 @@ class Element {
 }
 const elements=new Map(), get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
 let edited, saved=[], sent=[], current;
-get('quickEmail').parentElement=new Element();
+for(const id of ['quickEmail','quickContact','quickPartyType'])get(id).parentElement=new Element();
 const window={addEventListener(){},MarketizoOnboarding:template};
 const document={getElementById:get,createElement:()=>new Element(),querySelectorAll:selector=>selector==='[data-quick-field]'?get('quickIdentityFields').children.map(e=>e.children[0]):[]};
 const response=data=>({ok:true,json:async()=>({ok:true,...data})});
@@ -32,12 +32,12 @@ window.MarketizoQuickSign.init({templates:[],people:[],sender:{name:'Fixture Own
   const first=template.create();first.content.blocks[0].runs[0].text='changed';assert.notEqual(template.create().content.blocks[0].runs[0].text,'changed');
   window.MarketizoQuickSign.startOnboarding();
   assert.equal(saved.length,0,'Opening a shared template must not create a client record');
-  assert.equal(get('quickPrefill').open,true);assert.equal(get('quickEmail').required,false);
-  for(const key of ['name','company','country'])assert.equal(document.querySelectorAll('[data-quick-field]').find(e=>e.dataset.quickField===key).required,true);
+  assert.equal(get('quickPrefill').open,false);assert.equal(get('quickEmail').required,false);
+  for(const key of ['name','company','country'])assert.equal(document.querySelectorAll('[data-quick-field]').find(e=>e.dataset.quickField===key).required,false);
   assert.equal(document.querySelectorAll('[data-quick-field]').find(e=>e.dataset.quickField==='taxId').parentElement.hidden,true);
   function fill(){get('quickEmail').value='';for(const e of document.querySelectorAll('[data-quick-field]'))e.value=({name:'Test Klijent',company:'Test Firma',country:'RS'})[e.dataset.quickField]||'';}
   fill();await get('quickRecipient').listeners.submit({preventDefault(){}});await new Promise(setImmediate);
-  assert.equal(saved.length,1);assert.equal(saved[0].data.recipientCompletion,false);
+  assert.equal(saved.length,1);assert.equal(saved[0].data.recipientCompletion,true);
   assert.equal(saved[0].data.recipients[0].company,'Test Firma');assertReady(validateDraft(saved[0].data));
   const text=saved[0].data.content.blocks.flatMap(b=>b.runs.map(r=>r.text)).join('\n');
   for(const term of ['najmanje tri dana pre snimanja','Pre dolaska naše ekipe','jasne potvrde u zajedničkoj grupi','ne preuzima odgovornost za zatvaranje prodaje','plaćeni oglasi se ne prikazuju','potpisujemo pre njegovog završetka'])assert.ok(text.includes(term),term);

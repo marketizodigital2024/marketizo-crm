@@ -13,7 +13,7 @@
   const block = (text, type = 'paragraph') => ({ type, level: 1, runs: [{ text, bold: false, italic: false, underline: false }] });
   function create() {
     return {
-      title: 'Pravila saradnje — Marketizo Digital', category: 'clients', recipientCompletion: false,
+      title: 'Pravila saradnje — Marketizo Digital', category: 'clients', recipientCompletion: true,
       content: { version: 1, blocks: [
         block('Ova pravila zajedno prolazimo na onboarding sastanku i potpisujemo pre njegovog završetka.'),
         ...clauses.map(([title, text]) => ({ type: 'paragraph', level: 1, runs: [{ text: title + '. ', bold: true, italic: false, underline: false }, { text, bold: false, italic: false, underline: false }] })),
