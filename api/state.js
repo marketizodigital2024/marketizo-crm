@@ -159,9 +159,9 @@ function refreshWorkSummaries(payload) {
       && absence.status === "Odobreno" && absence.startDate <= date && absence.endDate >= date)) return [];
     const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
     const weeklyHours = costs.weeklyHours(employee, date.slice(0, 7));
-    // Keep the existing attendance policy; this change only refreshes its totals.
+    // Friday attendance extends by 30 minutes from 2026-10-30; preserve earlier dates.
     const expected = weekday >= 1 && weekday <= 5
-      ? weeklyHours >= 38 ? (weekday === 5 ? 390 : 510) : Math.round(weeklyHours * 60 / 5) : 0;
+      ? weeklyHours >= 38 ? (weekday === 5 ? (date >= "2026-10-30" ? 420 : 390) : 510) : Math.round(weeklyHours * 60 / 5) : 0;
     const minutes = dayFor(employeeId, date).minutes;
     if (!Number.isFinite(expected) || expected <= 0 || minutes >= expected) return [];
     const formatted = date.split("-").reverse().join(".") + ".";
