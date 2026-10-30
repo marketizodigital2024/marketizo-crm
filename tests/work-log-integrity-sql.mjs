@@ -25,5 +25,13 @@ const call=async(id,employeeId)=> (await db.query('select marketizo_append_work_
 await db.exec('set role service_role');const results=await Promise.all(['new-1','new-2','new-3'].map(id=>call(id,'e')));assert.ok(results.every(r=>r.ok));assert.equal((await call('new-1','e')).duplicate,true);assert.equal((await read()).employeeWorkLogs.length,4);assert.deepEqual((await read()).other,{preserve:true});
 const beforeCount=(await db.query('select count(*) n from marketizo_private.work_log_audit')).rows[0].n;
 await db.exec('begin');const rollback=await read();rollback.employeeWorkLogs[0].note='Rolled back';await save(rollback);await db.exec('rollback');assert.equal((await db.query('select count(*) n from marketizo_private.work_log_audit')).rows[0].n,beforeCount,'Business and audit roll back together');
-await db.exec('reset role; set role anon');await assert.rejects(db.query('select * from marketizo_private.work_log_audit'),/permission denied/);await db.exec('reset role');
+await db.exec('reset role');
+const bulk=await read();bulk.employeeWorkLogs=Array.from({length:10000},(_,i)=>({...log,id:'bulk-'+i}));await save(bulk);
+const bulkNext=structuredClone(bulk);bulkNext.employeeWorkLogs.unshift({...log,id:'bulk-new',minutes:15});
+const started=performance.now();await save(bulkNext);const appendMs=Math.round(performance.now()-started);
+assert.equal((await read()).employeeWorkLogs.length,10001);
+const bulkWipe=structuredClone(bulkNext);for(const l of bulkWipe.employeeWorkLogs){delete l.activityId;delete l.clientId;delete l.clientName;}
+await assert.rejects(save(bulkWipe),/metadata loss blocked/);assert.equal((await read()).employeeWorkLogs.length,10001);
+console.log('MEASUREMENT isolated PostgreSQL: 10,000 existing records + append and audit = '+appendMs+' ms; this is not a production SLA');
+await db.exec('set role anon');await assert.rejects(db.query('select * from marketizo_private.work_log_audit'),/permission denied/);await db.exec('reset role');
 await db.close();console.log('PASS: real PostgreSQL guard blocks metadata erasure/fallbacks, records transactional private audit, supports service-role writes, canonical internal corrections and concurrent atomic append/retry');
