@@ -197,7 +197,7 @@ def render_original(payload):
         s["heading"] = ParagraphStyle("onboarding-heading", parent=s["heading"], fontSize=12.5, leading=17, spaceBefore=12, spaceAfter=5)
         s["title"] = ParagraphStyle("onboarding-title", parent=s["title"], fontSize=20, leading=26, spaceAfter=15)
         if compact_onboarding:
-            s["body"] = ParagraphStyle("onboarding-one-page-body", parent=s["body"], fontSize=11, leading=14.5, spaceAfter=7)
+            s["body"] = ParagraphStyle("onboarding-one-page-body", parent=s["body"], fontSize=11, leading=14, spaceAfter=5)
             s["title"] = ParagraphStyle("onboarding-one-page-title", parent=s["title"], fontSize=18, leading=22, spaceAfter=10)
     de = doc.get("contractDetails", {}).get("language") == "de"
     story = [Paragraph(plain(doc["title"], 180), s["title"])]
