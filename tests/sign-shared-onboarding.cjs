@@ -25,7 +25,7 @@ process.env.SIGN_INTERNAL_SECRET='fixture-secret-'.repeat(4);process.env.SIGN_LE
  try{
   await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb);grant select on agency_crm_state to service_role;');
   await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify({employees:[{id:'emp-miljan',active:true}]})]);
-  for(const n of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql','marketizo-sign-onboarding-email.sql','marketizo-sign-onboarding-details.sql','marketizo-sign-read-first.sql','marketizo-sign-public-onboarding.sql'])await db.exec(fs.readFileSync(__dirname+'/../database/'+n,'utf8'));
+  for(const n of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql','marketizo-sign-onboarding-email.sql','marketizo-sign-onboarding-details.sql','marketizo-sign-read-first.sql','marketizo-sign-public-onboarding.sql','marketizo-sign-readable-documents.sql'])await db.exec(fs.readFileSync(__dirname+'/../database/'+n,'utf8'));
   assert.equal((await db.query("select has_function_privilege('anon','marketizo_sign_flow(text,text,jsonb)','EXECUTE') allowed")).rows[0].allowed,false);
   await db.exec('set role service_role');
   const flow=async(action,data={},org='marketizo-main')=>(await db.query('select marketizo_sign_flow($1,$2,$3::jsonb) r',[org,action,JSON.stringify(data)])).rows[0].r;
@@ -39,8 +39,9 @@ process.env.SIGN_INTERNAL_SECRET='fixture-secret-'.repeat(4);process.env.SIGN_LE
    assert.equal((await flow('public_onboarding_start',{...payload,requestSha256:hash('changed')})).status,409);
    const sessionDigest=hash('session'+cmd);assert.equal((await flow('link_exchange',{invitationDigest:payload.tokenSha256,sessionDigest,context:{}})).ok,true);
    const view=await flow('link_view',{sessionDigest});assert.equal(view.completion.complete,false);assert.equal(view.accepted,false);
-   assert.equal((await flow('completion_submit',{sessionDigest,fields:{name:'Client '+i,company:'Company '+i,country:'AT'}})).ok,true);
-   const ready=await flow('completion_render_data',{sessionDigest});assert.equal(ready.document.recipients[0].name,'Client '+i);
+   assert.equal((await flow('completion_submit',{sessionDigest,fields:{name:'Client '+i,company:'Company '+i,country:'AT',postalCode:'x'.repeat(21)}})).status,400);
+   assert.equal((await flow('completion_submit',{sessionDigest,fields:{name:'Client '+i,company:'Company '+i,country:'AT',postalCode:'11000'}})).ok,true);
+   const ready=await flow('completion_render_data',{sessionDigest});assert.equal(ready.document.recipients[0].name,'Client '+i);assert.equal(ready.document.recipients[0].postalCode,'11000');
    if(i===0){
     const filled=Buffer.from('%PDF-completed-public-client'),filledSha=hash(filled);
     assert.equal((await flow('completion_pdf_store',{sessionDigest,document:ready.document,inputSha256:ready.inputSha256,pdfBase64:filled.toString('base64'),pdfSha256:filledSha,renderer:'fixture'})).ok,true);

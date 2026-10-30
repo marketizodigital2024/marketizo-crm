@@ -25,10 +25,10 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, KeepTogether, Flowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, KeepTogether, Flowable, Table, TableStyle
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "marketizo-pdf-5"
+VERSION = "marketizo-pdf-6"
 LOGO = ImageReader(str(Path(__file__).resolve().parents[1] / "marketizo-logo.png"))
 FONTS = Path(reportlab.__file__).parent / "fonts"
 for name, file in [("Sign", "Vera.ttf"), ("SignBold", "VeraBd.ttf"), ("SignItalic", "VeraIt.ttf"), ("SignBI", "VeraBI.ttf")]:
@@ -187,10 +187,63 @@ class OnboardingSignatureBlock(Flowable):
         c.setStrokeColor(colors.HexColor("#CBD1D9")); c.line(0, 26, 270, 26)
 
 
+def identity_paragraph(value, style):
+    parts = value.split(":", 1)
+    text = ("<b>" + plain(parts[0]) + ":</b> " + plain(parts[1])) if len(parts) == 2 else plain(value)
+    return Paragraph(text, style)
+
+
+def identity_cards(left, right, de=False):
+    style = ParagraphStyle("identity-value", fontName="Sign", fontSize=10.5, leading=15.5, spaceAfter=6)
+    heading = ParagraphStyle("identity-label", parent=style, fontName="SignBold", fontSize=12, leading=17, spaceAfter=12, textColor=colors.HexColor("#243043"))
+    cells = [[Paragraph("Marketizo Digital", heading)] + [identity_paragraph(x, style) for x in left if x],
+             [Paragraph("Kunde" if de else "Klijent", heading)] + [identity_paragraph(x, style) for x in right if x]]
+    width = (A4[0] - 96 - 18) / 2
+    table = Table([[cells[0], "", cells[1]]], colWidths=[width, 18, width], hAlign="LEFT")
+    table.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "TOP"), ("BACKGROUND", (0,0), (0,0), colors.HexColor("#F4F6F8")), ("BACKGROUND", (2,0), (2,0), colors.HexColor("#F4F6F8")), ("BOX", (0,0), (0,0), .5, colors.HexColor("#DCE1E7")), ("BOX", (2,0), (2,0), .5, colors.HexColor("#DCE1E7")), ("LEFTPADDING", (0,0), (-1,-1), 12), ("RIGHTPADDING", (0,0), (-1,-1), 12), ("TOPPADDING", (0,0), (-1,-1), 14), ("BOTTOMPADDING", (0,0), (-1,-1), 14)]))
+    return [table, Spacer(1, 24)]
+
+
+def generic_client_identity(doc, issuer, styles, de):
+    rec = next((r for r in doc.get("recipients", []) if r.get("role") != "marketizo"), {})
+    left = [issuer.get("name", ""), ("Anschrift: " if de else "Adresa: ") + issuer.get("address", ""), issuer.get("email", "")]
+    right = [rec.get("company") or rec.get("name", ""), ("Vertreten durch: " if de else "Zastupnik: ") + rec.get("name", ""), ("Anschrift: " if de else "Adresa: ") + rec.get("address", ""), ("PLZ: " if de else "Poštanski broj: ") + rec.get("postalCode", ""), ("Land: " if de else "Zemlja: ") + rec.get("country", ""), ("Steuernummer: " if de else "PIB: ") + rec.get("taxId", ""), rec.get("email", "")]
+    return identity_cards(left, right, de)
+
+
+def client_identity_intro(doc, issuer, styles, de):
+    blocks = doc["content"]["blocks"]
+    raw = ["".join(r["text"] for r in b["runs"]).strip() for b in blocks]
+    first_clause = next((i for i, text in enumerate(raw) if re.match(r"^(?:Klauzula|Klausel|Član|Artikel)\s*1\b", text)), None)
+    between = next((i for i, text in enumerate(raw[:first_clause]) if text in ("Između:", "Zwischen:")), None) if first_clause else None
+    bank_end = next((i for i, text in enumerate(raw[:first_clause]) if text.startswith("IBAN:")), None) if first_clause else None
+    subject = next((i for i, text in enumerate(raw[:first_clause]) if text in ("Predmet ugovora:", "Vertragsgegenstand:")), None) if first_clause else None
+    if between is None or bank_end is None or subject is None or bank_end <= between:
+        return None
+    subject_lines = raw[subject:subject+2]
+    left = raw[between+1:bank_end+1]
+    right = [text for i, text in enumerate(raw[bank_end+1:first_clause], bank_end+1) if i not in (subject,subject+1) and text not in ("und", "i", "Kunde:")]
+    rec = next((r for r in doc.get("recipients", []) if r.get("role") != "marketizo"), {})
+    if rec.get("postalCode"):
+        suffix = " (" + ("PLZ: " if de else "poštanski broj: ") + rec["postalCode"] + ")"
+        right = [value[:-len(suffix)] if value.endswith(suffix) else value for value in right]
+        right.append(("PLZ: " if de else "Poštanski broj: ") + rec["postalCode"])
+    if rec.get("email"): right.append(("E-Mail: " if de else "Mejl: ") + rec["email"])
+    if rec.get("country"): right.append(("Land: " if de else "Zemlja: ") + rec["country"])
+    lead_style = ParagraphStyle("contract-intro-title", parent=styles["body"], fontName="SignBold", fontSize=13, leading=19, spaceAfter=8)
+    flow = [Paragraph(plain(text), lead_style if i == 0 else styles["body"]) for i, text in enumerate(raw[:between]) if text]
+    flow.extend([Spacer(1, 14), Paragraph(plain(raw[between]), styles["heading"])])
+    flow.extend(identity_cards(left, right, de))
+    flow.extend([identity_paragraph(text, styles["body"]) for text in subject_lines if text])
+    flow.append(Spacer(1, 22))
+    return flow, blocks[first_clause:], {"preamble": raw[:between], "left": left, "right": right, "subject": subject_lines, "language": "de" if de else "sr"}
+
+
 def render_original(payload):
     doc = payload["document"]
     s = styles()
-    onboarding = bool(re.fullmatch(r"marketizo-onboarding:v[123]", doc.get("note", "")))
+    onboarding = bool(re.fullmatch(r"marketizo-onboarding:v[1234]", doc.get("note", "")))
+    two_page_onboarding = doc.get("note") == "marketizo-onboarding:v4"
     compact_onboarding = doc.get("note") in ("marketizo-onboarding:v2", "marketizo-onboarding:v3")
     if onboarding:
         s["body"] = ParagraphStyle("onboarding-body", parent=s["body"], fontSize=11.5, leading=16.5, spaceAfter=7)
@@ -199,9 +252,17 @@ def render_original(payload):
         if compact_onboarding:
             s["body"] = ParagraphStyle("onboarding-one-page-body", parent=s["body"], fontSize=11, leading=14, spaceAfter=3)
             s["title"] = ParagraphStyle("onboarding-one-page-title", parent=s["title"], fontSize=18, leading=22, spaceAfter=10)
+        if two_page_onboarding:
+            s["body"] = ParagraphStyle("onboarding-readable-body", parent=s["body"], fontSize=12.5, leading=18, spaceAfter=9)
+            s["heading"] = ParagraphStyle("onboarding-readable-heading", parent=s["heading"], fontSize=14, leading=20, spaceBefore=8, spaceAfter=12)
+            s["title"] = ParagraphStyle("onboarding-readable-title", parent=s["title"], fontSize=20, leading=27, spaceAfter=18)
     de = doc.get("contractDetails", {}).get("language") == "de"
     story = [Paragraph(plain(doc["title"], 180), s["title"])]
-    for recipient in doc.get("recipients", []):
+    client_layout = doc.get("category") == "clients" and not onboarding and len([r for r in doc.get("recipients", []) if r.get("role") != "marketizo"]) == 1
+    intro = client_identity_intro(doc, payload.get("issuer", {}), s, de) if client_layout else None
+    if intro:
+        story.extend(intro[0])
+    for recipient in ([] if client_layout else doc.get("recipients", [])):
         if onboarding or recipient.get("role") == "marketizo" or (not doc.get("recipientCompletion") and not any(recipient.get(k) for k in ("address", "taxId", "registrationId"))):
             continue
         info = [recipient.get("company") or recipient.get("name", "")]
@@ -213,7 +274,9 @@ def render_original(payload):
         if recipient.get("taxId"): info.append(("Steuernummer: " if de else "Poreski broj: ") + recipient["taxId"])
         if recipient.get("registrationId"): info.append(("Registernummer: " if de else "Registracioni broj: ") + recipient["registrationId"])
         story.append(Paragraph("<br/>".join(plain(v, 400) for v in info), s["small"]))
-    blocks = doc["content"]["blocks"]
+    blocks = intro[1] if intro else doc["content"]["blocks"]
+    if client_layout and not intro:
+        story.extend(generic_client_identity(doc, payload.get("issuer", {}), s, de))
     if len(blocks) > 500:
         raise ValueError("Too many blocks")
     count = 0
@@ -222,6 +285,8 @@ def render_original(payload):
         block_text = "".join(run["text"] for run in block["runs"]).strip()
         if not block_text:
             continue
+        if two_page_onboarding and block_text == "Rezultati i zajedničke obaveze":
+            story.append(PageBreak())
         parts = []
         for run in block["runs"]:
             text = plain(run["text"], 10000)
@@ -259,12 +324,14 @@ def render_original(payload):
     others = [p for p in parties if p.get("role") != "marketizo"] or [{}]
     layouts = []
     for other in others:
-        story.append(OnboardingSignatureBlock(other, layouts, compact_onboarding) if onboarding else SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
+        story.append(OnboardingSignatureBlock(other, layouts, compact_onboarding or two_page_onboarding) if onboarding else SignatureBlock(details, issuer, owners[0] if owners else {}, other, layouts))
     data = build_pdf(doc["title"], story, issuer)
     writer = PdfWriter(io.BytesIO(data))
+    if two_page_onboarding and len(writer.pages) != 2:
+        raise ValueError("Onboarding rules must fit on two A4 pages")
     if compact_onboarding and len(writer.pages) != 1:
         raise ValueError("Onboarding rules must fit on one A4 page")
-    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr", "purpose": "onboarding" if onboarding else "codeks" if doc.get("category") == "other" and doc.get("note", "").startswith("marketizo-codeks:v1|") else "contract"}, ensure_ascii=False)})
+    writer.add_metadata({"/MarketizoLayout": json.dumps({"version": 1, "blocks": layouts, "issuer": issuer, "language": "de" if de else "sr", "readingIntro": intro[2] if intro else None, "purpose": "onboarding" if onboarding else "codeks" if doc.get("category") == "other" and doc.get("note", "").startswith("marketizo-codeks:v1|") else "contract"}, ensure_ascii=False)})
     out = io.BytesIO(); writer.write(out); data = out.getvalue()
     return {"base64": base64.b64encode(data).decode(), "sha256": hashlib.sha256(data).hexdigest(), "renderer": VERSION}
 
@@ -424,7 +491,7 @@ def preview_pdf(payload):
         blocks, paragraph = [], []
         clause_heading = re.compile(r"^(?:Član|Klauzula|Klausel|Artikel|Abschnitt|Article|§)\s*\d+", re.I)
         if layout.get("purpose") == "onboarding":
-            clause_heading = re.compile(r"^(?:[1-9]\.\s+[^\n]{1,100}|Potvrda sa onboarding sastanka)$")
+            clause_heading = re.compile(r"^(?:[1-9]\.\s+[^\n]{1,100}|Potvrda sa onboarding sastanka|Rezultati i zajedničke obaveze)$")
         numbered_item = re.compile(r"^\d+(?:\.\d+)+(?:[.)])?\s|^\d+[.)]\s")
         in_contract_body = layout.get("purpose") == "onboarding"
         def flush():
@@ -479,7 +546,7 @@ def preview_pdf(payload):
         pages.append(readable)
     # Older frozen PDFs predate explicit language metadata. Their fixed signature labels identify the language.
     language = layout.get("language") or ("de" if "Unterzeichnet am:" in "\n".join(full_text) else "sr")
-    return {"pdfSha256": digest, "language": language, "pages": pages, "issuer": layout.get("issuer", {}), "purpose": layout.get("purpose", "contract")}
+    return {"pdfSha256": digest, "language": language, "pages": pages, "issuer": layout.get("issuer", {}), "purpose": layout.get("purpose", "contract"), "readingIntro": layout.get("readingIntro")}
 
 
 def dispatch(payload):

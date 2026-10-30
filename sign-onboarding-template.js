@@ -9,6 +9,8 @@
     ["6. Obrada upita i prodaja", "Svaki novi lead pozovite u roku od 24 sata od ulaska u sistem. Vaša odgovorna osoba prati razgovore, ponude i prodaju. Marketizo Digital ne preuzima odgovornost za zatvaranje prodaje."],
     ["7. Kartica i oglasi", "Obezbedite ispravnu karticu i sredstva. Ako naplata zaustavi kampanje, plaćeni oglasi se ne prikazuju i ne donose upite do rešavanja problema i nastavka prikazivanja. Reagujte odmah."],
     ["8. Mesečni sastanci i rokovi", "Mesečni sastanci su obavezni: pregledamo rad i dogovaramo dalji smer. Odlaganje ili nedolazak klijenta može pomeriti snimanje, objave i oglase za nekoliko dana zbog organizacije novog sastanka. Materijale i pristupe dostavite na vreme; promene cena, ponude i kapaciteta javite unapred. Kašnjenja pomeraju povezane rokove. Radimo u ugovorenom obimu."]
+,
+    ["9. Zajednički rad i garancija", "Dogovorena garancija rezultata uslovljena je zajedničkim poštovanjem ovih pravila i obaveza iz ugovora. Ako se dogovorene obaveze ne poštuju, ne možemo garantovati rezultat. Konkretan obim i uslovi garancije definisani su osnovnim ugovorom."]
   ];
   const block = (text, type = 'paragraph') => ({ type, level: 1, runs: [{ text, bold: false, italic: false, underline: false }] });
   function create() {
@@ -16,14 +18,14 @@
       title: 'Pravila saradnje — Marketizo Digital', category: 'clients', recipientCompletion: true,
       content: { version: 1, blocks: [
         block('Ova pravila zajedno prolazimo na onboarding sastanku i potpisujemo pre njegovog završetka.'),
-        ...clauses.map(([title, text]) => ({ type: 'paragraph', level: 1, runs: [{ text: title + '. ', bold: true, italic: false, underline: false }, { text, bold: false, italic: false, underline: false }] })),
+        ...clauses.flatMap(([title, text], i) => [...(i === 4 ? [block('Rezultati i zajedničke obaveze', 'heading')] : []), { type: 'paragraph', level: 1, runs: [{ text: title + '. ', bold: true, italic: false, underline: false }, { text, bold: false, italic: false, underline: false }] }]),
         block('Potvrđujem da sam pravila pročitao/la, razumeo/la i prihvatio/la, uz mogućnost da postavim pitanja.')
       ] },
       recipients: [], contractDetails: { language: 'sr', audience: 'client', place: '', startDate: '' },
-      governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: 'marketizo-onboarding:v3', dossier: null, parentDocumentId: null
+      governingLaw: 'AT', signatureMethod: 'ses', legalReview: 'pending', note: 'marketizo-onboarding:v4', dossier: null, parentDocumentId: null
     };
   }
-  const template = { create, isDocument: doc => /^marketizo-onboarding:v[123]$/.test(doc?.note || '') };
+  const template = { create, isDocument: doc => /^marketizo-onboarding:v[1234]$/.test(doc?.note || '') };
   if (typeof module !== 'undefined') module.exports = template;
   else window.MarketizoOnboarding = template;
 })();
