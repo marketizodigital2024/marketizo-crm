@@ -8,7 +8,7 @@
     ["5. Kvalitet upita", "Odgovorni smo za kvalitet rada i optimizaciju. Za kvalifikovanije upite treba nam redovan feedback: ko je kontaktiran, da li odgovara dogovorenim kriterijumima i kakav je ishod."],
     ["6. Obrada upita i prodaja", "Svaki novi lead pozovite u roku od 24 sata od ulaska u sistem. Vaša odgovorna osoba prati razgovore, ponude i prodaju. Marketizo Digital ne preuzima odgovornost za zatvaranje prodaje."],
     ["7. Kartica i oglasi", "Obezbedite ispravnu karticu i sredstva. Ako naplata zaustavi kampanje, plaćeni oglasi se ne prikazuju i ne donose upite do rešavanja problema i nastavka prikazivanja. Reagujte odmah."],
-    ["8. Materijali i rokovi", "Materijale i pristupe dostavite na vreme; promene ponude, cena i kapaciteta javite unapred. Radimo u ugovorenom obimu. Kašnjenje pripreme, materijala i potvrda pomera rokove."]
+    ["8. Mesečni sastanci i rokovi", "Mesečni sastanci su obavezni: pregledamo rad i dogovaramo dalji smer. Odlaganje ili nedolazak klijenta može pomeriti snimanje, objave i oglase za nekoliko dana zbog organizacije novog sastanka. Materijale i pristupe dostavite na vreme; promene cena, ponude i kapaciteta javite unapred. Kašnjenja pomeraju povezane rokove. Radimo u ugovorenom obimu."]
   ];
   const block = (text, type = 'paragraph') => ({ type, level: 1, runs: [{ text, bold: false, italic: false, underline: false }] });
   function create() {
