@@ -392,10 +392,10 @@
       $('startOnboarding').disabled = !sendingEnabled;
       $('startOnboarding').addEventListener('click', () => window.MarketizoQuickSign.startOnboarding());
       $('copyOnboardingLink').addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText($('onboardingAdminLink').value); message('Link do onboarding šablona je kopiran. Otvaranje zahteva admin pristup.'); }
-        catch { $('onboardingAdminLink').focus(); $('onboardingAdminLink').select(); message('Označen je link do šablona. Kopiraj ga.'); }
+        try { await navigator.clipboard.writeText($('onboardingAdminLink').value); message('Zajednički link za klijente je kopiran. Admin prijava nije potrebna.'); }
+        catch { $('onboardingAdminLink').focus(); $('onboardingAdminLink').select(); message('Označen je zajednički link za klijente. Kopiraj ga.'); }
       });
-      if (new URLSearchParams(location.search).get('onboarding') === '1') window.MarketizoQuickSign.startOnboarding();
+      if (new URLSearchParams(location.search).get('onboarding') === '1') { $('onboardingTemplatePanel').open=true; $('onboardingTemplatePanel').scrollIntoView({block:'start'}); }
     } catch (e) { $('connectionStatus').textContent = 'Marketizo Sign nije spreman za rad.'; message(e.message, true); }
   }
   init();

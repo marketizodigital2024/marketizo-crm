@@ -113,6 +113,19 @@
           "value": "no-referrer"
         }
       ]
+    },
+    {
+      "source": "/onboarding(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
     }
   ],
   "regions": [
@@ -150,6 +163,9 @@
     },
     "api/codeks.js": {
       "maxDuration": 120
+    },
+    "api/onboarding.js": {
+      "maxDuration": 90
     }
   }
 }
