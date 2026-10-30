@@ -60,7 +60,11 @@ try:
             assert ('Unterschrift' not in page.locator('#signatureSection').inner_text()) if language=='sr' else ('potpis' not in page.locator('#signatureSection').inner_text())
             page.screenshot(path=str(out/f'sign-webkit-mobile-{language}.png'))
             assert not page.locator('#signatureSection').is_visible()
-            assert page.locator('#signSteps [aria-current=step]').inner_text()==('2. Pročitajte dokument' if language=='sr' else '2. Dokument lesen')
+            # This fixture has no details form: reading is the first of two steps.
+            expected_step='1. Pročitajte dokument' if language=='sr' else '1. Dokument lesen'
+            actual_step=page.locator('#signSteps [aria-current=step]').inner_text()
+            assert actual_step==expected_step, (actual_step, expected_step)
+            assert page.locator('#signSteps li').count()==2
             page.locator('#startSigning').click();page.locator('#enlargeSignature').click();assert page.locator('#signatureDialog').is_visible()
             page.locator('#closeSignatureDialog').click()
             assert page.locator('#acceptTerms').is_checked()==False
