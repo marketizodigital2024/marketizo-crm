@@ -57,7 +57,6 @@ try:
             assert page.locator('#zoomValue,#pageCounter,#readerToolbar,#pageNavigator').count()==0
             assert '100%' not in page.locator('body').inner_text()
             assert page.locator('#startSigning').inner_text()==('Pređi na potpis' if language=='sr' else 'Zur Unterschrift')
-            assert ('Unterschrift' not in page.locator('#signatureSection').inner_text()) if language=='sr' else ('potpis' not in page.locator('#signatureSection').inner_text())
             page.screenshot(path=str(out/f'sign-webkit-mobile-{language}.png'))
             assert not page.locator('#signatureSection').is_visible()
             # This fixture has no details form: reading is the first of two steps.
@@ -65,7 +64,14 @@ try:
             actual_step=page.locator('#signSteps [aria-current=step]').inner_text()
             assert actual_step==expected_step, (actual_step, expected_step)
             assert page.locator('#signSteps li').count()==2
-            page.locator('#startSigning').click();page.locator('#enlargeSignature').click();assert page.locator('#signatureDialog').is_visible()
+            page.locator('#startSigning').click()
+            assert page.locator('#signatureSection').is_visible()
+            assert page.locator('#signatureTitle').inner_text()==('Vaš potpis' if language=='sr' else 'Ihre Unterschrift')
+            # Inspect rendered UI after revealing it: innerText on a hidden ancestor
+            # includes hidden receipt-email labels which are not part of this fixture.
+            signature_text=page.locator('#signatureSection').inner_text()
+            assert ('Unterschrift' not in signature_text) if language=='sr' else ('potpis' not in signature_text)
+            page.locator('#enlargeSignature').click();assert page.locator('#signatureDialog').is_visible()
             page.locator('#closeSignatureDialog').click()
             assert page.locator('#acceptTerms').is_checked()==False
             assert not posts and not errors
