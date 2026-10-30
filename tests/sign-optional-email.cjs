@@ -4,7 +4,7 @@ const {hash}=require('../lib/sign-workflow.js'),{validateDraft,assertReady}=requ
 (async()=>{const db=new PGlite();await db.waitReady;try{
  await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb);grant select on agency_crm_state to service_role;');
  await db.query('insert into agency_crm_state values($1,$2)',['marketizo-main',JSON.stringify({employees:[{id:'emp-miljan',active:true}]})]);
- for(const n of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql','marketizo-sign-onboarding-email.sql','marketizo-sign-onboarding-details.sql'])await db.exec(fs.readFileSync(__dirname+'/../database/'+n,'utf8'));
+ for(const n of ['marketizo-sign.sql','marketizo-sign-flow.sql','marketizo-sign-direct.sql','marketizo-sign-completion.sql','marketizo-sign-onboarding-email.sql','marketizo-sign-onboarding-details.sql','marketizo-sign-read-first.sql'])await db.exec(fs.readFileSync(__dirname+'/../database/'+n,'utf8'));
  await db.exec('set role service_role');
  const flow=async(action,data={},org='marketizo-main')=>(await db.query('select marketizo_sign_flow($1,$2,$3::jsonb) r',[org,action,JSON.stringify(data)])).rows[0].r;
  const command=async(action,payload)=>(await db.query('select marketizo_sign_command($1,$2,$3,$4,$5::jsonb) r',['marketizo-main','emp-miljan',crypto.randomUUID(),action,JSON.stringify(payload)])).rows[0].r;
@@ -19,6 +19,7 @@ const {hash}=require('../lib/sign-workflow.js'),{validateDraft,assertReady}=requ
   assert.equal((await flow('link_exchange',{invitationDigest:tokenSha256,sessionDigest,context:{}})).ok,true);
   assert.equal((await flow('link_view',{sessionDigest})).clientReceiptEmail,true);
   assert.equal((await flow('link_view',{sessionDigest},'other')).ok,false);
+  const firstRead=await flow('onboarding_preview',{sessionDigest});assert.equal(firstRead.pdfSha256,sha);assert.equal(firstRead.pdfBase64,original.toString('base64'));assert.equal((await flow('onboarding_preview',{sessionDigest},'other')).ok,false);
   let signingOriginal=original,signingSha=sha;
   if(!adminEmail){
    const view=await flow('link_view',{sessionDigest});assert.equal(view.completion.complete,false);assert.deepEqual(view.completion.required,['name','company','country']);

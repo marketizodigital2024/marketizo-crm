@@ -32,8 +32,8 @@ function createHandler(deps = {}) {
    if (!config.configured) throw new SignError(503, 'Sign servis trenutno nije dostupan.');
    const flow = (deps.createWorkflow || createWorkflow)({ ...config, organization: process.env.CRM_STATE_ID || 'marketizo-main' });
    const ctx = context(req); await flow.rpc('rate', { key: mac('rate', ctx.ip) });
-   async function preview(digest, receipt = false) {
-    const source = await flow.rpc(receipt ? 'receipt' : 'pdf', { sessionDigest: digest });
+   async function preview(digest, receipt = false, initial = false) {
+    const source = await flow.rpc(initial ? 'onboarding_preview' : receipt ? 'receipt' : 'pdf', { sessionDigest: digest });
     const bytes = Buffer.from(source.pdfBase64 || '', 'base64');
     if (bytes.length > 1500000 || hash(bytes) !== source.pdfSha256) throw new SignError(503, 'PDF nije potvrđen.');
     const result = await flow.helper({ action: 'preview', pdfBase64: bytes.toString('base64'), pdfSha256: source.pdfSha256 });
@@ -56,6 +56,7 @@ function createHandler(deps = {}) {
      if (!view.accepted || view.status !== 'signed') throw new SignError(403, 'Preuzimanje PDF-a je dostupno nakon završenog potpisivanja.');
      return pdf(res, await flow.rpc('receipt', { sessionDigest: digest }));
     }
+    if (action === 'initial_preview') return json(res, 200, { ok: true, ...await preview(digest, false, true) });
     if (action === 'preview' || action === 'receipt_preview') return json(res, 200, { ok: true, ...await preview(digest, action === 'receipt_preview') });
     if (action === 'evidence') { res.setHeader('Content-Disposition', 'attachment; filename="Marketizo-evidencija.json"'); return json(res, 200, await flow.rpc('evidence', { sessionDigest: digest })); }
     throw new SignError(400, 'Nepoznata radnja.');
