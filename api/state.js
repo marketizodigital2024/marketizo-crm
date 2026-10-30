@@ -523,6 +523,16 @@ module.exports = async function handler(req, res) {
           updatedAt: current.updatedAt,
         });
       }
+      const metadataLoss = require("../lib/work-log-integrity.js").metadataLoss(current.payload, payload);
+      if (metadataLoss.length) {
+        console.warn("work-log-metadata-loss-blocked", JSON.stringify({ actorId: access.employee?.id, role: access.role, count: metadataLoss.length }));
+        return json(res, 409, {
+          configured: true, conflict: true, unsafeWorkLogMetadata: true,
+          error: "Čuvanje je zaustavljeno jer bi obrisalo aktivnost ili klijenta postojećeg radnog unosa. Osveži stranicu i ponovi izmenu.",
+          affectedCount: new Set(metadataLoss.map(item => item.id)).size,
+          updatedAt: current.updatedAt,
+        });
+      }
       await preserveDailyPrewriteBackup(config, current);
       payload = preserveCredentials(payload, current.payload);
       if (Array.isArray(payload.clients)) payload.clients = payload.clients.map((client) => {
@@ -540,6 +550,8 @@ module.exports = async function handler(req, res) {
         headers: {
           ...supabaseHeaders(config.key),
           Prefer: "return=representation",
+          "X-Marketizo-Actor-Id": access.employee?.id || access.client?.id || "",
+          "X-Marketizo-Write-Source": "state-api",
         },
         body: JSON.stringify({
           id: rowId,
