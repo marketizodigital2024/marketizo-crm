@@ -130,7 +130,7 @@ async function main(){
   fs.writeFileSync(path.join(out,'sign-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:false},sessionId)).data,'base64'));
   assert.equal(await evaluate("document.getElementById('signatureSection').hidden"),true,'Read the agreement before entering the signature step');
   await click('startSigning');
-  assert.equal(await evaluate("document.querySelector('#signSteps [aria-current=step]').textContent"),'3. Potpišite');
+  assert.equal(await evaluate("document.querySelector('#signSteps [aria-current=step]').textContent"),'3. Potvrdite i potpišite');
   await fill('signerName','Fixture Signer');
   await click('enlargeSignature'); assert.equal(await evaluate("document.getElementById('signatureDialog').open"),true);
   const rect=await evaluate("(()=>{const r=document.getElementById('largeSignatureCanvas').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()");
