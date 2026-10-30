@@ -2,7 +2,7 @@
 (() => {
   const clauses = [
     ["1. Scenariji", "Scenarije šaljemo tri dana pre snimanja. U roku od 24 sata od prijema proverite informacije i pošaljite sve izmene odjednom. Na terenu snimamo dogovorenu verziju, bez izmena scenarija ako se okolnosti nisu promenile."],
-    ["2. Snimanje i priprema", "Pre dolaska naše ekipe pripremite učesnike, prostor i proizvode; budite spremni na vreme, na svakoj lokaciji. Promene javite unapred. Ne snimamo vikendom, osim po prethodnom dogovoru uz doplatu prema naknadno dogovorenoj ceni."],
+    ["2. Snimanje i priprema", "Pre dolaska naše ekipe pripremite učesnike, prostor i proizvode za početak u dogovoreno vreme, na svakoj lokaciji. Tokom dana imamo više snimanja. Zbog kašnjenja ili nespremnosti klijenta termin se ne produžava: snimatelj odlazi na sledeće snimanje, a nesnimljeni materijal se ne nadoknađuje. Promene javite unapred. Ne snimamo vikendom bez dogovora i doplate po naknadno dogovorenoj ceni."],
     ["3. Odobrenje klipova", "Bez vaše jasne potvrde u zajedničkoj grupi ne objavljujemo klip. Čekanje pomera objave i oglase."],
     ["4. Revizije", "Za svaki scenario, klip i dizajn uključena je najviše jedna revizija. Jedna odgovorna osoba šalje sve komentare odjednom u grupi. Dodatne revizije dogovaramo posebno."],
     ["5. Kvalitet upita", "Odgovorni smo za kvalitet rada i optimizaciju. Za kvalifikovanije upite treba nam redovan feedback: ko je kontaktiran, da li odgovara dogovorenim kriterijumima i kakav je ishod."],
