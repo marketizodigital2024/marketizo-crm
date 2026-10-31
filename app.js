@@ -1,3 +1,38 @@
+// Short-lived calculation cache: discarded after each synchronous render.
+let adminRenderMemo = null;
+let adminRenderDay = "";
+let adminRenderRevision = 0;
+const adminRenderedViews = new Map();
+const adminViennaDateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit" });
+let employeeWorkPage = 0;
+let employeeWorkPageFilter = "";
+
+function memoizedAdminCalculation(key, calculate) {
+  if (!adminRenderMemo) return calculate();
+  if (!adminRenderMemo.has(key)) adminRenderMemo.set(key, calculate());
+  return adminRenderMemo.get(key);
+}
+
+function withAdminRenderCache(render) {
+  if (adminRenderMemo) return render();
+  adminRenderMemo = new Map();
+  adminRenderDay = adminViennaDateFormatter.format(new Date());
+  try { return render(); }
+  finally { adminRenderMemo = null; adminRenderDay = ""; }
+}
+
+function employeePanelNeeded(id) {
+  const element = document.getElementById(id);
+  return Boolean(element && !element.closest(".employee-section-hidden, .work-entry-subsection-hidden, [hidden]"));
+}
+
+function workLogPageSlice(rows, page = 0, size = 50) {
+  const pages = Math.max(1, Math.ceil(rows.length / size));
+  const index = Math.max(0, Math.min(pages - 1, page));
+  return { rows: rows.slice(index * size, (index + 1) * size), page: index, pages, total: rows.length,
+    from: rows.length ? index * size + 1 : 0, to: Math.min(rows.length, (index + 1) * size) };
+}
+
 // Keep persisted category identifiers stable for historical logs and older tabs.
 function workActivityCategoryLabel(category) {
   const value = String(category || "Ostalo");
@@ -1192,9 +1227,11 @@ function currentMonthKey() {
 }
 
 function currentDateKey() {
-  return new Intl.DateTimeFormat("en-CA", {
+  if (typeof adminRenderDay !== "undefined" && adminRenderDay) return adminRenderDay;
+  const formatter = typeof adminViennaDateFormatter !== "undefined" ? adminViennaDateFormatter : new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date());
+  });
+  return formatter.format(new Date());
 }
 
 function selectedMonthKey() {
@@ -2974,6 +3011,7 @@ function absenceWorkdays(absence) {
 }
 
 function employeeYearAbsenceDays(employeeId, year, type) {
+  const calculate = () => {
   const employee = employeeById(employeeId);
   const openingUsed = type === "Godišnji odmor" && year === Number(currentDateKey().slice(0, 4)) ? parseNumber(employee?.openingVacationUsed || 0) : 0;
   const overrides = employee?.monthlyAbsenceDays || {};
@@ -2988,6 +3026,9 @@ function employeeYearAbsenceDays(employeeId, year, type) {
       const days = absenceWorkdays(absence).filter((day) => day.startsWith(`${year}-`) && !overriddenMonths.has(day.slice(0, 7)));
       return sum + days.length;
     }, 0);
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeYearAbsenceDays", employeeId, year, type]), calculate) : calculate();
 }
 
 function vacationUtcDate(dateKey) {
@@ -3065,30 +3106,46 @@ function employeeMonthAbsenceDays(employeeId, monthKey, type = "") {
 }
 
 function employeeMonthHours(employeeId, monthKey) {
+  const calculate = () => {
   const loggedHours = state.employeeWorkLogs
     .filter((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey))
     .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
   const penaltyHours = employeeMonthLatePenaltyHours(employeeId, monthKey);
   const adjustmentHours = employeeMonthHourDeductionMinutes(employeeId, monthKey) / 60;
   return Math.round((loggedHours - penaltyHours - adjustmentHours) * 100) / 100;
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeMonthHours", employeeId, monthKey]), calculate) : calculate();
 }
 
 function employeeMonthHourDeductionMinutes(employeeId, monthKey) {
+  const calculate = () => {
   return (state.employeeHourAdjustments || [])
     .filter((adjustment) => adjustment.employeeId === employeeId && String(adjustment.date || "").startsWith(monthKey))
     .reduce((sum, adjustment) => sum + Math.max(0, Number(adjustment.minutes || 0)), 0);
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeMonthHourDeductionMinutes", employeeId, monthKey]), calculate) : calculate();
 }
 
 function employeeMonthRawHours(employeeId, monthKey) {
+  const calculate = () => {
   return state.employeeWorkLogs
     .filter((log) => log.employeeId === employeeId && String(log.date || "").startsWith(monthKey))
     .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeMonthRawHours", employeeId, monthKey]), calculate) : calculate();
 }
 
 function employeeMonthLatePenaltyHours(employeeId, monthKey) {
+  const calculate = () => {
   return (state.employeeLateRecords || [])
     .filter((record) => record.employeeId === employeeId && String(record.date || "").startsWith(monthKey))
     .reduce((sum, record) => sum + Math.max(15, Number(record.penaltyMinutes || record.minutes || 0)) / 60, 0);
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeMonthLatePenaltyHours", employeeId, monthKey]), calculate) : calculate();
 }
 
 function employeeLateCount(employeeId, monthKey) {
@@ -3118,6 +3175,7 @@ function scheduledMinutesForDate(weeklyHours, date) {
 }
 
 function employeeExpectedHours(employee, monthKey) {
+  const calculate = () => {
   const weeklyHours = parseNumber(employeeWeeklyHoursForMonth(employee, monthKey), 38.5);
   const eligibleWorkdays = workdaysInMonth(monthKey).filter((day) =>
     (!employee.startDate || day >= employee.startDate) &&
@@ -3125,9 +3183,13 @@ function employeeExpectedHours(employee, monthKey) {
     !(state.employeeAbsences || []).some((absence) => absence.employeeId === employee.id && absence.status === "Odobreno" && day >= absence.startDate && day <= absence.endDate)
   );
   return Math.round(eligibleWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeExpectedHours", employee.id, monthKey]), calculate) : calculate();
 }
 
 function employeeExpectedHoursToDate(employee, monthKey) {
+  const calculate = () => {
   const selectedMonth = monthIndex(monthKey);
   const currentMonth = monthIndex(currentMonthKey());
   if (selectedMonth < currentMonth) return employeeExpectedHours(employee, monthKey);
@@ -3147,6 +3209,9 @@ function employeeExpectedHoursToDate(employee, monthKey) {
     )
   );
   return Math.round(elapsedWorkdays.reduce((sum, day) => sum + scheduledMinutesForDate(weeklyHours, day), 0) / 60 * 100) / 100;
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeExpectedHoursToDate", employee.id, monthKey]), calculate) : calculate();
 }
 
 function employeeMonthlyHoursPreview(weeklyHours, monthKey, startDate = "") {
@@ -3181,6 +3246,7 @@ function employeeMonthHasActivity(employeeId, monthKey) {
 }
 
 function employeeMonthBalance(employee, monthKey) {
+  const calculate = () => {
   if (Object.prototype.hasOwnProperty.call(employee.monthlyBalanceOverrides || {}, monthKey)) {
     return Math.round((parseNumber(employee.monthlyBalanceOverrides[monthKey]) - (state.employeeHourAdjustments || []).filter((item) => item.employeeId === employee.id && String(item.date || "").startsWith(monthKey)).reduce((sum, item) => sum + Number(item.minutes || 0) / 60, 0)) * 100) / 100;
   }
@@ -3193,9 +3259,13 @@ function employeeMonthBalance(employee, monthKey) {
     completedHours -= todayHours;
   }
   return Math.round((completedHours - employeeExpectedHoursToDate(employee, monthKey)) * 100) / 100;
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeMonthBalance", employee.id, monthKey]), calculate) : calculate();
 }
 
 function employeeCarryoverBalance(employee, monthKey) {
+  const calculate = () => {
   const openingMonth = employee.openingBalanceMonth || shiftMonth(currentMonthKey(), -1);
   const openingBalance = parseNumber(employee.openingHourBalance || 0);
   let total = monthIndex(monthKey) > monthIndex(openingMonth) ? openingBalance : 0;
@@ -3213,10 +3283,17 @@ function employeeCarryoverBalance(employee, monthKey) {
     total += employeeMonthBalance(employee, key);
   }
   return Math.round(total * 100) / 100;
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeCarryoverBalance", employee.id, monthKey]), calculate) : calculate();
 }
 
 function employeeHourBalance(employee, monthKey) {
+  const calculate = () => {
   return Math.round((employeeMonthBalance(employee, monthKey) + employeeCarryoverBalance(employee, monthKey)) * 100) / 100;
+  };
+  return typeof memoizedAdminCalculation === "function"
+    ? memoizedAdminCalculation(JSON.stringify(["employeeHourBalance", employee.id, monthKey]), calculate) : calculate();
 }
 
 function employeeCarryoverLabel(employee, monthKey) {
@@ -3557,12 +3634,12 @@ function renderEmployees() {
   renderEmployeeRows(employees, monthKey, year);
   renderSelectedEmployeeDetail(employee, monthKey, year);
   renderEmployeeAbsenceRequests();
-  renderEmployeeCalendar(monthKey, employees);
-  renderEmployeeWorkRows(monthKey);
-  renderEmployeeActivities();
-  renderEmployeeHourAdjustments();
+  if (employeePanelNeeded("employeeCalendar")) renderEmployeeCalendar(monthKey, employees);
+  if (employeePanelNeeded("employeeWorkRows")) renderEmployeeWorkRows(monthKey);
+  if (employeePanelNeeded("employeeActivityList")) renderEmployeeActivities();
+  if (employeePanelNeeded("employeeHourDeductionList")) renderEmployeeHourAdjustments();
   renderEmployeeOps(monthKey);
-  renderEmployeeTeamTimeline(monthKey);
+  if (employeePanelNeeded("employeeTeamTimeline")) renderEmployeeTeamTimeline(monthKey);
   updateEmployeeMonthlyPreview();
 }
 
@@ -3864,7 +3941,7 @@ function renderEmployeeWorkRows(monthKey) {
   const workMonth = employeeWorkMonthFilter || monthKey;
   const monthInput = document.getElementById("employeeWorkMonthFilter");
   if (monthInput) monthInput.value = workMonth;
-  const rows = state.employeeWorkLogs
+  const filteredLogs = state.employeeWorkLogs
     .filter((log) => String(log.date || "").startsWith(workMonth))
     .filter((log) => employeeWorkPersonFilter === "all" || log.employeeId === employeeWorkPersonFilter)
     .filter((log) => {
@@ -3876,8 +3953,12 @@ function renderEmployeeWorkRows(monthKey) {
       const employee = employeeById(log.employeeId);
       return employee && bySearch({ ...log, employee: employee.name });
     })
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .map((log) => {
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const filterKey = JSON.stringify([workMonth, employeeWorkPersonFilter, employeeWorkClientFilter, searchTerm]);
+  if (employeeWorkPageFilter !== filterKey) { employeeWorkPageFilter = filterKey; employeeWorkPage = 0; }
+  const page = workLogPageSlice(filteredLogs, employeeWorkPage);
+  employeeWorkPage = page.page;
+  const rows = page.rows.map((log) => {
       const employee = employeeById(log.employeeId);
       return `
       <tr>
@@ -3886,12 +3967,21 @@ function renderEmployeeWorkRows(monthKey) {
         <td>${window.MarketizoCosts.minutes(log)} min<br /><span>${formatHours(log.hours || 0)}h</span></td>
         <td><strong>${escapeInvoiceText(log.activityName || "Rad")}</strong>${log.note ? `<br /><span>${escapeInvoiceText(log.note)}</span>` : ""}</td>
         <td>${escapeInvoiceText(log.clientName || "Bez klijenta")}</td>
-        <td><strong>+</strong> ${log.positive || "-"}<br /><strong>-</strong> ${log.negative || "-"}</td>
+        <td><strong>+</strong> ${escapeInvoiceText(log.positive || "-")}<br /><strong>-</strong> ${escapeInvoiceText(log.negative || "-")}</td>
         <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button" data-edit-work-log="${escapeInvoiceText(log.id)}" type="button">Izmeni</button> <button class="edit-button danger-action" data-delete-work-log="${escapeInvoiceText(log.id)}" type="button">Obriši</button></td>
       </tr>`;
     });
-  setText("employeeWorkRowsCount", `${rows.length} unosa`);
+  setText("employeeWorkRowsCount", `${page.total} unosa`);
   document.getElementById("employeeWorkRows").innerHTML = rows.join("") || `<tr><td colspan="7">Nema unetih sati za izabrani mesec i zaposlenog.</td></tr>`;
+  let pager = document.getElementById("employeeWorkPager");
+  if (!pager) {
+    pager = document.createElement("nav"); pager.id = "employeeWorkPager"; pager.className = "work-log-pagination";
+    pager.setAttribute("aria-label", "Stranice unosa rada");
+    const table = document.getElementById("employeeWorkRows").closest("table");
+    (table.parentElement.tagName === "DIV" ? table.parentElement : table).after(pager);
+  }
+  pager.innerHTML = `<button type="button" class="secondary-button" data-work-page="-1" ${page.page === 0 ? "disabled" : ""}>← Prethodna</button><span>Prikaz ${page.from}–${page.to} od ${page.total}</span><button type="button" class="secondary-button" data-work-page="1" ${page.page + 1 >= page.pages ? "disabled" : ""}>Sledeća →</button>`;
+  pager.querySelectorAll("[data-work-page]").forEach(button => button.addEventListener("click", () => { employeeWorkPage += Number(button.dataset.workPage); renderEmployeeWorkRows(monthKey); }));
   document.querySelectorAll("[data-edit-work-log]").forEach((button) => button.addEventListener("click", () => openWorkLogEditor(button.dataset.editWorkLog)));
   document.querySelectorAll("[data-delete-work-log]").forEach((button) => button.addEventListener("click", async () => {
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
@@ -4040,11 +4130,12 @@ function renderEmployeeAbsenceRequests() {
 }
 
 function renderEmployeeOps(monthKey) {
-  renderEmployeeLateRows(monthKey);
-  renderEmployeeGoalRows();
-  renderEmployeeOneOnOneRows();
-  renderCompanyPlanList();
-  renderEmployeeReportRows(monthKey);
+  const profile = /\/employee-profile(?:\.html)?$/.test(location.pathname);
+  if (employeePanelNeeded("employeeLateRows")) renderEmployeeLateRows(monthKey);
+  if (profile || employeePanelNeeded("employeeGoalRows") || employeePanelNeeded("employeePerformanceRows")) renderEmployeeGoalRows();
+  if (employeePanelNeeded("employeeOneOnOneRows")) renderEmployeeOneOnOneRows();
+  if (employeePanelNeeded("companyPlanList")) renderCompanyPlanList();
+  if (employeePanelNeeded("employeeReportRows")) renderEmployeeReportRows(monthKey);
 }
 
 function renderEmployeeLateRows(monthKey) {
@@ -4226,6 +4317,7 @@ function renderEmployeePerformanceOverview() {
     const activateProfileTab = () => {
       profileTarget.querySelectorAll("[data-profile-panel]").forEach((panel) => panel.hidden = panel.dataset.profilePanel !== employeeProfileTab);
       profileTarget.querySelectorAll("[data-profile-tab]").forEach((button) => button.classList.toggle("active", button.dataset.profileTab === employeeProfileTab));
+      if (employeeProfileTab === "clients" && !profileTarget.dataset.ratingsRequested) { profileTarget.dataset.ratingsRequested = "true"; renderProfileClientRatings(employee.id); }
     };
     profileTarget.querySelectorAll("[data-profile-tab]").forEach((button) => button.addEventListener("click", () => {
       employeeProfileTab = button.dataset.profileTab;
@@ -4238,7 +4330,6 @@ function renderEmployeePerformanceOverview() {
       renderAll();
     });
     activateProfileTab();
-    renderProfileClientRatings(employee.id);
     document.getElementById("saveEmployeeInternalNote")?.addEventListener("click", async () => {
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
@@ -4545,11 +4636,7 @@ function setupEmployeeAdminSections() {
 setupEmployeeAdminSections();
 
 function normalizeVisibleLayouts() {
-  document.querySelectorAll("#employees .panel[hidden]").forEach((panel) => {
-    panel.hidden = false;
-  });
-
-  document.querySelectorAll(".admin-layout").forEach((layout) => {
+  document.querySelectorAll(".view.active .admin-layout").forEach((layout) => {
     const visiblePanels = [...layout.children].filter((panel) => {
       const style = getComputedStyle(panel);
       return !panel.hidden && style.display !== "none" && style.visibility !== "hidden";
@@ -4560,7 +4647,12 @@ function normalizeVisibleLayouts() {
 
 window.addEventListener("hashchange", () => setTimeout(normalizeVisibleLayouts, 0));
 window.addEventListener("load", () => setTimeout(normalizeVisibleLayouts, 150));
-new MutationObserver(() => requestAnimationFrame(normalizeVisibleLayouts)).observe(document.body, {
+let adminLayoutFramePending = false;
+new MutationObserver(() => {
+  if (adminLayoutFramePending) return;
+  adminLayoutFramePending = true;
+  requestAnimationFrame(() => { adminLayoutFramePending = false; normalizeVisibleLayouts(); });
+}).observe(document.body, {
   childList: true,
   subtree: true
 });
@@ -4704,7 +4796,7 @@ function setupClientCostAnalysis() {
   const main = document.querySelector(".main");
   if (!sidebar || !main || document.getElementById("clientCosts")) return;
 
-  const button = document.createElement("button");
+  const button = sidebar.querySelector(".client-cost-nav") || document.createElement("button");
   button.className = "nav-item client-cost-nav";
   button.type = "button";
   button.textContent = "Trošak klijenata";
@@ -4884,17 +4976,17 @@ function setupClientCostAnalysis() {
     });
   };
   const show = (event) => {
-    event?.stopImmediatePropagation();
     document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
     document.querySelectorAll(".sidebar .nav-item").forEach((item) => item.classList.remove("active"));
     view.classList.add("active"); button.classList.add("active");
     document.body.dataset.activeView = "clientCosts";
     setText("pageTitle", "Trošak klijenata");
     updateContextActions("clientCosts");
-    history.replaceState(null, "", "#client-costs");
+    if (location.hash !== "#client-costs") history.pushState(null, "", "#client-costs");
     populate(); loadOverheadEditor(); render();
   };
   button.addEventListener("click", show);
+  window.addEventListener("hashchange", () => { if (location.hash === "#client-costs") show(); });
   view.querySelectorAll("[data-cost-period]").forEach((item) => item.addEventListener("click", () => { setPeriod(item.dataset.costPeriod); render(); }));
   [from, to, clientSelect, employeeSelect].forEach((item) => item.addEventListener("change", render));
   employeeSearch.addEventListener("input", () => { const query = employeeSearch.value.trim().toLowerCase(); employeeList.querySelectorAll("label").forEach((item) => item.hidden = Boolean(query) && !item.dataset.employeeName.includes(query)); });
@@ -5892,27 +5984,48 @@ document.addEventListener("click", (event) => {
   anchor.href = target.href;
 }, true);
 
+function renderCurrentAdminView() {
+  if (!onlineHydrationComplete && location.protocol !== "file:") return;
+  const view = document.querySelector(".view.active")?.id;
+  const root = document.getElementById(view);
+  const viewKey = view === "employees" ? JSON.stringify([view, root?.dataset.employeeSection, root?.dataset.workEntrySubsection, selectedEmployeeId]) : view;
+  const stamp = `${adminRenderRevision}:${currentDateKey()}`;
+  if (!view || adminRenderedViews.get(viewKey) === stamp) return;
+  withAdminRenderCache(() => {
+    if (view === "admin") renderAdminPanel();
+    else if (view === "clients") renderClients();
+    else if (view === "leadCrm") renderLeadCrm();
+    else if (view === "employees") renderEmployees();
+    else if (view === "calendar") renderAdminTeamCalendar();
+    else if (view === "reports") renderReports();
+    else if (view === "clientPortal") renderClientPortal();
+    else if (view === "clientCosts") window.dispatchEvent(new Event("marketizo-cost-data-ready"));
+    adminRenderedViews.set(viewKey, stamp);
+  });
+  window.MarketizoDashboardHelp?.refresh();
+}
+
 function renderAll() {
-  setupOperationalAdminField();
-  const notificationCount = (state.notifications || []).length;
-  generateSystemNotifications();
-  if ((state.notifications || []).length !== notificationCount) saveState({ remote: false });
-  renderPendingAdminRequests();
-  renderAdminPanel();
-  if (document.getElementById("clientCards")) renderClients();
-  if (document.getElementById("leadCards")) renderLeadCrm();
-  if (document.getElementById("employees")) renderEmployees();
-  if (document.getElementById("adminTeamCalendar")) renderAdminTeamCalendar();
-  if (document.getElementById("countryBars")) renderReports();
-  if (document.getElementById("clientPortal")) renderClientPortal();
-  renderLeadClientOptions();
-  applyOperationalAdminAccess();
+  if (!onlineHydrationComplete && location.protocol !== "file:") return;
+  adminRenderRevision += 1;
+  withAdminRenderCache(() => {
+    setupOperationalAdminField();
+    const notificationCount = (state.notifications || []).length;
+    generateSystemNotifications();
+    if ((state.notifications || []).length !== notificationCount) saveState({ remote: false });
+    renderPendingAdminRequests();
+    renderLeadClientOptions();
+    renderCurrentAdminView();
+    applyOperationalAdminAccess();
+    window.MarketizoDashboardHelp?.refresh();
+  });
 }
 
 document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
     const viewName = button.dataset.view;
     const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
+    if ((currentFile.startsWith("employees-") || currentFile === "employee-profile") && viewName === "employees" && currentFile !== "employees-overview") { location.href = "employees-overview.html"; return; }
     if ((currentFile.startsWith("employees-") || currentFile === "employee-profile") && viewName !== "employees") {
       location.href = `index.html#${viewName}`;
       return;
@@ -5940,11 +6053,17 @@ function setActiveView(viewName, updateUrl = false) {
   setText("pageTitle", button.textContent);
   updateContextActions(viewName);
   if (updateUrl && !location.pathname.split("/").pop().startsWith("employees-")) {
-    history.replaceState(null, "", `#${viewName}`);
+    if (location.hash !== `#${viewName}`) history.pushState(null, "", `#${viewName}`);
   }
+  renderCurrentAdminView();
 }
 
 function activateMainRoute() {
+  if (location.hash === "#client-costs") {
+    if (/\/(?:employees-|employee-profile)/.test(location.pathname)) { location.replace("index.html#client-costs"); return; }
+    document.querySelector(".client-cost-nav")?.click();
+    return;
+  }
   const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
   if (currentFile.startsWith("employees-") || currentFile === "employee-profile") {
     setActiveView("employees");
@@ -7040,7 +7159,6 @@ document.getElementById("backupNowBtn")?.addEventListener("click", async () => {
 
 setupPasswordToggles();
 hydrateOnlineState().then(() => {
-  renderAll();
   window.MarketizoRemote?.startPolling((payload) => {
     state = loadState(payload);
     window.MarketizoRemote.adoptBaseline?.(state);
@@ -7061,6 +7179,7 @@ updateContextActions("admin");
     const home = document.getElementById("admin");
     const month = document.getElementById("monthFilter");
     if (!home?.classList.contains("active") || !month) return;
+    const changed = month.value !== currentLocalMonth() || Boolean(dateFromFilter || dateToFilter);
     month.value = currentLocalMonth();
     const from = document.getElementById("dateFromFilter");
     const to = document.getElementById("dateToFilter");
@@ -7068,8 +7187,7 @@ updateContextActions("admin");
     dateToFilter = "";
     if (from) from.value = "";
     if (to) to.value = "";
-    month.dispatchEvent(new Event("input", { bubbles: true }));
-    month.dispatchEvent(new Event("change", { bubbles: true }));
+    if (changed) month.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
   const minutesFromText = (value) => {
