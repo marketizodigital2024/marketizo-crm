@@ -1,0 +1,31 @@
+import {PGlite} from '@electric-sql/pglite';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const db = new PGlite(); await db.waitReady;
+await db.exec('create role anon;create role authenticated;create role service_role bypassrls;create table public.agency_crm_state(id text primary key,payload jsonb,updated_at timestamptz);grant select,insert,update on agency_crm_state to service_role;');
+const legacy={id:'legacy',employeeId:'e',date:'2026-10-16',minutes:20,activityName:'Rad',activityCategory:'Ostalo',clientId:''};
+const original={employees:[{id:'e',status:'Aktivan'}],clients:[{id:'c',name:'Client'}],employeeActivities:[{id:'edit',name:'Edit',category:'Editori'},{id:'pause',name:'Pauza',category:'Interno'}],employeeWorkLogs:[legacy],unrelated:{keep:true}};
+await db.query("insert into agency_crm_state values('marketizo-main',$1,now())",[JSON.stringify(original)]);
+await db.exec(fs.readFileSync(new URL('../database/work-log-integrity.sql',import.meta.url),'utf8'));
+await db.exec(fs.readFileSync(new URL('../database/work-log-required-client.sql',import.meta.url),'utf8'));
+await db.exec(fs.readFileSync(new URL('../supabase/20261014_atomic_work_log.sql',import.meta.url),'utf8'));
+const read=async()=> (await db.query("select payload from agency_crm_state where id='marketizo-main'")).rows[0].payload;
+const save=async p=>db.query("update agency_crm_state set payload=$1,updated_at=clock_timestamp() where id='marketizo-main'",[JSON.stringify(p)]);
+assert.deepEqual(await read(),original,'DDL does not rewrite historical state');
+const valid={id:'new',employeeId:'e',date:'2026-10-16',minutes:15,activityId:'edit',activityName:'Edit',activityCategory:'Editori',clientId:'c',clientName:'Client'};
+await db.exec('set role service_role');
+for(const changed of [{clientId:'',clientName:''},{clientId:'bogus'},{activityId:'',activityName:'Rad'},{activityCategory:'Interno',clientId:'',clientName:''},{clientName:'Wrong'}]){
+ const p=structuredClone(original);p.employeeWorkLogs.push({...valid,...changed});
+ await assert.rejects(save(p),/Novi radni unos/);assert.deepEqual(await read(),original);
+}
+assert.equal((await db.query('select count(*) n from marketizo_private.work_log_audit')).rows[0].n,0,'Rejected saves do not create audit or records');
+const call=async log=> (await db.query('select public.marketizo_append_work_log($1,$2,$3::jsonb,$4,$5) r',['employee','e',JSON.stringify(log),'2026-10-31','backup-prewrite-1'])).rows[0].r;
+assert.equal((await call({...valid,clientId:''})).status,400,'Atomic RPC refuses missing client');
+assert.equal((await call(valid)).ok,true);assert.equal((await call(valid)).duplicate,true);
+assert.equal((await call({...valid,id:'pause-new',activityId:'pause',clientId:''})).ok,true);
+assert.equal((await read()).employeeWorkLogs.length,3);
+assert.deepEqual((await read()).employeeWorkLogs.find(x=>x.id==='legacy'),legacy);
+assert.deepEqual((await read()).unrelated,original.unrelated);
+await db.exec('begin');const p=await read();p.employeeWorkLogs.push({...valid,id:'rolled-back'});await save(p);await db.exec('rollback');assert.equal((await read()).employeeWorkLogs.length,3);
+await db.exec('reset role');await db.close();
+console.log('PASS: real PostgreSQL rejects missing/forged new associations, permits valid/internal atomic writes and duplicate retry; existing legacy rows, other state and rollback preserved');

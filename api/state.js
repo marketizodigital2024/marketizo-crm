@@ -533,6 +533,14 @@ module.exports = async function handler(req, res) {
           updatedAt: current.updatedAt,
         });
       }
+      const missingAssociations = require("../lib/work-log-integrity.js").missingWorkLogAssociations(current.payload, payload);
+      if (missingAssociations.length) {
+        return json(res, 400, {
+          configured: true, missingWorkLogAssociations: true,
+          error: "Za svaki novi radni unos izaberi ponuđenu aktivnost i klijenta. Za rad za firmu izaberi Marketizo Digital. Pauza i aktivnosti iz kategorije Interno ne zahtevaju klijenta.",
+          affectedCount: new Set(missingAssociations.map(item => item.id)).size,
+        });
+      }
       await preserveDailyPrewriteBackup(config, current);
       payload = preserveCredentials(payload, current.payload);
       if (Array.isArray(payload.clients)) payload.clients = payload.clients.map((client) => {

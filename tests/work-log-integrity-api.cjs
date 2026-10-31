@@ -22,5 +22,18 @@ async function call(body){let result;await ctx.module.exports({method:'PUT',head
  desired=structuredClone(current.payload);desired.clients[0].name='Renamed';r=await call({payload:desired,baseUpdatedAt:current.updated_at});assert.equal(r.status,200);assert.deepEqual(current.payload.employeeWorkLogs,[log]);
  r=await call({payload:desired,baseUpdatedAt:'stale'});assert.equal(r.status,409);assert.equal(writes,1,'Stale browser cannot overwrite a newer state');
  desired=structuredClone(current.payload);desired.employeeWorkLogs[0].note='Valid correction';simulateRace=true;r=await call({payload:desired,baseUpdatedAt:current.updated_at});assert.equal(r.status,409);assert.equal(current.payload.employeeWorkLogs.length,2);assert.equal(current.payload.employeeWorkLogs.find(x=>x.id==='old').note,'Original','Compare-and-swap race preserves coworker append and old record');
- console.log('PASS: actual state API rejects serializer data loss before any backup/write for both transports; unrelated saves, stale revision and competing live append retain records');
+ const existingWrites=writes, existingBackups=backups, existingLogs=structuredClone(current.payload.employeeWorkLogs);
+ desired=structuredClone(current.payload);desired.employeeWorkLogs.unshift({...log,id:'missing-client',clientId:'',clientName:''});
+ r=await call({payload:desired,baseUpdatedAt:current.updated_at});assert.equal(r.status,400);assert.equal(r.body.missingWorkLogAssociations,true);
+ r=await call({patch:patch.create(current.payload,desired),baseUpdatedAt:current.updated_at});assert.equal(r.status,400);
+ assert.equal(writes,existingWrites);assert.equal(backups,existingBackups);assert.deepEqual(current.payload.employeeWorkLogs,existingLogs);
+ desired=structuredClone(current.payload);desired.employeeWorkLogs.unshift({...log,id:'valid-client',clientName:desired.clients[0].name});
+ r=await call({payload:desired,baseUpdatedAt:current.updated_at});assert.equal(r.status,200);assert.equal(current.payload.employeeWorkLogs[0].id,'valid-client');
+ assert.deepEqual(current.payload.employeeWorkLogs.slice(1),existingLogs);
+ // A retained incomplete legacy row does not block another employee's valid save.
+ current.payload.employeeWorkLogs.push({id:'legacy-incomplete',minutes:10,activityName:'Rad',activityCategory:'Ostalo',clientId:''});
+ desired=structuredClone(current.payload);desired.employeeWorkLogs.unshift({...log,id:'valid-with-legacy',clientName:desired.clients[0].name});
+ r=await call({patch:patch.create(current.payload,desired),baseUpdatedAt:current.updated_at});assert.equal(r.status,200);
+ assert.equal(current.payload.employeeWorkLogs.find(x=>x.id==='legacy-incomplete').clientId,'');
+ console.log('PASS: actual state API blocks new missing-client rows before backup/write through patch and full payload; valid append and legacy coexistence work; metadata, stale revision and competing append protections remain');
 })().catch(e=>{console.error(e);process.exitCode=1});
