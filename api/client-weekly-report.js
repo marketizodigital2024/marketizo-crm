@@ -45,7 +45,7 @@ async function handler(req, res) {
       if (action === 'ensure') {
         source ||= await require('./kpi.js').internal.clickupRoster();
         if (!source.live) return send(res, 503, { ok: false, error: source.error || 'ClickUp nije dostupan.' });
-        changed = core.ensureReports(payload, source, windowInfo, new Date().toISOString(), actor?.id).length > 0;
+        changed = core.ensureReports(payload, source, windowInfo, new Date().toISOString(), actor?.isLeader ? (payload.employees || []).filter(e => e.id === actor.id || e.leaderId === actor.id || ['emp-miljan', 'emp-ivana'].includes(actor.id)).map(e => e.id) : actor?.id).length > 0;
       } else if (action === 'submit' || action === 'acknowledge') {
         report = (payload.employeeReports || []).find(r => r.id === body.reportId && r.isClientWeeklyReport);
         if (!report || !canView(actor, report)) return send(res, 403, { ok: false, error: 'Izveštaj nije dodeljen ovom nalogu.' });
