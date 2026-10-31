@@ -135,11 +135,19 @@ function refreshWorkSummaries(payload) {
     const summary = [...day.activities].sort((a, b) => b[1] - a[1])
       .map(([label, value]) => `${label}: ${Math.round(value)} min`).join("; ")
       || "Nema upisanih aktivnosti do 17:30.";
-    const expected = Number(report.expectedMinutes);
+    const compTimeDay = (payload.employeeAbsences || []).some(absence => absence.type === "Slobodno za prekovremene sate" && absence.employeeId === report.employeeId && absence.startDate <= report.date && absence.endDate >= report.date)
+      || (payload.hourAdjustmentAudit || []).some(entry => entry.source === "zeitausgleich" && entry.employeeId === report.employeeId && entry.absenceDate === report.date);
+    let expected = Number(report.expectedMinutes);
+    if (compTimeDay) {
+      const employee = employees.get(report.employeeId);
+      const absent = (payload.employeeAbsences || []).some(absence => absence.employeeId === report.employeeId && absence.status === "Odobreno" && absence.startDate <= report.date && absence.endDate >= report.date);
+      expected = absent || !require("../lib/business-calendar.js").isWorkingDay(report.date) || (employee.startDate && report.date < employee.startDate) || (employee.endDate && report.date > employee.endDate)
+        ? 0 : require("../comp-time.js").scheduledMinutes(costs.weeklyHours(employee, report.date.slice(0, 7)), report.date);
+    }
     const missing = Number.isFinite(expected) ? Math.max(0, expected - minutes) : report.missingMinutes;
     const generatedNegative = /^Nedostaje \d+ min do dnevne kvote\.$/.test(report.negative || "");
     return {
-      ...report, minutes, hours: Math.round(minutes / 60 * 10000) / 10000,
+      ...report, ...(compTimeDay ? { expectedMinutes: expected } : {}), minutes, hours: Math.round(minutes / 60 * 10000) / 10000,
       missingMinutes: missing, autoSummary: summary,
       // Preserve any note/feedback explicitly edited by a person.
       note: report.note === report.autoSummary || report.note === "Nema upisanih aktivnosti do 17:30." ? summary : report.note,
@@ -514,7 +522,7 @@ module.exports = async function handler(req, res) {
         if (!require("../company-overhead.js").validate(payload.companyCostsByMonth)) return json(res, 400, { configured: true, error: "Neispravni mesečni troškovi ili fond sati." });
       }
       if (["full-admin", "operational-admin"].includes(access.role)) {
-        try { payload = require("../lib/comp-time.js").sync(current.payload, payload, access.employee); }
+        try { const synced = require("../lib/comp-time.js").sync(current.payload, payload, access.employee); payload = synced === payload ? payload : refreshWorkSummaries(synced); }
         catch (error) { return json(res, 400, { configured: true, error: error.message }); }
       }
       const unsafeShrink = unsafeCollectionShrink(payload, current.payload, body.deletedIds);
