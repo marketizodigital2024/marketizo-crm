@@ -1,6 +1,7 @@
 // Copy-only monthly collector. Existing October trigger names remain compatible.
 // Install only after approval of the extra Drive write permission.
 let MONTHLY_ROOT='',MONTHLY_MONTH='';
+const MONTHLY_BATCH_LIMIT=100;
 const MONTHLY_YEAR_ROOT='1vL62ar7aimBXdqu1--q2EU4URLeuALxy';
 const MONTHLY_NAMES=['Januar','Februar','Mart','April','Maj','Jun','Jul','Avgust','Septembar','Oktobar','Novembar','Decembar'];
 function monthlyContext_(month,office){
@@ -91,21 +92,21 @@ function collectMonthInvoices_(month){
  const folders=monthlyList_("'"+MONTHLY_ROOT+"' in parents and mimeType = 'application/vnd.google-apps.folder'");let copies=[];
  for(const folder of folders)copies=copies.concat(monthlyList_("'"+folder.id+"' in parents"));
  for(const d of known.documents.filter(d=>d.copy?.verified))if(!copies.some(f=>f.id===d.copy.fileId&&f.sha256Checksum===d.sha256)){monthlyCall_({kind:'copy-missing',sha256:d.sha256,fileId:d.copy.fileId});done={};}
- for(const d of known.documents.filter(d=>d.source==='gmail'&&!d.copy?.verified)){if(count>=25||Date.now()>until){pending=true;break;}const queued=monthlyCall_(null,d.sha256);if(!queued.file)throw Error('Original u redu za kopiranje nije dostupan.');if(!monthlyCopy_(queued.file,Utilities.base64Decode(queued.file.data)))pending=true;count++;}
+ for(const d of known.documents.filter(d=>d.source==='gmail'&&!d.copy?.verified)){if(count>=MONTHLY_BATCH_LIMIT||Date.now()>until){pending=true;break;}const queued=monthlyCall_(null,d.sha256);if(!queued.file)throw Error('Original u redu za kopiranje nije dostupan.');if(!monthlyCopy_(queued.file,Utilities.base64Decode(queued.file.data)))pending=true;count++;}
  }
  if(account==='office@marketizo.com')for(const f of monthlyList_("'"+MONTHLY_ISSUED+"' in parents")){
   if(!/^Rechnung[_ ]*\d+[_ ].+\.(pdf|docx)$/i.test(f.name)||Number(f.size)>1500000)continue;
-  const key='d:'+f.id+':'+f.modifiedTime;if(done[key])continue;if(monthlySourceOutside_(known,f,month)){done[key]=true;continue;}if(Date.now()>until||count>=25){pending=true;break;}
+  const key='d:'+f.id+':'+f.modifiedTime;if(done[key])continue;if(monthlySourceOutside_(known,f,month)){done[key]=true;continue;}if(Date.now()>until||count>=MONTHLY_BATCH_LIMIT){pending=true;break;}
   if(monthlyCopy_({name:f.name,mimeType:f.mimeType,source:'drive',sourceId:f.id,sourceFolder:MONTHLY_ISSUED},monthlyMedia_(f.id)))done[key]=true;else pending=true;count++;
  }
  let next='';do{
-  if(Date.now()>until||count>=25){pending=true;break;}
+  if(Date.now()>until||count>=MONTHLY_BATCH_LIMIT){pending=true;break;}
   // Epoch boundaries avoid Gmail's default Pacific timezone; filter exact Vienna month below.
   const start=new Date(month+'-01T00:00:00Z'),end=new Date(start);end.setUTCMonth(end.getUTCMonth()+1);
   const query='after:'+Math.floor((start.getTime()-86400000)/1000)+' before:'+Math.ceil((end.getTime()+86400000)/1000)+' -in:sent -in:drafts has:attachment {filename:pdf filename:docx}';
   const page=googleGet_('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100&q='+encodeURIComponent(query)+(next?'&pageToken='+encodeURIComponent(next):''));
   for(const item of page.messages||[]){
-   if(done['m:'+item.id])continue;if(Date.now()>until||count>=25){pending=true;break;}
+   if(done['m:'+item.id])continue;if(Date.now()>until||count>=MONTHLY_BATCH_LIMIT){pending=true;break;}
    const m=googleGet_('https://gmail.googleapis.com/gmail/v1/users/me/messages/'+item.id+'?format=full'),receivedAt=new Date(Number(m.internalDate)).toISOString();
    if(Utilities.formatDate(new Date(receivedAt),'Europe/Vienna','yyyy-MM')!==month||(m.labelIds||[]).some(l=>['SENT','DRAFT','TRASH','SPAM'].includes(l)))continue;
    const headers=m.payload.headers||[],header=n=>(headers.find(h=>h.name.toLowerCase()===n)||{}).value||'',parts=[];
@@ -118,7 +119,7 @@ function collectMonthInvoices_(month){
   if(pending)break;next=page.nextPageToken||'';
  }while(next);
  const encoded=JSON.stringify(done),chunks=Math.ceil(encoded.length/7500);for(let i=0;i<chunks;i++)properties.setProperty(prefix+'Chunk'+i,encoded.slice(i*7500,(i+1)*7500));properties.setProperty(prefix+'Chunks',String(chunks));
- monthlyCall_({kind:'heartbeat',complete:!pending,pending});console.log(JSON.stringify({account,checked:count,pending}));
+ monthlyCall_({kind:'heartbeat',complete:!pending,pending});console.log(JSON.stringify({account,month,checked:count,processedSources:Object.keys(done).length,pending}));
  }catch(e){try{monthlyCall_({kind:'heartbeat',complete:false,error:e.message});}catch(_){}throw e;}finally{lock.releaseLock();}
 }
 
