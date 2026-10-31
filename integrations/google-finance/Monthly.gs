@@ -80,7 +80,8 @@ function collectMonthlyInvoices(){
 }
 function collectOctoberBackfill(){return collectMonthInvoices_('2026-10');}
 function collectMonthInvoices_(month){
- const lock=LockService.getUserLock();if(!lock.tryLock(1000))return;
+ // Separate from the source/billing user lock; serialize all monthly runs in this project.
+ const lock=LockService.getScriptLock();if(!lock.tryLock(1000))return;
  let pending=false;try{
  const prefix=month==='2026-10'?'octoberSources':'monthlySources'+month;
  const until=Date.now()+110000,properties=PropertiesService.getUserProperties();let saved='';for(let i=0;i<Number(properties.getProperty(prefix+'Chunks')||0);i++)saved+=properties.getProperty(prefix+'Chunk'+i)||'';
