@@ -15,7 +15,7 @@ const ctx = { state: { employees: [{ id: 'qa' }], employeeActivities: [{ id: 'ac
   reportRecipientId: () => 'leader', renderEmployeePortal() {}, saveState() {}, restorePortalHoursForm(_, values) { for (const key of Object.keys(fields)) fields[key] = values[key]; },
   clearPortalHoursForm() { clears++; for (const key of Object.keys(fields)) fields[key] = ''; },
   postEmployeeWorkLog(log) { calls++; received.push(structuredClone(log)); return new Promise(resolve => release = resolve); },
-  showToast: (...args) => notices.push(args), expectedMinutesForDate: () => 0, Date, JSON, window: { setTimeout() {} }, alert() { throw Error('Unexpected validation alert'); } };
+  showToast: (...args) => notices.push(args), expectedMinutesForDate: () => 1, loggedMinutesForDate: () => 999, hasFinalDailyReport: () => false, openDailyReportDialog() { throw Error("Daily popup must remain disabled"); }, Date, JSON, window: { setTimeout() { throw Error("Time-entry save must not schedule a daily popup"); } }, alert() { throw Error('Unexpected validation alert'); } };
 vm.createContext(ctx); vm.runInContext(['workLogIntentFingerprint', 'portalWorkLogRetryId', 'clearPortalWorkRetryId'].map(named).join('\n') + '\n' + source.slice(start, end), ctx);
 const event = () => ({ currentTarget: form, preventDefault() {} });
 (async () => {

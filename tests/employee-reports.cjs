@@ -57,7 +57,13 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   let inbox;
   const elements = { leaderReportsNav: {}, employeeReportsTab: {}, leaderLiveReportDate: { value: '2026-10-23' }, leaderLiveReportEmployee: { value: '' } };
   const ui = { state: { employees: row.payload.employees, employeeWorkLogs: [], employeeReports: [ { id: 'today', employeeId: 'worker', date: '2026-10-23', isFinalDailyReport: true }, { id: 'old', employeeId: 'worker', date: '2026-10-22', isFinalDailyReport: true }, { id: 'read', employeeId: 'worker', isFinalDailyReport: true, acknowledgedAt: 'yes' }, { id: 'foreign', employeeId: 'other', isFinalDailyReport: true } ] }, activeEmployee: row.payload.employees[0], document: { getElementById: id => elements[id], querySelectorAll: () => [] }, window: { MarketizoCosts: { minutes: l => l.minutes } }, Date, Intl, setText() {}, formatNumber: String, formatDate: String, escapePortalText: String, currentDateKey: () => '2026-10-23', renderLeaderReportInbox: reports => inbox = reports, renderWeeklyQuestionnaires() {} };
-  vm.createContext(ui); vm.runInContext(named('leaderReportPeople') + '\n' + named('weeklyReportsForLeader') + '\n' + named('renderLeaderReportStatus') + '\n' + named('renderLeaderReportsPage'), ui); ui.renderLeaderReportsPage(); assert.deepEqual(Array.from(inbox, r => r.id), ['today', 'old']); assert.equal(elements.leaderReportsNav.textContent, 'Izveštaji (2)');
+  vm.createContext(ui); vm.runInContext(named('leaderReportPeople') + '\n' + named('weeklyReportsForLeader') + '\n' + named('renderLeaderReportStatus') + '\n' + named('renderLeaderReportsPage'), ui); ui.renderLeaderReportsPage(); assert.equal(inbox, undefined, 'Daily reports never populate or open the leader inbox'); assert.equal(elements.leaderReportsNav.textContent, 'Izveštaji');
+  ui.state.employeeReports.push({id:'weekly-new',employeeId:'worker',isWeeklyQuestionnaire:true,submittedAt:'now'});
+  ui.renderLeaderReportsPage(); assert.equal(elements.leaderReportsNav.textContent,'Izveštaji (1)','Weekly answers retain their unread badge');
+  let dailyOpens=0,scheduled=0;
+  const dailyUi={document:{getElementById:id=>id==='leaderReportsDialog'?{showModal(){dailyOpens++}}:{innerHTML:''}},window:{setTimeout(){scheduled++}},state:{employees:row.payload.employees},formatDate:String,escapePortalText:String,formatNumber:String};
+  vm.createContext(dailyUi);vm.runInContext(named('renderLeaderReportInbox'),dailyUi);dailyUi.renderLeaderReportInbox([{id:'daily',employeeId:'worker',minutes:60,date:'2026-10-23'}]);
+  assert.equal(dailyOpens,0);assert.equal(scheduled,0,'Daily inbox never schedules a popup');
   // Actual form handler: failed submission retains answers; double clicks issue one request.
   let submit, release, calls = 0, resets = 0, toasts = [];
   const fields = Object.fromEntries(answers.map((a, i) => [`answer${i + 1}`, a]));

@@ -51,7 +51,6 @@ let activeEmployee = null;
 let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
-let leaderReportInboxShown = false;
 let weeklyPromptShown = false;
 let weeklyCompletionShown = false;
 let reportRefreshInFlight = false;
@@ -1964,16 +1963,9 @@ function renderLeaderReportsPage() {
 
 function renderLeaderReportStatus() {
   const nav = document.getElementById("leaderReportsNav");
-  const peopleIds = new Set(leaderReportPeople().map((employee) => employee.id));
-  const unreadReports = (state.employeeReports || [])
-    .filter((report) => report.isFinalDailyReport === true && peopleIds.has(report.employeeId) && !report.acknowledgedAt)
-    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  // Daily activity remains available on demand; only weekly answers need inbox attention.
   const unreadWeeklyCount = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).length;
-  if (nav) nav.textContent = `Izveštaji${unreadReports.length + unreadWeeklyCount ? ` (${unreadReports.length + unreadWeeklyCount})` : ""}`;
-  renderLeaderReportInbox(unreadReports);
-  document.querySelectorAll(".leader-report-ack").forEach((button) => {
-    button.addEventListener("click", () => acknowledgeLeaderReport(button.dataset.reportId, button));
-  });
+  if (nav) nav.textContent = `Izveštaji${unreadWeeklyCount ? ` (${unreadWeeklyCount})` : ""}`;
   renderWeeklyQuestionnaires();
 }
 
@@ -2010,7 +2002,6 @@ async function refreshReportInbox(force = false) {
 }
 
 async function refreshLeaderReportsFromRemote() {
-  leaderReportInboxShown = false;
   weeklyCompletionShown = false;
   if (!activeEmployee?.isLeader || document.querySelector("form[data-saving='true']")) return;
   const actorId = activeEmployee.id;
@@ -2055,9 +2046,7 @@ function renderLeaderReportInbox(reports) {
     const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
     return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}<br /><button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button></span></div>`;
   }).join("");
-  if (reports.length && !leaderReportInboxShown) {
-    window.setTimeout(() => { if (!dialog.open && !document.querySelector("dialog[open]")) { leaderReportInboxShown = true; dialog.showModal(); } }, 250);
-  }
+  // Keep historical rendering without automatically opening the daily inbox.
 }
 
 async function acknowledgeLeaderReport(reportId, button) {
@@ -2473,10 +2462,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   clearPortalWorkRetryId(form);
   clearPortalHoursForm(form);
   showToast("Sinhronizovano", "Sati su potvrđeni u centralnoj bazi.", "ok");
-  const expectedMinutes = expectedMinutesForDate(activeEmployee, date);
-  if (expectedMinutes > 0 && loggedMinutesForDate(date) >= expectedMinutes && !hasFinalDailyReport(date)) {
-    window.setTimeout(() => openDailyReportDialog(date), 250);
-  }
+  // A successful time entry must not launch a daily-report dialog.
 });
 
 document.getElementById("closeDailyReportDialog")?.addEventListener("click", () => {
@@ -2598,7 +2584,6 @@ document.getElementById("logoutEmployee")?.addEventListener("click", () => {
   }
   document.documentElement.classList.remove("employee-session-cached");
   activeEmployee = null;
-  leaderReportInboxShown = false;
   weeklyPromptShown = false;
   weeklyCompletionShown = false;
   document.getElementById("employeeApp").hidden = true;
