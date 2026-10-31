@@ -4534,11 +4534,13 @@ function buildStructuredSidebar() {
     <a class="work-entry-navigation-link" data-work-entry-link="late" href="employees-hours.html#work/late">Dodaj kašnjenje</a>
   `;
   navigation.insertAdjacentElement("afterend", workEntryNavigation);
-  const analyticsNavigation = document.createElement("nav");
-  analyticsNavigation.className = "team-navigation";
-  analyticsNavigation.setAttribute("aria-label", "Analitika");
-  analyticsNavigation.innerHTML = `<span class="sidebar-section-label">Analitika</span><a class="team-navigation-link" href="work-analytics.html">Analiza vremena rada</a>`;
-  workEntryNavigation.insertAdjacentElement("afterend", analyticsNavigation);
+  const analyticsLink = document.createElement("a");
+  analyticsLink.className = "nav-item analytics-nav";
+  analyticsLink.style.cssText = "display:flex;align-items:center;text-decoration:none";
+  analyticsLink.href = "work-analytics.html";
+  analyticsLink.textContent = "Analitika";
+  const mainNavigation = teamButton.parentElement;
+  mainNavigation.insertBefore(analyticsLink, mainNavigation.querySelector('.nav-item[data-view="calendar"]'));
 
   const syncActiveLink = () => {
     const current = location.hash || "#admin";
