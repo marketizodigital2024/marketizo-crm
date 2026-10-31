@@ -22,3 +22,34 @@ print('PASS numbered draft: planned 000634 visible with explicit non-accounting/
 
 for value in ['Zahlungsempfänger: Example Agency e.U.','Verwendungszweck: Rechnung 000634','IBAN: AT00 0000 0000 0000 0000']:assert value in draft_text,value
 print('PASS clearly separated beneficiary, IBAN/BIC and invoice payment reference')
+
+# Reproduce the two-line reverse-charge invoice that previously exceeded one page.
+import copy
+extra_s=copy.deepcopy(s)
+extra_s['profile']['taxNote']='Steuerschuldnerschaft des Leistungsempfängers – Reverse Charge gemäß Art. 44 und 196 MwStSystRL.'
+extra_s['items']=[dict(description='Monthly social media service',quantity=1,unitCents=199700,netCents=199700,vatCents=0,grossCents=199700),dict(description='Additional filming',quantity=1,unitCents=15000,netCents=15000,vatCents=0,grossCents=15000)]
+extra_s.update(quantity=1,unitCents=214700,netCents=214700,vatCents=0,grossCents=214700,note='Keep this invoice note')
+extra_pages=PdfReader(io.BytesIO(base64.b64decode(m.render({**payload,'snapshot':extra_s})['base64']))).pages
+extra_text='\n'.join(page.extract_text() for page in extra_pages)
+for value in ['Additional filming','Keep this invoice note','2.147,00','Verwendungszweck: Rechnung 000634']:assert value in extra_text,value
+print('PASS reverse-charge plus additional filming and note no longer fails rendering')
+
+# Long permitted content must paginate without losing rows or monetary totals.
+import copy,os
+long_s=copy.deepcopy(s);long_s['note']='Additional agreed work. '*12
+long_s['profile']['taxNote']='Steuerschuldnerschaft des Leistungsempfängers – Reverse Charge gemäß Art. 44 und 196 MwStSystRL.'
+long_s['items']=[]
+for i in range(10):
+ item={'description':f'Service {i+1:02d}: '+('Detailed filming and editing work for this client. '*8),'quantity':1,'unitCents':10000,'netCents':10000,'vatCents':0,'grossCents':10000}
+ long_s['items'].append(item)
+long_s.update(quantity=1,unitCents=100000,netCents=100000,vatCents=0,grossCents=100000)
+long_payload={**payload,'snapshot':long_s};rendered=m.render(long_payload);raw=base64.b64decode(rendered['base64']);pages=PdfReader(io.BytesIO(raw)).pages
+assert len(pages)>1
+all_text='\n'.join(page.extract_text() for page in pages)
+for i in range(10):assert all_text.count(f'Service {i+1:02d}:')==1
+for value in ['Bruttosumme','Verwendungszweck: Rechnung 000634','Additional agreed work.']:assert value in all_text
+assert all_text.count('Bruttosumme')==1
+assert all(page.images for page in pages),'Brand logo on every page'
+assert rendered==m.render(long_payload),'Pagination remains deterministic'
+if os.environ.get('BILLING_PAGINATION_PDF'):Path(os.environ['BILLING_PAGINATION_PDF']).write_bytes(raw)
+print('PASS long reverse-charge invoice: all ten lines, totals, note and bank reference survive deterministic pagination')
