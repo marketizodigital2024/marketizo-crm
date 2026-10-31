@@ -22,7 +22,7 @@ module.exports=async function(req,res){
  if(process.env.VERCEL_ENV!=='production')return json(res,409,{ok:false,error:'Sinhronizacija je dozvoljena samo u produkciji.'});
  const config=supabaseConfig();if(!config.configured)return json(res,503,{ok:false,error:'Baza nije dostupna.'});
  try{
-  if(req.method==='GET'){const {data}=await store.read(config);return json(res,200,{ok:true,files:identity.email==='office@marketizo.com'?Object.fromEntries(Object.entries(data.files||{}).map(([k,v])=>[k,v.modifiedTime])):{},messages:Object.values(data.messages||{}).filter(m=>m.account===identity.email).map(m=>m.id)});}
+  if(req.method==='GET'){const {data}=await store.read(config);return json(res,200,{ok:true,files:identity.email==='office@marketizo.com'?Object.fromEntries(Object.entries(data.files||{}).filter(([,v])=>v.parsed&&!v.error&&!v.deleted).map(([k,v])=>[k,v.modifiedTime])):{},messages:Object.values(data.messages||{}).filter(m=>m.account===identity.email).map(m=>m.id)});}
   const body=await readBody(req);let data;
   if(body.kind==='manifest'){
    if(identity.email!=='office@marketizo.com'||body.folderId!==store.folderId||body.complete!==true||!Array.isArray(body.files)||body.files.length>2000)throw Error('Proveri izvorni folder.');

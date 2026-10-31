@@ -10,7 +10,8 @@
   const labels = {covered:'Uplata u banci potvrđena',partial:'Delimična uplata u banci', 'allocation-review':'Potvrdi za koji račun je uplata','document-review':'Proveri originalni račun','overpayment-review':'Više uplata — proveri raspodelu','not-found':'Nema potvrđene bankarske uplate'};
   const controls = document.createElement('div'); controls.className='bank-matches-controls';
   controls.innerHTML='<div><strong>Bankarske uplate uz račune</strong><p data-bank-message role="status">Učitavanje bankarskih uplata…</p></div><button class="secondary-button" type="button" data-bank-refresh>Osveži bankarske uplate</button><details data-bank-unlinked hidden><summary>Računi koji nisu u prikazanom spisku</summary><div></div></details>';
-  reports.querySelector('.section-head')?.insertAdjacentElement('afterend',controls);
+  const panel=document.createElement('details');panel.className='finance-sync-panel';panel.innerHTML='<summary>Banka i poslati računi <span data-finance-bank-state>Provera u toku…</span><span data-finance-mail-state></span></summary>';panel.append(controls);
+  reports.querySelector('.section-head')?.insertAdjacentElement('afterend',panel);
   if (!controls.isConnected) return;
   let data=null, loadedMonth='', inFlight=false, destroyed=false, requestVersion=0, controller=null;
   const month=()=>document.getElementById('invoiceMonthFilter')?.value||'';
@@ -25,9 +26,9 @@
       if(!clientId)continue;
       const rows=data.invoices.filter(x=>x.clientId===clientId); rows.forEach(x=>linkedIds.add(x.invoiceId));
       const box=document.createElement('div');box.className='invoice-bank-match';
-      if(!rows.length){box.innerHTML='<small>Originalni račun iz Drive-a još nije povezan sa ovim unosom. Status plaćanja ostaje isti.</small>';card.append(box);continue;}
+      if(!rows.length){box.innerHTML='<small>Originalni račun iz Drive-a još nije povezan sa ovim unosom. Status plaćanja ostaje isti.</small>';(card.querySelector(".invoice-detail-content")||card).append(box);continue;}
       box.innerHTML=rows.map(x=>`<div class="bank-invoice-proof"><div class="bank-match-head"><strong>Drive račun ${String(x.number).padStart(5,'0')}</strong><span class="status ${x.status==='covered'?'ok':'warn'}">${esc(labels[x.status]||'Za proveru')}</span></div><p><b>Ukupan račun ${money(x.grossCents)}</b> · Neto ${money(x.netCents)} + PDV ${money(x.vatCents)}<br>Potvrđene bankarske uplate ${money(x.bankPaidCents)}${x.coveredAt?' · Datum '+date(x.coveredAt):''}</p><details><summary>Uplate i originalni račun</summary><p>${esc(x.filename)}<br><small>Drive proveren ${date(data.registryCheckedAt)} · Izdato ${date(x.issuedAt)}</small></p>${x.issues.map(i=>'<p class="bank-match-warning">'+esc(i)+'</p>').join('')}${x.payments.map(p=>paymentHtml(p,'Broj računa se poklapa')).join('')}${x.candidates.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(p=>paymentHtml(p,'Moguća veza — potvrditi')).join('')}${!x.payments.length&&!x.candidates.length?'<p>Nije pronađena bankarska uplata. Keš, drugi računi, Stripe naplate, avansi i storna zahtevaju zasebnu proveru.</p>':''}</details><p class="bank-card-comparison" data-compare="${esc(x.invoiceId)}"></p></div>`).join('');
-      card.append(box);
+      (card.querySelector(".invoice-detail-content")||card).append(box);
       for(const x of rows){
         const line=[...box.querySelectorAll('[data-compare]')].find(e=>e.dataset.compare===x.invoiceId),form=card.querySelector('.invoice-payment-form'),amountInput=form?.querySelector('[name="amount"]');
         const text=card.querySelector('.invoice-compact-amount')?.textContent||'';
@@ -64,8 +65,8 @@
       const result=await response.json();if(!response.ok||!result.ok)throw Error(result.error||'Bankarska provera nije dostupna.');
       if(version!==requestVersion||destroyed||selected!==month())return;
       if(!result.readOnly||result.month!==selected||!Array.isArray(result.invoices))throw Error('Bankarska provera nije potpuna.');
-      data=result;loadedMonth=selected;message.textContent='Banka proverena '+new Date(result.fetchedAt).toLocaleTimeString('sr-Latn-RS',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})+' · Drive računi provereni '+date(result.registryCheckedAt)+'. Poklapanja su proverena prema originalnim računima.';decorate();
-    }catch(error){if(version===requestVersion&&!destroyed){data=null;decorate();message.textContent=error.message||'Bankarska provera trenutno nije dostupna. Postojeći računi nisu menjani.';}}
+      data=result;loadedMonth=selected;panel.querySelector('[data-finance-bank-state]').textContent='Banka proverena '+new Date(result.fetchedAt).toLocaleTimeString('sr-Latn-RS',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'});message.textContent='Banka proverena '+new Date(result.fetchedAt).toLocaleTimeString('sr-Latn-RS',{timeZone:'Europe/Vienna',hour:'2-digit',minute:'2-digit'})+' · Drive računi provereni '+date(result.registryCheckedAt)+'. Poklapanja su proverena prema originalnim računima.';decorate();
+    }catch(error){if(version===requestVersion&&!destroyed){data=null;decorate();panel.querySelector('[data-finance-bank-state]').textContent='Banku treba proveriti';message.textContent=error.message||'Bankarska provera trenutno nije dostupna. Postojeći računi nisu menjani.';}}
     finally{clearTimeout(timer);inFlight=false;controller=null;if(!destroyed&&selected!==month())load();}
   }
   controls.querySelector('[data-bank-refresh]').addEventListener('click',()=>load(true));
