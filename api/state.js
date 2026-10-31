@@ -61,7 +61,7 @@ function accessSession(req, current, key) {
   return null;
 }
 
-const clientFinancialKeys = ["email", "revenue", "cpl", "package", "billingDay", "paymentStatus", "invoiceStatus", "paymentMethod", "invoices", "invoiceStartMonth", "invoiceExcludedMonths", "websitePrice", "hostingPrice", "domainPrice", "cashReceipts", "financePaymentActions", "billingFrequency", "billingProfile"];
+const clientFinancialKeys = ["email", "revenue", "cpl", "package", "billingDay", "paymentStatus", "invoiceStatus", "paymentMethod", "invoices", "invoiceStartMonth", "invoiceExcludedMonths", "websitePrice", "hostingPrice", "domainPrice", "cashReceipts", "financePaymentActions", "billingFrequency", "billingProfile", "billingName", "billingRecipientId", "billingGroupId", "billingDescription"];
 
 function hideOperationalFinancials(payload) {
   const copy = hidePasswords(payload);

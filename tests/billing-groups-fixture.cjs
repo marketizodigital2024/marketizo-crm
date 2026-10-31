@@ -1,0 +1,8 @@
+'use strict';
+const core=require('../lib/billing-content.js');
+const ids={recipient:'11111111-1111-4111-8111-111111111111',project:'22222222-2222-4222-8222-222222222222',group:'33333333-3333-4333-8333-333333333333',member:'44444444-4444-4444-8444-444444444444'};
+const profile=name=>core.profile({legalName:name,street:'Example Street 1',postalCode:'1010',city:'Wien',country:'AT',email:'billing@example.test',taxMode:'standard20',confirmed:true});
+function payload(){return{clients:[{id:ids.recipient,name:'Example Services GmbH',status:'Aktivan',country:'AT',email:'billing@example.test',revenue:1997,billingProfile:profile('Example Services GmbH'),invoices:{}},{id:ids.project,name:'Example Café Project',status:'Aktivan',revenue:1997,billingRecipientId:ids.recipient,invoices:{}},{id:ids.group,name:'Example Green Project',status:'Aktivan',country:'AT',email:'billing@example.test',revenue:997,billingName:'Example Metal GmbH',billingGroupId:ids.group,billingProfile:profile('Example Metal GmbH'),invoices:{}},{id:ids.member,name:'Example House Project',status:'Aktivan',revenue:997,billingGroupId:ids.group,invoices:{}}],employeeWorkLogs:[{id:'preserved-work',minutes:42}],other:{keep:true}};}
+const input=(clientId,serviceMonth='2026-11')=>({clientId,serviceMonth,quantity:1,unitCents:199700,description:'Social Media Marketing'});
+function groupInput(serviceMonth='2026-11'){return{clientId:ids.member,serviceMonth,items:[{clientId:ids.group,description:'Social Media Marketing – Green Project',quantity:1,unitCents:99700},{clientId:ids.member,description:'Social Media Marketing – House Project',quantity:1,unitCents:99700}]};}
+module.exports={ids,payload,input,groupInput};

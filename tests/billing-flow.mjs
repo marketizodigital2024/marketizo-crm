@@ -1,5 +1,6 @@
 import {PGlite} from '@electric-sql/pglite';import fs from 'node:fs';import assert from 'node:assert/strict';import {createRequire} from 'node:module';const require=createRequire(import.meta.url),core=require('../lib/billing-content.js');
 const db=new PGlite();await db.waitReady;await db.exec('create role anon;create role authenticated;create role service_role;create table agency_crm_state(id text primary key,payload jsonb,updated_at timestamptz);');
+await db.exec(fs.readFileSync(new URL('../database/billing-routing.sql',import.meta.url),'utf8'));
 await db.exec(fs.readFileSync(new URL('../database/billing-flow.sql',import.meta.url),'utf8'));
 const profile=core.profile({legalName:'Example Services GmbH',street:'Teststraße 1',postalCode:'1010',city:'Wien',country:'AT',email:'billing@example.test',taxMode:'standard20',confirmed:true}),client={id:'client-1',name:'Example Services GmbH',status:'Aktivan',revenue:100,billingProfile:profile,invoices:{}},original={clients:[client],employeeWorkLogs:[{id:'keep',minutes:20}],unchanged:{keep:true}};
 await db.query("insert into agency_crm_state values('marketizo-main',$1,now())",[JSON.stringify(original)]);

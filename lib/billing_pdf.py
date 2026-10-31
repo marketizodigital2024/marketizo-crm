@@ -25,7 +25,12 @@ def render(payload):
     for key in ['quantity','unitCents','netCents','vatCents','grossCents']:
         if not isinstance(s[key],int) or s[key]<0: raise ValueError('Invalid amount')
     if s['quantity']<1 or s['quantity']*s['unitCents']!=s['netCents'] or s['netCents']+s['vatCents']!=s['grossCents']: raise ValueError('Invalid total')
-    if s['vatCents']!=(int(s['netCents']*.2+.5) if p['taxMode']=='standard20' else 0): raise ValueError('Invalid VAT')
+    items=s.get('items') or [s]
+    if not isinstance(items,list) or not 1<=len(items)<=10: raise ValueError('Invalid invoice items')
+    for item in items:
+        if any(not isinstance(item.get(k),int) for k in ['quantity','unitCents','netCents','vatCents','grossCents']) or item['quantity']<1 or item['unitCents']<1 or item['quantity']*item['unitCents']!=item['netCents'] or item['netCents']+item['vatCents']!=item['grossCents']: raise ValueError('Invalid item total')
+        if item['vatCents']!=(int(item['netCents']*.2+.5) if p['taxMode']=='standard20' else 0): raise ValueError('Invalid VAT')
+    if any(sum(x[k] for x in items)!=s[k] for k in ['netCents','vatCents','grossCents']): raise ValueError('Invalid item sum')
     def text(value):
         value=str(value)
         if len(value)>1000 or any(ord(c)<32 for c in value): raise ValueError('Invalid text')
@@ -51,10 +56,10 @@ def render(payload):
     para('Wien, '+date,430,h-244,width=120)
     para(('TEST – KEIN GÜLTIGER BELEG' if test else b['defaults']['heading']+' '+str(number).zfill(6)),70,h-284,bold=True,size=14)
     para(b['defaults']['introduction'],70,h-316)
-    desc=Paragraph(text(s['description']),ParagraphStyle('description',fontName='Invoice',fontSize=10,leading=13))
     vat='20 %' if p['taxMode']=='standard20' else '0 %'
-    rows=[b['columns'],[desc,str(s['quantity']),money(s['unitCents']),vat,money(s['netCents'])],['','','Nettosumme','',money(s['netCents'])],['','','Umsatzsteuer '+vat,'',money(s['vatCents'])],['','','Bruttosumme','',money(s['grossCents'])]]
-    table=Table(rows,colWidths=[205,48,89,47,67]);table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'Invoice'),('FONTNAME',(0,0),(-1,0),'InvoiceBold'),('FONTNAME',(2,-1),(-1,-1),'InvoiceBold'),('FONTSIZE',(0,0),(-1,-1),9),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#F7CAAC')),('BACKGROUND',(2,-1),(-1,-1),colors.HexColor('#F7CAAC')),('ALIGN',(1,1),(-1,-1),'RIGHT'),('ALIGN',(2,2),(3,-1),'LEFT'),('SPAN',(2,2),(3,2)),('SPAN',(2,3),(3,3)),('SPAN',(2,4),(3,4)),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),2),('RIGHTPADDING',(0,0),(-1,-1),2),('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),('LINEBELOW',(0,1),(-1,1),.5,colors.black)]))
+    item_rows=[[Paragraph(text(item['description']),ParagraphStyle('description',fontName='Invoice',fontSize=10,leading=13)),str(item['quantity']),money(item['unitCents']),vat,money(item['netCents'])] for item in items]
+    rows=[b['columns']]+item_rows+[['','','Nettosumme','',money(s['netCents'])],['','','Umsatzsteuer '+vat,'',money(s['vatCents'])],['','','Bruttosumme','',money(s['grossCents'])]]
+    table=Table(rows,colWidths=[205,48,89,47,67]);table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'Invoice'),('FONTNAME',(0,0),(-1,0),'InvoiceBold'),('FONTNAME',(2,-1),(-1,-1),'InvoiceBold'),('FONTSIZE',(0,0),(-1,-1),9),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#F7CAAC')),('BACKGROUND',(2,-1),(-1,-1),colors.HexColor('#F7CAAC')),('ALIGN',(1,1),(-1,-1),'RIGHT'),('ALIGN',(2,len(items)+1),(3,-1),'LEFT'),('SPAN',(2,len(items)+1),(3,len(items)+1)),('SPAN',(2,len(items)+2),(3,len(items)+2)),('SPAN',(2,len(items)+3),(3,len(items)+3)),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),2),('RIGHTPADDING',(0,0),(-1,-1),2),('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),('LINEBELOW',(0,len(items)),(-1,len(items)),.5,colors.black)]))
     _,th=table.wrap(456,400);y=h-352-th;table.drawOn(c,70,y);y-=34
     year,month=map(int,s['serviceMonth'].split('-'));last=calendar.monthrange(year,month)[1]
     y-=para(f'Leistungszeitraum: 01.{month:02d}.{year} – {last:02d}.{month:02d}.{year}',70,y)+14
