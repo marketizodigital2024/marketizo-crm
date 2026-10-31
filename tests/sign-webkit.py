@@ -52,7 +52,7 @@ try:
             assert page.locator('#message').inner_text()==''
             assert page.locator('html').get_attribute('lang')==language
             assert page.locator('.document-page-text').count()>=4
-            body_paragraph=page.locator('.document-page-text p').filter(has_text=body.split('.')[0]).first
+            body_paragraph=page.locator('.document-page-text p').filter(has_text=('Ovo je neobavezujući test dugog ugovora' if language=='sr' else 'Dies ist ein unverbindlicher technischer Test eines langen Vertrags')).first
             assert body_paragraph.evaluate('(e)=>parseFloat(getComputedStyle(e).fontSize)')>=18
             assert not page.evaluate('document.documentElement.scrollWidth>innerWidth+1')
             assert page.locator('#zoomValue,#pageCounter,#readerToolbar,#pageNavigator').count()==0
