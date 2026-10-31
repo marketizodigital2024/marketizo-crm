@@ -3,3 +3,5 @@
 .billing-item{border:1px solid #dfe6df;border-radius:12px;margin:16px 0;padding:16px;min-width:0}.billing-item legend{font-weight:700;padding:0 8px}.billing-item>label{display:grid;gap:7px;font-size:13px;margin-bottom:12px}.billing-item [hidden]{display:none}
 
 .billing-grid{grid-template-columns:minmax(300px,.8fr) minmax(550px,1.35fr)}.billing-main{max-width:1750px}.billing-pdf{height:850px;min-height:70vh}.billing-extra-note{display:grid;gap:8px;font-size:13px;font-weight:650;margin-top:16px}.billing-extra-note textarea{resize:vertical}.billing-item-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.billing-item-head button{font-size:12px;padding:6px 10px}.billing-grid>section{min-width:0}@media(max-width:1200px){.billing-grid{grid-template-columns:1fr}.billing-pdf{height:780px;min-height:0}}@media(max-width:550px){.billing-pdf{height:550px}}
+
+.billing-check[hidden],#billSend[hidden],#billPrepareFinal[hidden]{display:none}#billPrepareFinal{margin-bottom:14px}

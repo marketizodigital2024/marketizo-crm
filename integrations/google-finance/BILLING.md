@@ -46,3 +46,5 @@ Before final preview, the form reloads current profile/invoice eligibility witho
 
 
 Changing the service month immediately clears the previous period's message and refreshes a read-only sample for the new month. It does not create a draft or reserve a number automatically; final Preview remains explicit. All form edits refresh the visible lock reason so an old billed-period error cannot remain on a newly selected month.
+
+The eligible draft now exposes an explicit **Pripremi konačni PDF** action beside the viewer and on the form. Sending confirmation and the send button appear only once a final PDF exists; editing immediately hides them again. Missing or invalid worker timestamps cannot enable sending. Refresh reloads profile/readiness and a read-only sample while retaining edited service, quantity, unit price, extra work and note.
