@@ -561,16 +561,17 @@
           <div><p class="eyebrow">Četvrtak · priprema za petak</p><h2>Pošalji nedeljni upitnik timu</h2></div>
           <button id="closeWeeklySendDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
         </div>
-        <p>Upitnik će biti poslat svim aktivnim zaposlenima koji su dodeljeni tebi. Rok za popunjavanje je večeras.</p>
+        <p>Upitnik će biti poslat svim aktivnim zaposlenima koji su dodeljeni tebi. Popunjavanje je obavezno do kraja radnog vremena u četvrtak. Obavezni podsetnik se zatvara tek kada je slanje potvrđeno.</p>
         <div class="modal-actions"><button id="confirmSendWeeklyQuestionnaire" class="primary-button" type="button">Pošalji</button></div>
       </section>
     </dialog>
     <dialog id="weeklyQuestionnaireDialog" class="daily-report-dialog">
       <form id="weeklyQuestionnaireForm" class="modal-card daily-report-modal">
         <div class="modal-head">
-          <div><p class="eyebrow">Nedeljni izveštaj</p><h2>Popuni do četvrtka uveče</h2><p class="muted">Odgovori pomažu lideru da se pripremi za sastanak u petak.</p></div>
-          <button id="closeWeeklyQuestionnaireDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
+          <div><p class="eyebrow">Nedeljni izveštaj</p><h2>Obavezan nedeljni upitnik</h2><p class="muted">Odgovori pomažu lideru da se pripremi za sastanak u petak.</p></div>
+
         </div>
+        <p id="weeklyQuestionnaireDeadline" role="status">Popuni do kraja svog radnog vremena u četvrtak. Prozor se zatvara tek kada su odgovori sačuvani.</p>
         <label>1. Koji ti je omiljeni klijent ove nedelje i zašto?<textarea name="answer1" rows="3" maxlength="1600" required></textarea></label>
         <label>2. Koji ti je najneomiljeniji klijent i zašto?<textarea name="answer2" rows="3" maxlength="1600" required></textarea></label>
         <label>3. Šta te je kočilo ove nedelje?<textarea name="answer3" rows="3" maxlength="1600" required></textarea></label>

@@ -39,6 +39,7 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   assert.equal((await call('GET', 'inactive')).status, 403);
   assert.ok(dbCalls.every(c => c.method !== 'GET' || !c.select.includes('select=payload')));
   const answers = ['one', 'two', 'three', 'four', 'five'];
+  assert.equal((await call('POST','worker',{action:'submitWeeklyQuestionnaire',employeeId:'worker',reportId:'weekly',answers:['one','two','three','four','  ']})).status,400,'Server refuses incomplete questionnaires');
   assert.equal((await call('POST', 'other', { action: 'submitWeeklyQuestionnaire', employeeId: 'other', reportId: 'weekly', answers })).status, 403);
   race = true;
   let r = await call('POST', 'worker', { action: 'submitWeeklyQuestionnaire', employeeId: 'worker', reportId: 'weekly', answers });
@@ -64,11 +65,35 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   const dailyUi={document:{getElementById:id=>id==='leaderReportsDialog'?{showModal(){dailyOpens++}}:{innerHTML:''}},window:{setTimeout(){scheduled++}},state:{employees:row.payload.employees},formatDate:String,escapePortalText:String,formatNumber:String};
   vm.createContext(dailyUi);vm.runInContext(named('renderLeaderReportInbox'),dailyUi);dailyUi.renderLeaderReportInbox([{id:'daily',employeeId:'worker',minutes:60,date:'2026-10-23'}]);
   assert.equal(dailyOpens,0);assert.equal(scheduled,0,'Daily inbox never schedules a popup');
+  // Exercise required weekly tasks with real renderers and dialog cancel handlers.
+  let day='2026-11-05', editingWeekly=false;
+  const dialog=()=>({open:false,listeners:{},showModal(){this.open=true;},addEventListener(type,fn){this.listeners[type]=fn;}});
+  const sendDialog=dialog(),answerDialog=dialog(),draftValues=Object.fromEntries([1,2,3,4,5].map(i=>[`answer${i}`,{value:''}]));
+  const draftForm={dataset:{},elements:draftValues,reset(){Object.values(draftValues).forEach(f=>f.value='');}};
+  const weeklyElements={weeklySendDialog:sendDialog,weeklyQuestionnaireDialog:answerDialog,weeklyQuestionnaireForm:draftForm,closeWeeklySendDialog:{}};
+  const storage=new Map();
+  const requiredUi={state:{employees:[{id:'leader',isLeader:true},{id:'worker',leaderId:'leader'},{id:'second',leaderId:'leader'}],employeeReports:[]},activeEmployee:{id:'leader',isLeader:true},currentDateKey:()=>day,currentWeeklyWindow:()=>({weekKey:'2026-11-02',dueDate:'2026-11-05'}),document:{hidden:false,activeElement:{matches:()=>editingWeekly},getElementById:id=>weeklyElements[id],querySelector:selector=>selector==='dialog[open]'?[sendDialog,answerDialog].find(d=>d.open):null},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},setText(){},formatDate:String};
+  vm.createContext(requiredUi);vm.runInContext(['leaderReportPeople','weeklyReportsForLeader','requiredWeeklyTask','weeklyDraftKey','saveWeeklyDraft','renderRequiredWeeklyTask'].map(named).join('\n'),requiredUi);
+  day='2026-11-04';assert.equal(requiredUi.requiredWeeklyTask(),null);
+  day='2026-11-05';editingWeekly=true;requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,false);
+  editingWeekly=false;requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,true);assert.equal(weeklyElements.closeWeeklySendDialog.hidden,true);
+  requiredUi.state.employeeReports.push({id:'w1',isWeeklyQuestionnaire:true,employeeId:'worker',weekKey:'2026-11-02'});assert.equal(requiredUi.requiredWeeklyTask().kind,'send','Partial team sends remain required');
+  requiredUi.state.employeeReports.push({id:'w2',isWeeklyQuestionnaire:true,employeeId:'second',weekKey:'2026-11-02'});assert.equal(requiredUi.requiredWeeklyTask(),null);
+  sendDialog.open=false;requiredUi.activeEmployee={id:'worker',isLeader:true};requiredUi.renderRequiredWeeklyTask();assert.equal(answerDialog.open,true,'Leader recipients must also answer');
+  draftValues.answer1.value='Draft retained';requiredUi.saveWeeklyDraft(draftForm);draftForm.dataset={};draftForm.reset();answerDialog.open=false;requiredUi.renderRequiredWeeklyTask();assert.equal(draftValues.answer1.value,'Draft retained');
+  const guardStart=source.indexOf('for (const [dialogId, kind]'),guardEnd=source.indexOf('document.getElementById("confirmSendWeeklyQuestionnaire")?.addEventListener',guardStart);
+  vm.runInContext(source.slice(guardStart,guardEnd),requiredUi);
+  requiredUi.activeEmployee={id:'leader',isLeader:true};requiredUi.state.employeeReports.pop();let senderPrevented=false;sendDialog.listeners.cancel({preventDefault(){senderPrevented=true;}});assert.equal(senderPrevented,true,'Escape cannot dismiss required team sending');
+  requiredUi.activeEmployee={id:'worker',isLeader:true};let prevented=false;answerDialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
+  answerDialog.open=false;answerDialog.listeners.close();assert.equal(answerDialog.open,true);
+  requiredUi.state.employeeReports[0].submittedAt='confirmed';assert.equal(requiredUi.requiredWeeklyTask(),null);prevented=false;answerDialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,false);
+  requiredUi.activeEmployee={id:'other'};assert.equal(requiredUi.requiredWeeklyTask(),null);
+  assert.ok(!fs.readFileSync(path.join(__dirname,'../employee-login.html'),'utf8').includes('id="closeWeeklyQuestionnaireDialog"'));
   // Actual form handler: failed submission retains answers; double clicks issue one request.
   let submit, release, calls = 0, resets = 0, toasts = [];
   const fields = Object.fromEntries(answers.map((a, i) => [`answer${i + 1}`, a]));
   const button = {}, form = { dataset: { reportId: 'weekly' }, querySelector: () => button, reset() { resets++; } };
-  const formUi = { state: { employeeReports: [] }, activeEmployee: { id: 'worker' }, document: { getElementById: id => id === 'weeklyQuestionnaireForm' ? { addEventListener(type, fn) { submit = fn; } } : { close() {} } }, FormData: class { get(key) { return fields[key]; } }, postEmployeeReport() { calls++; return new Promise(resolve => release = resolve); }, saveState() {}, showToast: (...args) => toasts.push(args) };
+  const formUi = { weeklyDraftKey: () => 'draft', localStorage: { removeItem() {} }, renderRequiredWeeklyTask() {}, state: { employeeReports: [] }, activeEmployee: { id: 'worker' }, document: { getElementById: id => id === 'weeklyQuestionnaireForm' ? { addEventListener(type, fn) { submit = fn; } } : { close() {} } }, FormData: class { get(key) { return fields[key]; } }, postEmployeeReport() { calls++; return new Promise(resolve => release = resolve); }, saveState() {}, showToast: (...args) => toasts.push(args) };
   vm.createContext(formUi); const start = source.indexOf('document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit"'); const end = source.indexOf('\ndocument.getElementById("leaderLiveReportEmployee")', start); vm.runInContext(source.slice(start, end), formUi);
   const event = { currentTarget: form, preventDefault() {} }; const sending = submit(event); assert.equal(form.inert, true); await submit(event); assert.equal(calls, 1); release({ ok: false, error: 'busy' }); await sending; assert.equal(resets, 0); assert.equal(form.inert, false); assert.equal(button.disabled, false); assert.equal(fields.answer5, 'five');
   const retry = submit(event); release({ ok: true, report: { id: 'weekly', submittedAt: 'now' } }); await retry; assert.equal(resets, 1); assert.equal(formUi.state.employeeReports.length, 1);
