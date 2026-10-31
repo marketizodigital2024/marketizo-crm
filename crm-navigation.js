@@ -23,6 +23,7 @@
   function route(pathname,hash,search,activeView){
     const file=pathname.replace(/\/+$/,'').split('/').pop().replace(/\.html$/,'');
     const files={'employees-overview':'overview','employee-profile':'profile','employees-absences':'leave','employees-recognitions':'meetings','employees-ratings':'performance','employees-goals':'activities','employees-settings':'settings'};
+    if(file==='billing-invoices')return{primary:'reports',finance:'issuing'};
     if(file==='work-analytics')return{primary:'analytics'};
     if(file==='kodeks')return{primary:'codeks'};
     if(file==='marketizo-sign')return{primary:'sign',sign:new URLSearchParams(search).get('onboarding')==='1'?'onboarding':'documents'};
@@ -31,7 +32,7 @@
     if(file==='employees-hours')return{primary:'employees',work:hash.startsWith('#work/')?hash.split('/')[1]:'hours'};
     if(files[file])return{primary:'employees',team:files[file]};
     const view=activeView||hash.replace(/^#/,'').split('/')[0]||'admin';
-    return{primary:view,team:view==='employees'?(hash.split('/')[1]||'overview'):''};
+    return{primary:view,finance:view==='reports'?'payments':'',team:view==='employees'?(hash.split('/')[1]||'overview'):''};
   }
   const api={team,work,primary,route,setup};
   if(typeof module==='object'&&module.exports)module.exports=api;
@@ -53,7 +54,15 @@
     const nodes=[];
     for(const[key,title,href]of primary){
       let item;
-      if(key==='sign'){
+      if(key==='reports'){
+        item=element('details','','sign-nav-menu finance-nav-menu');
+        const summary=element('summary','Finansije','nav-item');summary.dataset.navKey='reports';
+        const children=element('div','','sign-nav-children');
+        const issuing=element('a','Izdaj i pošalji račun','nav-item');issuing.href='/billing-invoices';issuing.dataset.financeSection='issuing';
+        const payments=routed?original.find(el=>el.matches('button[data-view="reports"]')):element('a','','nav-item');
+        payments.textContent='Računi i naplata';payments.dataset.financeSection='payments';if(payments.tagName==='A')payments.href='/#reports';
+        children.append(issuing,payments);item.append(summary,children);item.open=route(location.pathname,location.hash,location.search).primary==='reports';
+      }else if(key==='sign'){
         item=original.find(el=>el.classList.contains('sign-nav-menu'))||element('details','','sign-nav-menu');
         item.replaceChildren();
         const summary=element('summary',title,'nav-item');summary.dataset.navKey=key;
@@ -78,10 +87,12 @@
       const current=route(location.pathname,location.hash,location.search,routed?document.body.dataset.activeView:'');
       let operational=false;try{operational=typeof getAdminSession==='function'&&getAdminSession()?.role==='operational-admin';}catch{}
       nav.querySelectorAll('[data-nav-key]').forEach(el=>{const active=el.dataset.navKey===current.primary;el.classList.toggle('active',active);el.removeAttribute('aria-current');if(active&&!['employees','sign'].includes(current.primary))el.setAttribute('aria-current','page');if(['admin','reports','clientCosts'].includes(el.dataset.navKey))el.hidden=operational;});
-      nav.querySelectorAll('[data-team-section],[data-work-entry-link],[data-sign-section]').forEach(el=>{
-        const active=!!(el.dataset.teamSection&&el.dataset.teamSection===current.team||el.dataset.workEntryLink&&el.dataset.workEntryLink===current.work||el.dataset.signSection&&el.dataset.signSection===current.sign);
+      nav.querySelectorAll('[data-team-section],[data-work-entry-link],[data-sign-section],[data-finance-section]').forEach(el=>{
+        const active=!!(el.dataset.teamSection&&el.dataset.teamSection===current.team||el.dataset.workEntryLink&&el.dataset.workEntryLink===current.work||el.dataset.signSection&&el.dataset.signSection===current.sign||el.dataset.financeSection&&el.dataset.financeSection===current.finance);
         el.classList.toggle('active',active);if(active)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
       });
+      nav.querySelector('.finance-nav-menu').hidden=operational;
+      if(current.primary==='reports')nav.querySelector('.finance-nav-menu').open=true;
       nav.dataset.currentCategory=current.primary;
     };
     window.addEventListener('hashchange',sync);window.addEventListener('popstate',sync);window.addEventListener('load',sync);

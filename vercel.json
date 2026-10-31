@@ -162,7 +162,7 @@
     },
     "api/sign-helper.py": {
       "maxDuration": 60,
-      "includeFiles": "marketizo-logo.png",
+      "includeFiles": "{marketizo-logo.png,invoice-logo.png,billing-assets/**,lib/billing_pdf.py}",
       "excludeFiles": "{tests/**,work/**,public/**,.git/**}"
     },
     "api/codeks.js": {
@@ -179,6 +179,12 @@
     },
     "api/restore-backup.js": {
       "maxDuration": 300
+    },
+    "api/billing-invoices.js": {
+      "maxDuration": 120
+    },
+    "api/billing-delivery.js": {
+      "maxDuration": 60
     }
   }
 }
