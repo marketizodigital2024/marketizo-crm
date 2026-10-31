@@ -25,5 +25,10 @@ async function call(handler,body){let result;const res={setHeader(){},end(s){res
   const hanging=(url,options)=>new Promise((resolve,reject)=>{if(options.signal.aborted)reject(options.signal.reason);else options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true});});
   await assert.rejects(database.request(hanging,'https://fixture.invalid',{},10),/na vreme/);
   await assert.rejects(database.withRequestBudget(()=>database.request(hanging,'https://fixture.invalid',{},100),10),/na vreme/);clearTimeout(keepAlive);
+  const loginClient={id:'stable-client',name:'Client',status:'Aktivan',loginEmail:'old-login@marketizo.local',loginPassword:require('../lib/password.js').hashPassword('fixture-password'),email:'before@example.test'};
+  const clientContext={module:{exports:{}},require,process:{env},Buffer,Date,console,fetch:async(input)=>String(input).includes('marketizo_allow_login_attempt')?reply(200,true):reply(200,[{clients:[loginClient]}])};vm.createContext(clientContext);vm.runInContext(read('api/client-auth.js'),clientContext);
+  const oldLogin=await call(clientContext.module.exports,{action:'login',email:loginClient.loginEmail,password:'fixture-password'});assert.equal(oldLogin.status,200);loginClient.email='billing@example.test';
+  assert.equal((await call(clientContext.module.exports,{action:'login',email:loginClient.loginEmail,password:'fixture-password'})).status,200);assert.equal((await call(clientContext.module.exports,{action:'validate',token:oldLogin.body.token})).status,200);assert.equal((await call(clientContext.module.exports,{action:'login',email:loginClient.email,password:'fixture-password'})).status,401);
+  console.log('PASS contact-email update preserves the existing login identifier, password and active client session; billing mailbox gains no login access');
   console.log('PASS: fast-table admin/worker login avoids full-state fallback; missing-table compatibility; invalid local session and stalled login recover; same-count ID loss blocked; intentional deletion allowed; database call and invocation deadlines.');
 })().catch(error=>{console.error(error);process.exitCode=1});

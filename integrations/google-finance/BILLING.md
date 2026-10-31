@@ -19,3 +19,5 @@ Sent mail is labeled **Poslati računi**. The exact attached bytes are archived 
 Kontoflux matching includes sent CRM invoices without requiring legacy Drive originals. Automatic posting requires a unique invoice reference, exact gross amount and confirmed payer identity. Ambiguous payments, partials and preexisting manual payment history require review.
 
 Before enabling live sending, run the synthetic regression suite and PDF checks, verify production API authentication and navigation, and obtain authorization for a self-addressed non-accounting test message. Never allocate a real invoice number for a test. Do not create a real client invoice merely to test delivery.
+
+Client contact/invoice email uses `client.email`, reflected in the single visible email field and `billingProfile.email`. Existing `loginEmail` and password remain unchanged for authentication; never repurpose a billing-recipient update as a credential change. A changed or cleared contact email invalidates a stale invoice profile until saved again.
