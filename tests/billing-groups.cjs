@@ -28,3 +28,6 @@ console.log('PASS recipient sharing without invoice merging; exact grouped total
  const wrong=structuredClone(banked);wrong.clients.find(c=>c.id===f.ids.member).invoices['2026-11'].amount=1000;assert.equal(source.planSources(wrong,registry,data,now).changes.length,0);
  console.log('PASS original/sent evidence connects every group member with its own net share, preserves payments and rejects a mismatched member atomically');
 }
+{
+ const changed=f.payload();changed.clients[1].billingName='Previous project legal name';const s=core.snapshotFor(changed,f.input(f.ids.project));assert.equal(s.profile.legalName,'Example Services GmbH');assert.equal(changed.clients[1].billingName,'Previous project legal name');core.assertSnapshot(changed,s);console.log('PASS a shared recipient overrides an old project legal-name override without deleting project data');
+}
