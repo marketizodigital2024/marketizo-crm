@@ -71,6 +71,7 @@ function hideOperationalFinancials(payload) {
     clientFinancialKeys.forEach((key) => delete safe[key]);
     return safe;
   });
+  delete copy.billingOneOffClients;
   delete copy.companyCostsByMonth;
   delete copy.packages;
   delete copy.backup;
@@ -525,6 +526,9 @@ module.exports = async function handler(req, res) {
         try { const synced = require("../lib/comp-time.js").sync(current.payload, payload, access.employee); payload = synced === payload ? payload : refreshWorkSummaries(synced); }
         catch (error) { return json(res, 400, { configured: true, error: error.message }); }
       }
+      // Finance-only parties are managed by their owner-only invoice endpoint.
+      if (current.payload.billingOneOffClients) payload.billingOneOffClients = current.payload.billingOneOffClients;
+      else delete payload.billingOneOffClients;
       const unsafeShrink = unsafeCollectionShrink(payload, current.payload, body.deletedIds);
       if (unsafeShrink) {
         return json(res, 409, {

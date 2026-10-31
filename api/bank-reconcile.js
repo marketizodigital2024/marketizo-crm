@@ -5,6 +5,7 @@ const {registryFrom}=require('../lib/bank-matching.js');
 const {plan}=require('../lib/bank-posting.js');
 const {transactions}=require('./bank-matches.js')._test;
 const {request}=require('../lib/database-request.js');
+const oneoff=require('../lib/billing-oneoff.js');
 function json(res,status,body){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','private, no-store');res.end(JSON.stringify(body));}
 function cronAuth(req){const expected=process.env.CRON_SECRET,actual=String(req.headers?.authorization||'');return !!expected&&actual.length===('Bearer '+expected).length&&crypto.timingSafeEqual(Buffer.from(actual),Buffer.from('Bearer '+expected));}
 async function handler(req,res){
@@ -24,17 +25,17 @@ async function handler(req,res){
     for(let attempt=0;attempt<5;attempt++){
       if(!allowed(current))return json(res,403,{ok:false,error:'Pristup više nije dostupan.'});
       if(!current.updatedAt)throw Error('missing state');
-      const result=plan(current.payload,registry,bank);
+      const result=plan(oneoff.expand(current.payload),registry,bank);
       if(!result.posted.length)return json(res,200,{ok:true,posted:[],checkedAt:new Date().toISOString()});
       await preserveDailyPrewriteBackup(config,current);
       const updatedAt=new Date(Math.max(Date.now(),Date.parse(current.updatedAt)+1)).toISOString();
       const table=process.env.SUPABASE_TABLE||'agency_crm_state',id=process.env.CRM_STATE_ID||'marketizo-main';
-      const response=await request(fetch,`${config.url}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}&select=updated_at`,{method:'PATCH',headers:{...supabaseHeaders(config.key),Prefer:'return=representation'},body:JSON.stringify({payload:result.payload,updated_at:updatedAt})});
+      const response=await request(fetch,`${config.url}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}&updated_at=eq.${encodeURIComponent(current.updatedAt)}&select=updated_at`,{method:'PATCH',headers:{...supabaseHeaders(config.key),Prefer:'return=representation'},body:JSON.stringify({payload:oneoff.collapse(result.payload),updated_at:updatedAt})});
       if(!response.ok)throw Error('database write failed');
       const rows=await response.json();
       if(Array.isArray(rows)&&rows.length===1){
         const reloaded=await readStoredState(config);
-        const persisted=result.posted.every(p=>reloaded.payload.clients?.find(c=>c.id===p.clientId)?.invoices?.[p.month]?.payments?.some(t=>t.id==='bank-'+p.bankTransactionId));
+        const persisted=result.posted.every(p=>oneoff.expand(reloaded.payload).clients?.find(c=>c.id===p.clientId)?.invoices?.[p.month]?.payments?.some(t=>t.id==='bank-'+p.bankTransactionId));
         if(!persisted)throw Error('readback failed');
         return json(res,200,{ok:true,posted:result.posted,updatedAt,unchangedOtherCollections:result.unchangedDigest,verifiedReadback:true});
       }

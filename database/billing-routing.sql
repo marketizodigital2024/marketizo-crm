@@ -1,3 +1,17 @@
+-- View finance-only parties as clients only inside invoice/payment transactions.
+create or replace function public.marketizo_billing_scope(p_main jsonb)
+returns jsonb language sql immutable security invoker set search_path=public,pg_temp as $$
+ select jsonb_set(p_main,'{clients}',coalesce(p_main->'clients','[]'::jsonb)||coalesce(p_main->'billingOneOffClients','[]'::jsonb));
+$$;
+create or replace function public.marketizo_billing_unscoped(p_main jsonb)
+returns jsonb language sql immutable security invoker set search_path=public,pg_temp as $$
+ select case when p_main ? 'billingOneOffClients' then p_main||jsonb_build_object(
+ 'clients',coalesce((select jsonb_agg(c) from jsonb_array_elements(p_main->'clients') c where not exists(select 1 from jsonb_array_elements(p_main->'billingOneOffClients') o where o->>'id'=c->>'id')),'[]'::jsonb),
+ 'billingOneOffClients',coalesce((select jsonb_agg(c) from jsonb_array_elements(p_main->'clients') c where exists(select 1 from jsonb_array_elements(p_main->'billingOneOffClients') o where o->>'id'=c->>'id')),'[]'::jsonb)) else p_main end;
+$$;
+revoke all on function public.marketizo_billing_scope(jsonb),public.marketizo_billing_unscoped(jsonb) from public,anon,authenticated;
+grant execute on function public.marketizo_billing_scope(jsonb),public.marketizo_billing_unscoped(jsonb) to service_role;
+
 -- Validate every project and the shared recipient inside the same transaction as issuance.
 create or replace function public.marketizo_billing_members(p_main jsonb,p_snap jsonb)
 returns jsonb language plpgsql immutable security invoker set search_path=public,pg_temp as $$

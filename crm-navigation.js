@@ -23,7 +23,7 @@
   function route(pathname,hash,search,activeView){
     const file=pathname.replace(/\/+$/,'').split('/').pop().replace(/\.html$/,'');
     const files={'employees-overview':'overview','employee-profile':'profile','employees-absences':'leave','employees-recognitions':'meetings','employees-ratings':'performance','employees-goals':'activities','employees-settings':'settings'};
-    if(file==='billing-invoices')return{primary:'reports',finance:'issuing'};
+    if(file==='billing-invoices')return{primary:'reports',finance:new URLSearchParams(search).get('type')==='once'?'oneoff':'issuing'};
     if(file==='work-analytics')return{primary:'analytics'};
     if(file==='kodeks')return{primary:'codeks'};
     if(file==='marketizo-sign')return{primary:'sign',sign:new URLSearchParams(search).get('onboarding')==='1'?'onboarding':'documents'};
@@ -61,7 +61,7 @@
         const issuing=element('a','Izdaj i pošalji račun','nav-item');issuing.href='/billing-invoices';issuing.dataset.financeSection='issuing';
         const payments=routed?original.find(el=>el.matches('button[data-view="reports"]')):element('a','','nav-item');
         payments.textContent='Računi i naplata';payments.dataset.financeSection='payments';if(payments.tagName==='A')payments.href='/#reports';
-        children.append(issuing,payments);item.append(summary,children);item.open=route(location.pathname,location.hash,location.search).primary==='reports';
+        const oneoff=element('a','Jednokratni računi','nav-item');oneoff.href='/billing-invoices?type=once';oneoff.dataset.financeSection='oneoff';children.append(issuing,payments,oneoff);item.append(summary,children);item.open=route(location.pathname,location.hash,location.search).primary==='reports';
       }else if(key==='sign'){
         item=original.find(el=>el.classList.contains('sign-nav-menu'))||element('details','','sign-nav-menu');
         item.replaceChildren();
