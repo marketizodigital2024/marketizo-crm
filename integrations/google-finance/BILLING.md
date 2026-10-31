@@ -35,3 +35,8 @@ Selecting a client automatically renders an owner-only, read-only sample (`actio
 
 
 Invoice editing supports additional paid work (`extraItems`) assigned only to projects already on the invoice and a 300-character optional PDF note. Each project's snapshot keeps one aggregate item/share for the existing atomic issuance and bank reconciliation contracts; optional `lines` freeze the visible service lines. Net and VAT are computed from that project's aggregate net, and the PDF validates the line sum before rendering. At most ten visible lines are allowed. Existing issued snapshots/PDFs remain unchanged. Editing or removing work/notes invalidates the previous PDF and confirmation. The viewer opens with thumbnails hidden and fits the page width; the full-screen link remains available.
+
+
+Read-only samples show the current planned number from the read-only settings action, marked ENTWURF / TEST and explicitly not reserved. The counter is unchanged until actual issuing, and the existing SQL next-number check still requires a new final preview if another invoice consumes the planned number.
+
+Invoice payment instructions explicitly separate the verified bank beneficiary (`issuer.accountHolder`), unchanged IBAN/BIC and invoice-specific payment reference. The beneficiary is not inferred from the proprietor line. Keep the bank holder independently verified if the legal branding changes. Stationery version 3 removes the apartment suffix from the issuer street address. Existing issued PDF bytes remain immutable.
