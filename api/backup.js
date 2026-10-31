@@ -285,7 +285,10 @@ module.exports = async function handler(req, res) {
     const questionnaireSource = source.questionnaires;
     const independent = await writeIndependentBackup(source, date, now, kpiSource, questionnaireSource, productionSource, source.systemDomains);
 
-    const backupResponse = await fetch(`${url}/rest/v1/${TABLE}?on_conflict=id`, {
+    let databaseWarning='',databaseVerified=false;
+    try{
+    const domainArchive=await system.writeDatabaseArchive(url,key,source.systemDomains,fetch,TABLE);
+    const backupResponse = await require('../lib/database-request.js').request(fetch,`${url}/rest/v1/${TABLE}?on_conflict=id`, {
       method: "POST",
       headers: headers(key, "resolution=merge-duplicates,return=minimal"),
       body: JSON.stringify({
@@ -303,20 +306,19 @@ module.exports = async function handler(req, res) {
           questionnaires: questionnaireSource,
           workProduction: productionSource,
           workProductionRequired: true,
-          systemDomainsArchive: system.archive(source.systemDomains),
+          systemDomainsArchive: domainArchive,
           systemDomainsRequired: true,
         },
         updated_at: now.toISOString(),
       }),
     });
-    let databaseWarning = backupResponse.ok ? "" : `Backup write failed (${backupResponse.status})`, databaseVerified=false;
-    if(backupResponse.ok){try{
+    if(!backupResponse.ok)throw Error(`Backup write failed (${backupResponse.status})`);
       const check=await require('../lib/database-request.js').request(fetch,`${url}/rest/v1/${TABLE}?id=eq.${backupId}&select=payload`,{headers:headers(key)},20000);
       if(!check.ok)throw Error('Ponovno čitanje DB kopije nije uspelo.');
       const saved=(await check.json())[0]?.payload;
-      if(!saved||!production.equal(saved.state,source.payload)||!production.equal(saved.kpi,kpiSource?.payload||null)||!questionnaires.equal(saved.questionnaires,questionnaireSource)||!production.equal(saved.workProduction,productionSource)||!production.equal(system.unarchive(saved.systemDomainsArchive),source.systemDomains))throw Error('DB kopija nije prošla proveru sadržaja.');
+      if(!saved||!production.equal(saved.state,source.payload)||!production.equal(saved.kpi,kpiSource?.payload||null)||!questionnaires.equal(saved.questionnaires,questionnaireSource)||!production.equal(saved.workProduction,productionSource)||!production.equal(saved.systemDomainsArchive,domainArchive))throw Error('DB kopija nije prošla proveru sadržaja.');
       databaseVerified=true;
-    }catch(error){databaseWarning=error.message;}}
+    }catch(error){databaseWarning=error.message;}
 
 
     return send(res, 200, {
