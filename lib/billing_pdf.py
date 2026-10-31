@@ -1,6 +1,7 @@
 """Render immutable invoice snapshots using the existing Marketizo stationery."""
 import base64, calendar, hashlib, io, re
 from pathlib import Path
+from PIL import Image
 from xml.sax.saxutils import escape
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -35,7 +36,13 @@ def render(payload):
     def para(value,x,y,width=450,size=10,bold=False):
         par=Paragraph(text(value),ParagraphStyle('invoice',fontName='InvoiceBold' if bold else 'Invoice',fontSize=size,leading=size*1.25))
         _,height=par.wrap(width,1000);par.drawOn(c,x,y-height);return height
-    c.drawImage(ImageReader(str(ROOT/b['logoPath'])),490,h-108,width=82,height=82,mask='auto')
+    # Render the official MD asset without stretching its shape or changing the file.
+    logo=Image.open(ROOT/b['logoPath']);lw,lh=logo.size
+    bounds=logo.getchannel('A').getbbox() if 'A' in logo.getbands() else (0,0,lw,lh)
+    if not bounds:raise ValueError('Empty invoice logo')
+    x0,y0,x1,y1=bounds;scale=min(100/(x1-x0),82/(y1-y0))
+    left=480+(100-(x1-x0)*scale)/2;bottom=h-108+(82-(y1-y0)*scale)/2
+    c.drawImage(ImageReader(logo),left-x0*scale,bottom-(lh-y1)*scale,width=lw*scale,height=lh*scale,mask='auto')
     for i,v in enumerate([issuer['phone'],issuer['email'],issuer['website']]):para(v,70,h-50-i*13,size=9)
     c.setStrokeColor(colors.HexColor(b['colors']['accent']));c.setLineWidth(2);c.line(70,h-104,476,h-104)
     y=h-152
