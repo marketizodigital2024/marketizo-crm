@@ -51,7 +51,6 @@ let activeEmployee = null;
 let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
-let weeklyPromptShown = false;
 let weeklyCompletionShown = false;
 let reportRefreshInFlight = false;
 let reportInboxRevision = 0;
@@ -1813,6 +1812,58 @@ function weeklyReportsForLeader() {
   return (state.employeeReports || []).filter((report) => report.isWeeklyQuestionnaire === true && peopleIds.has(report.employeeId));
 }
 
+// Required weekly tasks are derived from confirmed state on every refresh.
+function requiredWeeklyTask() {
+  if (!activeEmployee) return null;
+  const pending = (state.employeeReports || []).filter((report) => report.isWeeklyQuestionnaire === true && report.employeeId === activeEmployee.id && !report.submittedAt)
+    .sort((a, b) => String(a.weekKey || "").localeCompare(String(b.weekKey || "")))[0];
+  if (pending) return { kind: "answer", report: pending };
+  const windowInfo = currentWeeklyWindow();
+  if (activeEmployee.isLeader && currentDateKey() >= windowInfo.dueDate) {
+    const sent = new Set(weeklyReportsForLeader().filter((report) => report.weekKey === windowInfo.weekKey).map((report) => report.employeeId));
+    if (leaderReportPeople().some((employee) => employee.id !== activeEmployee.id && !sent.has(employee.id))) return { kind: "send" };
+  }
+  return null;
+}
+
+function weeklyDraftKey(reportId) {
+  return `marketizoWeeklyDraft:${activeEmployee?.id}:${reportId}`;
+}
+
+function saveWeeklyDraft(form) {
+  if (!activeEmployee?.id || !form?.dataset.reportId) return;
+  try {
+    const values = [1, 2, 3, 4, 5].map((index) => String(form.elements[`answer${index}`]?.value || ""));
+    localStorage.setItem(weeklyDraftKey(form.dataset.reportId), JSON.stringify(values));
+  } catch { /* Keep the in-memory form intact when browser storage is full. */ }
+}
+
+function renderRequiredWeeklyTask() {
+  const task = requiredWeeklyTask();
+  const sendClose = document.getElementById("closeWeeklySendDialog");
+  if (sendClose) sendClose.hidden = task?.kind === "send";
+  if (!task || document.hidden || document.querySelector("form[data-saving='true']") || document.querySelector("dialog[open]")) return;
+  // Do not interrupt an employee while typing a work entry; retry on the next tick.
+  if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']")) return;
+  if (task.kind === "send") {
+    document.getElementById("weeklySendDialog")?.showModal();
+  } else {
+    const form = document.getElementById("weeklyQuestionnaireForm");
+    if (!form) return;
+    if (form.dataset.reportId !== task.report.id) {
+      saveWeeklyDraft(form);
+      form.reset();
+      form.dataset.reportId = task.report.id;
+      try {
+        const draft = JSON.parse(localStorage.getItem(weeklyDraftKey(task.report.id)) || "null");
+        if (Array.isArray(draft)) [1, 2, 3, 4, 5].forEach((index) => { form.elements[`answer${index}`].value = String(draft[index - 1] || ""); });
+      } catch { /* An unavailable draft must not prevent answering. */ }
+    }
+    setText("weeklyQuestionnaireDeadline", `Obavezno popuni svih pet odgovora do kraja svog radnog vremena ${formatDate(task.report.dueDate || task.report.date)}. Ako je rok prošao, popuni sada.`);
+    document.getElementById("weeklyQuestionnaireDialog")?.showModal();
+  }
+}
+
 function renderWeeklyQuestionnaires() {
   const windowInfo = currentWeeklyWindow();
   const currentReports = weeklyReportsForLeader().filter((report) => report.weekKey === windowInfo.weekKey);
@@ -1832,10 +1883,7 @@ function renderWeeklyQuestionnaires() {
     }).join("") : `<div class="empty-state">Upitnik za ovu nedelju još nije poslat.</div>`;
   }
 
-  if (activeEmployee?.isLeader && new Date().getDay() === 4 && !sentCount && !weeklyPromptShown) {
-    weeklyPromptShown = true;
-    window.setTimeout(() => document.getElementById("weeklySendDialog")?.showModal(), 300);
-  }
+  renderRequiredWeeklyTask();
 
   const unread = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
   const next = unread[0];
@@ -1849,15 +1897,7 @@ function renderWeeklyQuestionnaires() {
     window.setTimeout(() => { if (!completedDialog.open && !document.querySelector("dialog[open]")) { weeklyCompletionShown = true; completedDialog.showModal(); } }, 350);
   }
 
-  if (!activeEmployee?.isLeader) {
-    const pending = (state.employeeReports || []).find((report) => report.isWeeklyQuestionnaire === true && report.employeeId === activeEmployee?.id && !report.submittedAt);
-    const form = document.getElementById("weeklyQuestionnaireForm");
-    if (pending && form && !weeklyPromptShown) {
-      weeklyPromptShown = true;
-      form.dataset.reportId = pending.id;
-      window.setTimeout(() => document.getElementById("weeklyQuestionnaireDialog")?.showModal(), 300);
-    }
-  }
+
 }
 
 async function sendWeeklyQuestionnaires() {
@@ -1971,7 +2011,7 @@ function renderLeaderReportStatus() {
 
 // Report-only reads never replace work entries, balances or an employee's draft.
 async function refreshReportInbox(force = false) {
-  if (!activeEmployee?.isLeader || reportRefreshInFlight || document.hidden) return;
+  if (!activeEmployee || reportRefreshInFlight || document.hidden) return;
   if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']")) return;
   if (document.querySelector("form[data-saving='true']")) return;
   const openDialog = document.querySelector("dialog[open]");
@@ -1992,7 +2032,7 @@ async function refreshReportInbox(force = false) {
     const currentDialog = document.querySelector("dialog[open]");
     if (currentDialog && !["leaderReportsDialog", "weeklyCompletedDialog"].includes(currentDialog.id)) return;
     if (changed) state.employeeReports = result.reports;
-    if (changed || force) renderLeaderReportStatus();
+    renderLeaderReportStatus();
   } catch (error) {
     if (force) showToast("Izveštaji nisu osveženi", error?.message || "Pokušaj ponovo.", "warn");
   } finally {
@@ -2018,8 +2058,8 @@ async function refreshLeaderReportsFromRemote() {
   }
 }
 
-window.setInterval(() => refreshReportInbox(), 10000);
-window.addEventListener("focus", () => refreshReportInbox());
+window.setInterval(() => { renderRequiredWeeklyTask(); refreshReportInbox(); }, 10000);
+window.addEventListener("focus", () => { renderRequiredWeeklyTask(); refreshReportInbox(); });
 
 async function postEmployeeReport(body) {
   const controller = new AbortController();
@@ -2505,6 +2545,7 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   if (submitButton) {
     submitButton.disabled = false;
     submitButton.textContent = "Pošalji lideru";
+    renderRequiredWeeklyTask();
   }
   if (activeEmployee?.id !== actorId) return;
   if (!result.ok) {
@@ -2584,7 +2625,6 @@ document.getElementById("logoutEmployee")?.addEventListener("click", () => {
   }
   document.documentElement.classList.remove("employee-session-cached");
   activeEmployee = null;
-  weeklyPromptShown = false;
   weeklyCompletionShown = false;
   document.getElementById("employeeApp").hidden = true;
   document.getElementById("employeeLoginScreen").hidden = false;
@@ -2596,9 +2636,17 @@ document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", (
 });
 
 document.getElementById("sendWeeklyQuestionnaire")?.addEventListener("click", () => document.getElementById("weeklySendDialog")?.showModal());
-document.getElementById("closeWeeklySendDialog")?.addEventListener("click", () => document.getElementById("weeklySendDialog")?.close());
+document.getElementById("closeWeeklySendDialog")?.addEventListener("click", () => {
+  if (requiredWeeklyTask()?.kind !== "send") document.getElementById("weeklySendDialog")?.close();
+});
+for (const [dialogId, kind] of [["weeklySendDialog", "send"], ["weeklyQuestionnaireDialog", "answer"]]) {
+  document.getElementById(dialogId)?.addEventListener("cancel", (event) => {
+    if (requiredWeeklyTask()?.kind === kind) event.preventDefault();
+  });
+  document.getElementById(dialogId)?.addEventListener("close", renderRequiredWeeklyTask);
+}
 document.getElementById("confirmSendWeeklyQuestionnaire")?.addEventListener("click", sendWeeklyQuestionnaires);
-document.getElementById("closeWeeklyQuestionnaireDialog")?.addEventListener("click", () => document.getElementById("weeklyQuestionnaireDialog")?.close());
+document.getElementById("weeklyQuestionnaireForm")?.addEventListener("input", (event) => saveWeeklyDraft(event.currentTarget));
 document.getElementById("ackWeeklyCompleted")?.addEventListener("click", () => acknowledgeWeeklyQuestionnaire());
 document.getElementById("closeWeeklyCompletedDialog")?.addEventListener("click", () => document.getElementById("weeklyCompletedDialog")?.close());
 document.getElementById("leaderWeeklyReportList")?.addEventListener("click", (event) => {
@@ -2625,6 +2673,7 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
     if (report) Object.assign(report, result.report);
     else state.employeeReports.unshift(result.report);
     saveState({ remote: false });
+    try { localStorage.removeItem(weeklyDraftKey(form.dataset.reportId)); } catch {}
     form.reset();
     document.getElementById("weeklyQuestionnaireDialog")?.close();
     showToast("Nedeljni izveštaj je poslat", "Lider je obavešten da je upitnik popunjen.", "ok");
@@ -2635,6 +2684,7 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
     form.inert = false;
     submitButton.disabled = false;
     submitButton.textContent = "Pošalji lideru";
+    renderRequiredWeeklyTask();
   }
 });
 
