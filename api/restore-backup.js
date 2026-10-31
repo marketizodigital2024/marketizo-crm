@@ -68,7 +68,7 @@ module.exports = async function handler(req, res) {
       return send(res, 400, { ok: false, error: "Nevažeća putanja backupa." });
     }
     const blob = await import("@vercel/blob");
-    const downloaded = await blob.get(pathname, { access: "private" });
+    const downloaded = await blob.get(pathname, { access: "private", useCache: false });
     if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) {
       return send(res, 404, { ok: false, error: "Backup nije pronađen." });
     }
@@ -119,7 +119,7 @@ module.exports = async function handler(req, res) {
     };
     emergencyDocument.integrity = production.documentIntegrity(emergencyDocument);
     await blob.put(emergencyPath, JSON.stringify(emergencyDocument), { access: "private", contentType: "application/json", addRandomSuffix: false });
-    const emergencyRead = await blob.get(emergencyPath, { access:"private" });
+    const emergencyRead = await blob.get(emergencyPath, { access:"private", useCache:false });
     if (!emergencyRead || emergencyRead.statusCode !== 200 || !emergencyRead.stream || !questionnaires.equal(JSON.parse(await new Response(emergencyRead.stream).text()), emergencyDocument)) throw new Error("Sigurnosna kopija pre vraćanja nije potvrđena.");
 
     const restoreResponse = await fetch(`${url}/rest/v1/rpc/marketizo_restore_complete_backup_with_production`, {
