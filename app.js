@@ -1859,16 +1859,14 @@ function byCountry(client) {
 
 function byDateRange(client) {
   if (!dateFromFilter && !dateToFilter) return true;
-  if (!client.startDate) return true;
-  const start = new Date(client.startDate);
-  // Period filter shows clients already active during the selected period,
-  // not only clients whose cooperation started inside that exact range.
-  if (dateToFilter && start > new Date(dateToFilter)) return false;
-  return true;
+  if (!client.startDate) return false;
+  return (!dateFromFilter || client.startDate >= dateFromFilter)
+    && (!dateToFilter || client.startDate <= dateToFilter);
 }
 
 function byMonth(client) {
   if (!monthFilter) return true;
+  if (client.invoices?.[monthFilter]) return true;
   if (!client.startDate) return true;
   const [year, month] = monthFilter.split("-").map(Number);
   const periodEnd = new Date(year, month, 0, 23, 59, 59);
@@ -1933,23 +1931,24 @@ function clientLeadStats(client) {
 }
 
 function renderAdminPanel() {
-  const scopedClients = visibleClients();
+  const scopedClients = dashboardClients();
   const monthKey = monthFilter || currentMonthKey();
   const active = financeClientsForMonth(scopedClients, monthKey);
   const mrr = active.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
-  const paidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus === "Plaćeno");
-  const unpaidClients = active.filter((client) => monthlyInvoice(client, monthKey).paymentStatus !== "Plaćeno");
-  const paidTotal = active.reduce((sum, client) => sum + invoicePaidAmount(client, monthKey), 0);
-  const unpaidTotal = active.reduce((sum, client) => sum + invoiceRemainingAmount(client, monthKey), 0);
+  const totals = dashboardInvoiceTotals(active, monthKey);
+  const paidClients = active.filter((client) => invoiceRemainingAmount(client, monthKey) < 0.005);
+  const unpaidClients = active.filter((client) => invoiceRemainingAmount(client, monthKey) >= 0.005);
+  const paidTotal = totals.paid;
+  const unpaidTotal = totals.remaining;
   const unsentClients = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
 
   setText("adminTotalClients", active.length);
   setText("adminMrr", currency.format(mrr));
   setText("adminPaidTotal", currency.format(paidTotal));
-  setText("adminPaidCount", `${paidClients.length} klijenata`);
+  setText("adminPaidCount", `${paidClients.length} bez ostatka za naplatu`);
   setText("adminUnpaidTotal", currency.format(unpaidTotal));
-  setText("adminUnpaidCount", `${unpaidClients.length} nije plaćeno · ${unsentClients.length} nije poslat račun`);
-  setText("adminCollectionRate", `${mrr ? Math.round((paidTotal / mrr) * 100) : 0}%`);
+  setText("adminUnpaidCount", `${unpaidClients.length} sa ostatkom · ${unsentClients.length} računa nije poslato`);
+  setText("adminCollectionRate", `${totals.rate}%`);
   renderAdminActionSummary(active, monthKey);
   renderDashboardFilterNotice();
   renderRevenueTrend(monthKey);
@@ -1963,6 +1962,37 @@ function renderAdminPanel() {
   renderAdminClientSnapshot(active);
   renderAdminEmployeeRisk(monthKey);
   renderContractExpiryList();
+  window.MarketizoDashboardHelp?.refresh();
+}
+
+function dashboardClients() {
+  return state.clients.filter((client) => bySearch(client) && byCountry(client) && byDateRange(client));
+}
+
+function dashboardInvoiceTotals(clients, monthKey) {
+  const totals = clients.reduce((result, client) => {
+    const amount = Math.max(0, invoiceAmount(client, monthKey));
+    const paid = Math.max(0, invoicePaidAmount(client, monthKey));
+    result.billed += amount;
+    result.paid += paid;
+    result.covered += Math.min(amount, paid);
+    result.remaining += Math.max(0, amount - paid);
+    result.excess += Math.max(0, paid - amount);
+    return result;
+  }, { billed: 0, paid: 0, covered: 0, remaining: 0, excess: 0 });
+  totals.rate = totals.billed ? Math.round(totals.covered / totals.billed * 100) : 0;
+  return totals;
+}
+
+function dashboardTeamRows(monthKey) {
+  const today = currentDateKey();
+  return (state.employees || []).filter((employee) => employee.status === "Aktivan" && employee.active !== false).map((employee) => {
+    const expected = employeeExpectedHoursToDate(employee, monthKey);
+    const logged = (state.employeeWorkLogs || []).filter((log) => log.employeeId === employee.id
+      && String(log.date || "").startsWith(monthKey) && log.date < today)
+      .reduce((sum, log) => sum + window.MarketizoCosts.minutes(log) / 60, 0);
+    return { name: employee.name, expected, logged, ratio: expected ? Math.round(logged / expected * 1000) / 10 : null };
+  }).filter((row) => row.expected > 0).sort((a, b) => b.ratio - a.ratio);
 }
 
 function dashboardContractRows() {
@@ -1975,7 +2005,7 @@ function dashboardContractRows() {
 
 function dashboardOutstandingRows(endMonth) {
   const totals = new Map();
-  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(visibleClients(), month).forEach((client) => {
+  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(dashboardClients(), month).forEach((client) => {
     const remaining = invoiceRemainingAmount(client, month);
     if (!remaining) return;
     const age = invoiceAgeDays(monthlyInvoice(client, month), month);
@@ -1994,11 +2024,7 @@ function renderAdminActionSummary(active, monthKey) {
   const unsent = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
   const overdue = dashboardOutstandingRows(monthKey).filter((row) => row.overdueTotal > 0);
   const overdueTotal = overdue.reduce((sum, row) => sum + row.overdueTotal, 0);
-  const teamExceptions = (state.employees || []).filter((employee) => employee.status === "Aktivan").filter((employee) => {
-    const expected = employeeExpectedHoursToDate(employee, monthKey);
-    const ratio = expected ? (employeeMonthRawHours(employee.id, monthKey) / expected) * 100 : 100;
-    return ratio < 80 || ratio > 110;
-  });
+  const teamExceptions = dashboardTeamRows(monthKey).filter((row) => row.ratio < 80 || row.ratio > 110);
   const contracts = dashboardContractRows();
   const cards = [
     { view: "reports", tone: "warn", value: unsent.length, label: "računa nije poslato", detail: monthLabel(monthKey) },
@@ -2006,7 +2032,7 @@ function renderAdminActionSummary(active, monthKey) {
     { view: "employees", tone: "warn", value: teamExceptions.length, label: "odstupanja kapaciteta", detail: "ispod 80% ili preko 110%" },
     { view: "clients", tone: "info", value: contracts.length, label: "ugovora ističe uskoro", detail: "narednih 30 dana" },
   ];
-  target.innerHTML = cards.map((card) => `<button class="dashboard-action-card ${card.tone}" type="button" data-go-view="${card.view}"><strong>${dashboardEscape(card.value)}</strong><span>${card.label}</span><small>${dashboardEscape(card.detail)}</small></button>`).join("");
+  target.innerHTML = cards.map((card, index) => `<div class="dashboard-action-wrap"><button class="dashboard-action-card ${card.tone}" type="button" data-go-view="${card.view}"><strong>${dashboardEscape(card.value)}</strong><span>${card.label}</span><small>${dashboardEscape(card.detail)}</small></button><button type="button" class="dashboard-help-trigger action-help" data-dashboard-help="action-${index}" aria-label="Objašnjenje: ${dashboardEscape(card.label)}" aria-expanded="false" aria-controls="dashboardHelpPanel">?</button></div>`).join("");
 }
 
 function dashboardEscape(value) {
@@ -2029,8 +2055,8 @@ function renderDashboardFilterNotice() {
   const filters = [];
   if (searchTerm) filters.push(`Pretraga: “${searchTerm}”`);
   if (monthFilter) filters.push(monthLabel(monthFilter));
-  if (dateFromFilter) filters.push(`od ${dateFromFilter}`);
-  if (dateToFilter) filters.push(`do ${dateToFilter}`);
+  if (dateFromFilter) filters.push(`početak saradnje od ${dateFromFilter}`);
+  if (dateToFilter) filters.push(`početak saradnje do ${dateToFilter}`);
   if (countryFilter !== "all") filters.push(countryFilter);
   notice.hidden = filters.length === 0;
   text.textContent = filters.join(" · ");
@@ -2041,7 +2067,7 @@ function renderRevenueTrend(endMonth) {
   if (!target) return;
   const months = dashboardMonths(endMonth);
   const points = months.map((month) => {
-    const clients = financeClientsForMonth(visibleClients(), month);
+    const clients = financeClientsForMonth(dashboardClients(), month);
     return { month, billed: clients.reduce((sum, client) => sum + invoiceAmount(client, month), 0), paid: clients.reduce((sum, client) => sum + invoicePaidAmount(client, month), 0) };
   });
   const max = Math.max(1, ...points.flatMap((point) => [point.billed, point.paid]));
@@ -2049,26 +2075,23 @@ function renderRevenueTrend(endMonth) {
   const xy = (value, index) => [padX + (chartWidth * index) / Math.max(1, points.length - 1), padY + chartHeight - (value / max) * chartHeight];
   const line = (field) => points.map((point, index) => xy(point[field], index).join(",")).join(" ");
   const latest = points.at(-1), previous = points.at(-2);
-  const delta = previous?.billed ? Math.round(((latest.billed - previous.billed) / previous.billed) * 100) : 0;
-  target.innerHTML = `<div class="chart-legend"><span><i class="legend-dot billed"></i>Fakturisano</span><span><i class="legend-dot paid"></i>Naplaćeno</span></div><div class="line-chart-wrap"><svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafikon fakturisanog i naplaćenog prihoda">${[0, .25, .5, .75, 1].map((ratio) => `<line x1="${padX}" y1="${padY + chartHeight * ratio}" x2="${width - padX}" y2="${padY + chartHeight * ratio}" class="chart-gridline" />`).join("")}<polyline points="${line("billed")}" class="trend-line billed" /><polyline points="${line("paid")}" class="trend-line paid" />${points.map((point, index) => { const billed = xy(point.billed, index), paid = xy(point.paid, index); return `<circle cx="${billed[0]}" cy="${billed[1]}" r="5" class="trend-dot billed"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.billed)}</title></circle><circle cx="${paid[0]}" cy="${paid[1]}" r="5" class="trend-dot paid"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.paid)}</title></circle>`; }).join("")}</svg></div><div class="chart-axis">${points.map((point) => `<span>${dashboardEscape(shortMonthLabel(point.month))}</span>`).join("")}</div><div class="trend-summary"><span><b>${currency.format(latest.billed)}</b> fakturisano</span><span><b>${currency.format(latest.paid)}</b> naplaćeno</span><span class="${delta >= 0 ? "positive" : "negative"}"><b>${delta >= 0 ? "+" : ""}${delta}%</b> prema prethodnom mesecu</span></div>`;
+  const delta = previous?.billed ? Math.round(((latest.billed - previous.billed) / previous.billed) * 100) : latest.billed ? null : 0;
+  target.innerHTML = `<div class="chart-legend"><span><i class="legend-dot billed"></i>Fakturisano</span><span><i class="legend-dot paid"></i>Naplaćeno</span></div><div class="line-chart-wrap"><svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafikon fakturisanog i naplaćenog prihoda">${[0, .25, .5, .75, 1].map((ratio) => `<line x1="${padX}" y1="${padY + chartHeight * ratio}" x2="${width - padX}" y2="${padY + chartHeight * ratio}" class="chart-gridline" />`).join("")}<polyline points="${line("billed")}" class="trend-line billed" /><polyline points="${line("paid")}" class="trend-line paid" />${points.map((point, index) => { const billed = xy(point.billed, index), paid = xy(point.paid, index); return `<circle cx="${billed[0]}" cy="${billed[1]}" r="5" class="trend-dot billed"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.billed)}</title></circle><circle cx="${paid[0]}" cy="${paid[1]}" r="5" class="trend-dot paid"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.paid)}</title></circle>`; }).join("")}</svg></div><div class="chart-axis">${points.map((point) => `<span>${dashboardEscape(shortMonthLabel(point.month))}</span>`).join("")}</div><div class="trend-summary"><span><b>${currency.format(latest.billed)}</b> fakturisano</span><span><b>${currency.format(latest.paid)}</b> naplaćeno</span><span class="${delta >= 0 ? "positive" : "negative"}"><b>${delta === null ? "Nema osnovice" : `${delta >= 0 ? "+" : ""}${delta}%`}</b> prema prethodnom mesecu</span></div>`;
 }
 
 function renderPaymentDonut(clients, monthKey) {
   const target = document.getElementById("adminPaymentDonut");
   if (!target) return;
   setText("adminPaymentMonth", monthLabel(monthKey));
-  const billed = clients.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
-  const paid = clients.reduce((sum, client) => sum + invoicePaidAmount(client, monthKey), 0);
-  const remaining = Math.max(0, billed - paid);
-  const ratio = billed ? Math.min(100, Math.round((paid / billed) * 100)) : 0;
-  target.innerHTML = `<div class="donut-layout"><div class="donut-chart" style="--paid:${ratio * 3.6}deg"><div><strong>${ratio}%</strong><span>naplaćeno</span></div></div><div class="donut-stats"><p><span><i class="legend-dot paid"></i>Naplaćeno</span><strong>${currency.format(paid)}</strong></p><p><span><i class="legend-dot open"></i>Otvoreno</span><strong>${currency.format(remaining)}</strong></p><p><span>Ukupno računa</span><strong>${clients.length}</strong></p></div></div>`;
+  const { billed, paid, remaining, excess, rate: ratio } = dashboardInvoiceTotals(clients, monthKey);
+  target.innerHTML = `<div class="donut-layout"><div class="donut-chart" style="--paid:${ratio * 3.6}deg"><div><strong>${ratio}%</strong><span>naplaćeno</span></div></div><div class="donut-stats"><p><span><i class="legend-dot paid"></i>Naplaćeno</span><strong>${currency.format(paid)}</strong></p><p><span><i class="legend-dot open"></i>Otvoreno</span><strong>${currency.format(remaining)}</strong></p>${excess > 0.005 ? `<p><span>Uplate iznad vrednosti računa</span><strong>${currency.format(excess)}</strong></p>` : ""}<p><span>Ukupno računa</span><strong>${clients.length}</strong></p></div></div>`;
 }
 
 function renderClientGrowth(endMonth) {
   const target = document.getElementById("adminClientGrowth");
   if (!target) return;
   const months = dashboardMonths(endMonth);
-  const values = months.map((month) => state.clients.filter((client) => String(client.startDate || "").slice(0, 7) === month).length);
+  const values = months.map((month) => dashboardClients().filter((client) => client.status !== "Interni" && String(client.startDate || "").slice(0, 7) === month).length);
   const max = Math.max(1, ...values);
   target.innerHTML = `<div class="column-chart">${months.map((month, index) => `<div class="column-item"><strong>${values[index]}</strong><div class="column-track"><span style="height:${Math.max(values[index] ? 10 : 2, (values[index] / max) * 100)}%"></span></div><small>${dashboardEscape(shortMonthLabel(month))}</small></div>`).join("")}</div>`;
 }
@@ -2076,26 +2099,26 @@ function renderClientGrowth(endMonth) {
 function renderTeamUtilization(monthKey) {
   const target = document.getElementById("adminTeamUtilization");
   if (!target) return;
-  const employees = (state.employees || []).filter((employee) => employee.status === "Aktivan").map((employee) => {
-    const expected = employeeExpectedHoursToDate(employee, monthKey), logged = employeeMonthRawHours(employee.id, monthKey);
-    return { name: employee.name, expected, logged, ratio: expected ? Math.round((logged / expected) * 100) : 0 };
-  }).sort((a, b) => b.ratio - a.ratio);
+  const employees = dashboardTeamRows(monthKey);
   const exceptions = employees.filter((item) => item.ratio < 80 || item.ratio > 110);
   const normal = employees.filter((item) => item.ratio >= 80 && item.ratio <= 110);
   const rows = (items) => items.map((item) => `<div class="modern-bar-row utilization-row ${item.ratio < 80 ? "under" : item.ratio > 110 ? "over" : "normal"}"><div><strong>${dashboardEscape(item.name)}</strong><span>${formatHours(item.logged)} / ${formatHours(item.expected)}h</span></div><div class="modern-bar-track"><span style="width:${Math.min(100, item.ratio)}%"></span></div><small>${item.ratio}%</small></div>`).join("");
-  target.innerHTML = employees.length ? `<div class="modern-bars">${rows(exceptions)}${normal.length ? `<details class="utilization-all"><summary>Prikaži uredne (${normal.length})</summary><div class="modern-bars">${rows(normal)}</div></details>` : ""}</div>` : '<p class="chart-empty">Nema aktivnih zaposlenih za prikaz.</p>';
+  target.innerHTML = employees.length ? `<div class="modern-bars">${rows(exceptions)}${normal.length ? `<details class="utilization-all"><summary>Prikaži uredne (${normal.length})</summary><div class="modern-bars">${rows(normal)}</div></details>` : ""}</div>` : '<p class="chart-empty">Nema završenih radnih dana sa planiranim satima za prikaz.</p>';
 }
 
 function invoiceAgeDays(invoice, monthKey) {
-  const date = new Date(invoice.sentAt || `${monthKey}-01`);
-  return Number.isNaN(date.getTime()) ? 0 : Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+  const date = new Date(invoice.sentAt || `${monthKey}-01T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return 0;
+  const sentDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  // Calendar days in the business timezone, including across DST changes.
+  return Math.max(0, Math.round((Date.parse(`${currentDateKey()}T00:00:00Z`) - Date.parse(`${sentDay}T00:00:00Z`)) / 86400000));
 }
 
 function renderInvoiceAging(endMonth) {
   const target = document.getElementById("adminInvoiceAging");
   if (!target) return;
   const buckets = [{ label: "0–7 dana", min: 0, max: 7, value: 0 }, { label: "8–14 dana", min: 8, max: 14, value: 0 }, { label: "15–30 dana", min: 15, max: 30, value: 0 }, { label: "Preko 30 dana", min: 31, max: Infinity, value: 0 }];
-  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(visibleClients(), month).forEach((client) => {
+  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(dashboardClients(), month).forEach((client) => {
     const remaining = invoiceRemainingAmount(client, month);
     if (!remaining) return;
     const age = invoiceAgeDays(monthlyInvoice(client, month), month);
@@ -2117,11 +2140,16 @@ function renderModernBars(target, entries, formatter) {
   target.innerHTML = `<div class="modern-bars">${entries.map(([label, value]) => `<div class="modern-bar-row"><div><strong>${dashboardEscape(label)}</strong><span>${dashboardEscape(formatter(value))}</span></div><div class="modern-bar-track"><span style="width:${(value / max) * 100}%"></span></div></div>`).join("")}</div>`;
 }
 
+function dashboardCountryLabel(value) {
+  const labels = { austria: "Austrija", österreich: "Austrija", austrija: "Austrija", germany: "Nemačka", deutschland: "Nemačka", nemačka: "Nemačka", serbia: "Srbija", srbija: "Srbija", croatia: "Hrvatska", hrvatska: "Hrvatska" };
+  return labels[String(value || "").trim().toLowerCase()] || String(value || "").trim() || "Bez države";
+}
+
 function renderRevenueBreakdown(clients, monthKey) {
   const packageTarget = document.getElementById("adminPackageChart"), countryTarget = document.getElementById("adminCountryChart");
   if (!packageTarget || !countryTarget) return;
-  const totals = (field) => clients.reduce((result, client) => { const key = client[field] || "Ostalo"; result[key] = (result[key] || 0) + invoiceAmount(client, monthKey); return result; }, {});
-  const sorted = (object) => Object.entries(object).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const totals = (field) => clients.reduce((result, client) => { const key = field === "country" ? dashboardCountryLabel(client.country) : client[field] || "Ostalo"; result[key] = (result[key] || 0) + invoiceAmount(client, monthKey); return result; }, {});
+  const sorted = (object) => { const rows = Object.entries(object).sort((a, b) => b[1] - a[1]); return rows.length > 6 ? [...rows.slice(0, 5), ["Preostale grupe", rows.slice(5).reduce((sum, row) => sum + row[1], 0)]] : rows; };
   renderModernBars(packageTarget, sorted(totals("package")), (value) => currency.format(value));
   renderModernBars(countryTarget, sorted(totals("country")), (value) => currency.format(value));
 }
@@ -2232,8 +2260,8 @@ function renderAdminNotifications() {
   const requests = pendingAdminRequests();
   const pendingNotifications = requests.map(item => ({ id: `required-absence-${item.id}`, key: `absence-request-${item.id}`, scope: "admin", type: "warn", title: "Zahtev za odsustvo", message: `${employeeById(item.employeeId)?.name || "Zaposleni"}: ${item.type}, ${formatDate(item.startDate)} – ${formatDate(item.endDate)}.` }));
   const scopedNotifications = [...pendingNotifications, ...(state.notifications || []).filter(notification => notification.scope === "admin" && !String(notification.key || "").startsWith("absence-request-"))];
-  const activeNotifications = scopedNotifications.filter((notification) => !isNotificationHidden(notification)).slice(0, Math.max(8, requests.length));
-  const hiddenNotifications = scopedNotifications.filter(isNotificationHidden).slice(0, 6);
+  const activeNotifications = scopedNotifications.filter((notification) => !isNotificationHidden(notification));
+  const hiddenNotifications = scopedNotifications.filter(isNotificationHidden);
   setText("adminNotificationCount", `${activeNotifications.length} aktivno`);
   const target = document.getElementById("adminNotificationList");
   if (!target) return;
@@ -2342,10 +2370,9 @@ function renderAdminEmployeeRisk(monthKey) {
       const hours = employeeMonthHours(employee.id, monthKey);
       return { employee, balance, expected, hours };
     })
-    .filter(({ employee }) => employee.status !== "Neaktivan")
-    .sort((a, b) => a.balance - b.balance)
-    .slice(0, 6);
-  const riskCount = rows.filter((row) => row.balance < 0 || row.hours > row.expected).length;
+    .filter(({ employee }) => employee.status === "Aktivan" && employee.active !== false)
+    .sort((a, b) => a.balance - b.balance);
+  const riskCount = rows.filter((row) => row.balance < 0 || row.hours > row.expected || employeeLateCount(row.employee.id, monthKey) >= 3).length;
   setText("adminEmployeeRiskCount", `${riskCount} odstupanja`);
   const target = document.getElementById("adminEmployeeRiskList");
   if (!target) return;
@@ -2357,7 +2384,7 @@ function renderAdminEmployeeRisk(monthKey) {
           return `
           <div class="setup-item alert-item clickable-item employee-hours-row ${status}" data-go-view="employees" data-select-shortcut-employee="${escapeInvoiceText(employee.id)}">
             <strong>${formatHourBalance(balance)}</strong>
-            <span>${escapeInvoiceText(employee.name)}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employee.weeklyHours ?? 38.5)}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
+            <span>${escapeInvoiceText(employee.name)}<br />${formatHours(hours)}h od ${formatHours(expected)}h · ${formatHours(employeeWeeklyHoursForMonth(employee, monthKey))}h nedeljno<br />${employeeCarryoverLabel(employee, monthKey)} · ${lateStatus.label}</span>
             <button class="mini-action" data-view-employee-activities="${escapeInvoiceText(employee.id)}" type="button">Vidi aktivnosti</button>
           </div>`;
         })
@@ -3234,7 +3261,11 @@ function readSmallFile(file) {
 function addMonths(value, months) {
   if (!value || !months) return "";
   const date = parseDate(value);
+  const day = date.getDate();
+  date.setDate(1);
   date.setMonth(date.getMonth() + Number(months || 0));
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(day, lastDay));
   return dateKey(date);
 }
 
@@ -7023,8 +7054,7 @@ updateContextActions("admin");
 // Compact filters and current-period defaults added for the admin workspace.
 (() => {
   const currentLocalMonth = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return currentMonthKey();
   };
 
   const setHomeCurrentMonth = () => {
@@ -7034,6 +7064,8 @@ updateContextActions("admin");
     month.value = currentLocalMonth();
     const from = document.getElementById("dateFromFilter");
     const to = document.getElementById("dateToFilter");
+    dateFromFilter = "";
+    dateToFilter = "";
     if (from) from.value = "";
     if (to) to.value = "";
     month.dispatchEvent(new Event("input", { bubbles: true }));

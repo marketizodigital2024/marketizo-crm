@@ -4422,3 +4422,28 @@ body.employee-profile-page .employee-summary-grid article:nth-child(4n + 4)::bef
   .app-shell>.mobile-crm-navigation~.main .pending-approvals{top:72px}
   .app-shell>.main .top-actions>*{min-width:0;max-width:100%}
 }
+
+/* Dashboard explanations reuse the CRM palette and remain usable on touch screens. */
+.dashboard-help-trigger { display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:6px;width:32px;height:32px;min-width:32px;padding:0;border:1px solid #cbd8cd;border-radius:50%;background:#f3f7f2;color:#28643a;font-family:inherit;font-size:15px;font-weight:700;line-height:1;cursor:help;position:relative;z-index:1; }
+.dashboard-help-trigger:hover,.dashboard-help-trigger[aria-expanded="true"] {background:#e2efdf;border-color:#6c9871;}
+.dashboard-help-trigger:focus-visible,.dashboard-help-close:focus-visible {outline:3px solid #ed8b36;outline-offset:3px;}
+.dashboard-action-wrap {position:relative;min-width:0;display:flex;}
+.dashboard-action-wrap>.dashboard-action-card {width:100%;padding-right:46px;text-align:left;}
+.dashboard-action-wrap>.action-help {position:absolute;right:10px;top:10px;margin:0;}
+.dashboard-help-panel {position:fixed;z-index:20000;box-sizing:border-box;max-height:calc(100dvh - 24px);overflow:auto;padding:18px;background:#fffdf8;color:#24372b;border:1px solid #d6e0d4;border-radius:16px;box-shadow:0 12px 44px #23382a30;font-size:14px;line-height:1.5;animation:dashboard-help-in .12s ease-out;}
+.dashboard-help-panel[hidden] {display:none;}
+.dashboard-help-head {display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.dashboard-help-head strong {font-size:16px;}
+.dashboard-help-close {display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;padding:0;border:0;border-radius:10px;background:#edf3e9;color:#254f30;font-size:24px;cursor:pointer;}
+.dashboard-help-panel p {margin:12px 0;}
+.dashboard-help-panel .dashboard-help-scope {font-size:12px;color:#52634f;margin-bottom:0;}
+.dashboard-help-flow {display:flex;align-items:center;gap:5px;}
+.dashboard-help-flow .help-step {flex:1;min-width:0;text-align:center;padding:9px 6px;background:#edf3e9;border:1px solid #dce6d7;border-radius:9px;font-size:12px;line-height:1.35;overflow-wrap:anywhere;}
+.dashboard-help-flow .help-arrow {color:#668364;flex:none;}
+@keyframes dashboard-help-in {from {opacity:0;transform:translateY(3px)} to {opacity:1;transform:translateY(0)}}
+@media (max-width:1040px),(pointer:coarse) {.dashboard-help-trigger {width:44px;height:44px;min-width:44px}.dashboard-action-wrap>.dashboard-action-card {padding-right:62px}}
+@media (prefers-reduced-motion:reduce) {.dashboard-help-panel {animation:none}}
+
+.wa-filter-help-heading {font-size:15px; margin:0 0 12px;}
+.work-analytics-page .wa-kpi-label {display:block;padding-right:0;line-height:1.6;}
+.wa-table-wrap th>.dashboard-help-trigger {margin-left:3px;}

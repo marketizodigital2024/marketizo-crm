@@ -20,7 +20,7 @@
     <meta name="theme-color" content="#ff6b00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=20261015-overhead-r16d" />
+    <link rel="stylesheet" href="styles.css?v=20261031-dashboard-1" />
       <link rel="stylesheet" href="finance-bank-matches.css?v=20261018-bank-r1" />
   <link rel="stylesheet" href="sign-nav.css?v=20261029-menu">
 </head>
@@ -79,7 +79,7 @@
               <small>ukupna vrednost računa</small>
             </article>
             <article class="metric metric-link" data-go-view="reports">
-              <span>Plaćeno u mesecu</span>
+              <span>Naplaćeno za račune meseca</span>
               <strong id="adminPaidTotal">€0</strong>
               <small id="adminPaidCount">0 klijenata</small>
             </article>
@@ -112,10 +112,10 @@
               <label>Mesec
                 <input id="monthFilter" type="month" />
               </label>
-              <label>Od datuma
+              <label>Početak saradnje od
                 <input id="dateFromFilter" type="date" />
               </label>
-              <label>Do datuma
+              <label>Početak saradnje do
                 <input id="dateToFilter" type="date" />
               </label>
               <label>Država
@@ -195,7 +195,7 @@
           </details>
 
           <details class="panel dashboard-detail-section">
-            <summary><div><p class="eyebrow">Zaposleni</p><h2>Detaljni sati, ciljevi i odgovornost</h2></div><span id="adminEmployeeRiskCount">0</span></summary>
+            <summary><div><p class="eyebrow">Zaposleni</p><h2>Sati, saldo i kašnjenja</h2></div><span id="adminEmployeeRiskCount">0</span></summary>
             <div class="dashboard-detail-content">
               <div class="setup-list" id="adminEmployeeRiskList"></div>
             </div>
@@ -986,7 +986,8 @@
     <script src="company-overhead.js?v=20261015-overhead-r16d"></script>
     <script src="mobile-crm-nav.js?v=20261031-mobile-1"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="app.js?v=20261029-friday-hours"></script>
+    <script src="dashboard-help.js?v=20261031-help-1"></script>
+    <script src="app.js?v=20261031-dashboard-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
     <script src="finance-bank-matches.js?v=20261018-bank-r1"></script>
   <script src="finance-bank-auto.js?v=20261018-auto-r1"></script>
