@@ -21,3 +21,11 @@ Kontoflux matching includes sent CRM invoices without requiring legacy Drive ori
 Before enabling live sending, run the synthetic regression suite and PDF checks, verify production API authentication and navigation, and obtain authorization for a self-addressed non-accounting test message. Never allocate a real invoice number for a test. Do not create a real client invoice merely to test delivery.
 
 Client contact/invoice email uses `client.email`, reflected in the single visible email field and `billingProfile.email`. Existing `loginEmail` and password remain unchanged for authentication; never repurpose a billing-recipient update as a credential change. A changed or cleared contact email invalidates a stale invoice profile until saved again.
+
+## Shared recipients and combined invoices
+
+A client can set `billingRecipientId` to another client's canonical billing profile without merging their documents or project identities. `billingName` optionally supplies the legal company name while the project keeps its name. Optional `billingDescription` supplies a project-specific default service description.
+
+For a combined invoice, the primary and every member use the primary ID as `billingGroupId`. The owner sees one invoice choice with a separate editable line for each member. Apply `database/billing-routing.sql` before `database/billing-flow.sql`. The service-only helper revalidates the exact recipient/profile, complete active membership, frequency, month, and line/tax totals under the issuing/delivery transaction. A changed recipient or group invalidates a previously prepared snapshot. Issuing reserves one number and writes each project's net share atomically; delivery marks all member cards sent only on confirmed Gmail evidence.
+
+The bank registry carries exact net/VAT/gross shares. Full automatic matches and explicit partial allocations distribute the gross once across member cards, preserve every cent, and retain one shared payment reference. Existing manual payment history blocks automatic posting; reversal of a linked group reverses all portions together. Cash for a grouped invoice remains blocked pending a dedicated allocation workflow. Legacy original links are private per-document records tied to their exact SHA-256; ambiguous or changed originals retain blocking issues. Never infer a project solely from a shared payer's name.

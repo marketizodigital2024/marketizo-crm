@@ -2893,6 +2893,7 @@ function openEditClient(id) {
     const input=form.elements["billing_"+key];if(input){if(input.type==="checkbox")input.checked=value===true;else input.value=value || "";}
   }
   if(form.elements.billing_taxMode){form.elements.billing_taxMode.value=['reverse-charge','exempt'].includes(client.billingProfile?.taxMode)?'exempt':'standard20';form.elements.billing_taxFreeMode.value=client.billingProfile?.taxMode==='reverse-charge'?'reverse-charge':'exempt';}
+  refreshBillingRouting(form,client);
   form.elements.name.value = client.name || "";
   form.elements.niche.value = client.niche || "";
   form.elements.country.value = client.country || "Austrija";
@@ -6831,9 +6832,17 @@ function billingProfileFromForm(data) {
   const billingProfile={};for(const key of ["street","postalCode","city","vatId","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
   if(billingProfile.taxMode==="exempt"&&data.get("billing_taxFreeMode")==="reverse-charge")billingProfile.taxMode="reverse-charge";
   if(billingProfile.taxMode==="standard20")billingProfile.taxNote="";
-  const shared=clientBillingDefaults({name:data.get("name"),country:data.get("country"),email:String(data.get("email")||"").trim().toLowerCase()});
+  const shared=clientBillingDefaults({name:data.get("name"),billingName:data.get("billingDifferentName")==="on"?String(data.get("billingName")||"").trim():"",country:data.get("country"),email:String(data.get("email")||"").trim().toLowerCase()});
   billingProfile.legalName=String(shared.legalName||"").trim();billingProfile.country=String(shared.country||"");billingProfile.email=String(shared.email||"").trim().toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
-  return {billingProfile};
+  const routing={};if(data.has("billingRecipientId")){routing.billingRecipientId=String(data.get("billingRecipientId")||"");routing.billingGroupId=String(data.get("billingGroupId")||"");routing.billingName=data.get("billingDifferentName")==="on"?String(data.get("billingName")||"").trim():"";}
+  return {billingProfile,...routing};
+}
+function refreshBillingRouting(form,client){
+ if(!form.elements.billingRecipientId)return;
+ const id=client?.id||form.elements.id?.value||"",all=(state.clients||[]).filter(c=>c.status!=="Arhiviran");
+ for(const key of ["billingRecipientId","billingGroupId"]){const field=form.elements[key];if(!field)continue;const value=client?String(client[key]||""):field.value;field.replaceChildren(new Option(key==="billingRecipientId"?"Sam klijent":"Ne — poseban račun","") ,...all.filter(c=>key==="billingGroupId"||c.id!==id).map(c=>new Option(key==="billingGroupId"?(c.id===id?"Nosilac zajedničkog računa":"Zajedno sa "+c.name):c.name,c.id)));field.value=value;}
+ if(client){form.elements.billingName.value=client.billingName||"";form.elements.billingDifferentName.checked=!!client.billingName;}
+ form.dispatchEvent(new Event("billing-routing-refresh"));
 }
 function setupClientBillingFields(){
   if(typeof getAdminSession === "function" && getAdminSession()?.role === "operational-admin")return;
@@ -6841,7 +6850,11 @@ function setupClientBillingFields(){
     const frequencyLabel=document.createElement("label");frequencyLabel.textContent="Izdavanje računa";const frequency=document.createElement("select");frequency.name="billingFrequency";frequency.required=true;frequency.append(new Option("Mesečno","monthly"),new Option("Jednokratno — jedan račun","once"));frequencyLabel.append(frequency);const priceLabel=form.querySelector('[name="revenue"]')?.closest("label");if(priceLabel){priceLabel.parentNode.insertBefore(frequencyLabel,priceLabel);const caption=[...priceLabel.childNodes].find(node=>node.nodeType===3);if(caption)caption.textContent="Cena netto (€)";}else form.append(frequencyLabel);
     const section=document.createElement("details");section.className="billing-client-profile";section.style.gridColumn="1 / -1";
     const summary=document.createElement("summary");summary.textContent="Podaci za račune";section.append(summary);
-    const info=document.createElement("p");info.textContent="Naziv firme, država, e-mail i cena netto uzimaju se iz gornjih polja. Ovde dopuni samo adresu i poreske podatke potrebne za račun.";section.append(info);
+    const info=document.createElement("p");info.textContent="Za običan račun koristimo gornje podatke. Ako druga firma prima račun ili više projekata ide na jedan račun, izaberi to ovde.";section.append(info);
+    for(const [name,label]of [["billingRecipientId","Firma koja prima račun"],["billingGroupId","Zajednički račun"]]){const holder=document.createElement("label");holder.textContent=label;const select=document.createElement("select");select.name=name;holder.append(select);section.append(holder);select.addEventListener("focus",()=>refreshBillingRouting(form));select.addEventListener("change",()=>form.dispatchEvent(new Event("billing-routing-refresh")));}
+    const different=document.createElement("label"),differentInput=document.createElement("input");differentInput.type="checkbox";differentInput.name="billingDifferentName";different.append(differentInput,document.createTextNode("Naziv firme na računu se razlikuje od naziva projekta"));section.append(different);
+    const legalHolder=document.createElement("label");legalHolder.textContent="Naziv firme na računu";const legal=document.createElement("input");legal.name="billingName";legal.maxLength=180;legalHolder.append(legal);section.append(legalHolder);
+    form.addEventListener("billing-routing-refresh",()=>{const id=form.elements.id?.value||"",shared=form.elements.billingRecipientId.value||form.elements.billingGroupId.value&&form.elements.billingGroupId.value!==id;different.hidden=!!shared;legalHolder.hidden=!!shared||!differentInput.checked;legal.required=!legalHolder.hidden;section.querySelectorAll('[name^="billing_"]').forEach(input=>{const label=input.closest("label");if(label)label.hidden=!!shared;});});differentInput.addEventListener("change",()=>form.dispatchEvent(new Event("billing-routing-refresh")));
     const freeMode=document.createElement("input");freeMode.type="hidden";freeMode.name="billing_taxFreeMode";freeMode.value="exempt";section.append(freeMode);
     for(const [key,label]of [["street","Ulica i broj"],["postalCode","Poštanski broj"],["city","Grad"],["vatId","UID / PDV broj"],["taxMode","Porez"],["taxNote","Osnov za račun bez poreza"],["confirmed","Potvrđujem podatke i poreski tretman"]]){
       const holder=document.createElement("label");holder.textContent=label;let input;
@@ -6849,8 +6862,9 @@ function setupClientBillingFields(){
       else{input=document.createElement("input");input.type=key==="confirmed"?"checkbox":key==="email"?"email":"text";input.maxLength=key==="taxNote"?500:key==="email"?254:180;}
       input.name="billing_"+key;holder.append(input);section.append(holder);
     }const submit=form.querySelector('button[type="submit"], button:not([type])');let anchor=submit;while(anchor?.parentElement&&anchor.parentElement!==form)anchor=anchor.parentElement;form.insertBefore(section,anchor?.parentElement===form?anchor:null);
-    const note=form.elements.billing_taxNote?.closest("label");const updateTaxNote=()=>{if(note)note.hidden=!['reverse-charge','exempt'].includes(form.elements.billing_taxMode.value);};form.elements.billing_taxMode.addEventListener("change",updateTaxNote);section.addEventListener("toggle",updateTaxNote);updateTaxNote();
-    form.addEventListener("input",e=>{if(["name","country","email"].includes(e.target.name)||e.target.name?.startsWith("billing_")&&e.target.name!=="billing_confirmed")form.elements.billing_confirmed.checked=false;});
+    const note=form.elements.billing_taxNote?.closest("label");const updateTaxNote=()=>{const ownId=form.elements.id?.value||'';const shared=!!(form.elements.billingRecipientId.value||form.elements.billingGroupId.value&&form.elements.billingGroupId.value!==ownId);if(note)note.hidden=shared||!['reverse-charge','exempt'].includes(form.elements.billing_taxMode.value);};form.elements.billing_taxMode.addEventListener("change",updateTaxNote);section.addEventListener("toggle",updateTaxNote);form.addEventListener("billing-routing-refresh",updateTaxNote);updateTaxNote();
+    form.addEventListener("input",e=>{if(["name","country","email"].includes(e.target.name)||e.target.name?.startsWith("billing")&&e.target.name!=="billing_confirmed")form.elements.billing_confirmed.checked=false;});
+    refreshBillingRouting(form);
   }
 }
 setupClientBillingFields();

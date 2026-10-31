@@ -24,7 +24,7 @@
     for(const card of cards){
       const clientId=card.querySelector('[data-invoice-client]')?.getAttribute('data-invoice-client');
       if(!clientId)continue;
-      const rows=data.invoices.filter(x=>x.clientId===clientId); rows.forEach(x=>linkedIds.add(x.invoiceId));
+      const rows=data.invoices.filter(x=>x.clientId===clientId||x.clientShares?.some(s=>s.clientId===clientId)); rows.forEach(x=>linkedIds.add(x.invoiceId));
       const box=document.createElement('div');box.className='invoice-bank-match';
       if(!rows.length){box.innerHTML='<small>Originalni račun iz Drive-a još nije povezan sa ovim unosom. Status plaćanja ostaje isti.</small>';(card.querySelector(".invoice-detail-content")||card).append(box);continue;}
       box.innerHTML=rows.map(x=>`<div class="bank-invoice-proof"><div class="bank-match-head"><strong>${x.source==='crm'?'CRM račun':'Drive račun'} ${String(x.number).padStart(6,'0')}</strong><span class="status ${x.status==='covered'?'ok':'warn'}">${esc(labels[x.status]||'Za proveru')}</span></div><p><b>Ukupan račun ${money(x.grossCents)}</b> · Neto ${money(x.netCents)} + PDV ${money(x.vatCents)}<br>Potvrđene bankarske uplate ${money(x.bankPaidCents)}${x.coveredAt?' · Datum '+date(x.coveredAt):''}</p><details><summary>Uplate i originalni račun</summary><p>${esc(x.filename)}<br><small>${x.source==='crm'?'Original je sačuvan u CRM-u':'Drive proveren '+date(data.registryCheckedAt)} · Izdato ${date(x.issuedAt)}</small></p>${x.issues.map(i=>'<p class="bank-match-warning">'+esc(i)+'</p>').join('')}${x.payments.map(p=>paymentHtml(p,'Broj računa se poklapa')).join('')}${x.candidates.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(p=>paymentHtml(p,'Moguća veza — potvrditi')).join('')}${!x.payments.length&&!x.candidates.length?'<p>Nije pronađena bankarska uplata. Keš, drugi računi, Stripe naplate, avansi i storna zahtevaju zasebnu proveru.</p>':''}</details><p class="bank-card-comparison" data-compare="${esc(x.invoiceId)}"></p></div>`).join('');
@@ -33,15 +33,16 @@
         const line=[...box.querySelectorAll('[data-compare]')].find(e=>e.dataset.compare===x.invoiceId),form=card.querySelector('.invoice-payment-form'),amountInput=form?.querySelector('[name="amount"]');
         const text=card.querySelector('.invoice-compact-amount')?.textContent||'';
         const cardCents=Math.round(Number(text.replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.'))*100);
-        const net=x.netCents===cardCents&&x.netCents+x.vatCents===x.grossCents,gross=x.grossCents===cardCents;
+        const share=x.clientShares?.find(s=>s.clientId===clientId),cardNet=share?.net??x.netCents,cardVat=share?.vat??x.vatCents,cardGross=share?.gross??x.grossCents;const net=cardNet===cardCents&&cardNet+cardVat===cardGross,gross=cardGross===cardCents;
         line.textContent=net&&!gross?'Iznos u aplikaciji je bez PDV-a; bankarska uplata uključuje PDV.':gross?'Iznos u aplikaciji odgovara ukupnom računu.':'Iznos u aplikaciji se razlikuje od originalnog računa — proveri razliku.';
+        if(x.clientShares?.length>1)line.textContent='Zajednički račun — deo ovog projekta: '+money(cardNet)+' neto. Uplatu poveži jednom kroz raspodelu zajedničkog računa. '+line.textContent;
         if(!x.clientLinkVerified) line.textContent+=' Vezu originalnog računa i ovog klijenta treba potvrditi.';
         const paid=card.querySelector('[data-invoice-field="paymentStatus"]')?.value==='Plaćeno';
         const history=card.querySelector('.invoice-payment-history')?.textContent||'';
         const duplicate=x.payments.some(p=>history.includes('Bank ID '+p.id));
         const target=net?x.netCents:x.grossCents,maximum=Math.round(Number(amountInput?.max||'0')*100);
         // Explicit owner click only prepares the existing form. Its submit is untouched.
-        if(rows.length===1&&x.clientLinkVerified&&x.status==='covered'&&!x.issues.length&&(net||gross)&&!paid&&!duplicate&&form&&target<=maximum){
+        if(rows.length===1&&!(x.clientShares?.length>1)&&x.clientLinkVerified&&x.status==='covered'&&!x.issues.length&&(net||gross)&&!paid&&!duplicate&&form&&target<=maximum){
           const button=document.createElement('button');button.type='button';button.className='secondary-button';button.textContent='Popuni podatke za ovu uplatu';
           button.addEventListener('click',()=>{form.querySelector('[name="date"]').value=x.coveredAt;amountInput.value=(target/100).toFixed(2);form.querySelector('[name="note"]').value=('Račun '+x.number+'; Bank ID '+x.payments.map(p=>p.id).join(',')+'; bruto '+money(x.bankPaidCents)).slice(0,160);line.textContent='Proveri iznos i datum, pa klikni „Dodaj uplatu“ da sačuvaš.';form.scrollIntoView({block:'center',behavior:'smooth'});amountInput.focus();});line.after(button);
         } else if(paid)line.textContent+=' U aplikaciji je već označeno plaćeno; nema novog upisa.';
