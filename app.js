@@ -1271,7 +1271,8 @@ function invoiceStartMonthFor(client) {
 
 function invoiceHasFinancialHistory(invoice) {
   if (!invoice) return false;
-  return invoice.invoiceStatus === "Poslat"
+  return Boolean(invoice.originalInvoice || invoice.billingInvoiceId)
+    || invoice.invoiceStatus === "Poslat"
     || invoice.paymentStatus === "Plaćeno"
     || invoice.paymentStatus === "Delimično"
     || Number(invoice.paidAmount || 0) > 0
@@ -1321,6 +1322,7 @@ function ensureInvoiceMonthRoster(monthKey) {
     const excludedMonths = Array.isArray(client.invoiceExcludedMonths) ? client.invoiceExcludedMonths : [];
     const invoiceStartMonth = invoiceStartMonthFor(client);
     const startsAfterMonth = invoiceStartMonth && invoiceStartMonth > monthKey;
+    if (client.billingFrequency === "once" && monthKey !== invoiceStartMonth) return;
     if (client.status !== "Aktivan" || Number(client.revenue || 0) <= 0 || startsAfterMonth || excludedMonths.includes(monthKey)) return;
     client.invoices = client.invoices || {};
     if (client.invoices[monthKey]) return;
@@ -1362,7 +1364,7 @@ function clientCostEmployeeChoicesHtml(options) {
 }
 
 function clientsForInvoiceMonth(clients, monthKey) {
-  return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]));
+  return clients.filter((client) => Boolean(client.invoices && client.invoices[monthKey]) && (client.billingFrequency !== "once" || monthKey === invoiceStartMonthFor(client) || invoiceHasFinancialHistory(client.invoices[monthKey])));
 }
 
 function financeClientsForMonth(clients, monthKey) {
@@ -2886,6 +2888,7 @@ function openEditClient(id) {
   const form = document.getElementById("editClientForm");
   setText("editClientTitle", client.name);
   form.elements.id.value = client.id;
+  if (form.elements.billingFrequency) form.elements.billingFrequency.value = client.billingFrequency === "once" ? "once" : "monthly";
   for (const [key,value] of Object.entries(client.billingProfile || {})) {
     const input=form.elements["billing_"+key];if(input){if(input.type==="checkbox")input.checked=value===true;else input.value=value || "";}
   }
@@ -2944,8 +2947,8 @@ function openEditClient(id) {
 
 function renderPackageSummary(clients) {
   const packages = clients.reduce((acc, client) => {
-    const packageName = displayPackage(client.package || "Bez paketa");
-    if (!acc[packageName]) acc[packageName] = { count: 0, total: 0 };
+    const packageName = displayPackage(client.package || "Bez paketa") + (client.billingFrequency === "once" ? " · jednokratno" : "");
+    if (!acc[packageName]) acc[packageName] = { count: 0, total: 0, once: client.billingFrequency === "once" };
     acc[packageName].count += 1;
     acc[packageName].total += Number(client.revenue || 0);
     return acc;
@@ -2955,7 +2958,7 @@ function renderPackageSummary(clients) {
       ([packageName, info]) => `
       <div class="setup-item">
         <strong>${info.count}</strong>
-        <span>${info.count === 1 ? "1 klijent" : `${info.count} klijenata`} · ${packageName} · ${currency.format(info.total)}/mes</span>
+        <span>${info.count === 1 ? "1 klijent" : `${info.count} klijenata`} · ${packageName} · ${currency.format(info.total)}${info.once ? " · jednokratno" : "/mes"}</span>
       </div>`
     )
     .join("");
@@ -5749,7 +5752,7 @@ function renderClients() {
           return `
           <tr>
             <td><strong>${escapeInvoiceText(client.name)}</strong><br /><span>${escapeInvoiceText(client.niche)} · ${escapeInvoiceText(client.country)}</span></td>
-            <td><strong>${displayPackage(client.package)}</strong><br /><span>${currency.format(client.revenue || 0)}/mes</span></td>
+            <td><strong>${displayPackage(client.package)}</strong><br /><span>${currency.format(client.revenue || 0)}${client.billingFrequency === "once" ? " · jednokratno" : "/mes"}</span></td>
             <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
             <td><span class="status ${statusClass(client)}">${escapeInvoiceText(client.status || "Aktivan")}</span></td>
             <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
@@ -6865,16 +6868,18 @@ function billingProfileFromForm(data) {
   return {billingProfile};
 }
 function setupClientBillingFields(){
+  if(typeof getAdminSession === "function" && getAdminSession()?.role === "operational-admin")return;
   for(const id of ["adminClientForm","editClientForm"]){const form=document.getElementById(id);if(!form||form.querySelector('[name="billing_legalName"]'))continue;
+    const frequencyLabel=document.createElement("label");frequencyLabel.textContent="Izdavanje računa";const frequency=document.createElement("select");frequency.name="billingFrequency";frequency.required=true;frequency.append(new Option("Mesečno","monthly"),new Option("Jednokratno — jedan račun","once"));frequencyLabel.append(frequency);const priceLabel=form.querySelector('[name="revenue"]')?.closest("label");if(priceLabel){priceLabel.parentNode.insertBefore(frequencyLabel,priceLabel);const caption=[...priceLabel.childNodes].find(node=>node.nodeType===3);if(caption)caption.textContent="Cena usluge (€)";}else form.append(frequencyLabel);
     const section=document.createElement("details");section.className="billing-client-profile";section.style.gridColumn="1 / -1";
     const summary=document.createElement("summary");summary.textContent="Podaci za račune";section.append(summary);
-    const info=document.createElement("p");info.textContent="Obavezno pre izdavanja računa. E-mail za račune može biti drugačiji od prijave klijenta.";section.append(info);
+    const info=document.createElement("p");info.textContent="Obavezno pre izdavanja računa. Jednokratni klijent ima račun samo u izabranom početnom mesecu. E-mail za račune može biti drugačiji od prijave klijenta.";section.append(info);
     for(const [key,label]of [["legalName","Naziv firme"],["street","Ulica i broj"],["postalCode","Poštanski broj"],["city","Grad"],["country","Država (AT, RS…)"],["vatId","UID / PDV broj"],["email","E-mail za račune"],["taxMode","Poreski tretman"],["taxNote","Obrazloženje bez PDV-a"],["confirmed","Potvrđujem podatke i poreski tretman"]]){
       const holder=document.createElement("label");holder.textContent=label;let input;
       if(key==="taxMode"){input=document.createElement("select");for(const [v,t]of [["","Izaberi nakon provere"],["standard20","20% PDV"],["reverse-charge","Reverse Charge"],["exempt","Bez PDV-a uz obrazloženje"]])input.append(new Option(t,v));}
       else{input=document.createElement("input");input.type=key==="confirmed"?"checkbox":key==="email"?"email":"text";input.maxLength=key==="taxNote"?500:key==="email"?254:180;}
       input.name="billing_"+key;holder.append(input);section.append(holder);
-    }form.append(section);
+    }const submit=form.querySelector('button[type="submit"]');form.insertBefore(section,submit?.parentElement===form?submit:null);
   }
 }
 setupClientBillingFields();
@@ -6917,6 +6922,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     id: form.dataset.retryId,
     name,
     ...(typeof billingProfileFromForm === "function" ? billingProfileFromForm(formData) : {}),
+    ...(typeof formData.has === "function" && formData.has("billingFrequency") ? {billingFrequency:formData.get("billingFrequency")==="once"?"once":"monthly"} : {}),
     niche: formData.get("niche"),
     country: formData.get("country"),
     status: formData.get("status"),
@@ -7010,6 +7016,7 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
   Object.assign(client, {
     name: formData.get("name"),
     ...(typeof billingProfileFromForm === "function" ? billingProfileFromForm(formData) : {}),
+    ...(typeof formData.has === "function" && formData.has("billingFrequency") ? {billingFrequency:formData.get("billingFrequency")==="once"?"once":"monthly"} : {}),
     niche: formData.get("niche"),
     country: formData.get("country"),
     package: values.package,

@@ -64,6 +64,7 @@ begin
   select ordinality::int-1,value into idx,client from jsonb_array_elements(main->'clients') with ordinality where value->>'id'=snap->>'clientId';
   if client is null then raise exception 'Client not found';end if;
   if client->'billingProfile' is distinct from snap->'profile' then raise exception 'Client profile changed';end if;
+  if coalesce(client->>'billingFrequency','monthly') is distinct from coalesce(snap->>'billingFrequency','monthly') or (client->>'billingFrequency'='once' and snap->>'serviceMonth' is distinct from left(coalesce(nullif(client->>'invoiceStartMonth',''),client->>'startDate'),7)) then raise exception 'Client billing frequency or month changed';end if;
   inv:=client->'invoices'->(snap->>'serviceMonth');
   if inv->'originalInvoice' is not null or inv->>'invoiceStatus'='Poslat' or coalesce(jsonb_array_length(inv->'payments'),0)>0 or coalesce((inv->>'paidAmount')::numeric,0)>0 then raise exception 'Invoice or payment already exists for this period';end if;
   inv:=coalesce(inv,'{}'::jsonb)||jsonb_build_object('amount',(snap->>'netCents')::numeric/100,'invoiceStatus','Nije poslat','paymentStatus','Nije plaćeno','paymentMethod','Firma','billingInvoiceId',doc->>'id','originalInvoice',jsonb_build_object('source','crm','number',n,'netCents',snap->'netCents','vatCents',snap->'vatCents','grossCents',snap->'grossCents','sha256',doc->>'pdfSha256'));
@@ -76,12 +77,12 @@ begin
   if p_action in('prepared','sending') then
    select payload into main from public.agency_crm_state where id=p_organization for update;
    select value into client from jsonb_array_elements(main->'clients') where value->>'id'=doc->'snapshot'->>'clientId';
-   if client is null or client->'billingProfile' is distinct from doc->'snapshot'->'profile' then raise exception 'Client profile changed; delivery blocked';end if;
+   if client is null or client->'billingProfile' is distinct from doc->'snapshot'->'profile' or coalesce(client->>'billingFrequency','monthly') is distinct from coalesce(doc->'snapshot'->>'billingFrequency','monthly') or (client->>'billingFrequency'='once' and doc->'snapshot'->>'serviceMonth' is distinct from left(coalesce(nullif(client->>'invoiceStartMonth',''),client->>'startDate'),7)) then raise exception 'Client profile changed; delivery blocked';end if;
   end if;
   if p_action='prepared' then
    if doc->>'status' not in('queued','prepared') or nullif(p_data->>'draftId','') is null then raise exception 'Invalid draft preparation';end if;
    if doc->>'gmailDraftId' is not null and doc->>'gmailDraftId'<>p_data->>'draftId' then raise exception 'A Gmail draft is already assigned';end if;
-   doc:=doc||jsonb_build_object('status','prepared','gmailDraftId',p_data->>'draftId');
+   doc:=doc||jsonb_build_object('status','prepared','gmailDraftId',p_data->>'draftId','gmailDraftRfcMessageId',p_data->>'rfcMessageId');
   elsif p_action='sending' then
    if doc->>'status'<>'prepared' or doc->>'gmailDraftId' is null then raise exception 'Gmail draft not confirmed';end if;doc:=doc||jsonb_build_object('status','sending');
   elsif p_action='sent' then
