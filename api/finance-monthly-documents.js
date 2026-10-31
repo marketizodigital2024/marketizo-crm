@@ -31,7 +31,7 @@ module.exports=async(req,res)=>{
    const h=params.get('original');
    if(h){if(google.email!=='office@marketizo.com'||!/^[a-f0-9]{64}$/.test(h))throw Error('Original nije dostupan ovom nalogu.');return json(res,200,{ok:true,file:(await read(c,recordId+'-raw-'+h)).data.file||null});}
    const {data}=await readMonth();let sourceMonths={};
-   if(google.email==='office@marketizo.com'){try{const sources=await require('../lib/finance-source-store.js').read(c);sourceMonths=Object.fromEntries(Object.entries(sources.data.files||{}).filter(([,f])=>!f.deleted&&!f.error&&f.parsed&&!(f.parsed.issues||[]).length&&docs.validMonth(f.parsed.month)).map(([id,f])=>[id,{month:f.parsed.month,modifiedTime:f.modifiedTime,sha256:f.parsed.sha256}]));}catch{/* Optional optimization only: unknown originals must still be read. */}}
+   if(google.email==='office@marketizo.com'){try{const sources=await require('../lib/finance-source-store.js').read(c);sourceMonths=Object.fromEntries(Object.entries(sources.data.files||{}).filter(([,f])=>!f.deleted&&!f.error&&f.parsed&&!(f.parsed.issues||[]).length&&docs.validMonth(f.parsed.month)&&docs.validMonth(String(f.parsed.date||'').slice(0,7))).map(([id,f])=>[id,{month:f.parsed.month,issuedMonth:String(f.parsed.date).slice(0,7),modifiedTime:f.modifiedTime,sha256:f.parsed.sha256}]));}catch{/* Optional optimization only: unknown originals must still be read. */}}
    return json(res,200,{ok:true,month,sourceMonths,folderId:data.folderId||docs.FOLDERS[month]||null,documents:Object.values(data.documents).map(d=>({sha256:d.sha256,copy:d.copy||null,source:d.source,sourceId:d.sourceId,account:d.account}))});
   }
   if(body.kind==='folder'){
