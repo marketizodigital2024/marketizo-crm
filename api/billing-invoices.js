@@ -21,7 +21,7 @@ function createHandler(deps={}){return async(req,res)=>{
   }
   if(!String(req.headers?.['content-type']||'').startsWith('application/json'))throw Error('Neispravan zahtev.');const raw=typeof req.body==='string'?req.body:JSON.stringify(req.body);if(!raw||raw.length>10000)throw Error('Zahtev je prevelik.');const body=JSON.parse(raw);
   if(body.action==='sample'){
-   const snapshot=core.previewFor(current.payload,body),pdf=await(deps.render||render)(snapshot,0,true);return json(res,200,{ok:true,pdf:pdf.base64,previewOnly:true});
+   const snapshot=core.previewFor(current.payload,body),settings=await store.rpc('settings'),number=settings.nextNumber,pdf=await(deps.render||render)(snapshot,number,true);return json(res,200,{ok:true,pdf:pdf.base64,previewOnly:true,plannedNumber:number});
   }
   if(body.action==='profile')throw Error('Podatke za račun izmeni u Klijenti → Izmena klijenta, pa osveži ovaj prikaz.');
   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(body.id||''))throw Error('Neispravan ID računa.');

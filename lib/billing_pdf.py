@@ -45,7 +45,7 @@ def render(payload):
         if any(ord(c) not in pdfmetrics.getFont('Invoice').face.charToGlyph for c in value): raise ValueError('Unsupported invoice character')
         return escape(value)
     out=io.BytesIO(); c=canvas.Canvas(out,pagesize=A4,invariant=1); w,h=A4
-    c.setTitle('TEST - KEIN GÜLTIGER BELEG' if test else 'Rechnung '+str(number).zfill(6));c.setAuthor(issuer['legalName'])
+    c.setTitle(('ENTWURF / TEST - Rechnung '+str(number).zfill(6)) if test and number else 'TEST - KEIN GÜLTIGER BELEG' if test else 'Rechnung '+str(number).zfill(6));c.setAuthor(issuer['legalName'])
     def para(value,x,y,width=450,size=10,bold=False):
         par=Paragraph(text(value),ParagraphStyle('invoice',fontName='InvoiceBold' if bold else 'Invoice',fontSize=size,leading=size*1.25))
         _,height=par.wrap(width,1000);par.drawOn(c,x,y-height);return height
@@ -62,7 +62,8 @@ def render(payload):
     for v in [p['legalName'],p['street'],p['postalCode']+' '+p['city'],p['country']]+(['UID: '+p['vatId']] if p['vatId'] else []):y-=para(v,70,y,width=340,size=10)+2
     date='.'.join(reversed(s['issueDate'].split('-')))
     para('Wien, '+date,430,h-244,width=120)
-    para(('TEST – KEIN GÜLTIGER BELEG' if test else b['defaults']['heading']+' '+str(number).zfill(6)),70,h-284,bold=True,size=14)
+    para(('ENTWURF / TEST – Rechnung '+str(number).zfill(6) if test and number else 'TEST – KEIN GÜLTIGER BELEG' if test else b['defaults']['heading']+' '+str(number).zfill(6)),70,h-284,bold=True,size=14)
+    if test and number:para('KEIN GÜLTIGER BELEG – Nummer noch nicht reserviert',70,h-306,size=8)
     para(b['defaults']['introduction'],70,h-316)
     vat='20 %' if p['taxMode']=='standard20' else '0 %'
     item_rows=[[Paragraph(text(item['description']),ParagraphStyle('description',fontName='Invoice',fontSize=10,leading=13)),str(item['quantity']),money(item['unitCents']),vat,money(item['netCents'])] for item in display_items]
