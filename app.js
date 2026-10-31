@@ -2892,6 +2892,7 @@ function openEditClient(id) {
   for (const [key,value] of Object.entries(clientBillingDefaults(client))) {
     const input=form.elements["billing_"+key];if(input){if(input.type==="checkbox")input.checked=value===true;else input.value=value || "";}
   }
+  if(form.elements.billing_taxMode){form.elements.billing_taxMode.value=['reverse-charge','exempt'].includes(client.billingProfile?.taxMode)?'exempt':'standard20';form.elements.billing_taxFreeMode.value=client.billingProfile?.taxMode==='reverse-charge'?'reverse-charge':'exempt';}
   form.elements.name.value = client.name || "";
   form.elements.niche.value = client.niche || "";
   form.elements.country.value = client.country || "Austrija";
@@ -6828,6 +6829,7 @@ document.getElementById("openClientModal").addEventListener("click", () => {
 function billingProfileFromForm(data) {
   if (typeof data.has!=="function" || !data.has("billing_street")) return {};
   const billingProfile={};for(const key of ["street","postalCode","city","vatId","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
+  if(billingProfile.taxMode==="exempt"&&data.get("billing_taxFreeMode")==="reverse-charge")billingProfile.taxMode="reverse-charge";
   if(billingProfile.taxMode==="standard20")billingProfile.taxNote="";
   const shared=clientBillingDefaults({name:data.get("name"),country:data.get("country"),loginEmail:data.get("loginEmail")});
   billingProfile.legalName=String(shared.legalName||"").trim();billingProfile.country=String(shared.country||"");billingProfile.email=String(shared.email||"").trim().toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
@@ -6840,9 +6842,10 @@ function setupClientBillingFields(){
     const section=document.createElement("details");section.className="billing-client-profile";section.style.gridColumn="1 / -1";
     const summary=document.createElement("summary");summary.textContent="Podaci za račune";section.append(summary);
     const info=document.createElement("p");info.textContent="Naziv firme, država, e-mail i cena netto uzimaju se iz gornjih polja. Ovde dopuni samo adresu i poreske podatke potrebne za račun.";section.append(info);
-    for(const [key,label]of [["street","Ulica i broj"],["postalCode","Poštanski broj"],["city","Grad"],["vatId","UID / PDV broj"],["taxMode","Poreski tretman"],["taxNote","Obrazloženje bez PDV-a"],["confirmed","Potvrđujem podatke i poreski tretman"]]){
+    const freeMode=document.createElement("input");freeMode.type="hidden";freeMode.name="billing_taxFreeMode";freeMode.value="exempt";section.append(freeMode);
+    for(const [key,label]of [["street","Ulica i broj"],["postalCode","Poštanski broj"],["city","Grad"],["vatId","UID / PDV broj"],["taxMode","Porez"],["taxNote","Osnov za račun bez poreza"],["confirmed","Potvrđujem podatke i poreski tretman"]]){
       const holder=document.createElement("label");holder.textContent=label;let input;
-      if(key==="taxMode"){input=document.createElement("select");for(const [v,t]of [["","Izaberi nakon provere"],["standard20","20% PDV"],["reverse-charge","Reverse Charge"],["exempt","Bez PDV-a uz obrazloženje"]])input.append(new Option(t,v));}
+      if(key==="taxMode"){input=document.createElement("select");for(const [v,t]of [["standard20","Sa porezom (20%)"],["exempt","Bez poreza"]])input.append(new Option(t,v));}
       else{input=document.createElement("input");input.type=key==="confirmed"?"checkbox":key==="email"?"email":"text";input.maxLength=key==="taxNote"?500:key==="email"?254:180;}
       input.name="billing_"+key;holder.append(input);section.append(holder);
     }const submit=form.querySelector('button[type="submit"], button:not([type])');let anchor=submit;while(anchor?.parentElement&&anchor.parentElement!==form)anchor=anchor.parentElement;form.insertBefore(section,anchor?.parentElement===form?anchor:null);
