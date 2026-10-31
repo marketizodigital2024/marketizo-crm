@@ -4285,11 +4285,15 @@ body.employee-editor-open {
 .leader-report-day { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
 .leader-report-day + .leader-report-day { margin-top: 14px; }
 .weekly-report-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 18px 0; flex-wrap: wrap; }
-.weekly-report-row { align-items: flex-start; }
-.weekly-report-row > strong { min-width: 180px; }
+.weekly-report-row { display: grid; grid-template-columns: minmax(140px, 180px) minmax(0, 1fr); align-items: start; gap: 12px 18px; }
+.weekly-report-row > strong { display: block; width: auto; height: auto; min-width: 0; padding: 8px 10px; overflow-wrap: anywhere; }
+.weekly-report-row > span { min-width: 0; width: 100%; }
 .weekly-answer-details { margin-top: 10px; }
 .weekly-answer-details summary { cursor: pointer; font-weight: 800; color: var(--primary); }
-.weekly-answer-details p { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); line-height: 1.5; }
+.weekly-answer-details p { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Questions are text, not the 30px badges used by other setup-item rows. */
+.weekly-answer-details p > strong { display: inline; width: auto; height: auto; border-radius: 0; background: transparent; color: var(--ink); font-family: inherit; font-size: inherit; line-height: inherit; }
+@media (max-width: 680px) { .weekly-report-row { grid-template-columns: minmax(0, 1fr); } }
 .operational-admin-mode [data-finance-only] { display: none !important; }
 .operational-admin-mode .operational-panel-hidden { display: none !important; }
 #operationalAdminBadge { white-space: nowrap; }
