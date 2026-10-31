@@ -93,7 +93,8 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     systemDomainsRequired: true,
   };
   document.integrity = production.documentIntegrity(document);
-  const body = JSON.stringify(document);
+  const streaming=require('../lib/json-stream.js'),expected=streaming.digest(document);
+  const body=require('node:stream').Readable.from(streaming.chunks(document));
   const pathname = `${BLOB_PREFIX}${date}-${require("node:crypto").randomUUID()}.json`;
   const uploaded = await blob.put(pathname, body, {
     access: "private",
@@ -101,37 +102,12 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     addRandomSuffix: false,
     allowOverwrite: false,
   });
-  const {verified,verifiedCounts}=await(async()=>{try{
-  const downloaded = await blob.get(uploaded.pathname, { access: "private", useCache: false });
-  if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) {
-    throw new Error("Vercel Blob backup nije moguće ponovo pročitati.");
-  }
-  const verified = JSON.parse(await new Response(downloaded.stream).text());
-  const expectedCounts = {
-    employees: Array.isArray(source.payload.employees) ? source.payload.employees.length : 0,
-    clients: Array.isArray(source.payload.clients) ? source.payload.clients.length : 0,
-    workLogs: Array.isArray(source.payload.employeeWorkLogs) ? source.payload.employeeWorkLogs.length : 0,
-    absences: Array.isArray(source.payload.employeeAbsences) ? source.payload.employeeAbsences.length : 0,
-    activities: Array.isArray(source.payload.employeeActivities) ? source.payload.employeeActivities.length : 0,
-  };
-  const verifiedCounts = {
-    employees: Array.isArray(verified.state?.employees) ? verified.state.employees.length : 0,
-    clients: Array.isArray(verified.state?.clients) ? verified.state.clients.length : 0,
-    workLogs: Array.isArray(verified.state?.employeeWorkLogs) ? verified.state.employeeWorkLogs.length : 0,
-    absences: Array.isArray(verified.state?.employeeAbsences) ? verified.state.employeeAbsences.length : 0,
-    activities: Array.isArray(verified.state?.employeeActivities) ? verified.state.employeeActivities.length : 0,
-  };
-  if (!production.verifyDocument(verified) || verified.format !== "marketizo-crm-backup-v1" || verified.sourceUpdatedAt !== document.sourceUpdatedAt
-    || JSON.stringify(verified.state) !== JSON.stringify(document.state)
-    || JSON.stringify(verifiedCounts) !== JSON.stringify(expectedCounts)
-    || JSON.stringify(verified.kpi || null) !== JSON.stringify(document.kpi)
-    || !questionnaires.equal(verified.questionnaires, document.questionnaires)
-    || !production.equal(verified.workProduction, document.workProduction)
-    || !production.summary(verified.workProduction).included
-    || !system.summary(verified.systemDomains).included || !production.equal(verified.systemDomains, systemDomains)) {
-    throw new Error("Vercel Blob backup nije prošao proveru integriteta.");
-  }
-  return {verified,verifiedCounts};
+  const verifiedCounts=await(async()=>{try{
+    const downloaded=await blob.get(uploaded.pathname,{access:'private',useCache:false});
+    if(!downloaded||downloaded.statusCode!==200||!downloaded.stream)throw Error('Vercel Blob backup nije moguće ponovo pročitati.');
+    const actual=await streaming.readDigest(downloaded.stream);
+    if(actual.size!==expected.size||actual.sha256!==expected.sha256)throw Error('Vercel Blob backup nije prošao proveru integriteta.');
+    return backupCounts(source.payload);
   }catch(error){try{await blob.del(uploaded.pathname);}catch{}throw error;}})();
   let retained = null;
   let retentionWarning = "";
@@ -149,14 +125,14 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
   }
   return {
     pathname: uploaded.pathname,
-    size: Buffer.byteLength(body),
+    size: expected.size,
     retained,
     retentionWarning: retentionWarning || undefined,
     verified: true,
     counts: verifiedCounts,
-    questionnaires: questionnaires.summary(verified.questionnaires),
-    workProduction: production.summary(verified.workProduction),
-    systemDomains: system.summary(verified.systemDomains),
+    questionnaires: questionnaires.summary(document.questionnaires),
+    workProduction: production.summary(document.workProduction),
+    systemDomains: system.summary(document.systemDomains),
   };
 }
 
@@ -262,7 +238,9 @@ module.exports = async function handler(req, res) {
     const date = `${vienna.year}-${vienna.month}-${vienna.day}`;
     // Every authorized run writes and reads back the complete current snapshot.
     // An older same-day file must not suppress newly added backup domains.
+    console.info('backup-phase',{stage:'snapshot-start',rss:process.memoryUsage?.().rss});
     const source = await system.readSnapshot(url,key,fetch);
+    console.info('backup-phase',{stage:'snapshot-ready',rss:process.memoryUsage?.().rss});
     const productionSource = source.production;
     const kpiSource = source.kpi;
 
@@ -275,6 +253,7 @@ module.exports = async function handler(req, res) {
     const questionnaireSource = source.questionnaires;
     const independent = await writeIndependentBackup(source, date, now, kpiSource, questionnaireSource, productionSource, source.systemDomains);
 
+    console.info('backup-phase',{stage:'independent-verified',rss:process.memoryUsage?.().rss});
     let databaseWarning='',databaseVerified=false;
     try{
     const domainArchive=await system.writeDatabaseArchive(url,key,source.systemDomains,fetch,TABLE);
