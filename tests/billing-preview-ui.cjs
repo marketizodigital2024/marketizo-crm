@@ -11,3 +11,7 @@ const beforeDuplicate=pending.length;clients[1].invoices=[el('billMonth').value]
 console.log('PASS fresh saved profile unlocks final preview without manual refresh; billed month remains blocked with a nearby explanation');
 console.log('PASS automatic read-only preview: late samples cannot replace a final PDF; ');
 console.log('PASS automatic read-only preview: newest client wins, no automatic scrolling, edits invalidate PDF and confirmation cannot send a sample');})().catch(e=>{console.error(e);process.exitCode=1});
+
+{
+ const source=fs.readFileSync(__dirname+'/../billing-invoices.js','utf8'),nodes={},label={before(n){nodes[n.id]=n;}},context={$:id=>id==='billConfirm'?{closest:()=>label}:nodes[id],document:{createElement:()=>({setAttribute(){}})}};vm.createContext(context);vm.runInContext(source.slice(source.indexOf('function reason('),source.indexOf(' function blockedReason(')),context);context.reason('First');assert.equal(nodes.billSendReason.textContent,'First');const first=nodes.billSendReason;context.reason('Second');assert.equal(nodes.billSendReason,first);assert.equal(first.textContent,'Second');const headers=JSON.parse(fs.readFileSync(__dirname+'/../vercel.json','utf8')).headers;assert(headers.some(r=>r.source==='/billing-invoices(.*)'&&r.headers.some(h=>h.key==='Cache-Control'&&h.value.includes('no-store'))));console.log('PASS old cached invoice HTML gets a compatible inline reason and billing page/assets are served without HTTP caching');
+}
