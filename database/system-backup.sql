@@ -43,7 +43,7 @@ grant execute on function public.marketizo_system_domains_page(text,integer,inte
 -- One read-only MVCC statement binds core state and the exact domain row keys.
 -- Later work logs may continue; they belong to the next backup, not this anchor.
 create or replace function public.marketizo_backup_export_anchor()
-returns jsonb language sql stable security invoker set search_path='' as $$
+returns jsonb language sql stable security invoker set search_path='' set statement_timeout='30s' as $$
  select jsonb_build_object('payload',s.payload,'updated_at',s.updated_at,
   'kpi',(select to_jsonb(k) from public.agency_crm_state k where k.id='marketizo-kpi-v1'),
   'production',jsonb_build_object('format','marketizo-work-production-v1',
@@ -137,4 +137,5 @@ grant execute on function public.marketizo_restore_complete_system_backup(jsonb,
 -- Application exports use the bounded manifest/page RPCs above.
 drop function if exists public.marketizo_complete_system_snapshot();
 drop function if exists public.marketizo_system_domains_snapshot();
+notify pgrst, 'reload schema';
 commit;

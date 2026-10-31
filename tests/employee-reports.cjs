@@ -67,12 +67,12 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   assert.equal(dailyOpens,0);assert.equal(scheduled,0,'Daily inbox never schedules a popup');
   // Exercise required weekly tasks with real renderers and dialog cancel handlers.
   let day='2026-11-05', editingWeekly=false;
-  const dialog=()=>({open:false,listeners:{},showModal(){this.open=true;},addEventListener(type,fn){this.listeners[type]=fn;}});
+  const dialog=()=>({open:false,listeners:{},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();},addEventListener(type,fn){this.listeners[type]=fn;}});
   const sendDialog=dialog(),answerDialog=dialog(),draftValues=Object.fromEntries([1,2,3,4,5].map(i=>[`answer${i}`,{value:''}]));
   const draftForm={dataset:{},elements:draftValues,reset(){Object.values(draftValues).forEach(f=>f.value='');}};
   const weeklyElements={weeklySendDialog:sendDialog,weeklyQuestionnaireDialog:answerDialog,weeklyQuestionnaireForm:draftForm,closeWeeklySendDialog:{}};
   const storage=new Map();
-  const requiredUi={state:{employees:[{id:'leader',isLeader:true},{id:'worker',leaderId:'leader'},{id:'second',leaderId:'leader'}],employeeReports:[]},activeEmployee:{id:'leader',isLeader:true},currentDateKey:()=>day,currentWeeklyWindow:()=>({weekKey:'2026-11-02',dueDate:'2026-11-05'}),document:{hidden:false,activeElement:{matches:()=>editingWeekly},getElementById:id=>weeklyElements[id],querySelector:selector=>selector==='dialog[open]'?[sendDialog,answerDialog].find(d=>d.open):null},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},setText(){},formatDate:String};
+  const requiredUi={state:{employees:[{id:'leader',isLeader:true},{id:'worker',leaderId:'leader'},{id:'second',leaderId:'leader'}],employeeReports:[]},activeEmployee:{id:'leader',isLeader:true},currentDateKey:()=>day,currentWeeklyWindow:()=>({weekKey:'2026-11-02',dueDate:'2026-11-05',fridayDate:'2026-11-06'}),document:{hidden:false,activeElement:{matches:()=>editingWeekly},getElementById:id=>weeklyElements[id],querySelector:selector=>selector==='dialog[open]'?[sendDialog,answerDialog].find(d=>d.open):null},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},setText(){},formatDate:String};
   vm.createContext(requiredUi);vm.runInContext(['leaderReportPeople','weeklyReportsForLeader','requiredWeeklyTask','weeklyDraftKey','saveWeeklyDraft','renderRequiredWeeklyTask'].map(named).join('\n'),requiredUi);
   day='2026-11-04';assert.equal(requiredUi.requiredWeeklyTask(),null);
   day='2026-11-05';editingWeekly=true;requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,false);
@@ -87,6 +87,14 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   requiredUi.activeEmployee={id:'worker',isLeader:true};let prevented=false;answerDialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
   answerDialog.open=false;answerDialog.listeners.close();assert.equal(answerDialog.open,true);
   requiredUi.state.employeeReports[0].submittedAt='confirmed';assert.equal(requiredUi.requiredWeeklyTask(),null);prevented=false;answerDialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,false);
+  requiredUi.activeEmployee={id:'leader',isLeader:true};requiredUi.state.employeeReports=[];sendDialog.open=false;answerDialog.open=false;
+  day='2026-11-06';assert.equal(requiredUi.requiredWeeklyTask().kind,'send','Friday keeps the missed Thursday reminder');requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,true);
+  day='2026-11-07';requiredUi.renderRequiredWeeklyTask();assert.equal(requiredUi.requiredWeeklyTask(),null);assert.equal(sendDialog.open,false,'A required send popup does not stay trapped over the weekend');assert.equal(weeklyElements.closeWeeklySendDialog.hidden,false);
+  day='2026-11-08';requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,false);
+  requiredUi.activeEmployee={id:'worker'};requiredUi.state.employeeReports=[{id:'weekend-answer',isWeeklyQuestionnaire:true,employeeId:'worker',weekKey:'2026-11-02'}];draftForm.dataset.reportId='weekend-answer';draftValues.answer1.value='Keep weekend draft';answerDialog.open=true;requiredUi.renderRequiredWeeklyTask();assert.equal(answerDialog.open,false);assert.equal(requiredUi.state.employeeReports[0].submittedAt,undefined);assert.match(storage.get('marketizoWeeklyDraft:worker:weekend-answer'),/Keep weekend draft/);
+  day='2026-11-09';assert.equal(requiredUi.requiredWeeklyTask().kind,'answer','Unanswered reports remain due on the next workday');requiredUi.renderRequiredWeeklyTask();assert.equal(answerDialog.open,true);assert.equal(draftValues.answer1.value,'Keep weekend draft');
+  // The exact reported Saturday must never force the team-send popup.
+  day='2026-10-31';requiredUi.currentWeeklyWindow=()=>({weekKey:'2026-10-26',dueDate:'2026-10-29',fridayDate:'2026-10-30'});requiredUi.activeEmployee={id:'leader',isLeader:true};requiredUi.state.employeeReports=[];assert.equal(requiredUi.requiredWeeklyTask(),null);
   requiredUi.activeEmployee={id:'other'};assert.equal(requiredUi.requiredWeeklyTask(),null);
   assert.ok(!fs.readFileSync(path.join(__dirname,'../employee-login.html'),'utf8').includes('id="closeWeeklyQuestionnaireDialog"'));
   // Actual form handler: failed submission retains answers; double clicks issue one request.
