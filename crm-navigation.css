@@ -1,0 +1,24 @@
+/* Same navigation on the CRM, analytics, code of conduct, signatures and KPI pages. */
+.app-shell>.sidebar .nav-item { display:flex;align-items:center;text-decoration:none;min-width:0;white-space:normal;text-align:left;line-height:1.45; }
+.app-shell>.sidebar [hidden] { display:none!important; }
+.app-shell>.sidebar .team-navigation,.app-shell>.sidebar .work-entry-navigation { flex-shrink:0; }
+.app-shell>.sidebar .sign-nav-menu { min-width:0; }
+.app-shell>.sidebar .team-navigation-link,.app-shell>.sidebar .work-entry-navigation-link { overflow-wrap:anywhere; }
+.work-log-pagination { display:flex;justify-content:flex-end;align-items:center;gap:14px;margin:16px 0 0;font-size:12px;color:var(--muted); }
+.work-log-pagination button { min-height:44px; }
+.kpi-workspace { min-width:0; }
+.kpi-workspace>header { padding:0 0 18px;margin:0;border-bottom:1px solid var(--line);background:transparent; }
+.kpi-workspace>main { width:100%;max-width:1180px;margin:24px auto;padding:0; }
+@media(max-width:780px){
+ .app-shell>.sidebar.mobile-crm-navigation { z-index:80; }
+ .app-shell>.sidebar .sign-nav-children .nav-item { min-height:44px; }
+ .work-log-pagination { justify-content:space-between;gap:8px;flex-wrap:wrap; }
+ .kpi-workspace { padding:20px!important; }
+ .kpi-workspace .quick-nav { overflow-x:auto;max-width:100%; }
+}
+/* Keep the table's hidden action label inside its own horizontal scroller. */
+.sign-table-wrap { position:relative;max-width:100%; }
+@media(max-width:780px){
+ #employees .employee-performance-overview>.panel-head { flex-direction:column;align-items:stretch; }
+ #employees .employee-profile-filter { min-width:0;width:100%; }
+}
