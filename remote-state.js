@@ -227,14 +227,14 @@
     return result;
   }
 
-  function save(payload) {
+  function save(payload, options = {}) {
     setLocal(payload);
     if (isLocalFile()) return Promise.resolve({ ok: true, localOnly: true });
     if (!pendingPayload) pendingBasePayload = clone(lastViewPayload || lastServerPayload || {});
     pendingPayload = clone(payload);
     window.clearTimeout(saveTimer);
     const result = new Promise((resolve) => pendingWaiters.push(resolve));
-    saveTimer = window.setTimeout(flush, 350);
+    saveTimer = window.setTimeout(flush, options.immediate === true ? 0 : 350);
     return result;
   }
 

@@ -1729,11 +1729,107 @@ function addConfirmedRecord(collection, record) {
   return existing || record;
 }
 
+let invoiceStatusChanges = new Map();
+let invoiceStatusSaveTimer = null;
+let invoiceStatusSaving = false;
+let invoiceStatusSaveFailed = false;
+let invoiceStatusChangeRevision = 0;
+
+function invoiceStatusChangeKey(clientId, month, field) {
+  return JSON.stringify([clientId, month, field]);
+}
+
+function updateInvoiceStatusSaveNotice() {
+  let notice = document.getElementById("invoiceStatusSaveNotice");
+  if (!notice && !invoiceStatusChanges.size) return;
+  if (!notice) {
+    notice = document.createElement("aside");
+    notice.id = "invoiceStatusSaveNotice";
+    notice.className = "invoice-save-notice";
+    notice.setAttribute("role", "status");
+    const text = document.createElement("span");
+    const retry = document.createElement("button");
+    retry.type = "button"; retry.className = "secondary-button"; retry.textContent = "Pokušaj ponovo";
+    retry.addEventListener("click", () => { invoiceStatusSaveFailed = false; scheduleInvoiceStatusSave(); });
+    notice.append(text, retry); document.querySelector("main")?.prepend(notice);
+  }
+  notice.hidden = !invoiceStatusChanges.size;
+  notice.querySelector("span").textContent = invoiceStatusSaveFailed
+    ? `Izmene računa nisu sačuvane (${invoiceStatusChanges.size}). Izbori su zadržani. Pokušaj ponovo.`
+    : `Čuvamo izmene računa (${invoiceStatusChanges.size}). Možeš menjati i druge statuse; sačekaj potvrdu pre zatvaranja stranice.`;
+  notice.querySelector("button").hidden = !invoiceStatusSaveFailed;
+  document.querySelectorAll("select[data-invoice-field]").forEach(control => {
+    const pending = invoiceStatusChanges.get(invoiceStatusChangeKey(control.dataset.invoiceClient, control.dataset.invoiceMonth, control.dataset.invoiceField));
+    control.dataset.invoicePending = pending ? "true" : "false";
+    if (pending) control.value = pending.value;
+  });
+}
+
+function scheduleInvoiceStatusSave() {
+  if (!invoiceStatusChanges.size || invoiceStatusSaveFailed) return;
+  clearTimeout(invoiceStatusSaveTimer);
+  invoiceStatusSaveTimer = setTimeout(flushInvoiceStatusChanges, 100);
+}
+
+function queueInvoiceStatusChange(control) {
+  const field = control.dataset.invoiceField;
+  const allowed = { invoiceStatus: ["Nije poslat", "Poslat"], paymentStatus: ["Nije plaćeno", "Delimično", "Plaćeno", "Kasni"], paymentMethod: ["Firma", "Keš"] };
+  if (!allowed[field]?.includes(control.value)) return;
+  const month = control.dataset.invoiceMonth || selectedMonthKey();
+  const change = { clientId: control.dataset.invoiceClient, month, field, value: control.value, at: new Date().toISOString(), revision: ++invoiceStatusChangeRevision };
+  invoiceStatusChanges.set(invoiceStatusChangeKey(change.clientId, month, field), change);
+  updateInvoiceStatusSaveNotice(); scheduleInvoiceStatusSave();
+}
+
+async function flushInvoiceStatusChanges() {
+  if (invoiceStatusSaving || invoiceStatusSaveFailed || !invoiceStatusChanges.size || adminConfirmedSaveInFlight) return;
+  invoiceStatusSaving = true;
+  const batch = [...invoiceStatusChanges.entries()];
+  const previous = structuredClone(state);
+  let saved = false;
+  try {
+    for (const [, change] of batch) {
+      const client = state.clients.find(item => item.id === change.clientId);
+      const invoice = client?.invoices?.[change.month];
+      if (!invoice) throw new Error("Račun više nije u izabranom mesecu. Proveri račun pre ponavljanja izmene.");
+      invoice[change.field] = change.value;
+      if (change.field === "invoiceStatus") {
+        client.invoiceStatus = change.value;
+        invoice.sentAt = change.value === "Poslat" ? invoice.sentAt || change.at : "";
+      }
+      if (change.field === "paymentStatus") {
+        client.paymentStatus = change.value;
+        if (change.value === "Plaćeno") invoice.paidAt = change.at;
+      }
+      if (change.field === "paymentMethod") client.paymentMethod = change.value;
+    }
+    saved = await confirmAdminSave(previous, { immediate: true });
+    if (saved) {
+      for (const [key, change] of batch) if (invoiceStatusChanges.get(key)?.revision === change.revision) invoiceStatusChanges.delete(key);
+    } else invoiceStatusSaveFailed = true;
+  } catch (error) {
+    state = previous; window.MarketizoRemote?.cache?.(state);
+    invoiceStatusSaveFailed = true;
+    showToast("Nije sačuvano", error.message || "Izbori su zadržani. Pokušaj ponovo.", "warn");
+  } finally {
+    invoiceStatusSaving = false;
+    if (!invoiceStatusChanges.size || invoiceStatusSaveFailed) renderAll();
+    updateInvoiceStatusSaveNotice();
+    if (saved && !invoiceStatusChanges.size) showToast("Sačuvano", "Sve izmene statusa računa su potvrđene.", "ok");
+    else scheduleInvoiceStatusSave();
+  }
+}
+
+window.addEventListener("beforeunload", event => {
+  if (!invoiceStatusChanges.size) return;
+  event.preventDefault(); event.returnValue = "";
+});
+
 let adminConfirmedSaveInFlight = false;
-async function confirmAdminSave(previous) {
+async function confirmAdminSave(previous, options = {}) {
   adminConfirmedSaveInFlight = true;
   try {
-    const saved = await saveState();
+    const saved = await saveState(options);
     if (!saved?.ok) {
       state = previous;
       window.MarketizoRemote?.cache?.(state);
@@ -1745,14 +1841,14 @@ async function confirmAdminSave(previous) {
       window.MarketizoRemote?.adoptBaseline?.(state);
     }
     return true;
-  } finally { adminConfirmedSaveInFlight = false; }
+  } finally { adminConfirmedSaveInFlight = false; if (typeof scheduleInvoiceStatusSave === "function") scheduleInvoiceStatusSave(); }
 }
 
 function saveState(options = {}) {
   if (options.remote !== false && !onlineHydrationComplete) return Promise.resolve({ ok: false, error: "Sačekaj da se online podaci učitaju pa pokušaj ponovo." });
   window.MarketizoRemote?.cache?.(state);
   if (options.remote !== false && onlineHydrationComplete && window.MarketizoRemote) {
-    return window.MarketizoRemote.save(state);
+    return window.MarketizoRemote.save(state, { immediate: options.immediate === true });
   }
   return Promise.resolve({ ok: true, localOnly: true });
 }
@@ -2599,30 +2695,11 @@ function renderMonthlyInvoices(clients, monthKey) {
 }
 
 function bindInvoiceControls() {
-  document.querySelectorAll("[data-invoice-client]").forEach((control) => {
-    control.addEventListener("change", async () => {
-  if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
-  const _confirmedBefore = structuredClone(state);
-
-      const client = state.clients.find((item) => item.id === control.dataset.invoiceClient);
-      if (!client) return;
-      const invoice = monthlyInvoice(client);
-      invoice[control.dataset.invoiceField] = control.value;
-      if (control.dataset.invoiceField === "invoiceStatus") {
-        client.invoiceStatus = control.value;
-        if (control.value === "Poslat" && !invoice.sentAt) invoice.sentAt = new Date().toISOString();
-        if (control.value !== "Poslat") invoice.sentAt = "";
-      }
-      if (control.dataset.invoiceField === "paymentStatus") {
-        client.paymentStatus = control.value;
-        if (control.value === "Plaćeno") invoice.paidAt = new Date().toISOString();
-      }
-      if (control.dataset.invoiceField === "paymentMethod") client.paymentMethod = control.value;
-      if (!(await confirmAdminSave(_confirmedBefore))) return;
-      renderAll();
-      showToast("Sačuvano", `${client.name}: status računa je ažuriran.`, "ok");
-    });
+  document.querySelectorAll("select[data-invoice-client][data-invoice-field]").forEach((control) => {
+    control.dataset.invoiceMonth = selectedMonthKey();
+    control.addEventListener("change", () => queueInvoiceStatusChange(control));
   });
+  updateInvoiceStatusSaveNotice();
   document.querySelectorAll("[data-invoice-payment-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
   event.preventDefault();
