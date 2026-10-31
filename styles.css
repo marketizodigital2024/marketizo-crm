@@ -4404,3 +4404,21 @@ body.employee-profile-page .employee-summary-grid article:nth-child(4n + 4)::bef
 .pending-approval-row>div:first-child{display:grid;gap:3px;min-width:0;overflow-wrap:anywhere}
 .pending-approval-row span,.pending-approval-row small{font-size:12px;color:#665b4f}
 @media(max-width:640px){.pending-approvals{top:6px;padding:12px}.pending-approvals summary{align-items:flex-start}.pending-approvals summary>span{display:none}.pending-approval-row{align-items:flex-start;flex-direction:column;gap:8px}}
+
+/* CRM phone navigation: a real menu instead of full-width horizontal tabs. */
+.mobile-crm-nav-toggle{display:none}
+@media(max-width:780px){
+  .app-shell>.sidebar.mobile-crm-navigation{position:sticky!important;top:0;z-index:50;min-width:0;width:100%!important;height:auto!important;min-height:0!important;max-height:none;overflow:visible!important;padding:8px 14px!important}
+  .app-shell>.sidebar.mobile-crm-navigation>.mobile-crm-nav-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:44px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:white;color:var(--ink);font:inherit;font-weight:800;cursor:pointer;touch-action:manipulation}
+  .mobile-crm-nav-toggle::after{content:"☰";font-size:20px}
+  .mobile-crm-nav-toggle[aria-expanded="true"]::after{content:"×"}
+  .app-shell>.sidebar.mobile-crm-navigation>.nav{display:none!important}
+  .app-shell>.sidebar.mobile-crm-navigation.mobile-nav-open>.nav{display:grid!important;grid-template-columns:minmax(0,1fr);position:absolute;top:100%;left:0;right:0;gap:4px;max-height:calc(100dvh - 76px);max-height:min(75vh,680px);overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:12px 14px 18px;background:#fffefa;border-bottom:1px solid var(--line);box-shadow:0 16px 28px #20372c24}
+  .app-shell>.sidebar.mobile-crm-navigation .nav>.nav-item{display:flex!important;align-items:center;width:100%!important;min-width:0!important;min-height:44px;flex:none;white-space:normal;text-align:left;touch-action:manipulation}
+  .app-shell>.sidebar.mobile-crm-navigation .team-navigation,.app-shell>.sidebar.mobile-crm-navigation .work-entry-navigation{display:grid!important;grid-template-columns:minmax(0,1fr);flex:none;width:auto!important;min-width:0;max-width:100%;overflow:visible!important;margin:2px 0 8px 14px;padding:4px 0 4px 10px;border-left:1px solid var(--line)}
+  .app-shell>.sidebar.mobile-crm-navigation .team-navigation-link,.app-shell>.sidebar.mobile-crm-navigation .work-entry-navigation-link{display:flex;align-items:center;min-height:44px;min-width:0;white-space:normal;padding:9px 12px;touch-action:manipulation}
+  .app-shell>.sidebar.mobile-crm-navigation .sidebar-section-label,.app-shell>.sidebar.mobile-crm-navigation .work-entry-navigation-title{display:block;font-size:11px;padding:5px 12px}
+  .app-shell>.main{min-width:0;width:100%!important;overflow-wrap:anywhere}
+  .app-shell>.mobile-crm-navigation~.main .pending-approvals{top:72px}
+  .app-shell>.main .top-actions>*{min-width:0;max-width:100%}
+}

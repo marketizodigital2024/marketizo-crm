@@ -5827,11 +5827,11 @@ function renderAll() {
   applyOperationalAdminAccess();
 }
 
-document.querySelectorAll(".nav-item").forEach((button) => {
+document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
   button.addEventListener("click", () => {
     const viewName = button.dataset.view;
     const currentFile = location.pathname.split("/").pop().replace(/\.html$/, "");
-    if (currentFile.startsWith("employees-") && viewName !== "employees") {
+    if ((currentFile.startsWith("employees-") || currentFile === "employee-profile") && viewName !== "employees") {
       location.href = `index.html#${viewName}`;
       return;
     }
