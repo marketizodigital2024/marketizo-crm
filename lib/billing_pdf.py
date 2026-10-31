@@ -31,6 +31,14 @@ def render(payload):
         if any(not isinstance(item.get(k),int) for k in ['quantity','unitCents','netCents','vatCents','grossCents']) or item['quantity']<1 or item['unitCents']<1 or item['quantity']*item['unitCents']!=item['netCents'] or item['netCents']+item['vatCents']!=item['grossCents']: raise ValueError('Invalid item total')
         if item['vatCents']!=(int(item['netCents']*.2+.5) if p['taxMode']=='standard20' else 0): raise ValueError('Invalid VAT')
     if any(sum(x[k] for x in items)!=s[k] for k in ['netCents','vatCents','grossCents']): raise ValueError('Invalid item sum')
+    display_items=[]
+    for item in items:
+        lines=item.get('lines') or [item]
+        if not isinstance(lines,list) or not lines or sum(x.get('netCents',0) for x in lines)!=item['netCents']:raise ValueError('Invalid line sum')
+        for line in lines:
+            if any(not isinstance(line.get(k),int) for k in ['quantity','unitCents','netCents']) or line['quantity']<1 or line['unitCents']<1 or line['quantity']*line['unitCents']!=line['netCents']:raise ValueError('Invalid invoice line')
+        display_items.extend(lines)
+    if len(display_items)>10:raise ValueError('Too many invoice lines')
     def text(value):
         value=str(value)
         if len(value)>1000 or any(ord(c)<32 for c in value): raise ValueError('Invalid text')
@@ -57,13 +65,14 @@ def render(payload):
     para(('TEST – KEIN GÜLTIGER BELEG' if test else b['defaults']['heading']+' '+str(number).zfill(6)),70,h-284,bold=True,size=14)
     para(b['defaults']['introduction'],70,h-316)
     vat='20 %' if p['taxMode']=='standard20' else '0 %'
-    item_rows=[[Paragraph(text(item['description']),ParagraphStyle('description',fontName='Invoice',fontSize=10,leading=13)),str(item['quantity']),money(item['unitCents']),vat,money(item['netCents'])] for item in items]
+    item_rows=[[Paragraph(text(item['description']),ParagraphStyle('description',fontName='Invoice',fontSize=10,leading=13)),str(item['quantity']),money(item['unitCents']),vat,money(item['netCents'])] for item in display_items]
     rows=[b['columns']]+item_rows+[['','','Nettosumme','',money(s['netCents'])],['','','Umsatzsteuer '+vat,'',money(s['vatCents'])],['','','Bruttosumme','',money(s['grossCents'])]]
-    table=Table(rows,colWidths=[205,48,89,47,67]);table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'Invoice'),('FONTNAME',(0,0),(-1,0),'InvoiceBold'),('FONTNAME',(2,-1),(-1,-1),'InvoiceBold'),('FONTSIZE',(0,0),(-1,-1),9),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#F7CAAC')),('BACKGROUND',(2,-1),(-1,-1),colors.HexColor('#F7CAAC')),('ALIGN',(1,1),(-1,-1),'RIGHT'),('ALIGN',(2,len(items)+1),(3,-1),'LEFT'),('SPAN',(2,len(items)+1),(3,len(items)+1)),('SPAN',(2,len(items)+2),(3,len(items)+2)),('SPAN',(2,len(items)+3),(3,len(items)+3)),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),2),('RIGHTPADDING',(0,0),(-1,-1),2),('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),('LINEBELOW',(0,len(items)),(-1,len(items)),.5,colors.black)]))
+    table=Table(rows,colWidths=[205,48,89,47,67]);table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'Invoice'),('FONTNAME',(0,0),(-1,0),'InvoiceBold'),('FONTNAME',(2,-1),(-1,-1),'InvoiceBold'),('FONTSIZE',(0,0),(-1,-1),9),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#F7CAAC')),('BACKGROUND',(2,-1),(-1,-1),colors.HexColor('#F7CAAC')),('ALIGN',(1,1),(-1,-1),'RIGHT'),('ALIGN',(2,len(display_items)+1),(3,-1),'LEFT'),('SPAN',(2,len(display_items)+1),(3,len(display_items)+1)),('SPAN',(2,len(display_items)+2),(3,len(display_items)+2)),('SPAN',(2,len(display_items)+3),(3,len(display_items)+3)),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),2),('RIGHTPADDING',(0,0),(-1,-1),2),('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),('LINEBELOW',(0,len(display_items)),(-1,len(display_items)),.5,colors.black)]))
     _,th=table.wrap(456,400);y=h-352-th;table.drawOn(c,70,y);y-=34
     year,month=map(int,s['serviceMonth'].split('-'));last=calendar.monthrange(year,month)[1]
     y-=para(f'Leistungszeitraum: 01.{month:02d}.{year} – {last:02d}.{month:02d}.{year}',70,y)+14
     if p['taxMode']!='standard20':y-=para(p['taxNote'],70,y)+14
+    if s.get('note'):y-=para(s['note'],70,y)+14
     y-=para('Zahlungsbedingung: '+b['defaults']['paymentTerms'],70,y)+22
     y-=para(b['defaults']['questions'],70,y)+28
     y-=para(b['defaults']['closing'],70,y)+12
