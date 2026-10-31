@@ -19,6 +19,21 @@ begin
   select coalesce(jsonb_agg(x.doc order by x.doc->>'createdAt' desc),'[]'::jsonb) into result from (select payload-'pdfBase64' as doc from public.agency_crm_state where id like 'finance-billing-invoice-%' and payload->>'organization'=p_organization order by payload->>'createdAt' desc limit 200)x;
   return jsonb_build_object('settings',cfg,'invoices',result);
  end if;
+ if p_action='oneoff-create' then
+  client:=p_data->'client';
+  if client->>'id' is distinct from p_data->>'id' or coalesce(p_data->>'id','')!~'^[a-f0-9-]{36}$' or client->'billingOneOff' is distinct from 'true'::jsonb or client->>'billingFrequency' is distinct from 'once' or client->'billingProfile'->'confirmed' is distinct from 'true'::jsonb or coalesce(client->>'invoiceStartMonth','')!~'^20[0-9]{2}-(0[1-9]|1[0-2])$' then raise exception 'Invalid one-off recipient';end if;
+  select payload into main from public.agency_crm_state where id=p_organization for update;
+  if main is null then raise exception 'Organization not found';end if;
+  select value into inv from jsonb_array_elements(coalesce(main->'billingOneOffClients','[]'::jsonb)) where value->>'id'=client->>'id';
+  if inv is not null then
+   if inv-'invoices' is distinct from client-'invoices' then raise exception 'Recipient changed';end if;
+   return inv;
+  end if;
+  if exists(select 1 from jsonb_array_elements(main->'clients') c where c->>'id'=client->>'id') then raise exception 'Recipient ID exists';end if;
+  main:=jsonb_set(main,'{billingOneOffClients}',coalesce(main->'billingOneOffClients','[]'::jsonb)||jsonb_build_array(client));
+  update public.agency_crm_state set payload=main,updated_at=greatest(now_at,updated_at+interval '1 millisecond') where id=p_organization;
+  return client;
+ end if;
  if p_action='heartbeat' then
   cfg:=cfg||jsonb_build_object('workerAt',now_at,'deliveryReady',p_data->'ready'='true'::jsonb,'labelId',p_data->>'labelId','archiveRootId',p_data->>'archiveRootId','workerError',left(coalesce(p_data->>'error',''),300));
   update public.agency_crm_state set payload=cfg,updated_at=now_at where id=settings_id;return cfg;
@@ -60,7 +75,7 @@ begin
   if exists(select 1 from public.agency_crm_state s cross join lateral jsonb_each(coalesce(s.payload->'manifests','{}'::jsonb)) m cross join lateral jsonb_array_elements(coalesce(m.value->'files','[]'::jsonb)) f where s.id='finance-sources-v1' and (regexp_match(f->>'name','^Rechnung[_ ]*0*([0-9]{3,6})[_ ]','i'))[1]::int=n) then raise exception 'Invoice number already exists in Drive manifest';end if;
   if (doc->>'previewNumber')::int is distinct from n then raise exception 'Invoice number changed; preview again';end if;
   snap:=doc->'snapshot';if snap->>'profileHash' is distinct from p_data->>'profileHash' then raise exception 'Client profile changed';end if;
-  select payload into main from public.agency_crm_state where id=p_organization for update;
+  select public.marketizo_billing_scope(payload) into main from public.agency_crm_state where id=p_organization for update;
   members:=public.marketizo_billing_members(main,snap);
   for member in select value from jsonb_array_elements(members) loop
    select ordinality::int-1,value into idx,client from jsonb_array_elements(main->'clients') with ordinality where value->>'id'=member->>'clientId';
@@ -69,13 +84,13 @@ begin
    inv:=coalesce(inv,'{}'::jsonb)||jsonb_build_object('amount',(member->>'netCents')::numeric/100,'invoiceStatus','Nije poslat','paymentStatus','Nije plaćeno','paymentMethod','Firma','billingInvoiceId',doc->>'id','originalInvoice',jsonb_build_object('source','crm','number',n,'netCents',member->'netCents','vatCents',member->'vatCents','grossCents',member->'grossCents','invoiceNetCents',snap->'netCents','invoiceGrossCents',snap->'grossCents','sha256',doc->>'pdfSha256'));
    client:=jsonb_set(client,'{invoices}',coalesce(client->'invoices','{}'::jsonb)||jsonb_build_object(snap->>'serviceMonth',inv));main:=jsonb_set(main,array['clients',idx::text],client);
   end loop;
-  update public.agency_crm_state set payload=main,updated_at=greatest(now_at,updated_at+interval '1 millisecond') where id=p_organization;
+  update public.agency_crm_state set payload=public.marketizo_billing_unscoped(main),updated_at=greatest(now_at,updated_at+interval '1 millisecond') where id=p_organization;
   cfg:=jsonb_set(cfg,'{nextNumber}',to_jsonb(n+1));update public.agency_crm_state set payload=cfg,updated_at=now_at where id=settings_id;
   doc:=doc||jsonb_build_object('number',n,'status','queued','issuedAt',now_at,'archiveStatus','pending','messageId','<marketizo-invoice-'||(doc->>'id')||'@marketizo.com>');
  elsif p_action in('prepared','sending','uncertain','sent','archived','defer') then
   if doc->>'leaseToken' is distinct from p_data->>'leaseToken' or coalesce((doc->>'leaseUntil')::timestamptz,'1970-01-01')<now_at then raise exception 'Worker lease expired';end if;
   if p_action in('prepared','sending') then
-   select payload into main from public.agency_crm_state where id=p_organization for update;
+   select public.marketizo_billing_scope(payload) into main from public.agency_crm_state where id=p_organization for update;
    perform public.marketizo_billing_members(main,doc->'snapshot');
   end if;
   if p_action='prepared' then
@@ -88,7 +103,7 @@ begin
    if doc->>'status' not in('prepared','sending','uncertain','sent') or nullif(p_data->>'gmailMessageId','') is null or p_data->>'pdfSha256' is distinct from doc->>'pdfSha256' or p_data->>'to' is distinct from doc->'snapshot'->>'email' then raise exception 'Sent message proof is invalid';end if;
    if doc->>'gmailMessageId' is not null and doc->>'gmailMessageId'<>p_data->>'gmailMessageId' then raise exception 'Sent message is already confirmed';end if;
    doc:=doc||jsonb_build_object('status','sent','gmailMessageId',p_data->>'gmailMessageId','sentAt',coalesce(doc->'sentAt',to_jsonb(now_at)),'gmailLabelApplied',p_data->'labelApplied');
-   snap:=doc->'snapshot';select payload into main from public.agency_crm_state where id=p_organization for update;
+   snap:=doc->'snapshot';select public.marketizo_billing_scope(payload) into main from public.agency_crm_state where id=p_organization for update;
    members:=coalesce(snap->'items',jsonb_build_array(jsonb_build_object('clientId',snap->>'clientId')));
    for member in select value from jsonb_array_elements(members) loop
     select ordinality::int-1,value into idx,client from jsonb_array_elements(main->'clients') with ordinality where value->>'id'=member->>'clientId';
@@ -97,7 +112,7 @@ begin
     inv:=inv||jsonb_build_object('invoiceStatus','Poslat','sentAt',doc->'sentAt','sentEvidence',jsonb_build_object('source','crm-gmail','account','buchhaltung@marketizo.com','messageId',doc->>'gmailMessageId','invoiceNumber',doc->'number','attachmentSha256',doc->>'pdfSha256'));
     client:=jsonb_set(client,array['invoices',snap->>'serviceMonth'],inv);main:=jsonb_set(main,array['clients',idx::text],client);
    end loop;
-   update public.agency_crm_state set payload=main,updated_at=greatest(now_at,updated_at+interval '1 millisecond') where id=p_organization;
+   update public.agency_crm_state set payload=public.marketizo_billing_unscoped(main),updated_at=greatest(now_at,updated_at+interval '1 millisecond') where id=p_organization;
   elsif p_action='archived' then
    if doc->>'status'<>'sent' or p_data->>'pdfSha256' is distinct from doc->>'pdfSha256' or nullif(p_data->>'driveFileId','') is null then raise exception 'Drive copy not confirmed';end if;
    doc:=doc||jsonb_build_object('archiveStatus','complete','driveFileId',p_data->>'driveFileId','driveFolderId',p_data->>'driveFolderId','gmailLabelApplied',true,'leaseUntil',now_at,'lastError','');
