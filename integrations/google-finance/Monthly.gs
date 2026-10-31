@@ -96,7 +96,7 @@ function collectMonthInvoices_(month){
  }
  if(account==='office@marketizo.com')for(const f of monthlyList_("'"+MONTHLY_ISSUED+"' in parents")){
   if(!/^Rechnung[_ ]*\d+[_ ].+\.(pdf|docx)$/i.test(f.name)||Number(f.size)>1500000)continue;
-  const key='d:'+f.id+':'+f.modifiedTime;if(done[key])continue;if(monthlySourceOutside_(known,f,month)){done[key]=true;continue;}if(Date.now()>until||count>=MONTHLY_BATCH_LIMIT){pending=true;break;}
+  const key=(known.sourceMonths?.[f.id]?'d2:':'d:')+f.id+':'+f.modifiedTime;if(done[key])continue;if(monthlySourceOutside_(known,f,month)){done[key]=true;continue;}if(Date.now()>until||count>=MONTHLY_BATCH_LIMIT){pending=true;break;}
   if(monthlyCopy_({name:f.name,mimeType:f.mimeType,source:'drive',sourceId:f.id,sourceFolder:MONTHLY_ISSUED},monthlyMedia_(f.id)))done[key]=true;else pending=true;count++;
  }
  let next='';do{
@@ -125,5 +125,5 @@ function collectMonthInvoices_(month){
 
 function monthlySourceOutside_(known,file,month){
  const saved=known.sourceMonths?.[file.id];
- return Boolean(saved&&saved.month!==month&&saved.modifiedTime===file.modifiedTime&&saved.sha256&&saved.sha256===file.sha256Checksum);
+ return Boolean(saved&&saved.issuedMonth&&saved.month!==month&&saved.issuedMonth!==month&&saved.modifiedTime===file.modifiedTime&&saved.sha256&&saved.sha256===file.sha256Checksum);
 }
