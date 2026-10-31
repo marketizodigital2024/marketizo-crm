@@ -5240,7 +5240,14 @@ async function cancelCompTimeAbsence(id) {
   absence.cancelledAt = new Date().toISOString();
   absence.cancelledBy = "Admin";
   notifyOnce({ key: `comp-time-cancelled-${id}`, scope: "employee", targetId: absence.employeeId, type: "info", title: "Slobodno za prekovremene sate je otkazano", message: `Odsustvo ${formatDate(absence.startDate)} – ${formatDate(absence.endDate)} je otkazano. Automatsko zaduženje salda je poništeno.` });
-  if (!(await confirmAdminSave(before))) return;
+  try { if (!(await confirmAdminSave(before))) return; }
+  catch (error) {
+    state = before;
+    window.MarketizoRemote?.cache?.(state);
+    renderAll();
+    showToast("Otkazivanje nije potvrđeno", "Odsustvo i zaduženje ostaju sačuvani. Pokušaj ponovo.", "warn");
+    return;
+  }
   renderAll();
   showToast("Odsustvo otkazano", "Automatsko zaduženje salda je poništeno.", "ok");
 }
