@@ -9,3 +9,10 @@ const registry={version:1,checkedAt:'2026-10-31',invoices:c.registry([{id:'invoi
 const result=plan(payload,registry,[t],new Date('2026-10-31T12:00:00Z'));assert.equal(result.posted.length,1);assert.equal(result.payload.clients[0].invoices['2026-10'].paidAmount,497);assert.deepEqual(result.payload.employeeWorkLogs,payload.employeeWorkLogs);assert.equal(plan(result.payload,registry,[t],new Date('2026-10-31T12:00:00Z')).posted.length,0);
 for(const wrong of [{...t,amount:497},{...t,purpose:'Other'},{...t,counterpart:{name:'Wrong Company'}}])assert.equal(plan(payload,registry,[wrong],new Date('2026-10-31T12:00:00Z')).posted.length,0);
 assert.equal(c.registry([{status:'queued',snapshot:s}]).length,0);console.log('PASS billing content: required profile, header injection, explicit tax, integer math, immutable snapshot and conservative bank match without Drive');
+
+{
+ const defaults=require('../client-billing-defaults.js'), original={name:'Display name',country:'Nemačka',loginEmail:'login@example.test',billingProfile:{legalName:'Legal GmbH',email:'accounts@example.test',country:'AT',confirmed:true}}, before=JSON.stringify(original);
+ assert.deepEqual(defaults(original),original.billingProfile);assert.equal(JSON.stringify(original),before);
+ const suggested=defaults({...original,billingProfile:{confirmed:true}});assert.equal(suggested.country,'DE');assert.equal(suggested.email,'login@example.test');assert.equal(suggested.confirmed,false);assert.equal(defaults({country:'Unknown'}).country,undefined);
+ console.log('PASS shared profile defaults: preserve explicit legal identity, require confirmation for suggestions, no client mutation');
+}

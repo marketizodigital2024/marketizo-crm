@@ -2889,7 +2889,8 @@ function openEditClient(id) {
   setText("editClientTitle", client.name);
   form.elements.id.value = client.id;
   if (form.elements.billingFrequency) form.elements.billingFrequency.value = client.billingFrequency === "once" ? "once" : "monthly";
-  for (const [key,value] of Object.entries(client.billingProfile || {})) {
+  form.querySelectorAll('[name^="billing_"]').forEach(input=>{if(input.type==="checkbox")input.checked=false;else input.value="";});
+  for (const [key,value] of Object.entries(clientBillingDefaults(client))) {
     const input=form.elements["billing_"+key];if(input){if(input.type==="checkbox")input.checked=value===true;else input.value=value || "";}
   }
   if (!client.billingProfile) form.querySelectorAll('[name^="billing_"]').forEach(input=>{if(input.type==="checkbox")input.checked=false;else input.value="";});
@@ -6865,7 +6866,7 @@ function billingProfileFromForm(data) {
   if (typeof data.has!=="function" || !data.has("billing_legalName")) return {};
   const billingProfile={};for(const key of ["legalName","street","postalCode","city","country","vatId","email","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
   billingProfile.country=billingProfile.country.toUpperCase();billingProfile.email=billingProfile.email.toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
-  return {billingProfile};
+  return {billingProfile:clientBillingDefaults({name:data.get("name"),country:data.get("country"),loginEmail:data.get("loginEmail"),billingProfile})};
 }
 function setupClientBillingFields(){
   if(typeof getAdminSession === "function" && getAdminSession()?.role === "operational-admin")return;
@@ -6873,13 +6874,15 @@ function setupClientBillingFields(){
     const frequencyLabel=document.createElement("label");frequencyLabel.textContent="Izdavanje računa";const frequency=document.createElement("select");frequency.name="billingFrequency";frequency.required=true;frequency.append(new Option("Mesečno","monthly"),new Option("Jednokratno — jedan račun","once"));frequencyLabel.append(frequency);const priceLabel=form.querySelector('[name="revenue"]')?.closest("label");if(priceLabel){priceLabel.parentNode.insertBefore(frequencyLabel,priceLabel);const caption=[...priceLabel.childNodes].find(node=>node.nodeType===3);if(caption)caption.textContent="Cena usluge (€)";}else form.append(frequencyLabel);
     const section=document.createElement("details");section.className="billing-client-profile";section.style.gridColumn="1 / -1";
     const summary=document.createElement("summary");summary.textContent="Podaci za račune";section.append(summary);
-    const info=document.createElement("p");info.textContent="Obavezno pre izdavanja računa. Jednokratni klijent ima račun samo u izabranom početnom mesecu. E-mail za račune može biti drugačiji od prijave klijenta.";section.append(info);
+    const info=document.createElement("p");info.textContent="Obavezno pre izdavanja računa. Jednokratni klijent ima račun samo u izabranom početnom mesecu. Naziv, država i e-mail se preuzimaju iz ovog profila. Ako se razlikuju za račun, ispravi ih ovde. Cena se preuzima iz polja Cena usluge. Sve se čuva u istom profilu klijenta.";section.append(info);
     for(const [key,label]of [["legalName","Naziv firme"],["street","Ulica i broj"],["postalCode","Poštanski broj"],["city","Grad"],["country","Država (AT, RS…)"],["vatId","UID / PDV broj"],["email","E-mail za račune"],["taxMode","Poreski tretman"],["taxNote","Obrazloženje bez PDV-a"],["confirmed","Potvrđujem podatke i poreski tretman"]]){
       const holder=document.createElement("label");holder.textContent=label;let input;
       if(key==="taxMode"){input=document.createElement("select");for(const [v,t]of [["","Izaberi nakon provere"],["standard20","20% PDV"],["reverse-charge","Reverse Charge"],["exempt","Bez PDV-a uz obrazloženje"]])input.append(new Option(t,v));}
       else{input=document.createElement("input");input.type=key==="confirmed"?"checkbox":key==="email"?"email":"text";input.maxLength=key==="taxNote"?500:key==="email"?254:180;}
       input.name="billing_"+key;holder.append(input);section.append(holder);
     }const submit=form.querySelector('button[type="submit"]');form.insertBefore(section,submit?.parentElement===form?submit:null);
+    const fillShared=()=>{const values=new FormData(form), profile={};for(const key of ["legalName","country","email"])profile[key]=values.get("billing_"+key)||"";const merged=clientBillingDefaults({name:values.get("name"),country:values.get("country"),loginEmail:values.get("loginEmail"),billingProfile:profile});let changed=false;for(const key of ["legalName","country","email"]){const input=form.elements["billing_"+key];if(!input.value.trim()&&merged[key]){input.value=merged[key];changed=true;}}if(changed)form.elements.billing_confirmed.checked=false;};
+    form.addEventListener("change",e=>{if(["name","country","loginEmail"].includes(e.target.name))fillShared();});section.addEventListener("toggle",()=>{if(section.open)fillShared();});
   }
 }
 setupClientBillingFields();
