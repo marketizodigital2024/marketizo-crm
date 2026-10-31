@@ -6870,7 +6870,7 @@ function billingProfileFromForm(data) {
 function setupClientBillingFields(){
   if(typeof getAdminSession === "function" && getAdminSession()?.role === "operational-admin")return;
   for(const id of ["adminClientForm","editClientForm"]){const form=document.getElementById(id);if(!form||form.querySelector('[name="billing_legalName"]'))continue;
-    const frequencyLabel=document.createElement("label");frequencyLabel.textContent="Izdavanje računa";const frequency=document.createElement("select");frequency.name="billingFrequency";frequency.required=true;frequency.append(new Option("Mesečno","monthly"),new Option("Jednokratno — jedan račun","once"));frequencyLabel.append(frequency);form.append(frequencyLabel);
+    const frequencyLabel=document.createElement("label");frequencyLabel.textContent="Izdavanje računa";const frequency=document.createElement("select");frequency.name="billingFrequency";frequency.required=true;frequency.append(new Option("Mesečno","monthly"),new Option("Jednokratno — jedan račun","once"));frequencyLabel.append(frequency);const priceLabel=form.querySelector('[name="revenue"]')?.closest("label");if(priceLabel){priceLabel.parentNode.insertBefore(frequencyLabel,priceLabel);const caption=[...priceLabel.childNodes].find(node=>node.nodeType===3);if(caption)caption.textContent="Cena usluge (€)";}else form.append(frequencyLabel);
     const section=document.createElement("details");section.className="billing-client-profile";section.style.gridColumn="1 / -1";
     const summary=document.createElement("summary");summary.textContent="Podaci za račune";section.append(summary);
     const info=document.createElement("p");info.textContent="Obavezno pre izdavanja računa. Jednokratni klijent ima račun samo u izabranom početnom mesecu. E-mail za račune može biti drugačiji od prijave klijenta.";section.append(info);
@@ -6879,7 +6879,7 @@ function setupClientBillingFields(){
       if(key==="taxMode"){input=document.createElement("select");for(const [v,t]of [["","Izaberi nakon provere"],["standard20","20% PDV"],["reverse-charge","Reverse Charge"],["exempt","Bez PDV-a uz obrazloženje"]])input.append(new Option(t,v));}
       else{input=document.createElement("input");input.type=key==="confirmed"?"checkbox":key==="email"?"email":"text";input.maxLength=key==="taxNote"?500:key==="email"?254:180;}
       input.name="billing_"+key;holder.append(input);section.append(holder);
-    }form.append(section);
+    }const submit=form.querySelector('button[type="submit"]');form.insertBefore(section,submit?.parentElement===form?submit:null);
   }
 }
 setupClientBillingFields();
