@@ -1,7 +1,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.MarketizoWorkAnalytics=api;})(typeof window==='object'?window:globalThis,function(){
  'use strict';
- const units={scenario:'scenario',scenario_revision:'ispravka scenarija',clip:'klip',clip_revision:'ispravka klipa',story:'stori',post:'post',task:'zadatak',call:'poziv',shoot:'snimanje',clip_check:'proveren klip',voiceover:'voiceover',none:'Bez količine'};
- const plural={scenario:'scenarija',scenario_revision:'ispravki scenarija',clip:'klipova',clip_revision:'ispravki klipova',story:'storija',post:'postova',task:'zadataka',call:'poziva',shoot:'snimanja',clip_check:'proverenih klipova',voiceover:'voiceovera'};
+ const units={scenario:'scenario',scenario_revision:'ispravka scenarija',clip:'klip',clip_revision:'ispravka klipa',story:'stori',post:'post',task:'zadatak',call:'poziv',shoot:'snimljen reel',clip_check:'proveren klip',voiceover:'voiceover',none:'Bez količine'};
+ const plural={scenario:'scenarija',scenario_revision:'ispravki scenarija',clip:'klipova',clip_revision:'ispravki klipova',story:'storija',post:'postova',task:'zadataka',call:'poziva',shoot:'snimljenih reelova',clip_check:'proverenih klipova',voiceover:'voiceovera'};
  const sum=(rows,key)=>rows.reduce((n,r)=>n+(Number(r[key])||0),0);
  const median=values=>{const a=values.filter(Number.isFinite).sort((a,b)=>a-b);return a.length?(a[Math.floor((a.length-1)/2)]+a[Math.ceil((a.length-1)/2)])/2:null;};
  function analyze(data,filters={}) {
