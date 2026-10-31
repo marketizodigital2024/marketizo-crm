@@ -1,6 +1,6 @@
 'use strict';const assert=require('node:assert/strict'),c=require('../lib/billing-content.js'),{plan}=require('../lib/bank-posting.js');
 const client={id:'example',name:'Example Services GmbH',status:'Aktivan',revenue:497,billingProfile:c.profile({legalName:'Example Services GmbH',street:'Musterstraße 1',postalCode:'1010',city:'Wien',country:'AT',email:'billing@example.test',taxMode:'standard20',confirmed:true})};const input={quantity:1,unitCents:49700,description:c.brand.defaults.description,serviceMonth:'2026-10'};
-assert.equal(c.brand.logoPath,'marketizo-logo.png');assert.equal(c.brand.version,2);
+assert.equal(c.brand.logoPath,'marketizo-logo.png');assert.equal(c.brand.version,3);
 const s=c.snapshot(client,input,new Date('2026-10-31T12:00:00Z'));assert.equal(s.netCents,49700);assert.equal(s.vatCents,9940);assert.equal(s.grossCents,59640);
 for(const key of ['legalName','street','postalCode','city','country','email','taxMode','confirmed'])assert.throws(()=>c.snapshot({...client,billingProfile:{...client.billingProfile,[key]:''}},input),/Dopuni/);
 assert.throws(()=>c.snapshot({...client,billingProfile:{...client.billingProfile,email:'x@example.test\r\nBcc: other@example.test'}},input),/polje/);assert.throws(()=>c.snapshot(client,{...input,quantity:.5}),/količinu/);assert.throws(()=>c.assertCurrent({...client,billingProfile:{...client.billingProfile,street:'Changed'}},s),/promenjen/);
@@ -52,3 +52,5 @@ assert.throws(()=>c.snapshot({...client,billingProfile:{...client.billingProfile
  const fs=require('node:fs'),s=fs.readFileSync(__dirname+'/../app.js','utf8'),edit=s.slice(s.indexOf('document.getElementById("editClientForm")?.addEventListener("submit"'),s.indexOf('document.getElementById("portalLeadForm")'));assert(!edit.includes('loginEmail:'));assert(edit.includes('email: String(formData.get("email")'));const html=fs.readFileSync(__dirname+'/../index.html','utf8');assert(!html.includes('name="loginEmail"'));assert(html.includes('name="email"'));
  console.log('PASS invoice/contact email is independent of unchanged login credentials; clearing or changing the address invalidates stale billing data');
 }
+
+{const brand=require('../lib/billing-brand.js');assert.equal(brand.issuer.street,'Simmeringer Hauptstraße 24');assert(!brand.issuer.street.includes('/ 221'));console.log('PASS requested invoice address keeps house number 24 without the apartment suffix');}
