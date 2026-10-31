@@ -2,45 +2,6 @@
 -- Existing business rows are not changed by installation. Recovery never rewrites signed history.
 begin;
 set local lock_timeout='3s';
-create or replace function public.marketizo_system_domains_snapshot()
-returns jsonb language plpgsql security invoker set search_path='' set lock_timeout='3s' as $$
-declare r record; rows jsonb; result jsonb; columns jsonb:='{}'; extras jsonb; parts text[]:='{}'; ordering text;
-begin
- for r in select n.nspname as ns,c.relname as name,c.oid from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
- where c.relkind='r' and ((n.nspname='public' and (c.relname like 'marketizo\_sign\_%' escape '\' or c.relname in ('marketizo_codeks_portal_links','marketizo_audits'))) or (n.nspname='marketizo_private' and c.relname in ('work_log_audit','work_log_recovery_plan')))
- order by n.nspname,c.relname loop
-  execute format('lock table %I.%I in share mode',r.ns,r.name);
-  select string_agg(format('t.%I',a.attname),',' order by k.ord) into ordering from pg_catalog.pg_index i cross join lateral unnest(i.indkey) with ordinality k(attnum,ord) join pg_catalog.pg_attribute a on a.attrelid=i.indrelid and a.attnum=k.attnum where i.indrelid=r.oid and i.indisprimary;
-  if ordering is null then raise exception 'Snapshot table requires a primary key'; end if;
-  parts=array_append(parts,format('select %L as name,coalesce(jsonb_agg(to_jsonb(t) order by %s),''[]''::jsonb) as rows from %I.%I t',r.ns||'.'||r.name,ordering,r.ns,r.name));
-  select jsonb_agg(jsonb_build_object('name',a.attname,'type',pg_catalog.format_type(a.atttypid,a.atttypmod),'generated',a.attgenerated,'identity',a.attidentity) order by a.attnum)
-  into rows from pg_catalog.pg_attribute a where a.attrelid=r.oid and a.attnum>0 and not a.attisdropped;
-  columns=columns||jsonb_build_object(r.ns||'.'||r.name,rows);
- end loop;
- execute 'select jsonb_object_agg(name,rows) from ('||array_to_string(parts,' union all ')||') snapshots' into result;
- select coalesce(jsonb_agg(to_jsonb(s) order by s.id),'[]'::jsonb) into extras from public.agency_crm_state s
- where s.id not like 'backup-%' and s.id not in ('marketizo-main','marketizo-kpi-v1','marketizo-smm-preview-v1','marketizo-kpi-preview-v1');
- return jsonb_build_object('format','marketizo-system-domains-v1','schema',columns,'tables',result,'stateRows',extras);
-end $$;
-revoke all on function public.marketizo_system_domains_snapshot() from public,anon,authenticated;
-grant execute on function public.marketizo_system_domains_snapshot() to service_role;
-
-create or replace function public.marketizo_complete_system_snapshot()
-returns jsonb language plpgsql security invoker set search_path='' set lock_timeout='3s' as $$
-declare core jsonb; domains jsonb; kpi jsonb; questionnaires jsonb;
-begin
- -- One transaction holds a stable set of all domains until the snapshot returns.
- lock table public.agency_crm_state in share mode;
- core=public.marketizo_work_production_snapshot();
- select to_jsonb(s) into kpi from public.agency_crm_state s where id='marketizo-kpi-v1';
- lock table public.marketizo_questionnaires in share mode;
- questionnaires=public.marketizo_questionnaire_snapshot();
- domains=public.marketizo_system_domains_snapshot();
- return core||jsonb_build_object('kpi',kpi,'questionnaires',questionnaires,'systemDomains',domains);
-end $$;
-revoke all on function public.marketizo_complete_system_snapshot() from public,anon,authenticated;
-grant execute on function public.marketizo_complete_system_snapshot() to service_role;
-
 -- Bounded, read-only export: no large aggregate or long SHARE locks in live backups.
 create or replace function public.marketizo_system_domains_manifest()
 returns jsonb language plpgsql security invoker set search_path='' set statement_timeout='10s' as $$
@@ -139,4 +100,8 @@ begin
 end $$;
 revoke all on function public.marketizo_restore_complete_system_backup(jsonb,jsonb,timestamptz,timestamptz,jsonb,jsonb,jsonb,jsonb,jsonb,jsonb) from public,anon,authenticated;
 grant execute on function public.marketizo_restore_complete_system_backup(jsonb,jsonb,timestamptz,timestamptz,jsonb,jsonb,jsonb,jsonb,jsonb,jsonb) to service_role;
+-- Retire the unused unbounded helpers from the preparatory migration.
+-- Application exports use the bounded manifest/page RPCs above.
+drop function if exists public.marketizo_complete_system_snapshot();
+drop function if exists public.marketizo_system_domains_snapshot();
 commit;
