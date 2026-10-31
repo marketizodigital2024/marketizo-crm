@@ -6828,6 +6828,7 @@ document.getElementById("openClientModal").addEventListener("click", () => {
 function billingProfileFromForm(data) {
   if (typeof data.has!=="function" || !data.has("billing_street")) return {};
   const billingProfile={};for(const key of ["street","postalCode","city","vatId","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
+  if(billingProfile.taxMode==="standard20")billingProfile.taxNote="";
   const shared=clientBillingDefaults({name:data.get("name"),country:data.get("country"),loginEmail:data.get("loginEmail")});
   billingProfile.legalName=String(shared.legalName||"").trim();billingProfile.country=String(shared.country||"");billingProfile.email=String(shared.email||"").trim().toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
   return {billingProfile};
