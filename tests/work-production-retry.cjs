@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const src=fs.readFileSync(__dirname+'/../work-production.js','utf8');
+const form={dataset:{},elements:{}},fields=form.elements;
+for(const n of ['productionBatch','productionLabel','productionQuantity','productionStatus'])fields[n]={value:''};
+fields.productionBatch.replaceChildren=function(...options){this.options=options;};fields.productionBatch.value='batch';fields.productionLabel.value='Fixture';fields.productionStatus.value='done';fields.productionQuantity.value='2';
+const fieldset={querySelector:selector=>selector.includes('quantity')?{firstChild:{textContent:''}}:{textContent:''}};
+const c={employeeId:'a',activityId:'act',clientId:'c'},pending={batchId:'batch',label:'Fixture',unit:'clip',quantity:2,completed:true};
+const state={key:'a|act|c',batches:[],rules:[{activity_id:'act',unit:'post'}],pendingOutput:pending,ready:true};
+const attached=new WeakMap();attached.set(form,state);
+const ctx={form,fields,state,fieldset,attached,context:()=>c,unitNames:{clip:'klipova',post:'postova'},Option:class{constructor(label,value){this.label=label;this.value=value;}},crypto:{randomUUID:()=>{throw Error('Must not allocate another batch');}}};vm.createContext(ctx);
+const a=src.indexOf('  function render(){'),b=src.indexOf('  state.render=render;',a);vm.runInContext(src.slice(a,b),ctx);state.render=ctx.render;
+const start=src.indexOf(' function read(form)'),end=src.indexOf('\n function restore',start);vm.runInContext(src.slice(start,end),ctx);
+ctx.render();assert.equal(fields.productionBatch.value,'batch','A timed-out completion stays selectable even after server closes it');assert.equal(state.unit,'clip','Changed catalog cannot change an uncertain retry unit');assert.deepEqual(JSON.parse(JSON.stringify(ctx.read(form))),pending,'Same retry intent keeps the same batch, quantity and unit');
+c.clientId='different';ctx.render();assert.equal(state.pendingOutput,null,'Explicit new work context clears pending display');assert.equal(fields.productionBatch.value,'');assert.equal(state.unit,'post');console.log('PASS uncertain production retry: closed batch and changed catalog never create a new batch or duplicate intent after refresh');

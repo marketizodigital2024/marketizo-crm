@@ -1,3 +1,4 @@
+const production = require('../lib/work-production-backup.js');
 const questionnaires = require('../lib/questionnaire-backup.js');
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
@@ -73,7 +74,7 @@ async function listBlobBackups() {
   };
 }
 
-async function writeIndependentBackup(source, date, now, kpiSource = null, questionnaireSource = null) {
+async function writeIndependentBackup(source, date, now, kpiSource = null, questionnaireSource = null, productionSource = null) {
   const blob = await blobClient();
   if (!blob) throw new Error("Vercel Blob backup nije povezan.");
   const document = {
@@ -84,7 +85,10 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     state: source.payload,
     kpi: kpiSource?.payload || null,
     questionnaires: questionnaireSource,
+    workProduction: productionSource,
+    workProductionRequired: true,
   };
+  document.integrity = production.documentIntegrity(document);
   const body = JSON.stringify(document);
   const pathname = `${BLOB_PREFIX}${date}.json`;
   const uploaded = await blob.put(pathname, body, {
@@ -112,11 +116,13 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     absences: Array.isArray(verified.state?.employeeAbsences) ? verified.state.employeeAbsences.length : 0,
     activities: Array.isArray(verified.state?.employeeActivities) ? verified.state.employeeActivities.length : 0,
   };
-  if (verified.format !== "marketizo-crm-backup-v1" || verified.sourceUpdatedAt !== document.sourceUpdatedAt
+  if (!production.verifyDocument(verified) || verified.format !== "marketizo-crm-backup-v1" || verified.sourceUpdatedAt !== document.sourceUpdatedAt
     || JSON.stringify(verified.state) !== JSON.stringify(document.state)
     || JSON.stringify(verifiedCounts) !== JSON.stringify(expectedCounts)
     || JSON.stringify(verified.kpi || null) !== JSON.stringify(document.kpi)
-    || !questionnaires.equal(verified.questionnaires, document.questionnaires)) {
+    || !questionnaires.equal(verified.questionnaires, document.questionnaires)
+    || !production.equal(verified.workProduction, document.workProduction)
+    || !production.summary(verified.workProduction).included) {
     throw new Error("Vercel Blob backup nije prošao proveru integriteta.");
   }
   let retained = null;
@@ -139,6 +145,7 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     verified: true,
     counts: verifiedCounts,
     questionnaires: questionnaires.summary(verified.questionnaires),
+    workProduction: production.summary(verified.workProduction),
   };
 }
 
@@ -154,6 +161,15 @@ module.exports = async function handler(req, res) {
       const { accessSession, readStoredState } = require("./state.js").helpers;
       const row = await readStoredState({ url, key });
       if (accessSession(req, row.payload, key)?.role !== "full-admin") return send(res, 401, { error: "Unauthorized" });
+      if (String(req.query?.download || "") === "1") {
+        const snap = await production.readSnapshot(url,key,fetch);
+        const qr = await questionnaires.readSnapshot(url,key);
+        const kr = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(KPI_ROW_ID)}&select=payload,updated_at`,{headers:headers(key)});
+        if(!kr.ok) throw new Error("KPI backup nije dostupan.");
+        const kpi=(await kr.json())[0];
+        const now=new Date(),v=viennaTime(now);
+        return send(res,200,{ok:true,document:production.sealDocument({format:"marketizo-crm-backup-v1",backupDate:`${v.year}-${v.month}-${v.day}`,createdAt:now.toISOString(),sourceUpdatedAt:snap.updated_at,state:snap.payload,kpi:kpi?.payload||null,questionnaires:qr,workProduction:snap.production,workProductionRequired:true})});
+      }
       if (String(req.query?.verify || "") === "1") {
         const pathname = String(req.query?.pathname || "");
         if (!/^marketizo-crm\/daily\/\d{4}-\d{2}-\d{2}\.json$/.test(pathname)) return send(res, 400, { ok: false, error: "Nevažeća putanja backupa." });
@@ -164,10 +180,14 @@ module.exports = async function handler(req, res) {
         const document = JSON.parse(await new Response(downloaded.stream).text());
         const state = document.state;
         if (document.format !== "marketizo-crm-backup-v1" || !state || Array.isArray(state) || !Array.isArray(state.employees) || !state.employees.length || !Array.isArray(state.clients) || !Array.isArray(state.employeeWorkLogs)) return send(res, 422, { ok: false, error: "Backup nije prošao proveru strukture." });
+        if(document.workProductionRequired && !production.verifyDocument(document)) return send(res,422,{ok:false,error:"Backup nije prošao proveru kontrolnog zbira."});
+        if(document.workProductionRequired && !production.summary(document.workProduction).included) return send(res,422,{ok:false,error:"Backup nema obavezne podatke o količini."});
         const checksum = require("node:crypto").createHash("sha256").update(JSON.stringify(state)).digest("hex");
         return send(res, 200, { ok: true, verified: true, pathname, backupDate: document.backupDate,
           sourceUpdatedAt: document.sourceUpdatedAt, currentRevision: document.sourceUpdatedAt === row.updatedAt,
           questionnaires: questionnaires.summary(document.questionnaires),
+          workProduction: production.summary(document.workProduction),
+          integrityVerified: production.verifyDocument(document),
           counts: backupCounts(state), checksum, includesKpi: document.kpi != null,
           contractFiles: state.clients.filter(client => Boolean(client.contractFileData)).length,
           credentialsHashed: [...state.employees.map(e => e.password), ...state.clients.map(c => c.loginPassword)]
@@ -239,25 +259,10 @@ module.exports = async function handler(req, res) {
     const now = new Date();
     const vienna = viennaTime(now);
     const date = `${vienna.year}-${vienna.month}-${vienna.day}`;
-    const isFallbackRun = vienna.hour === "18" && vienna.minute === "30";
-
-    // Authentication is the safety boundary. An authorized invocation should
-    // always make a backup, including a delayed cron or Vercel's manual Run.
-    if (isFallbackRun) {
-      const existing = await listBlobBackups();
-      const todayPath = `${BLOB_PREFIX}${date}.json`;
-      if (existing.configured && existing.blobs.some((item) => item.pathname === todayPath)) {
-        return send(res, 200, { ok: true, skipped: true, reason: "Primary backup already verified", backupDate: date });
-      }
-    }
-
-    const sourceResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, {
-      headers: headers(key),
-    });
-    if (!sourceResponse.ok) throw new Error(`State fetch failed (${sourceResponse.status})`);
-    const sourceRows = await sourceResponse.json();
-    const source = sourceRows[0];
-    if (!source?.payload) return send(res, 404, { error: "Main state is empty" });
+    // Every authorized run writes and reads back the complete current snapshot.
+    // An older same-day file must not suppress newly added backup domains.
+    const source = await production.readSnapshot(url,key,fetch);
+    const productionSource = source.production;
     const kpiResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(KPI_ROW_ID)}&select=payload,updated_at`, { headers: headers(key) });
     if (!kpiResponse.ok) throw new Error(`KPI state fetch failed (${kpiResponse.status})`);
     const kpiSource = (await kpiResponse.json())[0] || null;
@@ -269,7 +274,7 @@ module.exports = async function handler(req, res) {
     // Create and verify the independent copy first. The rotating database copy
     // is secondary and must not prevent a recoverable backup from being made.
     const questionnaireSource = await questionnaires.readSnapshot(url, key);
-    const independent = await writeIndependentBackup(source, date, now, kpiSource, questionnaireSource);
+    const independent = await writeIndependentBackup(source, date, now, kpiSource, questionnaireSource, productionSource);
 
     const backupResponse = await fetch(`${url}/rest/v1/${TABLE}?on_conflict=id`, {
       method: "POST",
@@ -287,6 +292,8 @@ module.exports = async function handler(req, res) {
           state: source.payload,
           kpi: kpiSource?.payload || null,
           questionnaires: questionnaireSource,
+          workProduction: productionSource,
+          workProductionRequired: true,
         },
         updated_at: now.toISOString(),
       }),
@@ -302,6 +309,7 @@ module.exports = async function handler(req, res) {
       workLogs: Array.isArray(source.payload.employeeWorkLogs) ? source.payload.employeeWorkLogs.length : 0,
       independent,
       questionnaires: questionnaires.summary(questionnaireSource),
+      workProduction: production.summary(productionSource),
       databaseWarning: databaseWarning || undefined,
     });
   } catch (error) {

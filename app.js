@@ -6873,7 +6873,7 @@ document.getElementById("addTaskBtn")?.addEventListener("click", async () => {
 async function downloadBackup(filename = "agency-crm-export.json") {
   let payload = state;
   if (window.location.protocol !== "file:") {
-    const result = await window.MarketizoRemote.exportSnapshot();
+    const result = await window.MarketizoRemote.exportSnapshot({ complete: true });
     if (!result.ok) { showToast("Izvoz nije preuzet", result.error, "warn"); return false; }
     payload = result.payload;
   }
