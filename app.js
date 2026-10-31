@@ -7285,6 +7285,17 @@ function employeeRoles(value) {
 }
 function employeeHasSmm(value) { return employeeRoles(value).some(role => ['Social Media Manager','Social Media Manager Leader','Scenario','Scenario Leader'].includes(role)); }
 
+// Load counting controls on admin forms without duplicating the script across CRM pages.
+if (document.getElementById("employeeWorkForm")) {
+  const workProductionScript = document.createElement("script");
+  workProductionScript.src = "work-production.js?v=20261031-production";
+  workProductionScript.onload = () => {
+    const form = document.getElementById("employeeWorkForm");
+    window.MarketizoProduction?.attach(form, () => ({ employeeId: form.elements.employeeId.value, activityId: form.elements.activityId.value, clientId: form.elements.clientId.value }));
+  };
+  document.head.append(workProductionScript);
+}
+
 // Multi-role UI keeps the existing position field/storage contract intact.
 var employeePositionPickers = new WeakMap();
 function ensureEmployeePositionOption() { /* Existing position values are preserved by setEmployeePositions. */ }
@@ -7341,13 +7352,3 @@ setupEmployeePositionSelection();
 
 
 
-// Load counting controls on admin forms without duplicating the script across CRM pages.
-if (document.getElementById("employeeWorkForm")) {
-  const workProductionScript = document.createElement("script");
-  workProductionScript.src = "work-production.js?v=20261031-production";
-  workProductionScript.onload = () => {
-    const form = document.getElementById("employeeWorkForm");
-    window.MarketizoProduction?.attach(form, () => ({ employeeId: form.elements.employeeId.value, activityId: form.elements.activityId.value, clientId: form.elements.clientId.value }));
-  };
-  document.head.append(workProductionScript);
-}
