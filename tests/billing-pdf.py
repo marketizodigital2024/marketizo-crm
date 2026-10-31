@@ -23,6 +23,17 @@ print('PASS numbered draft: planned 000634 visible with explicit non-accounting/
 for value in ['Zahlungsempfänger: Example Agency e.U.','Verwendungszweck: Rechnung 000634','IBAN: AT00 0000 0000 0000 0000']:assert value in draft_text,value
 print('PASS clearly separated beneficiary, IBAN/BIC and invoice payment reference')
 
+# Reproduce the two-line reverse-charge invoice that previously exceeded one page.
+import copy
+extra_s=copy.deepcopy(s)
+extra_s['profile']['taxNote']='Steuerschuldnerschaft des Leistungsempfängers – Reverse Charge gemäß Art. 44 und 196 MwStSystRL.'
+extra_s['items']=[dict(description='Monthly social media service',quantity=1,unitCents=199700,netCents=199700,vatCents=0,grossCents=199700),dict(description='Additional filming',quantity=1,unitCents=15000,netCents=15000,vatCents=0,grossCents=15000)]
+extra_s.update(quantity=1,unitCents=214700,netCents=214700,vatCents=0,grossCents=214700,note='Keep this invoice note')
+extra_pages=PdfReader(io.BytesIO(base64.b64decode(m.render({**payload,'snapshot':extra_s})['base64']))).pages
+extra_text='\n'.join(page.extract_text() for page in extra_pages)
+for value in ['Additional filming','Keep this invoice note','2.147,00','Verwendungszweck: Rechnung 000634']:assert value in extra_text,value
+print('PASS reverse-charge plus additional filming and note no longer fails rendering')
+
 # Long permitted content must paginate without losing rows or monetary totals.
 import copy,os
 long_s=copy.deepcopy(s);long_s['note']='Additional agreed work. '*12
