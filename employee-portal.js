@@ -2635,7 +2635,7 @@ document.getElementById("portalAbsenceForm")?.addEventListener("submit", async (
     delete form.dataset.retryFingerprint;
     form.reset();
     renderEmployeePortal();
-    showToast("Zahtev poslat", "Admin će videti zahtev za odmor.", "warn");
+    showToast("Zahtev poslat", "Admin će videti zahtev za odsustvo.", "warn");
   } finally {
     delete form.dataset.saving;
     if (button) button.disabled = false;

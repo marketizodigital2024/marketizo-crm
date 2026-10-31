@@ -5,7 +5,7 @@ const end = source.indexOf('\ndocument.getElementById("ackLateBtn")', start);
 let handler, release, resets = 0, calls = 0, sequence = 0;
 const button = { disabled: false };
 const form = { dataset: {}, querySelector: () => button, reset() { resets++; } };
-const fields = { type: 'Slobodan dan', startDate: '2026-10-14', endDate: '2026-10-14', note: 'QA fixture' };
+const fields = { type: 'Slobodno za prekovremene sate', startDate: '2026-10-14', endDate: '2026-10-14', note: 'QA fixture' };
 const notices = [];
 const ctx = {
   document: { getElementById: () => ({ addEventListener: (_, fn) => handler = fn }) },
@@ -28,6 +28,7 @@ const event = () => ({ currentTarget: form, preventDefault() {} });
   const retry = handler(event()); assert.equal(ctx.state.employeeAbsences[0].id, id);
   // A rebase refresh discovers the first request committed on the server.
   const committed = structuredClone(ctx.state.employeeAbsences[0]);
+  assert.equal(committed.type, 'Slobodno za prekovremene sate'); assert.equal(committed.status, 'Zatraženo');
   ctx.state.employeeAbsences = [committed, { id: 'new-coworker', employeeId: 'qa-b' }, ...ctx.state.employeeAbsences.slice(1)];
   release({ ok: false, error: 'Second uncertain acknowledgement' }); await retry;
   assert.equal(ctx.state.employeeAbsences.length, 3); assert.equal(ctx.state.employeeAbsences[0].id, id);
