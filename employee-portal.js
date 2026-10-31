@@ -1817,11 +1817,14 @@ function weeklyReportsForLeader() {
 // Required weekly tasks are derived from confirmed state on every refresh.
 function requiredWeeklyTask() {
   if (!activeEmployee) return null;
+  const today = currentDateKey();
+  const weekday = new Date(`${today}T12:00:00`).getDay();
+  if (weekday === 0 || weekday === 6) return null;
   const pending = (state.employeeReports || []).filter((report) => report.isWeeklyQuestionnaire === true && report.employeeId === activeEmployee.id && !report.submittedAt)
     .sort((a, b) => String(a.weekKey || "").localeCompare(String(b.weekKey || "")))[0];
   if (pending) return { kind: "answer", report: pending };
   const windowInfo = currentWeeklyWindow();
-  if (activeEmployee.isLeader && currentDateKey() >= windowInfo.dueDate) {
+  if (activeEmployee.isLeader && today >= windowInfo.dueDate && today <= windowInfo.fridayDate) {
     const sent = new Set(weeklyReportsForLeader().filter((report) => report.weekKey === windowInfo.weekKey).map((report) => report.employeeId));
     if (leaderReportPeople().some((employee) => employee.id !== activeEmployee.id && !sent.has(employee.id))) return { kind: "send" };
   }
@@ -1843,7 +1846,20 @@ function saveWeeklyDraft(form) {
 function renderRequiredWeeklyTask() {
   const task = requiredWeeklyTask();
   const sendClose = document.getElementById("closeWeeklySendDialog");
+  const wasRequired = sendClose?.hidden === true;
   if (sendClose) sendClose.hidden = task?.kind === "send";
+  const weekday = new Date(`${currentDateKey()}T12:00:00`).getDay();
+  if (!task && (weekday === 0 || weekday === 6)) {
+    const sending = document.getElementById("confirmSendWeeklyQuestionnaire")?.disabled;
+    const sendDialog = document.getElementById("weeklySendDialog");
+    if (wasRequired && sendDialog?.open && !sending) sendDialog.close();
+    const answerDialog = document.getElementById("weeklyQuestionnaireDialog");
+    const form = document.getElementById("weeklyQuestionnaireForm");
+    if (answerDialog?.open && form && !form.inert && form.dataset.saving !== "true") {
+      saveWeeklyDraft(form);
+      answerDialog.close();
+    }
+  }
   if (!task || document.hidden || document.querySelector("form[data-saving='true']") || document.querySelector("dialog[open]")) return;
   // Do not interrupt an employee while typing a work entry; retry on the next tick.
   if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']")) return;
