@@ -21,3 +21,10 @@ console.log('PASS recipient sharing without invoice merging; exact grouped total
  const bad=structuredClone(data);bad.invoiceLinks[601].clientShares[0].gross++;assert(merge(seed,bad).invoices[0].issues.some(x=>x.includes('Raspodela')));
  console.log('PASS historical document links require the exact original hash and balanced project shares');
 }
+{
+ const source=require('../lib/finance-email-evidence.js'),x=registry.invoices[0],banked=structuredClone(p);banked.clients.find(c=>c.id===f.ids.group).invoices['2026-11'].paymentStatus='Plaćeno';
+ const data={mailCheckedAt:'2026-11-03T10:00:00Z',messages:{sent:{id:'synthetic-sent',account:'buchhaltung@marketizo.com',sent:true,labels:['SENT'],sentAt:'2026-11-01T12:00:00Z',to:['billing@example.test'],attachments:[{number:634,sha256:x.sha256}],checkedAt:'2026-11-03T10:00:00Z'}}};
+ const result=source.planSources(banked,registry,data,now);assert.equal(result.changes.length,2);for(const id of [f.ids.group,f.ids.member]){const inv=result.payload.clients.find(c=>c.id===id).invoices['2026-11'];assert.equal(inv.originalInvoice.netCents,99700);assert.equal(inv.originalInvoice.invoiceGrossCents,239280);assert.equal(inv.sentEvidence.messageId,'synthetic-sent');assert.equal(inv.paymentStatus,banked.clients.find(c=>c.id===id).invoices['2026-11'].paymentStatus);}
+ const wrong=structuredClone(banked);wrong.clients.find(c=>c.id===f.ids.member).invoices['2026-11'].amount=1000;assert.equal(source.planSources(wrong,registry,data,now).changes.length,0);
+ console.log('PASS original/sent evidence connects every group member with its own net share, preserves payments and rejects a mismatched member atomically');
+}
