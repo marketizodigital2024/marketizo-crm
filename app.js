@@ -4315,7 +4315,7 @@ function renderEmployeeGoalRows() {
           <div class="setup-item alert-item ${status}" data-admin-goal-id="${escapeInvoiceText(goal.id)}">
             <strong>${goal.progress || 0}%</strong>
             <span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(goal.category || "Razvoj")} · ${escapeInvoiceText(goal.title)}<br />${escapeInvoiceText(goal.target || "")} · ${deadline}</span>
-            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div>
+            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Napredak za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj napredak</button></div>
           </div>`;
         })
         .join("")
@@ -4341,7 +4341,7 @@ function renderEmployeeGoalRows() {
       }
       if (!(await confirmAdminSave(_confirmedBefore))) return;
       renderAll();
-      showToast("Progres sačuvan", `${employeeById(goal.employeeId)?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+      showToast("Napredak sačuvan", `${employeeById(goal.employeeId)?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
     });
   });
 
@@ -5103,7 +5103,7 @@ function setupExistingGoalProgressEditor() {
     const employeeId = employeeSelect.value;
     const employee = employeeById(employeeId);
     const goals = (state.employeeGoals || []).filter((goal) => goal.employeeId === employeeId).sort((a,b) => String(b.endDate || "").localeCompare(String(a.endDate || "")));
-    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${escapeInvoiceText(employee?.name || "zaposleni")}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${escapeInvoiceText(goal.id)}"><div><strong>${escapeInvoiceText(goal.title)}</strong><span>${escapeInvoiceText(goal.target || "Bez opisa")} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
+    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${escapeInvoiceText(employee?.name || "zaposleni")}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${escapeInvoiceText(goal.id)}"><div><strong>${escapeInvoiceText(goal.title)}</strong><span>${escapeInvoiceText(goal.target || "Bez opisa")} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Napredak za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj napredak</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
     section.querySelectorAll("[data-existing-goal-id]").forEach((row) => {
       const slider = row.querySelector('input[type="range"]');
       const output = row.querySelector("output");
@@ -5119,7 +5119,7 @@ function setupExistingGoalProgressEditor() {
         else if (goal.status === "Završeno") { goal.status = "U toku"; goal.completedDate = ""; }
         if (!(await confirmAdminSave(_confirmedBefore))) return;
         render();
-        showToast("Progres sačuvan", `${employee?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+        showToast("Napredak sačuvan", `${employee?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
       });
     });
   };

@@ -1512,7 +1512,7 @@ function renderPortalGoals() {
           <div class="setup-item alert-item ${status} goal-progress-row" data-employee-goal-id="${escapePortalText(goal.id)}">
             <strong>${goal.progress || 0}%</strong>
             <span>${escapePortalText(goal.category || "Razvoj")} · ${escapePortalText(goal.title)}<br />${escapePortalText(goal.target || "")} · ${deadline}</span>
-            <div class="employee-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapePortalText(goal.title)}" /><output>${goal.progress || 0}%</output><button class="secondary-button" type="button">Sačuvaj progres</button></div>
+            <div class="employee-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Napredak za ${escapePortalText(goal.title)}" /><output>${goal.progress || 0}%</output><button class="secondary-button" type="button">Sačuvaj napredak</button></div>
           </div>`;
         })
         .join("")
