@@ -1,6 +1,6 @@
 (function(){
  'use strict';
- const unitNames={scenario:'scenarija',scenario_revision:'ispravljenih scenarija',clip:'klipova',clip_revision:'ispravljenih klipova',story:'storija',post:'postova',task:'zadataka',call:'poziva',shoot:'snimanja',clip_check:'proverenih klipova',voiceover:'voiceovera'};
+ const unitNames={scenario:'scenarija',scenario_revision:'ispravljenih scenarija',clip:'klipova',clip_revision:'ispravljenih klipova',story:'storija',post:'postova',task:'zadataka',call:'poziva',shoot:'snimljenih reelova',clip_check:'proverenih klipova',voiceover:'voiceovera'};
  const attached=new WeakMap();
  function headers(){try{const employee=JSON.parse(localStorage.getItem('marketizoEmployeeSession')||'null'),admin=JSON.parse(localStorage.getItem('marketizoAdminSession')||'null');const s=location.pathname.includes('employee-login')?employee:admin;return s?.token?{Authorization:`Bearer ${s.token}`}:{}}catch{return {}}}
  function attach(form,context){
