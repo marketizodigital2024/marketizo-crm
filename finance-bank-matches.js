@@ -55,7 +55,7 @@
   }
   async function load(force=false){
     if(destroyed||!reports.classList.contains('active'))return;
-    const selected=month();if(!/^2026-\d{2}$/.test(selected))return;
+    const selected=month();if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(selected))return;
     if(inFlight)return;
     if(!force&&data&&loadedMonth===selected){decorate();return;}
     inFlight=true;const version=++requestVersion;controller=new AbortController();
