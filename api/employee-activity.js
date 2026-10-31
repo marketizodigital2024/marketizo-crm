@@ -120,12 +120,14 @@ module.exports = async function handler(req, res) {
     if (tableName === "agency_crm_state" && rowId === "marketizo-main") {
       const now = new Date();
       const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
-      const atomic = await dbFetch(`${url}/rest/v1/rpc/marketizo_append_work_log`, {
+      const atomic = await dbFetch(`${url}/rest/v1/rpc/${submittedLog.production ? "marketizo_append_work_log_with_output" : "marketizo_append_work_log"}`, {
         method: "POST", headers: headers(key),
         body: JSON.stringify({ p_role: session.role, p_actor_id: session.employeeId,
           p_work_log: submittedLog, p_backup_date: viennaDateKey(now),
-          p_backup_slot: `backup-prewrite-${dayNumber % BACKUP_SLOTS}` }),
+          p_backup_slot: `backup-prewrite-${dayNumber % BACKUP_SLOTS}`,
+          ...(submittedLog.production ? {p_output:submittedLog.production} : {}) }),
       });
+      if (submittedLog.production && atomic.status === 404) return json(res,503,{ok:false,error:"Čuvanje količine nije dostupno. Unos je zadržan; pokušaj ponovo."});
       // Compatibility for deployments installed before this service-only RPC.
       // Never fall back after a timeout or an uncertain commit.
       if (atomic.status !== 404) {
@@ -135,6 +137,7 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    if (submittedLog.production) return json(res,503,{ok:false,error:"Čuvanje količine zahteva atomsku bazu. Unos nije promenjen."});
     for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
       const row = await readRow(url, key);
       if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });

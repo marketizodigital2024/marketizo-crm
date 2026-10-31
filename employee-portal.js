@@ -262,6 +262,7 @@ function loadState(sourceData = null) {
     }
   });
   data.employeeWorkLogs = data.employeeWorkLogs.map((log) => ({
+    ...(log.production ? { production: log.production } : {}),
     id: log.id || createId(),
     employeeId: log.employeeId || "",
     date: log.date || currentDateKey(),
@@ -2358,10 +2359,11 @@ function restorePortalHoursForm(form, values) {
     activityIdInput.value = values.activityId || "";
     activityIdInput.dispatchEvent(new Event("change", { bubbles: true }));
   }
+  window.MarketizoProduction?.restore(form, values.production);
 }
 
 function workLogIntentFingerprint(log) {
-  return JSON.stringify([log.employeeId, String(log.date || ""), Number(log.minutes), log.activityId, String(log.clientId || ""), String(log.note || "")]);
+  return JSON.stringify([log.employeeId, String(log.date || ""), Number(log.minutes), log.activityId, String(log.clientId || ""), String(log.note || ""), log.production || null]);
 }
 
 function portalWorkLogRetryId(form, intent) {
@@ -2404,8 +2406,11 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     alert("Za Druge aktivnosti obavezno ukratko opiši šta si radio/la.");
     return;
   }
+  let production;
+  try { production = window.MarketizoProduction?.read(form); } catch (error) { alert(error.message); return; }
   const submittedFormValues = {
     date,
+    production,
     activityId: activity.id,
     activityName: activity.name,
     clientId: client?.id || "",
@@ -2422,7 +2427,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     submitButton.textContent = "Čuvanje...";
   }
   const workLog = {
-    id: portalWorkLogRetryId(form, { employeeId: activeEmployee.id, date, minutes, activityId: activity.id, clientId: isInternal ? "" : (client?.id || ""), note: formData.get("note") }),
+    ...(production ? {production} : {}),
+    id: portalWorkLogRetryId(form, { employeeId: activeEmployee.id, date, minutes, activityId: activity.id, clientId: isInternal ? "" : (client?.id || ""), note: formData.get("note"), production }),
     employeeId: activeEmployee.id,
     date,
     hours: Math.round((minutes / 60) * 10000) / 10000,
@@ -2501,6 +2507,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   removePendingWorkLog(workLog.id);
   clearPortalWorkRetryId(form);
   clearPortalHoursForm(form);
+  window.MarketizoProduction?.saved(form);
   showToast("Sinhronizovano", "Sati su potvrđeni u centralnoj bazi.", "ok");
   // A successful time entry must not launch a daily-report dialog.
 });
@@ -2851,3 +2858,5 @@ document.addEventListener("click", (event) => {
   document.querySelectorAll(".client-tab").forEach((item) => item.classList.toggle("active", item === target));
   setText("employeePageTitle", button.dataset.employeeTab === "employeeReportsTab" ? "Izveštaji" : button.textContent.trim());
 });
+
+window.MarketizoProduction?.attach(document.getElementById("portalHoursForm"), () => ({ employeeId: activeEmployee?.id || "", activityId: document.getElementById("portalActivityId")?.value || "", clientId: document.getElementById("portalClientSelect")?.value || "" }));
