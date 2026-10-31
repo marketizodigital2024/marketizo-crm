@@ -537,7 +537,7 @@ module.exports = async function handler(req, res) {
       if (missingAssociations.length) {
         return json(res, 400, {
           configured: true, missingWorkLogAssociations: true,
-          error: "Za svaki novi radni unos izaberi ponuđenu aktivnost i klijenta. Za rad za firmu izaberi Marketizo Digital. Pauza i aktivnosti iz kategorije Interno ne zahtevaju klijenta.",
+          error: missingAssociations.some(item => item.field === "note") ? "Za Druge aktivnosti obavezno ukratko opiši šta si radio/la." : "Za svaki novi radni unos izaberi ponuđenu aktivnost i klijenta. Za rad za firmu izaberi Marketizo Digital. Pauza i aktivnosti iz kategorije Interno ne zahtevaju klijenta.",
           affectedCount: new Set(missingAssociations.map(item => item.id)).size,
         });
       }

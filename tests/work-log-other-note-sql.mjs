@@ -1,0 +1,31 @@
+import {PGlite} from '@electric-sql/pglite';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite();await db.waitReady;
+await db.exec('create role anon;create role authenticated;create role service_role bypassrls;create table public.agency_crm_state(id text primary key,payload jsonb,updated_at timestamptz);grant select,insert,update on agency_crm_state to service_role;');
+const legacy={id:'legacy',employeeId:'e',date:'2026-10-16',minutes:20,activityId:'other',activityName:'Other',activityCategory:'Ostalo',clientId:'',note:''};
+const original={employees:[{id:'e',status:'Aktivan'}],clients:[{id:'c',name:'Client'}],employeeActivities:[{id:'other',name:'Other',category:'Ostalo'},{id:'edit',name:'Edit',category:'Editori'},{id:'pause',name:'Pauza',category:'Interno'}],employeeWorkLogs:[legacy],unrelated:{keep:true}};
+await db.query("insert into agency_crm_state values('marketizo-main',$1,now())",[JSON.stringify(original)]);
+for(const file of ['database/work-log-integrity.sql','database/work-log-required-client.sql','database/work-log-other-note.sql','supabase/20261014_atomic_work_log.sql','supabase/20261014_work_log_bounds.sql']) await db.exec(fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'));
+const read=async()=> (await db.query("select payload from agency_crm_state where id='marketizo-main'")).rows[0].payload;
+assert.deepEqual(await read(),original,'schema install changes no existing data');
+await db.exec('set role service_role');
+const valid={id:'new',employeeId:'e',date:'2026-10-16',minutes:15,activityId:'other',activityName:'Other',activityCategory:'Ostalo',clientId:'c',clientName:'Client'};
+const call=async log=>(await db.query('select public.marketizo_append_work_log($1,$2,$3::jsonb,$4,$5) r',['employee','e',JSON.stringify(log),'2026-10-31','backup-prewrite-1'])).rows[0].r;
+for(const note of ['', ' \n\t']) {
+ assert.equal((await call({...valid,note})).status,400);
+ const p=structuredClone(original);p.employeeWorkLogs.push({...valid,note});
+ await assert.rejects(db.query("update agency_crm_state set payload=$1 where id='marketizo-main'",[JSON.stringify(p)]),/obavezan je opis/);
+ assert.deepEqual(await read(),original);
+}
+assert.equal((await db.query("select count(*) n from agency_crm_state where id like 'backup%'")).rows[0].n,0,'invalid description creates no backup or save');
+assert.equal((await call({...valid,note:'Konkretan opis posla'})).ok,true);
+assert.equal((await call({...valid,note:'Konkretan opis posla'})).duplicate,true,'retries remain idempotent');
+const p=await read();p.employeeWorkLogs.find(x=>x.id==='new').note='';
+await assert.rejects(db.query("update agency_crm_state set payload=$1 where id='marketizo-main'",[JSON.stringify(p)]),/obavezan je opis/);
+assert.equal((await call({...valid,id:'edit-new',activityId:'edit',note:''})).ok,true);
+assert.equal((await call({...valid,id:'pause-new',activityId:'pause',clientId:'',note:''})).ok,true);
+assert.deepEqual((await read()).employeeWorkLogs.find(x=>x.id==='legacy'),legacy);
+assert.deepEqual((await read()).unrelated,original.unrelated);
+await db.exec('reset role');await db.close();
+console.log('PASS: PostgreSQL rejects blank descriptions through RPC and full state before writes; retries, non-other work, internal entries and legacy records preserved');
