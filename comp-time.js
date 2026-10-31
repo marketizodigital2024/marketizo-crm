@@ -2,6 +2,7 @@
  'use strict';
  const TYPE='Slobodno za prekovremene sate',PREFIX='comp-time:';
  const isAutomatic=row=>String(row?.id||'').startsWith(PREFIX)||row?.source==='zeitausgleich';
+ function approvalDate(now=new Date()){const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Vienna',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now).map(p=>[p.type,p.value]));return `${parts.year}-${parts.month}-${parts.day}`;}
  function validDate(date){return /^\d{4}-\d{2}-\d{2}$/.test(String(date||''))&&Number.isFinite(Date.parse(date+'T12:00:00Z'))&&new Date(date+'T12:00:00Z').toISOString().slice(0,10)===date;}
  function scheduledMinutes(hours,date){const day=new Date(date+'T12:00:00Z').getUTCDay();if(day===0||day===6)return 0;return hours>=38?(day===5?(date>='2026-10-30'?420:390):510):Math.round(hours*60/5);}
  function plan(payload,absence,isWorkingDay){
@@ -13,5 +14,5 @@
   if(!days.length)throw Error('Izabrani period nema planiranih radnih sati.');return days;
  }
  function total(payload,absenceId){return (payload.employeeHourAdjustments||[]).filter(row=>isAutomatic(row)&&row.absenceId===absenceId).reduce((n,row)=>n+Number(row.minutes||0),0);}
- return {TYPE,PREFIX,isAutomatic,validDate,scheduledMinutes,plan,total};
+ return {TYPE,PREFIX,isAutomatic,approvalDate,validDate,scheduledMinutes,plan,total};
 });

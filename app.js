@@ -5216,7 +5216,15 @@ function confirmCompTimeAbsence(absence) {
     if (change <= 0) return true;
     const employee = employeeById(absence.employeeId);
     const balance = employeeHourBalance(employee, currentMonthKey());
-    const after = Math.round((balance - change / 60) * 100) / 100;
+    const original = state;
+    const preview = structuredClone(state);
+    preview.employeeAbsences = [...(preview.employeeAbsences || []).filter(item => item.id !== absence.id), { ...absence, status: "Odobreno" }];
+    preview.employeeHourAdjustments = [...(preview.employeeHourAdjustments || []).filter(item => !(comp.isAutomatic(item) && item.absenceId === absence.id)), { id: "comp-time-preview", employeeId: absence.employeeId, date: comp.approvalDate(), minutes: planned, reason: "Pregled obračuna" }];
+    let after;
+    // Balance functions are synchronous and read-only. Preview both the released
+    // attendance target and the debit, including past dates and saved overrides.
+    try { state = preview; after = employeeHourBalance(employee, currentMonthKey()); }
+    finally { state = original; }
     return confirm(`Slobodno za prekovremene sate: ${change} min (${Math.round(change / 60 * 100) / 100} h) biće skinuto iz salda nakon čuvanja.\nTrenutni saldo: ${formatHourBalance(balance)}. Posle odobrenja: ${formatHourBalance(after)}.${after < 0 ? "\nUPOZORENJE: saldo prelazi u minus. Odobravanje je dozvoljeno." : ""}\nPotvrdi odobravanje?`);
   } catch (error) { alert(error.message); return false; }
 }
