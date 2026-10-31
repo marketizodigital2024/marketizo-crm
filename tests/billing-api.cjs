@@ -11,5 +11,10 @@ client.billingProfile.email='changed@example.test';assert.equal((await call({act
 const old=process.env.VERCEL_ENV;process.env.VERCEL_ENV='preview';assert.equal((await call()).statusCode,409);process.env.VERCEL_ENV=old;
 let workerRole='office@marketizo.com';const wh=worker.createHandler({helpers,createStore:()=>store,verifyGoogle:async()=>({email:workerRole})});async function wc(action){const r={setHeader(){},end(v){this.body=JSON.parse(v);}};await wh({method:'POST',headers:{authorization:'Bearer Google'},body:{action}},r);return r;}
 assert.equal((await wc('claim')).statusCode,403);workerRole='buchhaltung@marketizo.com';assert.equal((await wc('issue')).statusCode,422);assert.equal((await wc('claim')).statusCode,200);
+// A sample is owner-only and read-only, even when confirmation is still missing.
+client.billingProfile.confirmed=false;calls=[];const before=JSON.stringify(payload),sampleInput={action:'sample',clientId:'example',quantity:1,unitCents:100,serviceMonth:'2026-10',description:'Service'};
+const sample=await call(sampleInput);assert.equal(sample.statusCode,200);assert.equal(sample.body.previewOnly,true);assert.equal(calls.length,0);assert.equal(JSON.stringify(payload),before);assert.equal((await call({...sampleInput,action:'draft',id})).statusCode,422);assert.equal(calls.length,0);
+client.billingProfile.street='';assert.equal((await call(sampleInput)).statusCode,422);client.billingProfile.street='Test 1';role='operational-admin';assert.equal((await call(sampleInput)).statusCode,403);role='full-admin';assert.equal((await call(sampleInput,{origin:'https://wrong.test'})).statusCode,403);
+console.log('PASS unconfirmed-profile sample renders without writes, numbers or sendable document; issuance, missing address, unauthorized role and wrong origin remain blocked');
 console.log('PASS billing APIs: owner-only access, origin/preview boundaries, incomplete profile blocked, current-profile recheck, explicit PDF confirmation and Buchhaltung-only worker actions');
 })().catch(e=>{console.error(e);process.exitCode=1;});

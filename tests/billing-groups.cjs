@@ -31,3 +31,8 @@ console.log('PASS recipient sharing without invoice merging; exact grouped total
 {
  const changed=f.payload();changed.clients[1].billingName='Previous project legal name';const s=core.snapshotFor(changed,f.input(f.ids.project));assert.equal(s.profile.legalName,'Example Services GmbH');assert.equal(changed.clients[1].billingName,'Previous project legal name');core.assertSnapshot(changed,s);console.log('PASS a shared recipient overrides an old project legal-name override without deleting project data');
 }
+
+{
+ const original=f.payload();original.clients[2].billingProfile.confirmed=false;const before=JSON.stringify(original),s=core.previewFor(original,f.groupInput());assert.equal(s.previewOnly,true);assert.equal(s.profile.confirmed,false);assert.equal(s.items.length,2);assert.equal(JSON.stringify(original),before);assert.throws(()=>core.snapshotFor(original,f.groupInput()));assert.throws(()=>core.assertSnapshot(original,s));
+ console.log('PASS grouped read-only sample preserves unconfirmed profile and cannot pass the issue/delivery validation');
+}
