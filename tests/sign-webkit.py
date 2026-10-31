@@ -52,16 +52,27 @@ try:
             assert page.locator('#message').inner_text()==''
             assert page.locator('html').get_attribute('lang')==language
             assert page.locator('.document-page-text').count()>=4
-            assert page.locator('.document-page-text p').first.evaluate('(e)=>parseFloat(getComputedStyle(e).fontSize)')>=18
+            body_paragraph=page.locator('.document-page-text p').filter(has_text=('Ovo je neobavezujući test dugog ugovora' if language=='sr' else 'Dies ist ein unverbindlicher technischer Test eines langen Vertrags')).first
+            assert body_paragraph.evaluate('(e)=>parseFloat(getComputedStyle(e).fontSize)')>=18
             assert not page.evaluate('document.documentElement.scrollWidth>innerWidth+1')
             assert page.locator('#zoomValue,#pageCounter,#readerToolbar,#pageNavigator').count()==0
             assert '100%' not in page.locator('body').inner_text()
             assert page.locator('#startSigning').inner_text()==('Pređi na potpis' if language=='sr' else 'Zur Unterschrift')
-            assert ('Unterschrift' not in page.locator('#signatureSection').inner_text()) if language=='sr' else ('potpis' not in page.locator('#signatureSection').inner_text())
             page.screenshot(path=str(out/f'sign-webkit-mobile-{language}.png'))
             assert not page.locator('#signatureSection').is_visible()
-            assert page.locator('#signSteps [aria-current=step]').inner_text()==('2. Pročitajte ugovor' if language=='sr' else '2. Vertrag lesen')
-            page.locator('#startSigning').click();page.locator('#enlargeSignature').click();assert page.locator('#signatureDialog').is_visible()
+            # This fixture has no details form: reading is the first of two steps.
+            expected_step='1. Pročitajte dokument' if language=='sr' else '1. Dokument lesen'
+            actual_step=page.locator('#signSteps [aria-current=step]').inner_text()
+            assert actual_step==expected_step, (actual_step, expected_step)
+            assert page.locator('#signSteps li').count()==2
+            page.locator('#startSigning').click()
+            assert page.locator('#signatureSection').is_visible()
+            assert page.locator('#signatureTitle').inner_text()==('Vaš potpis' if language=='sr' else 'Ihre Unterschrift')
+            # Inspect rendered UI after revealing it: innerText on a hidden ancestor
+            # includes hidden receipt-email labels which are not part of this fixture.
+            signature_text=page.locator('#signatureSection').inner_text()
+            assert ('Unterschrift' not in signature_text) if language=='sr' else ('potpis' not in signature_text)
+            page.locator('#enlargeSignature').click();assert page.locator('#signatureDialog').is_visible()
             page.locator('#closeSignatureDialog').click()
             assert page.locator('#acceptTerms').is_checked()==False
             assert not posts and not errors
