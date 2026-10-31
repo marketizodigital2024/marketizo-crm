@@ -2886,6 +2886,10 @@ function openEditClient(id) {
   const form = document.getElementById("editClientForm");
   setText("editClientTitle", client.name);
   form.elements.id.value = client.id;
+  for (const [key,value] of Object.entries(client.billingProfile || {})) {
+    const input=form.elements["billing_"+key];if(input){if(input.type==="checkbox")input.checked=value===true;else input.value=value || "";}
+  }
+  if (!client.billingProfile) form.querySelectorAll('[name^="billing_"]').forEach(input=>{if(input.type==="checkbox")input.checked=false;else input.value="";});
   form.elements.name.value = client.name || "";
   form.elements.niche.value = client.niche || "";
   form.elements.country.value = client.country || "Austrija";
@@ -4618,7 +4622,7 @@ function setupEmployeeAdminSections() {
   if (!root || root.dataset.sectionsReady) return;
   root.dataset.sectionsReady = "true";
   root.dataset.employeeSection = "overview";
-  const simpleLabels = { admin: "Početna", clients: "Klijenti", employees: "Tim", calendar: "Kalendar", reports: "Finansije" };
+  const simpleLabels = { admin: "Početna", clients: "Klijenti", employees: "Tim", calendar: "Kalendar", reports: "Računi i naplata" };
   document.querySelectorAll(".sidebar .nav-item[data-view]").forEach((item) => {
     if (simpleLabels[item.dataset.view]) item.textContent = simpleLabels[item.dataset.view];
   });
@@ -4756,7 +4760,7 @@ function buildStructuredSidebar() {
     clients: "Klijenti",
     employees: "Tim",
     calendar: "Kalendar",
-    reports: "Finansije"
+    reports: "Računi i naplata"
   };
   sidebar.querySelectorAll(".nav-item[data-view]").forEach((item) => {
     if (labels[item.dataset.view]) item.textContent = labels[item.dataset.view];
@@ -4890,7 +4894,7 @@ function setupClientCostAnalysis() {
   button.type = "button";
   button.textContent = "Trošak klijenata";
   const financeButton = [...sidebar.querySelectorAll(".nav-item")].find((item) => /Finansije|Računi/.test(item.textContent));
-  sidebar.insertBefore(button, financeButton || null);
+  sidebar.insertBefore(button, financeButton?.closest(".finance-nav-menu") || financeButton || null);
 
   const view = document.createElement("section");
   view.className = "view client-cost-view";
@@ -6854,6 +6858,27 @@ document.getElementById("openClientModal").addEventListener("click", () => {
   firstInput?.focus();
 });
 
+function billingProfileFromForm(data) {
+  if (typeof data.has!=="function" || !data.has("billing_legalName")) return {};
+  const billingProfile={};for(const key of ["legalName","street","postalCode","city","country","vatId","email","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
+  billingProfile.country=billingProfile.country.toUpperCase();billingProfile.email=billingProfile.email.toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
+  return {billingProfile};
+}
+function setupClientBillingFields(){
+  for(const id of ["adminClientForm","editClientForm"]){const form=document.getElementById(id);if(!form||form.querySelector('[name="billing_legalName"]'))continue;
+    const section=document.createElement("details");section.className="billing-client-profile";section.style.gridColumn="1 / -1";
+    const summary=document.createElement("summary");summary.textContent="Podaci za račune";section.append(summary);
+    const info=document.createElement("p");info.textContent="Obavezno pre izdavanja računa. E-mail za račune može biti drugačiji od prijave klijenta.";section.append(info);
+    for(const [key,label]of [["legalName","Naziv firme"],["street","Ulica i broj"],["postalCode","Poštanski broj"],["city","Grad"],["country","Država (AT, RS…)"],["vatId","UID / PDV broj"],["email","E-mail za račune"],["taxMode","Poreski tretman"],["taxNote","Obrazloženje bez PDV-a"],["confirmed","Potvrđujem podatke i poreski tretman"]]){
+      const holder=document.createElement("label");holder.textContent=label;let input;
+      if(key==="taxMode"){input=document.createElement("select");for(const [v,t]of [["","Izaberi nakon provere"],["standard20","20% PDV"],["reverse-charge","Reverse Charge"],["exempt","Bez PDV-a uz obrazloženje"]])input.append(new Option(t,v));}
+      else{input=document.createElement("input");input.type=key==="confirmed"?"checkbox":key==="email"?"email":"text";input.maxLength=key==="taxNote"?500:key==="email"?254:180;}
+      input.name="billing_"+key;holder.append(input);section.append(holder);
+    }form.append(section);
+  }
+}
+setupClientBillingFields();
+
 document.getElementById("adminClientForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
@@ -6891,6 +6916,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   state.clients.unshift({
     id: form.dataset.retryId,
     name,
+    ...(typeof billingProfileFromForm === "function" ? billingProfileFromForm(formData) : {}),
     niche: formData.get("niche"),
     country: formData.get("country"),
     status: formData.get("status"),
@@ -6983,6 +7009,7 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
   const contractFileData = await readSmallFile(contractFile);
   Object.assign(client, {
     name: formData.get("name"),
+    ...(typeof billingProfileFromForm === "function" ? billingProfileFromForm(formData) : {}),
     niche: formData.get("niche"),
     country: formData.get("country"),
     package: values.package,
@@ -7012,7 +7039,7 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     client.contractFileData = contractFileData;
   }
   reconcileClientInvoiceStart(client, client.invoiceStartMonth);
-  if (client.invoices?.[selectedMonthKey()]) {
+  if (client.invoices?.[selectedMonthKey()] && Number(_confirmedBefore.clients.find(c=>c.id===client.id)?.revenue)!==values.revenue && !client.invoices[selectedMonthKey()].originalInvoice && client.invoices[selectedMonthKey()].invoiceStatus!=="Poslat" && !client.invoices[selectedMonthKey()].payments?.length) {
     client.invoices[selectedMonthKey()] = {
       ...client.invoices[selectedMonthKey()],
       amount: values.revenue,

@@ -22,3 +22,4 @@
  #employees .employee-performance-overview>.panel-head { flex-direction:column;align-items:stretch; }
  #employees .employee-profile-filter { min-width:0;width:100%; }
 }
+.billing-client-profile>summary{cursor:pointer;font-weight:700;padding:12px 0}.billing-client-profile>p{font-size:13px;color:var(--muted)}.billing-client-profile>label{display:inline-flex;vertical-align:top;flex-direction:column;gap:6px;width:calc(50% - 16px);margin:8px}.billing-client-profile input[type=checkbox]{width:auto;align-self:flex-start}.finance-nav-menu .sign-nav-children{display:grid;gap:4px}@media(max-width:550px){.billing-client-profile>label{width:calc(100% - 16px)}}

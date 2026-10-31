@@ -550,6 +550,12 @@ def preview_pdf(payload):
 
 
 def dispatch(payload):
+    if payload.get("action") == "invoice":
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("billing_pdf", Path(__file__).resolve().parents[1] / "lib" / "billing_pdf.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.render(payload)
     if payload.get("action") == "preview":
         return preview_pdf(payload)
     if payload.get("action") == "render":

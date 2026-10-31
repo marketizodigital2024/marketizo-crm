@@ -1,0 +1,64 @@
+"""Render immutable invoice snapshots using the existing Marketizo stationery."""
+import base64, calendar, hashlib, io, re
+from pathlib import Path
+from xml.sax.saxutils import escape
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph, Table, TableStyle
+ROOT=Path(__file__).resolve().parents[1]
+# Arial-compatible, redistributable font metrics; embedded for consistent rendering.
+for name,filename in [('Invoice','LiberationSans-Regular.ttf'),('InvoiceBold','LiberationSans-Bold.ttf')]:
+    pdfmetrics.registerFont(TTFont(name,str(ROOT/'billing-assets'/filename)))
+
+def money(cents):
+    return f'{cents/100:,.2f}'.replace(',','X').replace('.',',').replace('X','.')+' €'
+
+def render(payload):
+    s=payload['snapshot']; b=payload['brand']; number=payload['number']; test=payload.get('test') is True; p=s['profile']; issuer=b['issuer']
+    if not isinstance(number,int) or not (0 if test else 1)<=number<=999999: raise ValueError('Invalid invoice number')
+    for key in ['quantity','unitCents','netCents','vatCents','grossCents']:
+        if not isinstance(s[key],int) or s[key]<0: raise ValueError('Invalid amount')
+    if s['quantity']<1 or s['quantity']*s['unitCents']!=s['netCents'] or s['netCents']+s['vatCents']!=s['grossCents']: raise ValueError('Invalid total')
+    if s['vatCents']!=(int(s['netCents']*.2+.5) if p['taxMode']=='standard20' else 0): raise ValueError('Invalid VAT')
+    def text(value):
+        value=str(value)
+        if len(value)>1000 or any(ord(c)<32 for c in value): raise ValueError('Invalid text')
+        if any(ord(c) not in pdfmetrics.getFont('Invoice').face.charToGlyph for c in value): raise ValueError('Unsupported invoice character')
+        return escape(value)
+    out=io.BytesIO(); c=canvas.Canvas(out,pagesize=A4,invariant=1); w,h=A4
+    c.setTitle('TEST - KEIN GÜLTIGER BELEG' if test else 'Rechnung '+str(number).zfill(6));c.setAuthor(issuer['legalName'])
+    def para(value,x,y,width=450,size=10,bold=False):
+        par=Paragraph(text(value),ParagraphStyle('invoice',fontName='InvoiceBold' if bold else 'Invoice',fontSize=size,leading=size*1.25))
+        _,height=par.wrap(width,1000);par.drawOn(c,x,y-height);return height
+    c.drawImage(ImageReader(str(ROOT/b['logoPath'])),490,h-108,width=82,height=82,mask='auto')
+    for i,v in enumerate([issuer['phone'],issuer['email'],issuer['website']]):para(v,70,h-50-i*13,size=9)
+    c.setStrokeColor(colors.HexColor(b['colors']['accent']));c.setLineWidth(2);c.line(70,h-104,476,h-104)
+    y=h-152
+    for v in [p['legalName'],p['street'],p['postalCode']+' '+p['city'],p['country']]+(['UID: '+p['vatId']] if p['vatId'] else []):y-=para(v,70,y,width=340,size=10)+2
+    date='.'.join(reversed(s['issueDate'].split('-')))
+    para('Wien, '+date,430,h-244,width=120)
+    para(('TEST – KEIN GÜLTIGER BELEG' if test else b['defaults']['heading']+' '+str(number).zfill(6)),70,h-284,bold=True,size=14)
+    para(b['defaults']['introduction'],70,h-316)
+    desc=Paragraph(text(s['description']),ParagraphStyle('description',fontName='Invoice',fontSize=10,leading=13))
+    vat='20 %' if p['taxMode']=='standard20' else '0 %'
+    rows=[b['columns'],[desc,str(s['quantity']),money(s['unitCents']),vat,money(s['netCents'])],['','','Nettosumme','',money(s['netCents'])],['','','Umsatzsteuer '+vat,'',money(s['vatCents'])],['','','Bruttosumme','',money(s['grossCents'])]]
+    table=Table(rows,colWidths=[205,48,89,47,67]);table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'Invoice'),('FONTNAME',(0,0),(-1,0),'InvoiceBold'),('FONTNAME',(2,-1),(-1,-1),'InvoiceBold'),('FONTSIZE',(0,0),(-1,-1),9),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#F7CAAC')),('BACKGROUND',(2,-1),(-1,-1),colors.HexColor('#F7CAAC')),('ALIGN',(1,1),(-1,-1),'RIGHT'),('ALIGN',(2,2),(3,-1),'LEFT'),('SPAN',(2,2),(3,2)),('SPAN',(2,3),(3,3)),('SPAN',(2,4),(3,4)),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),2),('RIGHTPADDING',(0,0),(-1,-1),2),('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),('LINEBELOW',(0,1),(-1,1),.5,colors.black)]))
+    _,th=table.wrap(456,400);y=h-352-th;table.drawOn(c,70,y);y-=34
+    year,month=map(int,s['serviceMonth'].split('-'));last=calendar.monthrange(year,month)[1]
+    y-=para(f'Leistungszeitraum: 01.{month:02d}.{year} – {last:02d}.{month:02d}.{year}',70,y)+14
+    if p['taxMode']!='standard20':y-=para(p['taxNote'],70,y)+14
+    y-=para('Zahlungsbedingung: '+b['defaults']['paymentTerms'],70,y)+22
+    y-=para(b['defaults']['questions'],70,y)+28
+    y-=para(b['defaults']['closing'],70,y)+12
+    y-=para(issuer['legalName'],70,y)
+    if y<95:raise ValueError('Invoice content exceeds one page; shorten description or tax note')
+    c.setStrokeColor(colors.HexColor('#595959'));c.setLineWidth(2);c.line(70,70,526,70)
+    footer=[[issuer['proprietor'],issuer['street'],issuer['postalCode']+' '+issuer['city']],['Firmenbuchnummer '+issuer['companyNumber'],'UID '+issuer['vatId']],[issuer['bank'],'IBAN '+issuer['iban'],'BIC '+issuer['bic']]]
+    for x,lines in zip([70,246,429],footer):
+        for i,v in enumerate(lines):para(v,x,61-i*7,width=172,size=5.5)
+    c.showPage();c.save();data=out.getvalue();return{'base64':base64.b64encode(data).decode(),'sha256':hashlib.sha256(data).hexdigest()}
