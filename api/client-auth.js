@@ -5,7 +5,7 @@ const crypto = require("node:crypto");
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
-const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
+const ROW_ID = process.env.VERCEL_ENV === "preview" ? "marketizo-smm-preview-v1" : process.env.CRM_STATE_ID || "marketizo-main";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 function send(res, status, payload) {
@@ -16,7 +16,7 @@ function send(res, status, payload) {
 }
 
 function secret() {
-  return process.env.EMPLOYEE_SESSION_SECRET || SUPABASE_KEY;
+  return require('../lib/environment.js').sessionSecret(process.env.EMPLOYEE_SESSION_SECRET || SUPABASE_KEY,process.env);
 }
 
 function sign(payload) {

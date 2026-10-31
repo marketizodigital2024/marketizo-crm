@@ -173,6 +173,12 @@
     },
     "api/client-weekly-report.js": {
       "maxDuration": 30
+    },
+    "api/backup.js": {
+      "maxDuration": 300
+    },
+    "api/restore-backup.js": {
+      "maxDuration": 300
     }
   }
 }

@@ -6,6 +6,7 @@ const {request}=require('../lib/database-request.js');
 const actions=require('../lib/finance-payment-actions.js');
 const json=(res,code,body)=>{res.statusCode=code;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','private, no-store');res.end(JSON.stringify(body));};
 module.exports=async(req,res)=>{
+ if(require('../lib/environment.js').blockProductionFeatureInPreview(res,typeof process==='undefined'?{}:process.env))return;
  if(!['GET','POST'].includes(req.method))return json(res,405,{ok:false,error:'Metod nije podržan.'});
  if(!/^Bearer\s+\S+/i.test(req.headers?.authorization||''))return json(res,401,{ok:false,error:'Prijava je obavezna.'});
  try{

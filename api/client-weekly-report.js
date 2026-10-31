@@ -15,6 +15,7 @@ function canView(actor, report) {
   return report.employeeId === actor.id || (actor.isLeader && (report.recipientId === actor.id || ['emp-miljan', 'emp-ivana'].includes(actor.id)));
 }
 async function handler(req, res) {
+  if (require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
   if (!['GET', 'POST'].includes(req.method)) return send(res, 405, { ok: false, error: 'Metod nije podržan.' });
   const url = String(process.env.SUPABASE_URL || '').replace(/\/$/, ''), key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return send(res, 503, { ok: false, error: 'Baza nije dostupna.' });

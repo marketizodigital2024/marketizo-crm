@@ -20,6 +20,7 @@ async function readBody(req) {
 }
 function createHandler(deps = {}) {
   return async (req, res) => {
+  if (require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Content-Type-Options', 'nosniff');

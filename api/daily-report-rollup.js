@@ -51,6 +51,7 @@ function summarizeLogs(logs) {
 }
 
 module.exports = async function handler(req, res) {
+  if (require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
   if (req.method !== "GET" && req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
   const secret = process.env.CRON_SECRET || "";
   if (!secret || String(req.headers.authorization || "") !== `Bearer ${secret}`) return send(res, 401, { error: "Unauthorized" });

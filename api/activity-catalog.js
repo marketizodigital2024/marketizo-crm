@@ -28,6 +28,7 @@ const normalized = (value) => String(value || "").trim().toLowerCase();
 const pause = (attempt) => new Promise((resolve) => setTimeout(resolve, Math.min(800, 45 * (2 ** attempt))));
 
 module.exports = async function handler(req, res) {
+  if (req.method !== 'GET' && require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
   if (!["GET", "POST"].includes(req.method)) return json(res, 405, { ok: false, error: "Metod nije podržan." });
   const config = supabaseConfig();
   if (!config.configured) return json(res, 503, { ok: false, error: "Online baza nije povezana." });

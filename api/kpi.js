@@ -4,7 +4,7 @@ const boundedFetch = (input, options) => databaseRequest.request(fetch, input, o
 
 const table = process.env.SUPABASE_TABLE || 'agency_crm_state';
 const rowId = process.env.VERCEL_ENV === 'preview' ? 'marketizo-kpi-preview-v1' : 'marketizo-kpi-v1';
-const mainId = process.env.CRM_STATE_ID || 'marketizo-main';
+const mainId = process.env.VERCEL_ENV === 'preview' ? 'marketizo-smm-preview-v1' : process.env.CRM_STATE_ID || 'marketizo-main';
 const roles = ['Scenarista', 'Voice Over', 'Editor', 'Social Media Manager', 'Snimatelj', 'Paid Ads'];
 const roleQuestions = {
   Scenarista: 'Da li su scenariji jasni, zanimljivi i u skladu sa vašim brendom?',
@@ -23,7 +23,7 @@ const baseQuestions = [
 const blank = () => ({ questions: baseQuestions, assignments: [], links: [], invites: [], responses: [] });
 const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const secret = () => process.env.KPI_ADMIN_PASSWORD || '';
-const signKey = () => process.env.KPI_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const signKey = () => require('../lib/environment.js').sessionSecret(process.env.KPI_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '',process.env);
 function json(res, code, body) { res.status(code).setHeader('Cache-Control', 'no-store').json(body); }
 function dbHeaders() { const key = process.env.SUPABASE_SERVICE_ROLE_KEY; return { apikey:key, Authorization:`Bearer ${key}`, 'Content-Type':'application/json' }; }
 function dbUrl(id) { return `${process.env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}&select=payload,updated_at`; }

@@ -22,6 +22,7 @@ async function bodyOf(req) {
 function pdf(res, data) { const bytes = Buffer.from(data.pdfBase64 || '', 'base64'); if (hash(bytes) !== data.pdfSha256 || bytes.length > 1500000) throw new SignError(503, 'PDF nije potvrđen.'); res.statusCode = 200; res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', 'inline; filename="Marketizo-ugovor.pdf"'); res.setHeader('X-Document-SHA256', data.pdfSha256); res.end(bytes); }
 function createHandler(deps = {}) {
  return async (req, res) => {
+  if (require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
   res.setHeader('Cache-Control', 'private, no-store'); res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Content-Type-Options', 'nosniff');
   try {
    if (!['GET', 'POST'].includes(req.method)) { res.setHeader('Allow', 'GET, POST'); return json(res, 405, { ok: false, error: 'Metod nije podržan.' }); }

@@ -71,6 +71,7 @@ async function preserveDailyPrewriteBackup(url, key, row) {
 }
 
 module.exports = async function handler(req, res) {
+  if (require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -99,8 +100,8 @@ module.exports = async function handler(req, res) {
       const row = await readRow(url, key);
       if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
       const payload = JSON.parse(JSON.stringify(row.payload || {}));
-      const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.isLeader);
-      const employee = (payload.employees || []).find((item) => item.id === employeeId && item.status !== "Neaktivan");
+      const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.active !== false && item.isLeader);
+      const employee = (payload.employees || []).find((item) => item.id === employeeId && item.status !== "Neaktivan" && item.active !== false);
       if (!leader || !employee || !isDirectReport(leader, employee)) {
         return json(res, 403, { ok: false, error: "Cilj možeš dodati samo zaposlenom koji je dodeljen tebi." });
       }

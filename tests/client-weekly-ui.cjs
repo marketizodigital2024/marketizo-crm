@@ -18,6 +18,7 @@ function setup(actor,initial){
  vm.createContext(ctx);vm.runInContext(source,ctx);return{ctx,node,form,storage,posts,timers,setMode:v=>mode=v,release:()=>release(),setServer:v=>server=clone(v)};
 }
 (async()=>{
+ const focused=setup('worker',[fixture]);focused.ctx.document.activeElement={matches:()=>true};await flush();assert.equal(focused.node('clientWeeklyDialog').open,false,'Do not interrupt typing');focused.ctx.document.activeElement=null;focused.ctx.tick();await flush();assert.equal(focused.node('clientWeeklyDialog').open,true,'Obligation opens once typing finishes');
  const ui=setup('worker',[fixture]);await flush();assert.equal(ui.node('clientWeeklyDialog').open,true);assert.match(ui.node('clientWeeklyFields').innerHTML,/Ivica &lt;script&gt;/);assert.equal((ui.node('clientWeeklyFields').innerHTML.match(/ required /g)||[]).length,3);
  let prevented=false;ui.node('clientWeeklyDialog').listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
  for(const key of ['positive','negative','help'])ui.form.elements[key+'-0'].value='Answer '+key;

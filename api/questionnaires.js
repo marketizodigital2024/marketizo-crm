@@ -5,7 +5,7 @@ const TABLE = 'marketizo_questionnaires';
 const stateTable = process.env.SUPABASE_TABLE || 'agency_crm_state';
 const mainId = (process.env.VERCEL_ENV === 'preview' ? 'marketizo-smm-preview-v1' : process.env.CRM_STATE_ID || 'marketizo-main');
 const namespace = () => process.env.VERCEL_ENV === 'preview' ? 'preview' : 'production';
-const secret = () => process.env.EMPLOYEE_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const secret = () => require('../lib/environment.js').sessionSecret(process.env.EMPLOYEE_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY,process.env);
 function fail(status, message) { const e = new Error(message); e.status = status; throw e; }
 function json(res, status, body) { res.setHeader('Cache-Control', 'private, no-store'); res.setHeader('X-Content-Type-Options', 'nosniff'); res.status(status).json(body); }
 function headers(prefer) { const key = process.env.SUPABASE_SERVICE_ROLE_KEY; return { apikey:key, Authorization:`Bearer ${key}`, 'Content-Type':'application/json', ...(prefer ? { Prefer:prefer } : {}) }; }

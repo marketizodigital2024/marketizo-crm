@@ -13,6 +13,7 @@ function projection(payload) {
  };
 }
 async function handler(req,res) {
+  if (require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
  if(!['GET','POST'].includes(req.method))return reply(res,405,{ok:false,error:'Metod nije podržan.'});
  const config=supabaseConfig();if(!config.configured)return reply(res,503,{ok:false,error:'Online baza nije povezana.'});
  try {

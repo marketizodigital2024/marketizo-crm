@@ -64,6 +64,7 @@ async function readRow(url, key) {
 }
 
 module.exports = async function handler(req, res) {
+  if (require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
@@ -83,9 +84,9 @@ module.exports = async function handler(req, res) {
       if (!response.ok) throw new Error(`Čitanje izveštaja nije uspelo (${response.status}).`);
       const row = (await response.json())[0];
       if (!row) return json(res, 404, { ok: false, error: "Izveštaji nisu dostupni." });
-      const actor = (row.employees || []).find((employee) => employee.id === session.employeeId && employee.status !== "Neaktivan");
+      const actor = (row.employees || []).find((employee) => employee.id === session.employeeId && employee.status !== "Neaktivan" && employee.active !== false);
       if (!actor) return json(res, 403, { ok: false, error: "Nalog nije aktivan." });
-      const visibleIds = new Set((row.employees || []).filter((employee) => employee.id === actor.id || (employee.status !== "Neaktivan" && canLead(actor, employee))).map((employee) => employee.id));
+      const visibleIds = new Set((row.employees || []).filter((employee) => employee.id === actor.id || (employee.status !== "Neaktivan" && employee.active !== false && canLead(actor, employee))).map((employee) => employee.id));
       const reports = require("./state.js").helpers.refreshWorkSummaries({ employees: row.employees || [], employeeReports: row.reports || [], employeeWorkLogs: row.workLogs || [] }).employeeReports;
       return json(res, 200, { ok: true, reports: reports.filter((report) => visibleIds.has(report.employeeId)), updatedAt: row.updated_at });
     }
@@ -105,9 +106,9 @@ module.exports = async function handler(req, res) {
         const row = await readRow(url, key);
         if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
         const payload = JSON.parse(JSON.stringify(row.payload || {}));
-        const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.isLeader);
+        const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.active !== false && item.isLeader);
         if (!leader) return json(res, 403, { ok: false, error: "Samo aktivan lider može poslati upitnik." });
-        const employees = (payload.employees || []).filter((item) => item.id !== leaderId && item.status !== "Neaktivan" && canLead(leader, item));
+        const employees = (payload.employees || []).filter((item) => item.id !== leaderId && item.status !== "Neaktivan" && item.active !== false && canLead(leader, item));
         payload.employeeReports = Array.isArray(payload.employeeReports) ? payload.employeeReports : [];
         const now = new Date().toISOString();
         const invitations = employees.map((employee) => {
@@ -153,7 +154,7 @@ module.exports = async function handler(req, res) {
         const row = await readRow(url, key);
         if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
         const payload = JSON.parse(JSON.stringify(row.payload || {}));
-        const employee = (payload.employees || []).find((item) => item.id === employeeId && item.status !== "Neaktivan");
+        const employee = (payload.employees || []).find((item) => item.id === employeeId && item.status !== "Neaktivan" && item.active !== false);
         const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.employeeId === employeeId && item.isWeeklyQuestionnaire === true);
         if (!employee || !report) return json(res, 403, { ok: false, error: "Upitnik nije pronađen za ovog zaposlenog." });
         if (report.submittedAt && JSON.stringify(report.answers) === JSON.stringify(answers)) {
@@ -177,7 +178,7 @@ module.exports = async function handler(req, res) {
         const row = await readRow(url, key);
         if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
         const payload = JSON.parse(JSON.stringify(row.payload || {}));
-        const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.isLeader);
+        const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.active !== false && item.isLeader);
         const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.isWeeklyQuestionnaire === true && item.submittedAt);
         const employee = (payload.employees || []).find((item) => item.id === report?.employeeId);
         if (!leader || !report || !canLead(leader, employee)) return json(res, 403, { ok: false, error: "Ovaj izveštaj nije dodeljen tom lideru." });
@@ -202,7 +203,7 @@ module.exports = async function handler(req, res) {
         const row = await readRow(url, key);
         if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
         const payload = JSON.parse(JSON.stringify(row.payload || {}));
-        const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.isLeader);
+        const leader = (payload.employees || []).find((item) => item.id === leaderId && item.status !== "Neaktivan" && item.active !== false && item.isLeader);
         const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.isFinalDailyReport === true);
         const reportEmployee = (payload.employees || []).find((item) => item.id === report?.employeeId);
         const ownerLeader = leader?.id === "emp-miljan" || leader?.id === "emp-ivana";
@@ -237,7 +238,7 @@ module.exports = async function handler(req, res) {
       const row = await readRow(url, key);
       if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
       const payload = JSON.parse(JSON.stringify(row.payload || {}));
-      const employee = (payload.employees || []).find((item) => item.id === employeeId && item.status !== "Neaktivan");
+      const employee = (payload.employees || []).find((item) => item.id === employeeId && item.status !== "Neaktivan" && item.active !== false);
       if (!employee) return json(res, 400, { ok: false, error: "Zaposleni nije pronađen ili nalog nije aktivan." });
       const minutes = (payload.employeeWorkLogs || [])
         .filter((log) => log.employeeId === employeeId && log.date === date)

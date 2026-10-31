@@ -1,3 +1,4 @@
+const system = require('../lib/system-backup.js');
 const production = require('../lib/work-production-backup.js');
 const questionnaires = require('../lib/questionnaire-backup.js');
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
@@ -67,14 +68,15 @@ async function blobClient() {
 async function listBlobBackups() {
   const blob = await blobClient();
   if (!blob) return { configured: false, blobs: [] };
-  const result = await blob.list({ prefix: BLOB_PREFIX, limit: 100 });
+  const blobs=[];let cursor;do{const page=await blob.list({prefix:BLOB_PREFIX,limit:1000,...(cursor?{cursor}:{})});blobs.push(...(page.blobs||[]));cursor=page.cursor;if(blobs.length>10000)throw Error('Previše kopija za bezbedno automatsko čišćenje.');}while(cursor);
+  const result={blobs};
   return {
     configured: true,
     blobs: (result.blobs || []).sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)),
   };
 }
 
-async function writeIndependentBackup(source, date, now, kpiSource = null, questionnaireSource = null, productionSource = null) {
+async function writeIndependentBackup(source, date, now, kpiSource = null, questionnaireSource = null, productionSource = null, systemDomains = null) {
   const blob = await blobClient();
   if (!blob) throw new Error("Vercel Blob backup nije povezan.");
   const document = {
@@ -87,16 +89,19 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     questionnaires: questionnaireSource,
     workProduction: productionSource,
     workProductionRequired: true,
+    systemDomains,
+    systemDomainsRequired: true,
   };
   document.integrity = production.documentIntegrity(document);
   const body = JSON.stringify(document);
-  const pathname = `${BLOB_PREFIX}${date}.json`;
+  const pathname = `${BLOB_PREFIX}${date}-${require("node:crypto").randomUUID()}.json`;
   const uploaded = await blob.put(pathname, body, {
     access: "private",
     contentType: "application/json",
     addRandomSuffix: false,
-    allowOverwrite: true,
+    allowOverwrite: false,
   });
+  const {verified,verifiedCounts}=await(async()=>{try{
   const downloaded = await blob.get(uploaded.pathname, { access: "private", useCache: false });
   if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) {
     throw new Error("Vercel Blob backup nije moguće ponovo pročitati.");
@@ -122,16 +127,21 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     || JSON.stringify(verified.kpi || null) !== JSON.stringify(document.kpi)
     || !questionnaires.equal(verified.questionnaires, document.questionnaires)
     || !production.equal(verified.workProduction, document.workProduction)
-    || !production.summary(verified.workProduction).included) {
+    || !production.summary(verified.workProduction).included
+    || !system.summary(verified.systemDomains).included || !production.equal(verified.systemDomains, systemDomains)) {
     throw new Error("Vercel Blob backup nije prošao proveru integriteta.");
   }
+  return {verified,verifiedCounts};
+  }catch(error){try{await blob.del(uploaded.pathname);}catch{}throw error;}})();
   let retained = null;
   let retentionWarning = "";
   try {
     const inventory = await listBlobBackups();
-    const obsolete = inventory.blobs.slice(30);
+    const days=[...new Set(inventory.blobs.map(b=>b.pathname.slice(BLOB_PREFIX.length,BLOB_PREFIX.length+10)))].sort().reverse();
+    const keep=new Set(days.slice(0,30));
+    const obsolete=inventory.blobs.filter(b=>!keep.has(b.pathname.slice(BLOB_PREFIX.length,BLOB_PREFIX.length+10)));
     if (obsolete.length) await blob.del(obsolete.map((item) => item.url));
-    retained = Math.min(inventory.blobs.length, 30);
+    retained = inventory.blobs.length-obsolete.length;
   } catch (error) {
     // The uploaded file was already read back and verified above. Inventory
     // cleanup is useful, but it must not invalidate a confirmed backup.
@@ -146,10 +156,12 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     counts: verifiedCounts,
     questionnaires: questionnaires.summary(verified.questionnaires),
     workProduction: production.summary(verified.workProduction),
+    systemDomains: system.summary(verified.systemDomains),
   };
 }
 
 module.exports = async function handler(req, res) {
+ if(require('../lib/environment.js').blockProductionFeatureInPreview(res,typeof process==='undefined'?{}:process.env))return;
   if (!["GET","POST"].includes(req.method)) return send(res, 405, { error: "Method not allowed" });
 
   const url = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
@@ -162,23 +174,21 @@ module.exports = async function handler(req, res) {
       const row = await readStoredState({ url, key });
       if (accessSession(req, row.payload, key)?.role !== "full-admin") return send(res, 401, { error: "Unauthorized" });
       if (String(req.query?.download || "") === "1") {
-        const snap = await production.readSnapshot(url,key,fetch);
-        const qr = await questionnaires.readSnapshot(url,key);
-        const kr = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(KPI_ROW_ID)}&select=payload,updated_at`,{headers:headers(key)});
-        if(!kr.ok) throw new Error("KPI backup nije dostupan.");
-        const kpi=(await kr.json())[0];
+        const snap = await system.readSnapshot(url,key,fetch);
         const now=new Date(),v=viennaTime(now);
-        return send(res,200,{ok:true,document:production.sealDocument({format:"marketizo-crm-backup-v1",backupDate:`${v.year}-${v.month}-${v.day}`,createdAt:now.toISOString(),sourceUpdatedAt:snap.updated_at,state:snap.payload,kpi:kpi?.payload||null,questionnaires:qr,workProduction:snap.production,workProductionRequired:true})});
+        return system.streamDocument(res,production.sealDocument({format:"marketizo-crm-backup-v1",backupDate:`${v.year}-${v.month}-${v.day}`,createdAt:now.toISOString(),sourceUpdatedAt:snap.updated_at,state:snap.payload,kpi:snap.kpi?.payload||null,questionnaires:snap.questionnaires,workProduction:snap.production,workProductionRequired:true,systemDomains:snap.systemDomains,systemDomainsRequired:true}));
       }
+
       if (String(req.query?.verify || "") === "1") {
         const pathname = String(req.query?.pathname || "");
-        if (!/^marketizo-crm\/daily\/\d{4}-\d{2}-\d{2}\.json$/.test(pathname)) return send(res, 400, { ok: false, error: "Nevažeća putanja backupa." });
+        if (!/^marketizo-crm\/daily\/\d{4}-\d{2}-\d{2}(?:-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})?\.json$/.test(pathname)) return send(res, 400, { ok: false, error: "Nevažeća putanja backupa." });
         const blob = await blobClient();
         if (!blob) return send(res, 503, { ok: false, error: "Nezavisni backup nije povezan." });
         const downloaded = await blob.get(pathname, { access: "private", useCache: false });
         if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) return send(res, 404, { ok: false, error: "Backup nije pronađen." });
         const document = JSON.parse(await new Response(downloaded.stream).text());
         const state = document.state;
+        if (document.systemDomainsRequired && (!system.valid(document.systemDomains) || !production.verifyDocument(document))) return send(res,422,{ok:false,error:"Backup dodatnih domena nije potvrđen."});
         if (document.format !== "marketizo-crm-backup-v1" || !state || Array.isArray(state) || !Array.isArray(state.employees) || !state.employees.length || !Array.isArray(state.clients) || !Array.isArray(state.employeeWorkLogs)) return send(res, 422, { ok: false, error: "Backup nije prošao proveru strukture." });
         if(document.workProductionRequired && !production.verifyDocument(document)) return send(res,422,{ok:false,error:"Backup nije prošao proveru kontrolnog zbira."});
         if(document.workProductionRequired && !production.summary(document.workProduction).included) return send(res,422,{ok:false,error:"Backup nema obavezne podatke o količini."});
@@ -186,6 +196,7 @@ module.exports = async function handler(req, res) {
         return send(res, 200, { ok: true, verified: true, pathname, backupDate: document.backupDate,
           sourceUpdatedAt: document.sourceUpdatedAt, currentRevision: document.sourceUpdatedAt === row.updatedAt,
           questionnaires: questionnaires.summary(document.questionnaires),
+          systemDomains: system.summary(document.systemDomains),
           workProduction: production.summary(document.workProduction),
           integrityVerified: production.verifyDocument(document),
           counts: backupCounts(state), checksum, includesKpi: document.kpi != null,
@@ -199,7 +210,7 @@ module.exports = async function handler(req, res) {
       let databaseWarning = "";
       // Do not download every multi-megabyte backup payload just to list them.
       // That response grows on every run and can make PostgREST return 500.
-      const response = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,updated_at,backupDate:payload->>backupDate,sourceUpdatedAt:payload->>sourceUpdatedAt,counts:payload->counts,firstWorkLogDate:payload->>firstWorkLogDate,lastWorkLogDate:payload->>lastWorkLogDate,septemberWorkLogs:payload->septemberWorkLogs,septemberDates:payload->septemberDates&order=updated_at.desc`, {
+      const response = await fetch(`${url}/rest/v1/${TABLE}?and=(id.like.backup-*,id.not.like.backup-system-*)&select=id,updated_at,backupDate:payload->>backupDate,sourceUpdatedAt:payload->>sourceUpdatedAt,counts:payload->counts,firstWorkLogDate:payload->>firstWorkLogDate,lastWorkLogDate:payload->>lastWorkLogDate,septemberWorkLogs:payload->septemberWorkLogs,septemberDates:payload->septemberDates&order=updated_at.desc`, {
         headers: headers(key),
       });
       if (response.ok) {
@@ -208,14 +219,14 @@ module.exports = async function handler(req, res) {
         // Older backup rows can contain multi-megabyte payloads and different
         // metadata shapes. If PostgREST cannot project one of the JSON paths,
         // fall back to the stable columns instead of losing the whole list.
-        const fallbackResponse = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,updated_at&order=updated_at.desc`, {
+        const fallbackResponse = await fetch(`${url}/rest/v1/${TABLE}?and=(id.like.backup-*,id.not.like.backup-system-*)&select=id,updated_at&order=updated_at.desc`, {
           headers: headers(key),
         });
         if (fallbackResponse.ok) rows = await fallbackResponse.json();
         else databaseWarning = `Backup list failed (${response.status}/${fallbackResponse.status})`;
       }
       if (rows.length) {
-        const recentResponse = await fetch(`${url}/rest/v1/${TABLE}?id=like.backup-*&select=id,payload,updated_at&order=updated_at.desc&limit=3`, {
+        const recentResponse = await fetch(`${url}/rest/v1/${TABLE}?and=(id.like.backup-*,id.not.like.backup-system-*)&select=id,payload,updated_at&order=updated_at.desc&limit=3`, {
           headers: headers(key),
         });
         if (recentResponse.ok) {
@@ -261,11 +272,9 @@ module.exports = async function handler(req, res) {
     const date = `${vienna.year}-${vienna.month}-${vienna.day}`;
     // Every authorized run writes and reads back the complete current snapshot.
     // An older same-day file must not suppress newly added backup domains.
-    const source = await production.readSnapshot(url,key,fetch);
+    const source = await system.readSnapshot(url,key,fetch);
     const productionSource = source.production;
-    const kpiResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(KPI_ROW_ID)}&select=payload,updated_at`, { headers: headers(key) });
-    if (!kpiResponse.ok) throw new Error(`KPI state fetch failed (${kpiResponse.status})`);
-    const kpiSource = (await kpiResponse.json())[0] || null;
+    const kpiSource = source.kpi;
 
     const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
     const backupId = `backup-daily-${dayNumber % BACKUP_SLOTS}`;
@@ -273,8 +282,8 @@ module.exports = async function handler(req, res) {
     const workLogDates = workLogs.map((log) => String(log.date || "")).filter(Boolean).sort();
     // Create and verify the independent copy first. The rotating database copy
     // is secondary and must not prevent a recoverable backup from being made.
-    const questionnaireSource = await questionnaires.readSnapshot(url, key);
-    const independent = await writeIndependentBackup(source, date, now, kpiSource, questionnaireSource, productionSource);
+    const questionnaireSource = source.questionnaires;
+    const independent = await writeIndependentBackup(source, date, now, kpiSource, questionnaireSource, productionSource, source.systemDomains);
 
     const backupResponse = await fetch(`${url}/rest/v1/${TABLE}?on_conflict=id`, {
       method: "POST",
@@ -294,11 +303,21 @@ module.exports = async function handler(req, res) {
           questionnaires: questionnaireSource,
           workProduction: productionSource,
           workProductionRequired: true,
+          systemDomainsArchive: system.archive(source.systemDomains),
+          systemDomainsRequired: true,
         },
         updated_at: now.toISOString(),
       }),
     });
-    const databaseWarning = backupResponse.ok ? "" : `Backup write failed (${backupResponse.status})`;
+    let databaseWarning = backupResponse.ok ? "" : `Backup write failed (${backupResponse.status})`, databaseVerified=false;
+    if(backupResponse.ok){try{
+      const check=await require('../lib/database-request.js').request(fetch,`${url}/rest/v1/${TABLE}?id=eq.${backupId}&select=payload`,{headers:headers(key)},20000);
+      if(!check.ok)throw Error('Ponovno čitanje DB kopije nije uspelo.');
+      const saved=(await check.json())[0]?.payload;
+      if(!saved||!production.equal(saved.state,source.payload)||!production.equal(saved.kpi,kpiSource?.payload||null)||!questionnaires.equal(saved.questionnaires,questionnaireSource)||!production.equal(saved.workProduction,productionSource)||!production.equal(system.unarchive(saved.systemDomainsArchive),source.systemDomains))throw Error('DB kopija nije prošla proveru sadržaja.');
+      databaseVerified=true;
+    }catch(error){databaseWarning=error.message;}}
+
 
     return send(res, 200, {
       ok: true,
@@ -310,6 +329,8 @@ module.exports = async function handler(req, res) {
       independent,
       questionnaires: questionnaires.summary(questionnaireSource),
       workProduction: production.summary(productionSource),
+      systemDomains: system.summary(source.systemDomains),
+      databaseVerified,
       databaseWarning: databaseWarning || undefined,
     });
   } catch (error) {
