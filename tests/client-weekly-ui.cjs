@@ -7,12 +7,13 @@ function setup(actor,initial){
  function node(id){if(nodes.has(id))return nodes.get(id);const n={id,hidden:true,open:false,dataset:{},value:'',textContent:'',innerHTML:'',elements:{},listeners:{},addEventListener(type,fn){this.listeners[type]=fn;},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();},reportValidity(){return true;},reset(){Object.values(this.elements).forEach(f=>f.value='');}};nodes.set(id,n);return n;}
  const form=node('clientWeeklyForm');for(const key of ['positive','negative','help'])form.elements[key+'-0']={value:''};
  const ctx={activeEmployee:{id:actor,isLeader:actor==='leader'},formatDate:x=>x,escapePortalText:x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),employeeApiHeaders:()=>({}),showToast(){},AbortController,Date,Intl,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},document:{hidden:false,activeElement:null,getElementById:node,querySelector:selector=>selector==='dialog[open]'?[...nodes.values()].find(n=>n.open):null},window:{setTimeout(fn,ms){if(ms===0)timers.push(fn);return 1;},clearTimeout(){},setInterval(fn){ctx.tick=fn;},addEventListener(type,fn){ctx.focus=fn;}},fetch:async(url,options)=>{
-  const body=options.body&&JSON.parse(options.body);if(body)posts.push(body);
+  const body=options.body&&JSON.parse(options.body),readSnapshot=!body?clone(server):null;if(body)posts.push(body);
+  if(mode==='holdRead'&&!body)await new Promise(r=>release=r);
   if(mode==='hold'&&body?.action==='submit')await new Promise(r=>release=r);
   if(mode==='fail'&&body?.action==='submit')return{ok:false,json:async()=>({ok:false,error:'offline'})};
   if(body?.action==='submit'){server[0].submittedAt='confirmed';server[0].clientAnswers=body.answers;}
   if(body?.action==='acknowledge'){server[0].acknowledgedAt='confirmed';server[0].acknowledgedBy=actor;}
-  return{ok:true,json:async()=>({ok:true,reports:clone(server),report:body?.reportId?clone(server.find(r=>r.id===body.reportId)):undefined,window:{releaseDate:'2026-11-02'},syncedAt:'2026-11-02T11:00:00Z',assignmentPreview:[]})};
+  return{ok:true,json:async()=>({ok:true,reports:clone(readSnapshot||server),report:body?.reportId?clone(server.find(r=>r.id===body.reportId)):undefined,window:{releaseDate:'2026-11-02'},syncedAt:'2026-11-02T11:00:00Z',assignmentPreview:[]})};
  }};
  vm.createContext(ctx);vm.runInContext(source,ctx);return{ctx,node,form,storage,posts,timers,setMode:v=>mode=v,release:()=>release(),setServer:v=>server=clone(v)};
 }
@@ -24,7 +25,8 @@ function setup(actor,initial){
  ui.setMode('hold');const pending=ui.form.listeners.submit({preventDefault(){},currentTarget:ui.form});await flush();await ui.form.listeners.submit({preventDefault(){},currentTarget:ui.form});assert.equal(ui.posts.filter(p=>p.action==='submit').length,2,'One failed request and exactly one in-flight retry');ui.setMode('ok');ui.release();await pending;assert.equal(ui.node('clientWeeklyDialog').open,false);assert.equal(ui.storage.size,0);
  const completed={...fixture,submittedAt:'now',clientAnswers:[{clientId:'c',positive:'Good',negative:'None',help:'None'}]};const lead=setup('leader',[completed]);await flush();assert.equal(lead.node('clientWeeklyReadDialog').open,true);assert.match(lead.node('clientWeeklyReadContent').innerHTML,/Good/);
  prevented=false;lead.node('clientWeeklyReadDialog').listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,0,'Opening never marks read');
- await lead.node('clientWeeklyReadAck').listeners.click();assert.equal(lead.node('clientWeeklyReadDialog').open,false);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,1);
+ lead.setMode('holdRead');lead.ctx.focus();await flush();
+ await lead.node('clientWeeklyReadAck').listeners.click();lead.setMode('ok');lead.release();await flush();assert.equal(lead.node('clientWeeklyReadDialog').open,false);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,1);
  const identity=setup('worker',[fixture]);await flush();identity.ctx.activeEmployee={id:'other'};identity.ctx.tick();assert.equal(identity.node('clientWeeklyDialog').open,false,'Account change hides previous employee form');
  console.log('PASS weekly client UI: three required fields/client, escaped content, scoped drafts, failed-send retention, duplicate-click guard, explicit receipt and identity isolation');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,5 +1,6 @@
 /* Weekly client review: isolated report API, scoped drafts, no work-log writes. */
 (() => {
+  let revision = 0;
   let reports = [], busy = false, saving = false, lastEnsure = 0, lastRead = 0, loadedActor = '', sourceError = '', assignmentPreview = [], assignmentSyncedAt = '';
   const el = id => document.getElementById(id);
   const escape = value => escapePortalText(String(value || ''));
@@ -95,14 +96,15 @@
     if (!force && Date.now() - lastRead < 30000) return render();
     if (document.activeElement?.matches?.('input,textarea,select,[contenteditable="true"]')) return;
     busy = true;
+    const readRevision = revision;
     try {
       const result = await request();
-      if (activeEmployee?.id !== actor) return;
+      if (activeEmployee?.id !== actor || saving || revision !== readRevision) return;
       reports = result.reports; lastRead = Date.now();
       if (Date.now() - lastEnsure > 300000) {
         try {
           const ensured = await request({ action: 'ensure' });
-          if (activeEmployee?.id !== actor) return;
+          if (activeEmployee?.id !== actor || saving || revision !== readRevision) return;
           reports = ensured.reports; assignmentPreview = ensured.assignmentPreview || []; assignmentSyncedAt = ensured.syncedAt || ''; lastEnsure = Date.now(); sourceError = '';
         } catch (error) { sourceError = error.message; }
       }
@@ -116,7 +118,7 @@
     const form = event.currentTarget, actor = activeEmployee?.id;
     const report = reports.find(r => r.id === form.dataset.reportId && r.employeeId === actor);
     if (!report || !form.reportValidity()) return;
-    saveDraft(); saving = true; form.dataset.saving = 'true'; form.inert = true;
+    saveDraft(); revision += 1; saving = true; form.dataset.saving = 'true'; form.inert = true;
     const button = el('clientWeeklySubmit'); button.disabled = true; button.textContent = 'Slanje…';
     try {
       const result = await request({ action: 'submit', reportId: report.id, answers: collect(form, report) });
@@ -126,19 +128,19 @@
       try { localStorage.removeItem(draftKey(report)); } catch {}
       el('clientWeeklyDialog').close(); form.dataset.reportId = ''; form.reset();
     } catch (error) { el('clientWeeklyFormStatus').textContent = `Nije poslato. Odgovori su zadržani. ${error.message}`; }
-    finally { saving = false; delete form.dataset.saving; form.inert = false; button.disabled = false; button.textContent = 'Pošalji lideru'; render(); }
+    finally { revision += 1; saving = false; delete form.dataset.saving; form.inert = false; button.disabled = false; button.textContent = 'Pošalji lideru'; render(); }
   });
   el('clientWeeklyReadAck').addEventListener('click', async () => {
     if (saving) return;
     const dialog = el('clientWeeklyReadDialog'), id = dialog.dataset.reportId, actor = activeEmployee?.id, button = el('clientWeeklyReadAck');
-    saving = true; button.disabled = true; button.textContent = 'Čuvanje potvrde…';
+    revision += 1; saving = true; button.disabled = true; button.textContent = 'Čuvanje potvrde…';
     try {
       const result = await request({ action: 'acknowledge', reportId: id });
       if (activeEmployee?.id !== actor) return;
       if (result.report?.id !== id || !result.report.acknowledgedAt) throw new Error('Potvrda nije sačuvana.');
       reports = result.reports; dialog.close();
     } catch (error) { showToast('Nije potvrđeno', error.message, 'danger'); }
-    finally { saving = false; button.disabled = false; button.textContent = 'Pročitao/la sam izveštaj'; render(); }
+    finally { revision += 1; saving = false; button.disabled = false; button.textContent = 'Pročitao/la sam izveštaj'; render(); }
   });
   for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog']) {
     el(id).addEventListener('cancel', event => event.preventDefault());
