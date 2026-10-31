@@ -97,7 +97,7 @@ async function writeIndependentBackup(source, date, now, kpiSource = null, quest
     addRandomSuffix: false,
     allowOverwrite: true,
   });
-  const downloaded = await blob.get(uploaded.pathname, { access: "private" });
+  const downloaded = await blob.get(uploaded.pathname, { access: "private", useCache: false });
   if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) {
     throw new Error("Vercel Blob backup nije moguće ponovo pročitati.");
   }
@@ -175,7 +175,7 @@ module.exports = async function handler(req, res) {
         if (!/^marketizo-crm\/daily\/\d{4}-\d{2}-\d{2}\.json$/.test(pathname)) return send(res, 400, { ok: false, error: "Nevažeća putanja backupa." });
         const blob = await blobClient();
         if (!blob) return send(res, 503, { ok: false, error: "Nezavisni backup nije povezan." });
-        const downloaded = await blob.get(pathname, { access: "private" });
+        const downloaded = await blob.get(pathname, { access: "private", useCache: false });
         if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) return send(res, 404, { ok: false, error: "Backup nije pronađen." });
         const document = JSON.parse(await new Response(downloaded.stream).text());
         const state = document.state;
