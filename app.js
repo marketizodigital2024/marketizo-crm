@@ -2647,7 +2647,7 @@ function renderMonthlyInvoices(clients, monthKey) {
       const remainingAmount = invoiceRemainingAmount(client, monthKey);
       const payments = invoicePaymentEntries(invoice);
       return `<div class="invoice-compact-row">
-        <div class="invoice-compact-client"><strong>${escapeInvoiceText(client.name)}</strong><span>${escapeInvoiceText(client.country)} · naplata ${client.billingDay || 1}.</span></div>
+        <div class="invoice-row-main"><div class="invoice-compact-client"><strong>${escapeInvoiceText(client.name)}</strong><span>${escapeInvoiceText(client.country)} · naplata ${client.billingDay || 1}.</span></div>
         <strong class="invoice-compact-amount">${currency.format(invoiceAmount(client, monthKey))}</strong>
         <label>Račun
           <select class="table-select" data-invoice-client="${escapeInvoiceText(client.id)}" data-invoice-field="invoiceStatus">
@@ -2663,6 +2663,8 @@ function renderMonthlyInvoices(clients, monthKey) {
             ${option("Kasni", invoice.paymentStatus)}
           </select>
         </label>
+        </div>
+        <details class="invoice-row-details"><summary>Detalji</summary><div class="invoice-detail-content">
         <label>Način
           <select class="table-select" data-invoice-client="${escapeInvoiceText(client.id)}" data-invoice-field="paymentMethod">
             ${option("Firma", invoice.paymentMethod)}
@@ -2678,6 +2680,7 @@ function renderMonthlyInvoices(clients, monthKey) {
         </form>
         <div class="invoice-payment-history">${payments.length ? payments.map((payment) => `<div><span>${formatDate(payment.date)} · ${currency.format(Number(payment.amount || 0))}${payment.note ? ` · ${escapeInvoiceText(payment.note)}` : ""}</span><button type="button" data-delete-invoice-payment="${escapeInvoiceText(payment.id)}" data-invoice-client="${escapeInvoiceText(client.id)}">Obriši</button></div>`).join("") : `<small>Nema pojedinačnih uplata.</small>`}</div>
         <button class="invoice-month-remove danger-action" type="button" data-remove-invoice-client="${escapeInvoiceText(client.id)}" data-invoice-month="${monthKey}">Ukloni iz meseca</button>
+        </div></details>
       </div>`;
   };
   const sorted = [...clients].sort((a, b) => invoiceAmount(b, monthKey) - invoiceAmount(a, monthKey));
