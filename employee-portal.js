@@ -500,7 +500,7 @@ async function syncPendingWorkLogs({ notify = false } = {}) {
       if (!result.ok) {
         // Only a successful server acknowledgement can remove a local entry.
         // A validation failure remains available for correction and recovery.
-        if (notify) showToast(result.authRequired ? "Prijava je potrebna" : "Unos nije sinhronizovan",
+        if (notify) showToast(result.authRequired ? "Prijava je potrebna" : "Unos još nije poslat",
           result.error || "Unos ostaje sačuvan na ovom uređaju. Pokušaj ponovo.", "warn");
         if (result.authRequired || result.retryable) break;
         continue;
@@ -515,7 +515,7 @@ async function syncPendingWorkLogs({ notify = false } = {}) {
     if (synced) {
       saveState({ remote: false });
       renderEmployeePortal();
-      if (notify) showToast("Sinhronizovano", `${synced} sačuvan${synced === 1 ? " unos" : "a unosa"} je potvrđeno u bazi.`, "ok");
+      if (notify) showToast("Uspešno sačuvano", `${synced} sačuvan${synced === 1 ? " unos" : "a unosa"} je potvrđeno u bazi.`, "ok");
     }
   } finally {
     pendingWorkLogSyncRunning = false;
@@ -2490,7 +2490,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
       submitButton.disabled = false;
       submitButton.textContent = "Sačuvaj sate";
     }
-    showToast("Nije sačuvano", error?.message || "Uređaj nije potvrdio lokalno čuvanje. Pokušaj ponovo.", "danger");
+    showToast("Nije sačuvano", error?.message || "Unos nije sačuvan na ovom uređaju. Ne zatvaraj formu i pokušaj ponovo.", "danger");
     return;
   }
 
@@ -2499,7 +2499,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   saveState({ remote: false });
   renderEmployeePortal();
   restorePortalHoursForm(form, submittedFormValues);
-  showToast("Sačuvano lokalno", "Unos je prikazan odmah i sinhronizuje se sa bazom u pozadini.", "warn");
+  showToast("Slanje je u toku", "Unos je sačuvan na ovom uređaju. Sačekaj potvrdu da je stigao u aplikaciju.", "warn");
 
   form.inert = true;
   let saveResult;
@@ -2518,10 +2518,10 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     if (saveResult.retryable) {
       restorePortalHoursForm(form, submittedFormValues);
       showToast(
-        saveResult.authRequired ? "Unos čeka novu prijavu" : "Unos čeka sinhronizaciju",
+        saveResult.authRequired ? "Unos čeka novu prijavu" : "Unos čeka slanje",
         saveResult.authRequired
           ? "Sati nisu obrisani. Osveži portal ili se prijavi ponovo i unos će se automatski poslati."
-          : "Sati nisu obrisani i biće poslati čim veza sa bazom ponovo bude dostupna.",
+          : "Sati nisu obrisani i biće poslati čim veza sa aplikacijom ponovo bude dostupna.",
         "warn"
       );
       return;
@@ -2538,7 +2538,7 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   clearPortalWorkRetryId(form);
   clearPortalHoursForm(form);
   window.MarketizoProduction?.saved(form);
-  showToast("Sinhronizovano", "Sati su potvrđeni u centralnoj bazi.", "ok");
+  showToast("Uspešno sačuvano", "Sati su uspešno sačuvani u aplikaciji.", "ok");
   // A successful time entry must not launch a daily-report dialog.
 });
 
@@ -2828,10 +2828,10 @@ document.getElementById("portalGoalList")?.addEventListener("click", async (even
   if (!result?.ok) {
     Object.assign(goal, previous);
     renderEmployeePortal();
-    return showToast("Nije sačuvano", result?.error || "Online baza nije potvrdila progres.", "danger");
+    return showToast("Nije sačuvano", result?.error || "Napredak nije sačuvan. Pokušaj ponovo.", "danger");
   }
   renderEmployeePortal();
-  showToast("Progres sačuvan", `${goal.title}: ${goal.progress}%`, "ok");
+  showToast("Napredak sačuvan", `${goal.title}: ${goal.progress}%`, "ok");
 });
 
 window.addEventListener("storage", (event) => {

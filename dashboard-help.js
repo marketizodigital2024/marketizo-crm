@@ -2,51 +2,427 @@
   'use strict';
   // Read-only explanations. No CRM save, network call or business-record mutation.
   const definitions = {
-    adminTotalClients: { title: 'Klijenti sa računom', text: 'Broj klijenata koji imaju sačuvan mesečni obračun. Jedan klijent se broji jednom, čak i ako račun još nije poslat.', flow: ['Sačuvan obračun', 'Izabrani mesec', 'Broj klijenata'], scope: 'Važe pretraga, država i početak saradnje. Arhivirani klijenti su isključeni, kao i u Finansijama.' },
-    adminMrr: { title: 'Fakturisano', text: 'Zbir vrednosti mesečnih računa u CRM-u, uključujući pripremljene račune koji još nisu poslati. Ovo nije dobit.', flow: ['Vrednost svakog računa', 'Sabiranje', 'Ukupan iznos'], scope: 'Ako iznos nije posebno sačuvan, koristi se mesečna cena klijenta, pa cena paketa. Sačuvana nula ostaje nula. Važe filteri klijenata; arhivirani su isključeni.' },
-    adminPaidTotal: { title: 'Naplaćeno za račune meseca', text: 'Uplate povezane sa računima izabranog meseca. Uplata za septembarski račun ostaje u septembru i kada novac legne u oktobru.', flow: ['Računi izabranog meseca', 'Povezane uplate', 'Naplaćen iznos'], scope: 'Ovo nije promet banke po datumu uplate. Koriste se sačuvane uplate; kod starijih računa bez stavki uplate koristi se plaćeni iznos ili oznaka „Plaćeno“. Višak uplate se čuva. Važe filteri klijenata.' },
-    adminUnpaidTotal: { title: 'Otvorena naplata', text: 'Koliko još ostaje za naplatu za izabrani mesec. Svaki račun se računa posebno: višak uplate jednog klijenta ne briše dug drugog.', flow: ['Račun − njegove uplate', 'Najmanje nula', 'Zbir ostataka'], scope: 'Primer: račun 100 €, uplaćeno 40 € → otvoreno 60 €. Broj klijenata se računa po preostalom iznosu, a ne samo po ručnoj oznaci statusa. Važe filteri klijenata.' },
-    adminCollectionRate: { title: 'Stopa naplate', text: 'Koliki deo vrednosti računa je pokriven uplatama. Primer: od 1.000 € računa pokriveno je 600 € → 60%.', flow: ['Pokriveni iznos', '÷ vrednost računa × 100', 'Procenat naplate'], scope: 'Višak preko vrednosti pojedinačnog računa ne povećava procenat. Ako nema vrednosti računa, prikazuje se 0%. Važe filteri klijenata.' },
-    actionSummary: { title: 'Šta traži reakciju', text: 'Četiri prečice: neposlati računi, otvoreni iznosi stari preko 30 dana, odstupanja sati i ugovori koji uskoro ističu.', flow: ['Računi, sati, ugovori', 'Provera uslova', 'Prečica na detalje'], scope: 'Računi koriste filtere klijenata. Tim koristi samo izabrani mesec. Ugovori koriste današnji datum i celu bazu.' },
-    'action-0': { title: 'Računi koji nisu poslati', text: 'Broj sačuvanih mesečnih obračuna čiji status nije „Poslat“. Račun može biti pripremljen, a još neposlat.', flow: ['Izabrani mesec', 'Status nije „Poslat“', 'Broj računa'], scope: 'Važe filteri klijenata i pravilo Finansija koje isključuje arhivirane. Klik na karticu otvara Finansije.' },
-    'action-1': { title: 'Otvoreno preko 30 dana', text: 'Zbir preostalih iznosa na računima starijim od 30 dana. Starost je od datuma slanja; kada on nedostaje, od prvog dana meseca računa.', flow: ['Otvoreni računi', 'Starost preko 30 dana', 'Zbir ostataka'], scope: 'Poslednjih 12 meseci do izabranog meseca, starost prema današnjem datumu. Ovo nije obračun ugovorenog roka plaćanja. Važe filteri klijenata.' },
-    'action-2': { title: 'Odstupanja kapaciteta', text: 'Broj zaposlenih sa manje od 80% ili više od 110% upisanih sati u odnosu na plan. Porede se isti završeni dani.', flow: ['Upisani sati', '÷ planirani sati × 100', 'Ispod 80% / preko 110%'], scope: 'Današnji nepotpuni dan i budući dani se ne računaju. Odobrena odsustva i neradni dani smanjuju plan. Nije ocena kvaliteta rada. Filteri klijenata ne utiču.' },
-    'action-3': { title: 'Ugovori koji ističu', text: 'Broj ugovora čiji izračunati datum isteka pada od danas do narednih 30 dana, uključujući oba kraja.', flow: ['Početak + trajanje ugovora', 'Danas do +30 dana', 'Broj ugovora'], scope: 'Cela baza, nezavisno od meseca i filtera klijenata. Prethodno uklonjeni podsetnici se ne prikazuju.' },
-    filters: { title: 'Kako rade filteri', text: 'Mesec bira račune i sate. Država i pretraga sužavaju klijente. Datumi „Početak saradnje od/do“ biraju klijente prema datumu početka saradnje.', flow: ['Izaberi klijente', 'Izaberi mesec', 'Uporedi pokazatelje'], scope: 'Kod raspona početka saradnje klijenti bez tog datuma se izostavljaju. Sati tima koriste samo mesec; obaveštenja i isticanje ugovora koriste trenutno stanje cele baze.' },
-    adminRevenueTrend: { title: 'Prihod i naplata', text: 'Za svaki od poslednjih šest meseci prikazuje vrednost računa i uplate povezane sa tim računima. Završava se izabranim mesecom.', flow: ['Mesec računa', 'Vrednost i uplate', 'Poređenje 6 meseci'], scope: 'Uplate nisu grupisane po datumu priliva novca. Promena u procentima poredi vrednost računa poslednjeg i prethodnog meseca. Kada je prethodni iznos nula, nema procentualne osnovice. Važe filteri klijenata.' },
-    adminPaymentDonut: { title: 'Status naplate', text: 'Isti obračun kao na karticama iznad: naplaćeno, preostalo za naplatu i procenat pokrivene vrednosti računa.', flow: ['Pokrivena vrednost', '÷ ukupna vrednost', 'Krug naplate'], scope: 'Izabrani mesec i filteri klijenata. Uplata iznad vrednosti računa prikazuje se posebno; ne prebija dug drugih klijenata.' },
-    adminInvoiceAging: { title: 'Starost otvorenih računa', text: 'Preostali iznosi su podeljeni prema starosti: 0–7, 8–14, 15–30 i preko 30 dana. Duža traka znači veći iznos, ne veći broj računa.', flow: ['Preostali iznos', 'Starost računa', 'Zbir u grupi'], scope: 'Poslednjih 12 meseci do izabranog meseca, uz filtere klijenata. Starost prema danas: od slanja, ili od prvog dana meseca ako datum slanja nedostaje. Nije datum dospelosti.' },
-    adminTopDebtors: { title: 'Najveća otvorena dugovanja', text: 'Do pet klijenata sa najvećim zbirom preostalih računa. „Najstarije“ pokazuje starost njihovog najstarijeg otvorenog računa.', flow: ['Ostaci po klijentu', 'Najveći zbir prvo', 'Prvih 5'], scope: 'Poslednjih 12 meseci do izabranog meseca, uz filtere klijenata; arhivirani su isključeni. Klik otvara Finansije.' },
-    adminTeamUtilization: { title: 'Odstupanja kapaciteta', text: 'Upisani sati podeljeni planiranim satima. Primer: 32 h od planiranih 40 h → 80%. Uredni zaposleni su u proširivoj listi ispod.', flow: ['Upisani sati', '÷ plan × 100', 'Iskorišćenost vremena'], scope: 'Aktivni zaposleni sa planom većim od nule. Za tekući mesec do juče, za prošli mesec svi dani. Koristi sačuvani raspored, praznike i odobrena odsustva. Današnji i budući upisi ne ulaze. Uključuje sve upisane aktivnosti, ne samo rad za klijente; bez kazni i korekcija salda. Nije mera učinka po komadu.' },
-    breakdown: { title: 'Paketi i države', text: 'Ista vrednost računa kao na kartici „Fakturisano“, raspoređena prema paketu ili državi klijenta.', flow: ['Vrednost računa', 'Grupisanje klijenata', 'Zbir po grupi'], scope: 'Izabrani mesec i filteri klijenata. Ako ima više od šest grupa, manje grupe su sabrane kao „Preostale grupe“, pa se zbir ne gubi. Paket i država su trenutni podaci klijenta.' },
-    adminPackageChart: { title: 'Paketi', text: 'Zbir vrednosti računa za svaki paket. Paket preuzet iz trenutne kartice klijenta.', flow: ['Računi meseca', 'Paket klijenta', 'Zbir po paketu'], scope: 'Važe filteri klijenata. Kod više od šest grupa ostale su sabrane zajedno.' },
-    adminCountryChart: { title: 'Države', text: 'Zbir vrednosti računa prema državi klijenta. Različiti zapisi iste države, na primer Austria i Austrija, sabiraju se zajedno.', flow: ['Računi meseca', 'Država klijenta', 'Zbir po državi'], scope: 'Izabrani mesec i filteri klijenata. Država je trenutni podatak sa kartice klijenta.' },
-    adminClientGrowth: { title: 'Novi klijenti', text: 'Broj klijenata prema mesecu početka saradnje. Ovo nisu novi leadovi, novi računi niti broj potpisa.', flow: ['Datum početka saradnje', 'Mesec', 'Broj novih klijenata'], scope: 'Poslednjih šest meseci do izabranog meseca. Važe pretraga, država i raspon početka saradnje. Uključuje i sada arhivirane klijente koji su tada počeli; bez datuma se ne broje. Interni profili se ne broje.' },
-    contractExpiryList: { title: 'Ističu uskoro', text: 'Ugovori čiji datum isteka pada u narednih 30 dana. Isti spisak određuje broj na kartici u fokusu.', flow: ['Početak saradnje', '+ broj meseci ugovora', 'Datum isteka'], scope: 'Gleda današnji datum i celu bazu, nezavisno od izabranih filtera. „Ukloni“ sklanja podsetnik za taj ugovor; ne briše ugovor.' },
-    adminNotificationList: { title: 'Sva aktivna obaveštenja', text: 'Sva trenutno vidljiva administratorska obaveštenja. Broj u naslovu odgovara celoj listi, a ne samo prvih nekoliko stavki.', flow: ['Trenutna obaveštenja', 'Bez sakrivenih', 'Ceo aktivni spisak'], scope: 'Ne zavisi od izabranog meseca ili klijenta. Zahtevi za odsustvo ostaju do odluke. Privremeno sakrivena obaveštenja su u posebnom delu liste.' },
-    adminEmployeeRiskList: { title: 'Sati, saldo i kašnjenja', text: 'Za svakog aktivnog zaposlenog: upisani sati umanjeni za kazne i korekcije, plan sati, preneti saldo i broj kašnjenja. „Vidi aktivnosti“ prikazuje originalne minute rada.', flow: ['Preneti saldo', '+ rezultat meseca', 'Ukupan saldo sati'], scope: 'Izabrani mesec; filteri klijenata ne utiču. Plan u redu je za ceo mesec, dok saldo tekućeg meseca izostavlja današnji rad i plan. Odobrena odsustva smanjuju plan; Zeitausgleich ima povezano skidanje salda. Odstupanje je minus salda, višak preko mesečnog plana ili najmanje 3 kašnjenja. Ovo nije isti pokazatelj kao procenat kapaciteta.' },
-    pending: { title: 'Zahtevi koji čekaju odluku', text: 'Zahtevi zaposlenih koje administrator treba da odobri ili odbije. Ostaju vidljivi sve dok odluka nije uspešno sačuvana.', flow: ['Zaposleni podnese zahtev', 'Odluka administratora', 'Potvrđeno čuvanje'], scope: 'Trenutno stanje cele baze, bez obzira na filtere. Otvaranje objašnjenja ne odobrava niti odbija zahtev.' }
+    "adminTotalClients": {
+      "title": "Klijenti sa računom",
+      "text": "Broj klijenata koji imaju sačuvan mesečni obračun. Jedan klijent se broji jednom, čak i ako račun još nije poslat.",
+      "flow": [
+        "Sačuvan obračun",
+        "Izabrani mesec",
+        "Broj klijenata"
+      ],
+      "scope": "Važe pretraga, država i početak saradnje. Arhivirani klijenti su isključeni, kao i u Finansijama."
+    },
+    "adminMrr": {
+      "title": "Fakturisano",
+      "text": "Zbir vrednosti mesečnih računa u CRM-u, uključujući pripremljene račune koji još nisu poslati. Ovo nije dobit.",
+      "flow": [
+        "Vrednost svakog računa",
+        "Sabiranje",
+        "Ukupan iznos"
+      ],
+      "scope": "Ako iznos nije posebno sačuvan, koristi se mesečna cena klijenta, pa cena paketa. Sačuvana nula ostaje nula. Važe filteri klijenata; arhivirani su isključeni."
+    },
+    "adminPaidTotal": {
+      "title": "Naplaćeno za račune meseca",
+      "text": "Uplate povezane sa računima izabranog meseca. Uplata za septembarski račun ostaje u septembru i kada novac legne u oktobru.",
+      "flow": [
+        "Računi izabranog meseca",
+        "Povezane uplate",
+        "Naplaćen iznos"
+      ],
+      "scope": "Ovo nije promet banke po datumu uplate. Koriste se sačuvane uplate; kod starijih računa bez stavki uplate koristi se plaćeni iznos ili oznaka „Plaćeno“. Višak uplate se čuva. Važe filteri klijenata."
+    },
+    "adminUnpaidTotal": {
+      "title": "Otvorena naplata",
+      "text": "Koliko još ostaje za naplatu za izabrani mesec. Svaki račun se računa posebno: višak uplate jednog klijenta ne briše dug drugog.",
+      "flow": [
+        "Račun − njegove uplate",
+        "Najmanje nula",
+        "Zbir ostataka"
+      ],
+      "scope": "Primer: račun 100 €, uplaćeno 40 € → otvoreno 60 €. Broj klijenata se računa po preostalom iznosu, a ne samo po ručnoj oznaci statusa. Važe filteri klijenata."
+    },
+    "adminCollectionRate": {
+      "title": "Stopa naplate",
+      "text": "Koliki deo računa je plaćen. Primer: od 1.000 € računa plaćeno je 600 € → naplaćeno je 60%.",
+      "flow": [
+        "Plaćeni deo računa",
+        "÷ vrednost računa × 100",
+        "Procenat naplate"
+      ],
+      "scope": "Višak uplate ne zatvara dug drugog klijenta i ne povećava ovaj procenat. Ako nema vrednosti računa, prikazuje se 0%. Važe izabrani filteri klijenata."
+    },
+    "actionSummary": {
+      "title": "Šta treba rešiti",
+      "text": "Ovde vidiš neposlate račune, dugovanja starija od 30 dana, odstupanja radnih sati i ugovore koji uskoro ističu.",
+      "flow": [
+        "Provera podataka",
+        "Stavke koje traže pažnju",
+        "Klik za detalje"
+      ],
+      "scope": "Računi prate izabrane filtere. Sati prate izabrani mesec. Ugovori se proveravaju prema današnjem datumu."
+    },
+    "action-0": {
+      "title": "Računi koji nisu poslati",
+      "text": "Broj sačuvanih mesečnih obračuna čiji status nije „Poslat“. Račun može biti pripremljen, a još neposlat.",
+      "flow": [
+        "Izabrani mesec",
+        "Status nije „Poslat“",
+        "Broj računa"
+      ],
+      "scope": "Važe filteri klijenata i pravilo Finansija koje isključuje arhivirane. Klik na karticu otvara Finansije."
+    },
+    "action-1": {
+      "title": "Otvoreno preko 30 dana",
+      "text": "Zbir preostalih iznosa na računima starijim od 30 dana. Starost je od datuma slanja; kada on nedostaje, od prvog dana meseca računa.",
+      "flow": [
+        "Otvoreni računi",
+        "Starost preko 30 dana",
+        "Zbir ostataka"
+      ],
+      "scope": "Poslednjih 12 meseci do izabranog meseca, starost prema današnjem datumu. Ovo nije obračun ugovorenog roka plaćanja. Važe filteri klijenata."
+    },
+    "action-2": {
+      "title": "Odstupanja radnih sati",
+      "text": "Broj zaposlenih koji su upisali manje od 80% ili više od 110% planiranih sati. Na primer, 32 od planiranih 40 sati je 80%.",
+      "flow": [
+        "Upisani sati",
+        "÷ planirani sati × 100",
+        "Procenat plana"
+      ],
+      "scope": "Poredimo samo završene dane. Današnji nepotpuni dan se ne računa. Odobrena odsustva i neradni dani smanjuju plan. Ovo nije ocena kvaliteta rada."
+    },
+    "action-3": {
+      "title": "Ugovori koji ističu",
+      "text": "Broj ugovora čiji izračunati datum isteka pada od danas do narednih 30 dana, uključujući oba kraja.",
+      "flow": [
+        "Početak + trajanje ugovora",
+        "Danas do +30 dana",
+        "Broj ugovora"
+      ],
+      "scope": "Cela baza, nezavisno od meseca i filtera klijenata. Prethodno uklonjeni podsetnici se ne prikazuju."
+    },
+    "filters": {
+      "title": "Kako rade filteri",
+      "text": "Mesec bira račune i sate. Država i pretraga sužavaju klijente. Datumi „Početak saradnje od/do“ biraju klijente prema datumu početka saradnje.",
+      "flow": [
+        "Izaberi klijente",
+        "Izaberi mesec",
+        "Uporedi pokazatelje"
+      ],
+      "scope": "Kod raspona početka saradnje klijenti bez tog datuma se izostavljaju. Sati tima koriste samo mesec; obaveštenja i isticanje ugovora koriste trenutno stanje cele baze."
+    },
+    "adminRevenueTrend": {
+      "title": "Računi i uplate kroz mesece",
+      "text": "Za svaki mesec vidiš vrednost računa i koliko je za njih uplaćeno. Prikaz obuhvata šest meseci do izabranog meseca.",
+      "flow": [
+        "Računi za mesec",
+        "Njihova vrednost i uplate",
+        "Poređenje meseci"
+      ],
+      "scope": "Uplata pripada mesecu računa, čak i ako novac stigne kasnije. Procenat poredi poslednji i prethodni mesec. Ako je prethodni iznos bio nula, procenat promene ne može da se izračuna."
+    },
+    "adminPaymentDonut": {
+      "title": "Koliko je plaćeno, a koliko ostaje",
+      "text": "Isti iznosi kao na karticama iznad: uplate i ostatak za naplatu. Krug pokazuje procenat plaćene vrednosti računa.",
+      "flow": [
+        "Plaćeni deo računa",
+        "÷ ukupna vrednost",
+        "Procenat naplate"
+      ],
+      "scope": "Prikazuje izabrani mesec i klijente. Višak uplate preko vrednosti jednog računa prikazuje se odvojeno i ne umanjuje tuđi dug."
+    },
+    "adminInvoiceAging": {
+      "title": "Starost otvorenih računa",
+      "text": "Preostali iznosi su podeljeni prema starosti: 0–7, 8–14, 15–30 i preko 30 dana. Duža traka znači veći iznos, ne veći broj računa.",
+      "flow": [
+        "Preostali iznos",
+        "Starost računa",
+        "Zbir u grupi"
+      ],
+      "scope": "Poslednjih 12 meseci do izabranog meseca, uz filtere klijenata. Starost prema danas: od slanja, ili od prvog dana meseca ako datum slanja nedostaje. Nije datum dospelosti."
+    },
+    "adminTopDebtors": {
+      "title": "Najveća otvorena dugovanja",
+      "text": "Do pet klijenata sa najvećim zbirom preostalih računa. „Najstarije“ pokazuje starost njihovog najstarijeg otvorenog računa.",
+      "flow": [
+        "Ostaci po klijentu",
+        "Najveći zbir prvo",
+        "Prvih 5"
+      ],
+      "scope": "Poslednjih 12 meseci do izabranog meseca, uz filtere klijenata; arhivirani su isključeni. Klik otvara Finansije."
+    },
+    "adminTeamUtilization": {
+      "title": "Upisani sati i plan",
+      "text": "Pokazuje koliko je sati zaposleni upisao u odnosu na plan. Primer: 32 od 40 planiranih sati → 80%.",
+      "flow": [
+        "Upisani sati",
+        "÷ planirani sati × 100",
+        "Koliko plana je upisano"
+      ],
+      "scope": "Za tekući mesec računamo dane do juče; za prošli mesec sve dane. Odobrena odsustva i neradni dani smanjuju plan. Uključene su sve aktivnosti. Kazne i oduzimanje prekovremenih nisu radno vreme i ne menjaju ovaj procenat."
+    },
+    "breakdown": {
+      "title": "Paketi i države",
+      "text": "Ista vrednost računa kao na kartici „Fakturisano“, raspoređena prema paketu ili državi klijenta.",
+      "flow": [
+        "Vrednost računa",
+        "Grupisanje klijenata",
+        "Zbir po grupi"
+      ],
+      "scope": "Izabrani mesec i filteri klijenata. Ako ima više od šest grupa, manje grupe su sabrane kao „Preostale grupe“, pa se zbir ne gubi. Paket i država su trenutni podaci klijenta."
+    },
+    "adminPackageChart": {
+      "title": "Paketi",
+      "text": "Zbir vrednosti računa za svaki paket. Paket preuzet iz trenutne kartice klijenta.",
+      "flow": [
+        "Računi meseca",
+        "Paket klijenta",
+        "Zbir po paketu"
+      ],
+      "scope": "Važe filteri klijenata. Kod više od šest grupa ostale su sabrane zajedno."
+    },
+    "adminCountryChart": {
+      "title": "Države",
+      "text": "Zbir vrednosti računa prema državi klijenta. Različiti zapisi iste države, na primer Austria i Austrija, sabiraju se zajedno.",
+      "flow": [
+        "Računi meseca",
+        "Država klijenta",
+        "Zbir po državi"
+      ],
+      "scope": "Izabrani mesec i filteri klijenata. Država je trenutni podatak sa kartice klijenta."
+    },
+    "adminClientGrowth": {
+      "title": "Novi klijenti",
+      "text": "Broj klijenata prema mesecu početka saradnje. Ovo nisu novi leadovi, novi računi niti broj potpisa.",
+      "flow": [
+        "Datum početka saradnje",
+        "Mesec",
+        "Broj novih klijenata"
+      ],
+      "scope": "Poslednjih šest meseci do izabranog meseca. Važe pretraga, država i raspon početka saradnje. Uključuje i sada arhivirane klijente koji su tada počeli; bez datuma se ne broje. Interni profili se ne broje."
+    },
+    "contractExpiryList": {
+      "title": "Ističu uskoro",
+      "text": "Ugovori čiji datum isteka pada u narednih 30 dana. Isti spisak određuje broj na kartici u fokusu.",
+      "flow": [
+        "Početak saradnje",
+        "+ broj meseci ugovora",
+        "Datum isteka"
+      ],
+      "scope": "Gleda današnji datum i celu bazu, nezavisno od izabranih filtera. „Ukloni“ sklanja podsetnik za taj ugovor; ne briše ugovor."
+    },
+    "adminNotificationList": {
+      "title": "Sva aktivna obaveštenja",
+      "text": "Sva trenutno vidljiva administratorska obaveštenja. Broj u naslovu odgovara celoj listi, a ne samo prvih nekoliko stavki.",
+      "flow": [
+        "Trenutna obaveštenja",
+        "Bez sakrivenih",
+        "Ceo aktivni spisak"
+      ],
+      "scope": "Ne zavisi od izabranog meseca ili klijenta. Zahtevi za odsustvo ostaju do odluke. Privremeno sakrivena obaveštenja su u posebnom delu liste."
+    },
+    "adminEmployeeRiskList": {
+      "title": "Sati i kašnjenja zaposlenih",
+      "text": "Za svakog zaposlenog vidiš sate, plan, višak ili manjak sati i broj kašnjenja. „Vidi aktivnosti“ otvara originalne minute koje je zaposleni upisao.",
+      "flow": [
+        "Preneti višak ili manjak",
+        "+ rezultat ovog meseca",
+        "Ukupno stanje sati"
+      ],
+      "scope": "Stanje sati uključuje prenete sate, kazne i korišćenje prekovremenih. Današnji rad još ne ulazi u stanje tekućeg meseca, dok je plan u redu za ceo mesec. Za proveru se izdvajaju manjak sati, sati preko mesečnog plana ili najmanje 3 kašnjenja."
+    },
+    "pending": {
+      "title": "Zahtevi koji čekaju odluku",
+      "text": "Zahtevi zaposlenih koje administrator treba da odobri ili odbije. Ostaju vidljivi sve dok odluka nije uspešno sačuvana.",
+      "flow": [
+        "Zaposleni podnese zahtev",
+        "Odluka administratora",
+        "Potvrđeno čuvanje"
+      ],
+      "scope": "Trenutno stanje cele baze, bez obzira na filtere. Otvaranje objašnjenja ne odobrava niti odbija zahtev."
+    },
+    "waFilters": {
+      "title": "Kako biraš podatke",
+      "text": "Izaberi period, zaposlenog, aktivnost ili klijenta. „Šta brojimo“ bira da li porediš scenarije, klipove, storije ili drugi broj komada.",
+      "flow": [
+        "Izaberi period",
+        "Izaberi čiji i koji rad",
+        "Pogledaj sate i proseke"
+      ],
+      "scope": "„Šta brojimo“ menja prosek po komadu. Ako želiš i sate samo za tu vrstu rada, izaberi Aktivnost. Stari zbirni unosi predstavljaju zbir sati za mesec, a ne pojedinačne aktivnosti; uključuješ ih posebnim poljem. Pozicije su iz sadašnjeg profila zaposlenog."
+    },
+    "waTotal": {
+      "title": "Ukupno vreme u periodu",
+      "text": "Svi minuti sačuvanih upisa koji odgovaraju filterima, podeljeni sa 60. Primer: 150 minuta → 2,5 sata.",
+      "flow": [
+        "Minuti izabranih upisa",
+        "÷ 60",
+        "Sati"
+      ],
+      "scope": "Računa datum rada, uključujući današnje upise. Nije saldo prekovremenih: kazne i skidanje salda za Zeitausgleich nisu radni minuti. Rad bez količine ulazi u sate."
+    },
+    "waAverageEntry": {
+      "title": "Prosečno vreme po unosu",
+      "text": "Svi minuti podeljeni brojem unosa rada. Primer: 120 minuta kroz 3 unosa → 40 minuta po unosu.",
+      "flow": [
+        "Ukupni minuti",
+        "÷ broj unosa",
+        "Minuta po unosu"
+      ],
+      "scope": "U jednom unosu može biti više klipova ili scenarija. Zato ovo nije prosek izrade jednog komada. Važe izabrani period, zaposleni, aktivnost i klijent."
+    },
+    "waAverageUnit": {
+      "title": "Prosečno vreme po komadu",
+      "text": "Vreme za završen posao podeljeno brojem urađenih komada. Primer: 120 minuta za 4 klipa → 30 minuta po klipu.",
+      "flow": [
+        "Vreme završenog posla",
+        "÷ broj urađenih komada",
+        "Minuta po komadu"
+      ],
+      "scope": "Izaberi šta brojimo, na primer klipove. Ako je isti posao rađen više dana i ti unosi su povezani, sabira se celo vreme; period bira dan završetka. Bez upisane količine i za nezavršen posao nema ovog proseka. Crtica znači da podataka nema, a ne da je vreme nula."
+    },
+    "waCoverage": {
+      "title": "Unosi sa količinom",
+      "text": "Koliko unosa ima popunjene podatke o broju komada. Primer: popunjeno je 8 od 10 unosa → 80%.",
+      "flow": [
+        "Unosi sa podacima o količini",
+        "÷ unosi koji traže količinu",
+        "Procenat popunjenosti"
+      ],
+      "scope": "Brojimo samo aktivnosti za koje se traži količina ili je ona već zabeležena. Kod starijih unosa i oznaka da posao još traje računa se kao popunjen podatak. Ovo nije procenat završenog rada."
+    },
+    "waQuantitySummary": {
+      "title": "Koliko je urađeno",
+      "text": "Broj urađenih scenarija, klipova, storija i drugih komada. Svaka vrsta se prikazuje odvojeno, uz prosečno vreme po komadu.",
+      "flow": [
+        "Završeni poslovi",
+        "Sabiranje iste vrste komada",
+        "Broj komada i prosek"
+      ],
+      "scope": "Računa se datum završetka posla. Za posao rađen više dana sabira se povezano vreme. Ako količina nije upisana, ne nagađamo je. „Još je malo podataka“ znači da je završeno manje od pet poslova."
+    },
+    "waTrend": {
+      "title": "Vreme kroz period",
+      "text": "Svaka kolona prikazuje zbir sati upisanih tog dana. Viša kolona znači više upisanog vremena.",
+      "flow": [
+        "Upisi jednog datuma",
+        "Zbir minuta ÷ 60",
+        "Sati tog dana"
+      ],
+      "scope": "Važe svi filteri rada i datuma. Dani bez upisa se ne crtaju. Ne pokazuje završene komade niti planirani kapacitet."
+    },
+    "waCategories": {
+      "title": "Aktivnosti po kategoriji",
+      "text": "Sati iz izabranog perioda sabrani po kategoriji aktivnosti. Prikazuje do sedam kategorija sa najviše vremena.",
+      "flow": [
+        "Upisani minuti",
+        "Kategorija aktivnosti",
+        "Sati po kategoriji"
+      ],
+      "scope": "Koristi sadašnji katalog aktivnosti, a sačuvanu kategoriju ako aktivnost više nije u katalogu. „Druge aktivnosti“ je prikaz kategorije Ostalo. Lista je top 7, pa ne mora obuhvatati sve sate."
+    },
+    "waComparison": {
+      "title": "Poređenje vremena rada",
+      "text": "Poredi sate, broj unosa, urađene komade i prosečno vreme. Dugmad iznad tabele biraju poređenje po zaposlenom, aktivnosti, klijentu ili poziciji.",
+      "flow": [
+        "Izabrani podaci",
+        "Poređaj po zaposlenom ili klijentu",
+        "Uporedi vreme i količinu"
+      ],
+      "scope": "Za smisleno poređenje biraj istu aktivnost i istu vrstu komada. Sati prate datum rada, a prosek po komadu datum završetka i celo povezano vreme. Različita složenost posla i kvalitet nisu zasebno izmereni."
+    },
+    "waClients": {
+      "title": "Gde odlazi najviše vremena",
+      "text": "Do sedam klijenata sa najvećim zbirom upisanih sati u izabranom periodu.",
+      "flow": [
+        "Minuti po klijentu",
+        "Najviše sati prvo",
+        "Prvih 7"
+      ],
+      "scope": "Važe filteri rada i datuma. „Bez klijenta“ znači da stari upis nema zabeleženog klijenta. Lista nije prikaz svih klijenata, niti procenat profitabilnosti."
+    },
+    "waMethod": {
+      "title": "Kako se računa prosek",
+      "text": "Prosek po unosu govori koliko traje jedan unos rada. Prosek po komadu govori koliko vremena odlazi na jedan urađen scenario, klip ili drugi komad.",
+      "flow": [
+        "Izaberi istu aktivnost",
+        "Proveri broj završenih poslova",
+        "Uporedi proseke"
+      ],
+      "scope": "Bez upisane količine nema proseka po komadu. Ako je završeno manje od pet poslova, još je malo podataka za poređenje. Uzmi u obzir i složenost i kvalitet rada."
+    },
+    "waDetails": {
+      "title": "Unosi rada u izabranom periodu",
+      "text": "Ovde vidiš pojedinačne unose iz kojih se računaju sati: datum, zaposlenog, aktivnost, klijenta, minute i broj komada.",
+      "flow": [
+        "Sačuvani unosi rada",
+        "Izabrani period i filteri",
+        "Redovi u tabeli"
+      ],
+      "scope": "Prikazuje se po 30 unosa na strani. Broj u naslovu obuhvata sve izabrane unose. „Preuzmi tabelu“ preuzima sve njih, ne samo otvorenu stranu. Prosek po komadu može uključiti i raniji povezani rad na istom poslu."
+    },
+    "waSettings": {
+      "title": "Za koje aktivnosti tražimo količinu",
+      "text": "Izaberi postojeću aktivnost i šta brojimo: scenarije, klipove, snimljene reelove, zadatke ili druge komade.",
+      "flow": [
+        "Izaberi aktivnost",
+        "Izaberi šta brojimo",
+        "Važi za nove poslove"
+      ],
+      "scope": "Nazivi aktivnosti se ne menjaju. Starim unosima ne dodajemo količine. Ranije započeti povezani poslovi zadržavaju vrstu komada koja je tada izabrana."
+    },
+    "waNameColumn": {
+      "title": "Koga ili šta poredimo",
+      "text": "Naziv zaposlenog, aktivnosti, klijenta ili pozicije, prema izabranom dugmetu iznad tabele.",
+      "flow": [
+        "Izaberi poređenje",
+        "Isti zaposleni, aktivnost ili klijent",
+        "Jedan red tabele"
+      ],
+      "scope": "Pozicije su iz sadašnjih profila. Zaposleni sa više pozicija pojavljuje se jednom pod njihovom kombinacijom, pa se njegovi sati ne dupliraju."
+    },
+    "waMinutesColumn": {
+      "title": "Vreme grupe",
+      "text": "Zbir minuta svih filtriranih upisa u ovom redu, prikazan u satima.",
+      "flow": [
+        "Minuti upisa u grupi",
+        "÷ 60",
+        "Sati grupe"
+      ],
+      "scope": "Računa datum rada u izabranom periodu. Uključuje i upise bez zabeležene količine."
+    },
+    "waEntriesColumn": {
+      "title": "Broj unosa rada",
+      "text": "Koliko je puta sačuvano vreme rada. Jedan unos može sadržati jedan ili više završenih komada.",
+      "flow": [
+        "Sačuvani unosi",
+        "Izabrani period i posao",
+        "Broj unosa"
+      ],
+      "scope": "Broje se unosi sa ispravno upisanim vremenom većim od nule."
+    },
+    "waQuantityColumn": {
+      "title": "Urađeni komadi",
+      "text": "Zbir upisanih završenih scenarija, klipova ili drugih komada. Različite vrste se ne sabiraju zajedno.",
+      "flow": [
+        "Upisane količine",
+        "Ista vrsta komada",
+        "Ukupan broj"
+      ],
+      "scope": "Period bira dan završetka. Ako količina nije zabeležena, prikazuje se crtica. Broj unosa nije broj urađenih komada."
+    },
+    "waMedianColumn": {
+      "title": "Tipično vreme po komadu",
+      "text": "Poređamo prosečna vremena po komadu od najkraćeg do najdužeg i uzmemo vrednost iz sredine. Primer: 10, 20 i 90 minuta → tipično vreme je 20 minuta.",
+      "flow": [
+        "Prosek po komadu za svaki posao",
+        "Poređaj od kraćeg do dužeg",
+        "Uzmi vrednost iz sredine"
+      ],
+      "scope": "Ako su dve vrednosti u sredini, uzmemo njihov prosek. Svaki posao ima istu težinu bez obzira na broj komada. Za običan prosek svih minuta i komada koristi kolonu „Min / komad“. Izaberi šta brojimo."
+    }
   };
-  Object.assign(definitions, {
-    waFilters: { title: 'Filteri analitike', text: 'Datumi biraju dane kada je rad upisan. Zaposleni, pozicija, kategorija, aktivnost i klijent sužavaju evidenciju rada.', flow: ['Izaberi period i posao', 'Izdvoji upise', 'Izračunaj prikaz'], scope: 'Pozicije su iz sadašnjeg profila. Jedinica bira samo prosek po komadu i završene količine; sama ne sužava sate. Za sate određene vrste rada izaberi i Aktivnost. Istorijski mesečni prenosi su isključeni dok ih ne uključiš.' },
-    waTotal: { title: 'Ukupno vreme u periodu', text: 'Svi minuti sačuvanih upisa koji odgovaraju filterima, podeljeni sa 60. Primer: 150 minuta → 2,5 sata.', flow: ['Minuti izabranih upisa', '÷ 60', 'Sati'], scope: 'Računa datum rada, uključujući današnje upise. Nije saldo prekovremenih: kazne i skidanje salda za Zeitausgleich nisu radni minuti. Rad bez količine ulazi u sate.' },
-    waAverageEntry: { title: 'Prosek po upisu', text: 'Ukupni minuti podeljeni brojem sačuvanih upisa. Primer: 120 minuta kroz 3 upisa → 40 minuta po upisu.', flow: ['Ukupni minuti', '÷ broj upisa', 'Minuta po upisu'], scope: 'Jedan upis može biti jedan klip ili više njih. Zato ovo nije prosečno vreme izrade klipa ili scenarija. Važe filteri perioda i rada.' },
-    waAverageUnit: { title: 'Prosek po završenom komadu', text: 'Minuti rada sa zabeleženom završenom količinom podeljeni brojem komada iste jedinice. Primer: 120 minuta za 4 klipa → 30 minuta po klipu.', flow: ['Vreme završenog posla', '÷ završeni komadi', 'Minuta po komadu'], scope: 'Izaberi jedinicu. Kod starijih povezanih serija sabiraju se i raniji dani rada, a period bira datum završetka. Upisi bez količine i rad u toku ne ulaze. Crtica znači da nema dovoljno tih podataka, ne da je prosek nula.' },
-    waCoverage: { title: 'Podaci o količini', text: 'Koliki deo relevantnih upisa ima ispravno povezanu količinu ili status rada. Primer: 8 od 10 upisa → 80%.', flow: ['Upisi sa količinom/statusom', '÷ relevantni upisi × 100', 'Pokrivenost evidencije'], scope: 'Relevantni su upisi aktivnosti za koje se prati količina ili koji već imaju povezanu količinu. Nije procenat završenih poslova: i pravilno označen rad u toku je pokriven. Stare količine se ne izmišljaju.' },
-    waQuantitySummary: { title: 'Završene količine', text: 'Broj završenih scenarija, klipova i drugih jedinica prikazuje se odvojeno. Za svaku jedinicu prikazan je njen prosek vremena.', flow: ['Završeni poslovi', 'Sabiranje iste jedinice', 'Količina i prosek'], scope: 'Klipovi se ne sabiraju sa scenarijima. Period bira datum završetka; kod povezanih serija vreme može uključivati ranije dane. Nezabeležene količine ne ulaze. Mali uzorak znači manje od pet završenih poslova/serija.' },
-    waTrend: { title: 'Vreme kroz period', text: 'Svaka kolona prikazuje zbir sati upisanih tog dana. Viša kolona znači više upisanog vremena.', flow: ['Upisi jednog datuma', 'Zbir minuta ÷ 60', 'Sati tog dana'], scope: 'Važe svi filteri rada i datuma. Dani bez upisa se ne crtaju. Ne pokazuje završene komade niti planirani kapacitet.' },
-    waCategories: { title: 'Aktivnosti po kategoriji', text: 'Sati iz izabranog perioda sabrani po kategoriji aktivnosti. Prikazuje do sedam kategorija sa najviše vremena.', flow: ['Upisani minuti', 'Kategorija aktivnosti', 'Sati po kategoriji'], scope: 'Koristi sadašnji katalog aktivnosti, a sačuvanu kategoriju ako aktivnost više nije u katalogu. „Druge aktivnosti“ je prikaz kategorije Ostalo. Lista je top 7, pa ne mora obuhvatati sve sate.' },
-    waComparison: { title: 'Pregled proseka', text: 'Isti podaci grupisani po zaposlenom, aktivnosti, klijentu ili poziciji. Dugmad menjaju grupisanje, a nazivi kolona menjaju redosled.', flow: ['Izabrani upisi', 'Grupisanje', 'Sati, upisi i proseci'], scope: 'Za pošteno poređenje biraj istu aktivnost i jedinicu. Sati prate datum rada; prosek po komadu prati datum završetka i sav povezani rad. Razlika u složenosti i kvalitetu posla nije automatski izmerena.' },
-    waClients: { title: 'Gde odlazi najviše vremena', text: 'Do sedam klijenata sa najvećim zbirom upisanih sati u izabranom periodu.', flow: ['Minuti po klijentu', 'Najviše sati prvo', 'Prvih 7'], scope: 'Važe filteri rada i datuma. „Bez klijenta“ znači da stari upis nema zabeleženog klijenta. Lista nije prikaz svih klijenata, niti procenat profitabilnosti.' },
-    waMethod: { title: 'Kako čitati podatke', text: 'Prosek po upisu meri veličinu upisa. Prosek po komadu meri vreme za zabeleženu završenu količinu. Ta dva pokazatelja imaju različit osnov.', flow: ['Proveri aktivnost', 'Proveri jedinicu i uzorak', 'Uporedi proseke'], scope: 'Bez količine ne možemo znati koliko je scenarija ili klipova urađeno. Kod manje od pet završenih poslova/serija zaključak je manje pouzdan. Ne merimo zasebno složenost niti kvalitet svakog komada.' },
-    waDetails: { title: 'Upisi u izabranom periodu', text: 'Izvorna evidencija iz koje se računaju sati i prosek po upisu. Prikazuje datum, zaposlenog, aktivnost, klijenta, minute i povezanu količinu.', flow: ['Sačuvani upis', 'Filteri', 'Red u tabeli'], scope: 'Po 30 redova na strani. Broj u naslovu je ceo filtrirani spisak. CSV izvozi sve filtrirane upise, ne samo otvorenu stranu. Prosek po komadu može uključiti i raniji rad iz iste završene serije.' },
-    waSettings: { title: 'Podešavanja količine', text: 'Određuje koja se postojeća aktivnost meri scenarijima, klipovima, snimljenim reelovima, zadacima ili drugom jedinicom.', flow: ['Postojeća aktivnost', 'Jedinica količine', 'Novi unosi rada'], scope: 'Ne menja nazive aktivnosti i ne dopisuje količine starim upisima. Već započeti povezani poslovi zadržavaju svoju jedinicu. Samo otvaranje ovog objašnjenja ništa ne čuva.' },
-    waNameColumn: { title: 'Naziv grupe', text: 'Zaposleni, aktivnost, klijent ili pozicija, prema izabranom grupisanju iznad tabele.', flow: ['Izabrano grupisanje', 'Isti naziv / identitet', 'Jedan red'], scope: 'Pozicije su iz sadašnjih profila. Zaposleni sa više pozicija prikazan je pod njihovom kombinacijom, bez dupliranja njegovih sati.' },
-    waMinutesColumn: { title: 'Vreme grupe', text: 'Zbir minuta svih filtriranih upisa u ovom redu, prikazan u satima.', flow: ['Minuti upisa u grupi', '÷ 60', 'Sati grupe'], scope: 'Računa datum rada u izabranom periodu. Uključuje i upise bez zabeležene količine.' },
-    waEntriesColumn: { title: 'Upisi', text: 'Broj sačuvanih evidencija rada u grupi. Jedan upis nije isto što i jedan završen komad.', flow: ['Sačuvani upisi', 'Filteri i grupa', 'Broj upisa'], scope: 'Računa upise sa pozitivnim, ispravnim minutima u izabranom periodu.' },
-    waQuantityColumn: { title: 'Završeni komadi', text: 'Zbir zabeleženih završenih količina u grupi, odvojeno za svaku jedinicu.', flow: ['Završene količine', 'Ista jedinica', 'Zbir komada'], scope: 'Period bira datum završetka. Ako ništa nije zabeleženo, prikazuje se crtica. Ne pretvaramo broj upisa u broj komada.' },
-    waMedianColumn: { title: 'Medijana po komadu', text: 'Srednja vrednost proseka završenih poslova/serija. Primer proseka 10, 20 i 90 minuta → medijana je 20 minuta.', flow: ['Prosek svake serije', 'Poređaj od manjeg', 'Srednja vrednost'], scope: 'Kod parnog broja uzima se prosek dve srednje vrednosti. Svaka serija ima istu težinu; nije medijana vremena pojedinačnih klipova jer to vreme ne beležimo zasebno. Potrebna je izabrana jedinica.' }
-  });
   if (typeof module !== 'undefined' && module.exports) module.exports = definitions;
   if (typeof document === 'undefined') return;
   let panel, trigger, pinned = false, timer, restoringFocus = false;

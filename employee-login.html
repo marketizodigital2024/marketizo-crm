@@ -310,15 +310,15 @@
           <section class="panel">
             <div class="panel-head">
               <div>
-                <p class="eyebrow">Lider pregled</p>
+                <p class="eyebrow">Pregled tima</p>
                 <h2>1:1 sastanci</h2>
               </div>
               <span id="leaderMeetingsUpdated">podaci uživo</span>
             </div>
-            <p class="muted">Pregled beleški sa 1:1 sastanaka zaposlenih koji su ispod tebe.</p>
+            <p class="muted">Pregled beleški sa 1:1 sastanaka zaposlenih iz tvog tima.</p>
             <div class="leader-activity-filter">
               <label>Zaposleni
-                <select id="leaderMeetingEmployee"><option value="">Svi zaposleni ispod mene</option></select>
+                <select id="leaderMeetingEmployee"><option value="">Svi zaposleni iz mog tima</option></select>
               </label>
               <label>Datum sastanka
                 <input id="leaderMeetingDate" type="date" />
@@ -339,7 +339,7 @@
         <section class="client-tab" id="employeeReportsTab">
           <section class="panel" id="clientWeeklyLeaderPanel" hidden>
             <div class="panel-head"><div><p class="eyebrow">Priprema za utorak</p><h2>Nedeljni pregled klijenata</h2></div><label>Nedelja <select id="clientWeeklyPeriod" aria-label="Nedelja pregleda klijenata"></select></label></div>
-            <p class="muted">Ponedeljkom od 12h · prethodna nedelja · klijenti iz ClickUp raspodele. Pozitivno, negativno i potrebna pomoć.</p>
+            <p class="muted">Ponedeljkom od 12h zaposleni pišu kako je protekla prethodna nedelja za njihove klijente: šta je dobro, šta nije dobro i za šta im treba pomoć.</p>
             <p id="clientWeeklyTeamStatus" role="status"></p><div id="clientWeeklyTeamList"></div><details><summary>Aktuelna ClickUp raspodela</summary><p id="clientWeeklyAssignmentStatus" class="muted"></p><div id="clientWeeklyAssignmentList"></div></details>
           </section>
           <section class="panel weekly-report-panel">
@@ -360,7 +360,7 @@
           <section class="panel">
             <div class="panel-head">
               <div>
-                <p class="eyebrow">Lider pregled</p>
+                <p class="eyebrow">Pregled tima</p>
                 <h2>Izveštaji zaposlenih</h2>
               </div>
               <span id="leaderLiveReportUpdated">podaci uživo</span>
@@ -371,7 +371,7 @@
                 <input id="leaderLiveReportDate" type="date" />
               </label>
               <label>Zaposleni
-                <select id="leaderLiveReportEmployee"><option value="">Svi zaposleni ispod mene</option></select>
+                <select id="leaderLiveReportEmployee"><option value="">Svi zaposleni iz mog tima</option></select>
               </label>
               <button id="leaderLiveReportToday" class="secondary-button" type="button">Danas</button>
               <strong id="leaderLiveReportSummary">0 aktivnosti</strong>
@@ -391,7 +391,7 @@
             <div class="panel-head">
               <div>
                 <p class="eyebrow">Kalendar odsustva</p>
-                <h2>Ko je na odmoru</h2>
+                <h2>Ko je odsutan</h2>
               </div>
               <span id="portalCalendarSummary">po mesecu</span>
             </div>
@@ -412,7 +412,7 @@
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">Unos sati</p>
-                  <h2>Dodaj radni dan</h2>
+                  <h2>Dodaj vreme rada</h2>
                 </div>
               </div>
               <form id="portalHoursForm" class="admin-form">
@@ -427,7 +427,7 @@
                   </label>
                   <label>Klijent (obavezno za rad)<select id="portalClientSelect" name="clientId" required aria-describedby="portalClientRequirement"><option value="">Izaberi klijenta</option></select></label>
                   <p id="portalClientRequirement">Za rad za firmu izaberi Marketizo Digital. Pauza i aktivnosti iz kategorije Interno ne zahtevaju klijenta.</p>
-                  <label>Minuta<input name="minutes" type="number" min="1" max="960" step="1" value="60" required /></label>
+                  <label>Vreme (u minutima)<input name="minutes" type="number" min="1" max="960" step="1" value="60" required /></label>
                   <label class="span-2">Napomena
                     <textarea name="note" rows="5" placeholder="Opciono: rezultat ili detalj aktivnosti."></textarea>
                   </label>
@@ -569,7 +569,7 @@
           <div><p class="eyebrow">Četvrtak · priprema za petak</p><h2>Pošalji nedeljni upitnik timu</h2></div>
           <button id="closeWeeklySendDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
         </div>
-        <p>Upitnik će biti poslat svim aktivnim zaposlenima koji su dodeljeni tebi. Popunjavanje je obavezno do kraja radnog vremena u četvrtak. Obavezni podsetnik se zatvara tek kada je slanje potvrđeno.</p>
+        <p>Upitnik će biti poslat svim aktivnim zaposlenima koji su dodeljeni tebi. Zaposleni treba da ga popune do kraja radnog vremena u četvrtak. Ovaj prozor se zatvara kada je upitnik uspešno poslat.</p>
         <div class="modal-actions"><button id="confirmSendWeeklyQuestionnaire" class="primary-button" type="button">Pošalji</button></div>
       </section>
     </dialog>
@@ -631,7 +631,7 @@
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-simple-quantity"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="employee-portal.js?v=20261031-weekly-receipts"></script>
+    <script src="employee-portal.js?v=20261031-plain-language-1"></script>
     <script src="client-weekly-reports.js?v=20261031-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
   <script src="questionnaire-nav.js?v=20261020-1" defer></script>
