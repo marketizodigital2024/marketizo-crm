@@ -76,8 +76,9 @@ module.exports = async function handler(req, res) {
     const document = JSON.parse(await new Response(downloaded.stream).text());
     if (!validBackup(document)) return send(res, 422, { ok: false, error: "Backup nije prošao proveru strukture." });
 
-    if(document.workProductionRequired && !production.verifyDocument(document)) return send(res,422,{ok:false,error:"Backup nije prošao proveru kontrolnog zbira."});
-    if(document.systemDomainsRequired && (!system.valid(document.systemDomains)||!production.verifyDocument(document))) return send(res,422,{ok:false,error:"Backup dodatnih domena nije potvrđen."});
+    const integrityVerified = production.verifyDocument(document);
+    if(document.workProductionRequired && !integrityVerified) return send(res,422,{ok:false,error:"Backup nije prošao proveru kontrolnog zbira."});
+    if(document.systemDomainsRequired && (!system.valid(document.systemDomains)||!integrityVerified)) return send(res,422,{ok:false,error:"Backup dodatnih domena nije potvrđen."});
     const systemCounts = system.summary(document.systemDomains);
     const productionCounts = production.summary(document.workProduction);
     if(document.workProductionRequired && !productionCounts.included) return send(res,422,{ok:false,error:"Backup nema obavezne podatke o količini."});

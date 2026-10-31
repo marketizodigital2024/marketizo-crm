@@ -1382,7 +1382,7 @@ function invoiceAmount(client, monthKey = selectedMonthKey()) {
 
 function groupInvoiceSum(clients, field, monthKey) {
   return clientsForInvoiceMonth(clients, monthKey).reduce((totals, client) => {
-    const key = client[field] || "Ostalo";
+    const key = field === "country" ? dashboardCountryLabel(client.country) : client[field] || "Ostalo";
     totals[key] = (totals[key] || 0) + invoiceAmount(client, monthKey);
     return totals;
   }, {});
@@ -1985,6 +1985,10 @@ function visibleClients() {
 function byCountry(client) {
   if (countryFilter === "all") return true;
   const aliases = {
+    at: "austrija",
+    de: "nemačka",
+    rs: "srbija",
+    hr: "hrvatska",
     austria: "austrija",
     österreich: "austrija",
     austrija: "austrija",
@@ -2288,7 +2292,7 @@ function renderModernBars(target, entries, formatter) {
 }
 
 function dashboardCountryLabel(value) {
-  const labels = { austria: "Austrija", österreich: "Austrija", austrija: "Austrija", germany: "Nemačka", deutschland: "Nemačka", nemačka: "Nemačka", serbia: "Srbija", srbija: "Srbija", croatia: "Hrvatska", hrvatska: "Hrvatska" };
+  const labels = { at: "Austrija", de: "Nemačka", rs: "Srbija", hr: "Hrvatska", austria: "Austrija", österreich: "Austrija", austrija: "Austrija", germany: "Nemačka", deutschland: "Nemačka", nemačka: "Nemačka", serbia: "Srbija", srbija: "Srbija", croatia: "Hrvatska", hrvatska: "Hrvatska" };
   return labels[String(value || "").trim().toLowerCase()] || String(value || "").trim() || "Bez države";
 }
 

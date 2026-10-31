@@ -19,8 +19,13 @@ const MONTHLY_ISSUED='1wkk-iEAkLnqtYMDAgc3RXCkqCH1fnVd_';
 function monthlyCall_(body,original){
  const o={headers:{Authorization:'Bearer '+ScriptApp.getIdentityToken()},muteHttpExceptions:true};
  if(body){o.method='post';o.contentType='application/json';o.payload=JSON.stringify(body);}
- const r=UrlFetchApp.fetch('https://app.marketizo.com/api/finance-monthly-documents'+'?month='+encodeURIComponent(MONTHLY_MONTH)+(original?'&original='+encodeURIComponent(original):''),o),d=JSON.parse(r.getContentText());
- if(r.getResponseCode()!==200||!d.ok)throw Error(d.error||'Evidencija nije potvrđena.');return d;
+ for(let attempt=0;attempt<3;attempt++){
+  const r=UrlFetchApp.fetch('https://app.marketizo.com/api/finance-monthly-documents'+'?month='+encodeURIComponent(MONTHLY_MONTH)+(original?'&original='+encodeURIComponent(original):''),o);let d;try{d=JSON.parse(r.getContentText());}catch{d={error:'Evidencija nije dostupna.'};}
+  if(r.getResponseCode()===200&&d.ok)return d;
+  const transient=[429,502,503,504].includes(r.getResponseCode())||/Online baza nije odgovorila na vreme|Evidencija je zauzeta/.test(d.error||'');
+  if(!transient||attempt===2)throw Error(d.error||'Evidencija nije potvrđena.');Utilities.sleep(750*(attempt+1));
+ }
+
 }
 function monthlyDrive_(path,options){
  const o=options||{};o.headers={Authorization:'Bearer '+ScriptApp.getOAuthToken()};o.muteHttpExceptions=true;
@@ -90,7 +95,7 @@ function collectMonthInvoices_(month){
  }
  if(account==='office@marketizo.com')for(const f of monthlyList_("'"+MONTHLY_ISSUED+"' in parents")){
   if(!/^Rechnung[_ ]*\d+[_ ].+\.(pdf|docx)$/i.test(f.name)||Number(f.size)>1500000)continue;
-  const key='d:'+f.id+':'+f.modifiedTime;if(done[key])continue;if(Date.now()>until||count>=25){pending=true;break;}
+  const key='d:'+f.id+':'+f.modifiedTime;if(done[key])continue;if(monthlySourceOutside_(known,f,month)){done[key]=true;continue;}if(Date.now()>until||count>=25){pending=true;break;}
   if(monthlyCopy_({name:f.name,mimeType:f.mimeType,source:'drive',sourceId:f.id,sourceFolder:MONTHLY_ISSUED},monthlyMedia_(f.id)))done[key]=true;else pending=true;count++;
  }
  let next='';do{
@@ -115,4 +120,9 @@ function collectMonthInvoices_(month){
  const encoded=JSON.stringify(done),chunks=Math.ceil(encoded.length/7500);for(let i=0;i<chunks;i++)properties.setProperty(prefix+'Chunk'+i,encoded.slice(i*7500,(i+1)*7500));properties.setProperty(prefix+'Chunks',String(chunks));
  monthlyCall_({kind:'heartbeat',complete:!pending,pending});console.log(JSON.stringify({account,checked:count,pending}));
  }catch(e){try{monthlyCall_({kind:'heartbeat',complete:false,error:e.message});}catch(_){}throw e;}finally{lock.releaseLock();}
+}
+
+function monthlySourceOutside_(known,file,month){
+ const saved=known.sourceMonths?.[file.id];
+ return Boolean(saved&&saved.month!==month&&saved.modifiedTime===file.modifiedTime&&saved.sha256&&saved.sha256===file.sha256Checksum);
 }
