@@ -1,0 +1,47 @@
+'use strict';
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const root=__dirname+'/../',app=fs.readFileSync(root+'app.js','utf8');
+const costs=require('../cost-calculation.js'),calendar=require('../lib/business-calendar.js');
+function fn(name){const a=app.indexOf('function '+name+'(');assert.ok(a>=0,name);return app.slice(a,app.indexOf('\n}',a)+2);}
+function createContext(state={},today='2026-10-31'){
+ const nodes=new Map(),texts={};
+ const ctx={state:{clients:[],employees:[],employeeWorkLogs:[],employeeAbsences:[],employeeHourAdjustments:[],employeeLateRecords:[],notifications:[],...state},nodes,texts,window:{MarketizoCosts:costs},Date,Math,Number,String,Map,Set,Intl,
+ searchTerm:'',countryFilter:'all',dateFromFilter:'',dateToFilter:'',monthFilter:'2026-10',
+ packageConfig:{Starter:{price:997},Business:{price:1497},Enterprise:{price:1997},Custom:{price:0}},normalizePackage:x=>x,
+ parseDate:value=>new Date(value+'T12:00:00'),dateKey:d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,currentDateKey:()=>today,currentMonthKey:()=>today.slice(0,7),selectedMonthKey:()=>ctx.monthFilter,parseNumber:(x,f=0)=>Number.isFinite(Number(x))?Number(x):f,
+ workdaysInMonth:m=>{const out=[];for(let d=1;d<=31;d++){const date=m+'-'+String(d).padStart(2,'0');if(new Date(date+'T12:00:00Z').toISOString().slice(0,7)!==m)break;if(calendar.isWorkingDay(date))out.push(date);}return out;},
+ currency:new Intl.NumberFormat('sr-Latn-RS',{style:'currency',currency:'EUR',maximumFractionDigits:0}),formatHours:String,formatHourBalance:String,formatDate:String,monthLabel:String,employeeCarryoverLabel:()=>'',
+ employeeHourBalance:e=>e.testBalance||0,employeeById:id=>ctx.state.employees.find(e=>e.id===id),pendingAdminRequests:()=>[],isNotificationHidden:()=>false,showAdminNotificationPopups(){},
+ setText:(id,value)=>texts[id]=value,document:{getElementById:id=>{if(!nodes.has(id))nodes.set(id,{innerHTML:'',querySelectorAll:()=>[]});return nodes.get(id);}},
+ };
+ vm.createContext(ctx);
+ for(const n of ['monthlyInvoice','invoicePaymentEntries','invoicePaidAmount','invoiceRemainingAmount','clientsForInvoiceMonth','financeClientsForMonth','invoiceAmount','bySearch','byCountry','dashboardClients','dashboardInvoiceTotals','dashboardTeamRows','dashboardEscape','dashboardMonths','shiftMonth','monthIndex','shortMonthLabel','employeeWeeklyHoursForMonth','scheduledMinutesForDate','employeeExpectedHours','employeeExpectedHoursToDate','employeeMonthLatePenaltyHours','employeeMonthHourDeductionMinutes','employeeMonthHours','employeeLateCount','employeeLateStatus','escapeInvoiceText','renderPaymentDonut','renderRevenueTrend','renderClientGrowth','renderTeamUtilization','dashboardCountryLabel','renderModernBars','renderRevenueBreakdown','renderAdminEmployeeRisk','renderAdminNotifications','notificationClass','addMonths','invoiceAgeDays'])vm.runInContext(fn(n),ctx);
+ return ctx;
+}
+function run(){
+ const invoice=(id,amount,paid,status='Nije plaćeno')=>({id,name:id,status:'Aktivan',country:'Austrija',package:'Custom',startDate:'2026-01-01',invoices:{'2026-10':{amount,paidAmount:paid,paymentStatus:status}}});
+ const a=invoice('a',100,150),b=invoice('b',100,0),zero=invoice('zero',0,497),ctx=createContext({clients:[a,b,zero]});
+ const original=JSON.stringify(ctx.state),totals=ctx.dashboardInvoiceTotals(ctx.state.clients,'2026-10');
+ assert.equal(totals.billed,200);assert.equal(totals.paid,647);assert.equal(totals.remaining,100,'Overpayment on A cannot erase B debt');assert.equal(totals.covered,100);assert.equal(totals.excess,547);assert.equal(totals.rate,50);
+ assert.equal(totals.billed+totals.excess,totals.paid+totals.remaining,'Money reconciliation including explicit excess');
+ assert.equal(ctx.dashboardInvoiceTotals([],'2026-10').rate,0);ctx.renderPaymentDonut(ctx.state.clients,'2026-10');assert.match(ctx.nodes.get('adminPaymentDonut').innerHTML,/50%/);assert.match(ctx.nodes.get('adminPaymentDonut').innerHTML,/Uplate iznad vrednosti računa/);assert.equal(JSON.stringify(ctx.state),original,'Dashboard computations never modify saved records');
+ const partial=invoice('partial',100,40,'Plaćeno');assert.equal(ctx.invoiceRemainingAmount(partial,'2026-10'),60,'Actual payment amount wins over a stale paid flag');
+ const legacy=invoice('legacy',100,0,'Plaćeno');assert.equal(ctx.invoicePaidAmount(legacy,'2026-10'),100);zero.revenue=997;assert.equal(ctx.invoiceAmount(zero,'2026-10'),0,'Explicit zero is preserved');
+ ctx.dateFromFilter='2026-10-01';ctx.dateToFilter='2026-10-31';ctx.state.clients=[{...a,startDate:'2026-10-10'},{...b,startDate:''},{...zero,startDate:'2026-09-30'}];assert.deepEqual(Array.from(ctx.dashboardClients(),c=>c.id),['a']);
+ ctx.dateFromFilter='';ctx.dateToFilter='';ctx.countryFilter='Austrija';ctx.state.clients=[{...a,country:'Austria'},{...b,country:'Srbija'}];assert.equal(ctx.dashboardClients().length,1);ctx.renderClientGrowth('2026-01');assert.match(ctx.nodes.get('adminClientGrowth').innerHTML,/<strong>1<\/strong>/,'Growth honors the same client filter');
+ const employees=[{id:'e',name:'Employee',status:'Aktivan',weeklyHours:20,startDate:'2026-10-01'},{id:'zero',name:'Zero',status:'Aktivan',weeklyHours:0},{id:'off',status:'Aktivan',active:false,weeklyHours:20}];
+ const team=createContext({employees,employeeWorkLogs:[{employeeId:'e',date:'2026-10-14',minutes:240},{employeeId:'e',date:'2026-10-15',minutes:600},{employeeId:'e',date:'2026-10-16',minutes:600}]},'2026-10-15');
+ const row=team.dashboardTeamRows('2026-10')[0];assert.equal(row.logged,4,'Today and future work never compared with yesterday plan');assert.equal(row.expected,40);assert.equal(row.ratio,10);assert.equal(team.dashboardTeamRows('2026-10').length,1,'Zero-plan and disabled profiles excluded');assert.equal(team.dashboardTeamRows('2026-11').length,0,'Future month cannot generate false under-capacity');
+ team.state.employeeAbsences=[{employeeId:'e',startDate:'2026-10-14',endDate:'2026-10-14',status:'Odobreno'}];assert.equal(team.dashboardTeamRows('2026-10')[0].expected,36);team.renderTeamUtilization('2026-10');assert.match(team.nodes.get('adminTeamUtilization').innerHTML,/11.1%/);
+ const risk=createContext({employees:Array.from({length:12},(_,i)=>({id:'e'+i,name:'Employee '+i,status:'Aktivan',weeklyHours:20,testBalance:i<8?-1:0})),employeeLateRecords:[{employeeId:'e11',date:'2026-10-01'},{employeeId:'e11',date:'2026-10-02'},{employeeId:'e11',date:'2026-10-03'}]});risk.renderAdminEmployeeRisk('2026-10');assert.equal(risk.texts.adminEmployeeRiskCount,'9 odstupanja');assert.equal((risk.nodes.get('adminEmployeeRiskList').innerHTML.match(/data-select-shortcut-employee/g)||[]).length,12,'Full employee list, not only first six');
+ risk.state.notifications=Array.from({length:20},(_,i)=>({id:'n'+i,scope:'admin',title:'Notification '+i,message:'Fixture'}));risk.renderAdminNotifications();assert.equal(risk.texts.adminNotificationCount,'20 aktivno');assert.match(risk.nodes.get('adminNotificationList').innerHTML,/Notification 19/);
+ const groups=createContext({clients:Array.from({length:8},(_,i)=>({...invoice('g'+i,100,0),package:'Package '+i,country:i<2?(i?'Austria':'Austrija'):'Country '+i}))});groups.renderRevenueBreakdown(groups.state.clients,'2026-10');const html=groups.nodes.get('adminPackageChart').innerHTML;assert.match(html,/Preostale grupe/);assert.match(html,/300/,'Overflow is included');assert.match(groups.nodes.get('adminCountryChart').innerHTML,/200/,'Country aliases grouped');
+ const growth=createContext({clients:[{...a,startDate:'2026-10-01',status:'Arhiviran'},{...b,startDate:'2026-10-01',status:'Interni'}]});growth.renderClientGrowth('2026-10');assert.match(growth.nodes.get('adminClientGrowth').innerHTML,/<strong>1<\/strong>/);
+ const trend=createContext({clients:[invoice('new',100,0)]});trend.renderRevenueTrend('2026-10');assert.match(trend.nodes.get('adminRevenueTrend').innerHTML,/Nema osnovice/,'New revenue from a zero baseline cannot claim 0% growth');
+ assert.equal(ctx.addMonths('2026-01-31',1),'2026-02-28');assert.equal(ctx.addMonths('2028-01-31',1),'2028-02-29');assert.equal(ctx.addMonths('2026-08-31',3),'2026-11-30');assert.equal(ctx.invoiceAgeDays({sentAt:'2026-10-30T23:30:00Z'},'2026-10'),0,'Late UTC time is already next business day in Vienna');assert.equal(ctx.invoiceAgeDays({},'2026-10'),30);
+ const help=require('../dashboard-help.js');assert.ok(Object.keys(help).length>=40);for(const [key,d] of Object.entries(help)){assert.ok(d.title&&d.text&&d.scope,key);assert.equal(d.flow.length,3,key);}
+ for(const file of fs.readdirSync(root).filter(f=>f.endsWith('.html')&&fs.readFileSync(root+f,'utf8').includes('id="admin"')))assert.match(fs.readFileSync(root+file,'utf8'),/dashboard-help\.js/);
+ assert.match(fs.readFileSync(root+'work-analytics.html','utf8'),/dashboard-help\.js/);assert.match(fs.readFileSync(root+'work-analytics.js','utf8'),/MarketizoDashboardHelp\?\.refresh/);
+ console.log('PASS dashboard: independent invoice reconciliation, excess/partial/zero payments, cohort/country filters, completed-day capacity, zero/future schedules, complete risk/notification counts, full group totals and 40+ explanations on dashboard and work analytics');
+}
+module.exports={createContext,fn};if(require.main===module)run();

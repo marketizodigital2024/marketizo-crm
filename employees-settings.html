@@ -20,7 +20,7 @@
     <meta name="theme-color" content="#ff6b00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="apple-touch-icon" href="icons/marketizo-180.png" />
-    <link rel="stylesheet" href="styles.css?v=20261015-overhead-r16d" />
+    <link rel="stylesheet" href="styles.css?v=20261031-dashboard-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -66,17 +66,17 @@
         <section class="view active" id="admin">
           <div class="admin-kpi-grid">
             <article class="metric metric-link" data-go-view="clients">
-              <span>Klijenti</span>
+              <span>Klijenti sa računom</span>
               <strong id="adminTotalClients">0</strong>
-              <small>ukupno u bazi</small>
+              <small>u izabranom mesecu</small>
             </article>
             <article class="metric metric-link" data-go-view="reports">
-              <span>Mesečno</span>
+              <span>Fakturisano</span>
               <strong id="adminMrr">€0</strong>
-              <small>ukupna cena paketa</small>
+              <small>ukupna vrednost računa</small>
             </article>
             <article class="metric metric-link" data-go-view="reports">
-              <span>Plaćeno u mesecu</span>
+              <span>Naplaćeno za račune meseca</span>
               <strong id="adminPaidTotal">€0</strong>
               <small id="adminPaidCount">0 klijenata</small>
             </article>
@@ -99,10 +99,10 @@
               <label>Mesec
                 <input id="monthFilter" type="month" />
               </label>
-              <label>Od datuma
+              <label>Početak saradnje od
                 <input id="dateFromFilter" type="date" />
               </label>
-              <label>Do datuma
+              <label>Početak saradnje do
                 <input id="dateToFilter" type="date" />
               </label>
               <label>Država
@@ -982,7 +982,8 @@
     <script src="company-overhead.js?v=20261015-overhead-r16d"></script>
     <script src="mobile-crm-nav.js?v=20261031-mobile-1"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="app.js?v=20261015-overhead-r16d"></script>
+    <script src="dashboard-help.js?v=20261031-help-1"></script>
+    <script src="app.js?v=20261031-dashboard-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
 </body>
 </html>

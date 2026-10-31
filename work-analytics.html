@@ -4,7 +4,7 @@
  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
  <title>Analiza vremena rada · Marketizo Digital</title>
  <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
- <link rel="stylesheet" href="styles.css?v=20261015-overhead-r16d">
+ <link rel="stylesheet" href="styles.css?v=20261031-dashboard-1">
  <link rel="stylesheet" href="work-analytics.css?v=20261031-native-2">
  <script src="admin-auth.js?v=20261014-audit-fix-r7"></script>
 </head>
@@ -28,7 +28,7 @@
   <header class="topbar wa-header"><div><p class="eyebrow">Marketizo Digital · Analitika</p><h1>Analiza vremena rada</h1><p class="wa-subtitle">Vidi gde odlazi vreme i koliko traje završen posao.</p></div><div class="top-actions wa-actions"><button id="waRefresh" class="secondary-button" type="button">↻ Osveži</button><button id="waExport" class="primary-button" type="button" disabled>↓ Izvezi CSV</button></div></header>
   <div id="waStatus" class="wa-status" role="status">Učitavam sačuvane podatke…</div>
   <section class="panel wa-filter-panel" aria-label="Filteri analitike">
-   <div class="wa-filter-head"><div class="wa-presets" aria-label="Brzi period"><button type="button" data-period="month" class="active">Ovaj mesec</button><button type="button" data-period="previous">Prethodni mesec</button><button type="button" data-period="7">7 dana</button><button type="button" data-period="30">30 dana</button><button type="button" data-period="all">Sve vreme</button></div><button id="waReset" class="wa-text-button" type="button">Poništi filtere</button></div>
+   <h2 class="wa-filter-help-heading">Filteri</h2><div class="wa-filter-head"><div class="wa-presets" aria-label="Brzi period"><button type="button" data-period="month" class="active">Ovaj mesec</button><button type="button" data-period="previous">Prethodni mesec</button><button type="button" data-period="7">7 dana</button><button type="button" data-period="30">30 dana</button><button type="button" data-period="all">Sve vreme</button></div><button id="waReset" class="wa-text-button" type="button">Poništi filtere</button></div>
    <form id="waFilters" class="wa-filter-grid"><label>Od datuma<input id="waFrom" type="date"></label><label>Do datuma<input id="waTo" type="date"></label><label>Pozicija<select id="waPosition"><option value="">Sve pozicije</option></select></label><label>Zaposleni<select id="waEmployee"><option value="">Svi zaposleni</option></select></label><label>Kategorija aktivnosti<select id="waCategory"><option value="">Sve kategorije</option></select></label><label>Aktivnost<select id="waActivity"><option value="">Sve aktivnosti</option></select></label><label>Klijent<select id="waClient"><option value="">Svi klijenti</option></select></label><label>Jedinica za prosek po komadu<select id="waUnit"><option value="">Izaberi jedinicu</option></select></label></form>
    <label class="wa-checkbox"><input id="waAggregates" type="checkbox"> Uključi istorijske mesečne prenose i usklađenja</label>
   </section>
@@ -45,5 +45,5 @@
  </main>
  </div>
  <script src="mobile-crm-nav.js?v=20261031-mobile-1"></script>
-    <script src="work-analytics-core.js?v=20261031-1"></script><script src="work-analytics.js?v=20261031-1"></script>
+    <script src="dashboard-help.js?v=20261031-help-1"></script><script src="work-analytics-core.js?v=20261031-1"></script><script src="work-analytics.js?v=20261031-help-1"></script>
 </body></html>
