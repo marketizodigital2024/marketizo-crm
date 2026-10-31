@@ -210,21 +210,11 @@ module.exports = async function handler(req, res) {
       let databaseWarning = "";
       // Do not download every multi-megabyte backup payload just to list them.
       // That response grows on every run and can make PostgREST return 500.
-      const response = await fetch(`${url}/rest/v1/${TABLE}?and=(id.like.backup-*,id.not.like.backup-system-*)&select=id,updated_at,backupDate:payload->>backupDate,sourceUpdatedAt:payload->>sourceUpdatedAt,counts:payload->counts,firstWorkLogDate:payload->>firstWorkLogDate,lastWorkLogDate:payload->>lastWorkLogDate,septemberWorkLogs:payload->septemberWorkLogs,septemberDates:payload->septemberDates&order=updated_at.desc`, {
+      const response = await fetch(`${url}/rest/v1/${TABLE}?and=(id.like.backup-*,id.not.like.backup-system-*)&select=id,updated_at&order=updated_at.desc`, {
         headers: headers(key),
       });
-      if (response.ok) {
-        rows = await response.json();
-      } else {
-        // Older backup rows can contain multi-megabyte payloads and different
-        // metadata shapes. If PostgREST cannot project one of the JSON paths,
-        // fall back to the stable columns instead of losing the whole list.
-        const fallbackResponse = await fetch(`${url}/rest/v1/${TABLE}?and=(id.like.backup-*,id.not.like.backup-system-*)&select=id,updated_at&order=updated_at.desc`, {
-          headers: headers(key),
-        });
-        if (fallbackResponse.ok) rows = await fallbackResponse.json();
-        else databaseWarning = `Backup list failed (${response.status}/${fallbackResponse.status})`;
-      }
+      if (response.ok) rows = await response.json();
+      else databaseWarning = `Backup list failed (${response.status})`;
       if (rows.length) {
         const recentResponse = await fetch(`${url}/rest/v1/${TABLE}?and=(id.like.backup-*,id.not.like.backup-system-*)&select=id,payload,updated_at&order=updated_at.desc&limit=3`, {
           headers: headers(key),
