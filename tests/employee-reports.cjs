@@ -110,7 +110,24 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   let abortRequest;
   const postUi = { reportInboxRevision: 0, window: { setTimeout: fn => { abortRequest = fn; return 1; }, clearTimeout() {} }, AbortController, employeeApiHeaders: () => ({}), fetch: (url, options) => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(Object.assign(new Error(), { name: 'AbortError' })))) };
   vm.createContext(postUi); vm.runInContext(named('postEmployeeReport'), postUi); const timedPost = postUi.postEmployeeReport({}); abortRequest(); const timedResult = await timedPost; assert.equal(timedResult.ok, false); assert.match(timedResult.error, /zadržani/);
-  // Closing the notification is a UI-only close; only the explicit button acknowledges.
-  const closeStart = source.indexOf('document.getElementById("closeWeeklyCompletedDialog")'); const closeCode = source.slice(closeStart, source.indexOf('\n', closeStart)); assert.ok(!closeCode.includes('acknowledgeWeeklyQuestionnaire')); assert.match(closeCode, /\.close\(\)/);
+  // Completed reports cannot be dismissed; failed/duplicate requests do not mark them read.
+  const html = fs.readFileSync(path.join(__dirname, '../employee-login.html'), 'utf8');
+  assert.ok(!html.includes('id="closeWeeklyCompletedDialog"'));
+  let receiptCancel;
+  const receipt = { open: true, dataset: { reportId: 'receipt' }, close() { this.open = false; }, addEventListener(type, fn) { receiptCancel = fn; } };
+  const receiptButton = {};
+  let ackRelease, ackCalls = 0, ackRenders = 0;
+  const ackUi = { activeEmployee: { id: 'leader' }, weeklyCompletionShown: true, weeklyAcknowledgementInFlight: false, state: { employeeReports: [{ id: 'receipt' }] }, document: { getElementById: id => id === 'weeklyCompletedDialog' ? receipt : receiptButton }, postEmployeeReport() { ackCalls++; return new Promise(resolve => ackRelease = resolve); }, saveState() {}, showToast() {}, renderLeaderReportStatus() { ackRenders++; } };
+  vm.createContext(ackUi); vm.runInContext(named('acknowledgeWeeklyQuestionnaire'), ackUi);
+  const cancelStart = source.indexOf('document.getElementById("weeklyCompletedDialog")?.addEventListener("cancel"');
+  vm.runInContext(source.slice(cancelStart, source.indexOf('\n', cancelStart)), ackUi);
+  let receiptPrevented = false; receiptCancel({ preventDefault() { receiptPrevented = true; } }); assert.equal(receiptPrevented, true);
+  const failedAck = ackUi.acknowledgeWeeklyQuestionnaire(); await ackUi.acknowledgeWeeklyQuestionnaire(); assert.equal(ackCalls, 1); assert.equal(receiptButton.disabled, true);
+  ackRelease({ ok: false, error: 'offline' }); await failedAck; assert.equal(receipt.open, true); assert.equal(ackUi.state.employeeReports[0].acknowledgedAt, undefined); assert.equal(receiptButton.disabled, false);
+  const falseSuccess = ackUi.acknowledgeWeeklyQuestionnaire(); ackRelease({ ok: true, report: { id: 'receipt' } }); await falseSuccess; assert.equal(receipt.open, true);
+  const confirmedAck = ackUi.acknowledgeWeeklyQuestionnaire(); ackRelease({ ok: true, report: { id: 'receipt', acknowledgedAt: 'confirmed' } }); await confirmedAck;
+  assert.equal(receipt.open, false); assert.equal(ackUi.state.employeeReports[0].acknowledgedAt, 'confirmed'); assert.equal(ackUi.weeklyCompletionShown, false); assert.equal(ackRenders, 1);
+  // Refresh never replaces an open report with a different unread report.
+  assert.match(named('renderWeeklyQuestionnaires'), /if \(completedDialog\?\.open\) return;/);
   console.log('PASS: same-day leader inbox, team isolation, live report read without writes, concurrent staff-entry preservation, safe/idempotent retries, changed report unread status, bounded forms retain failed answers, and explicit-only read confirmations.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

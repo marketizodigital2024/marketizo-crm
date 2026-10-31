@@ -51,6 +51,10 @@
     {
       "path": "/api/sign-jobs",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/client-weekly-report",
+      "schedule": "0 10,11 * * 1"
     }
   ],
   "headers": [
@@ -166,6 +170,9 @@
     },
     "api/onboarding.js": {
       "maxDuration": 90
+    },
+    "api/client-weekly-report.js": {
+      "maxDuration": 30
     }
   }
 }

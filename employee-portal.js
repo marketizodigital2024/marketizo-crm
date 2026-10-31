@@ -52,6 +52,7 @@ let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
 let weeklyCompletionShown = false;
+let weeklyAcknowledgementInFlight = false;
 let reportRefreshInFlight = false;
 let reportInboxRevision = 0;
 const employeeSessionKey = "marketizoEmployeeSession";
@@ -1887,8 +1888,9 @@ function renderWeeklyQuestionnaires() {
   renderRequiredWeeklyTask();
 
   const unread = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
-  const next = unread[0];
   const completedDialog = document.getElementById("weeklyCompletedDialog");
+  if (completedDialog?.open) return;
+  const next = unread[0];
   if (next && completedDialog && !weeklyCompletionShown) {
     completedDialog.dataset.reportId = next.id;
     const employee = (state.employees || []).find((item) => item.id === next.employeeId);
@@ -1927,18 +1929,28 @@ async function sendWeeklyQuestionnaires() {
 
 async function acknowledgeWeeklyQuestionnaire(reportId = document.getElementById("weeklyCompletedDialog")?.dataset.reportId || "") {
   const dialog = document.getElementById("weeklyCompletedDialog");
-  if (!reportId || !activeEmployee?.id) return;
+  const actorId = activeEmployee?.id;
+  if (!reportId || !actorId || weeklyAcknowledgementInFlight) return;
+  const button = document.getElementById("ackWeeklyCompleted");
+  weeklyAcknowledgementInFlight = true;
+  if (button) { button.disabled = true; button.textContent = "Čuvanje potvrde…"; }
   try {
-    const result = await postEmployeeReport({ action: "acknowledgeWeeklyQuestionnaire", reportId, leaderId: activeEmployee.id });
-    if (!result.ok) throw new Error(result.error || "Potvrda nije sačuvana.");
+    const result = await postEmployeeReport({ action: "acknowledgeWeeklyQuestionnaire", reportId, leaderId: actorId });
+    if (!result.ok || result.report?.id !== reportId || !result.report?.acknowledgedAt) throw new Error(result.error || "Potvrda nije sačuvana.");
+    if (activeEmployee?.id !== actorId) return;
     const report = (state.employeeReports || []).find((item) => item.id === reportId);
-    if (report) Object.assign(report, result.report || {});
+    if (report) Object.assign(report, result.report);
     saveState({ remote: false });
-    dialog?.close();
-    weeklyCompletionShown = false;
+    if (dialog?.dataset.reportId === reportId) {
+      dialog.close();
+      weeklyCompletionShown = false;
+    }
     renderLeaderReportStatus();
   } catch (error) {
     showToast("Nije potvrđeno", error?.message || "Pokušaj ponovo.", "danger");
+  } finally {
+    weeklyAcknowledgementInFlight = false;
+    if (button) { button.disabled = false; button.textContent = "Pročitao/la sam izveštaj"; }
   }
 }
 
@@ -2655,7 +2667,7 @@ for (const [dialogId, kind] of [["weeklySendDialog", "send"], ["weeklyQuestionna
 document.getElementById("confirmSendWeeklyQuestionnaire")?.addEventListener("click", sendWeeklyQuestionnaires);
 document.getElementById("weeklyQuestionnaireForm")?.addEventListener("input", (event) => saveWeeklyDraft(event.currentTarget));
 document.getElementById("ackWeeklyCompleted")?.addEventListener("click", () => acknowledgeWeeklyQuestionnaire());
-document.getElementById("closeWeeklyCompletedDialog")?.addEventListener("click", () => document.getElementById("weeklyCompletedDialog")?.close());
+document.getElementById("weeklyCompletedDialog")?.addEventListener("cancel", (event) => event.preventDefault());
 document.getElementById("leaderWeeklyReportList")?.addEventListener("click", (event) => {
   const button = event.target.closest?.(".weekly-report-ack");
   if (button) acknowledgeWeeklyQuestionnaire(button.dataset.reportId);

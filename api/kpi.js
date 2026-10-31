@@ -80,7 +80,7 @@ async function loadClickupRoster() {
       const response=await clickupFetch(`https://api.clickup.com/api/v2/list/${encodeURIComponent(listId)}/task?include_closed=true&subtasks=true&page=${page}`,{headers:{Authorization:token},cache:'no-store'});
       if(!response.ok) throw new Error(`ClickUp ${response.status}`);
       const payload=await response.json(),tasks=Array.isArray(payload.tasks)?payload.tasks:[];
-      for(const task of tasks){const fields=Object.fromEntries((task.custom_fields||[]).map(field=>[field.name,fieldValue(field)]));rows.push({Klijent:String(task.name||'').trim(),Scenarista:fields.Scenarista||'','Voice Over':fields['Voice Over']||'',Editor:fields.Editor||'','Social Media Manager':fields.SMM||fields['Social Media Manager']||'',Snimatelj:fields.Snimatelj||'','Paid Ads':fields['Paid Ads']||''});}
+      for(const task of tasks){const fields=Object.fromEntries((task.custom_fields||[]).map(field=>[field.name,fieldValue(field)]));rows.push({taskId:task.id,archived:Boolean(task.archived),statusType:task.status?.type||'',clientStatus:fields['Status klijenta']||'',Checking:fields.Checking||'',Klijent:String(task.name||'').trim(),Scenarista:fields.Scenarista||'','Voice Over':fields['Voice Over']||'',Editor:fields.Editor||'','Social Media Manager':fields.SMM||fields['Social Media Manager']||'',Snimatelj:fields.Snimatelj||'','Paid Ads':fields['Paid Ads']||''});}
       if(tasks.length<100)break;
     }
     const relatedIds=[...new Set(rows.flatMap(row=>splitPeople(row.Snimatelj)).filter(value=>/^[a-f0-9-]{24,}$/i.test(value)))];
@@ -236,3 +236,6 @@ async function handler(req,res) {
 module.exports = (req,res) => databaseRequest.withRequestBudget(() => handler(req,res),18000);
 
 module.exports._test={norm,roster,validQuestion,publicInvite,parseClickup};
+
+// Server-only assignment source, shared with weekly client reporting.
+module.exports.internal = { clickupRoster };
