@@ -1,4 +1,4 @@
-const CACHE_NAME = "marketizo-crm-20261023-codeks-r1";
+const CACHE_NAME = "marketizo-crm-20261031-overtime-absence-r1";
 const ASSETS = [
   "index.html",
   "client-login.html",
