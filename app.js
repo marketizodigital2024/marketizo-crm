@@ -6880,7 +6880,7 @@ function setupClientBillingFields(){
       if(key==="taxMode"){input=document.createElement("select");for(const [v,t]of [["","Izaberi nakon provere"],["standard20","20% PDV"],["reverse-charge","Reverse Charge"],["exempt","Bez PDV-a uz obrazloženje"]])input.append(new Option(t,v));}
       else{input=document.createElement("input");input.type=key==="confirmed"?"checkbox":key==="email"?"email":"text";input.maxLength=key==="taxNote"?500:key==="email"?254:180;}
       input.name="billing_"+key;holder.append(input);section.append(holder);
-    }const submit=form.querySelector('button[type="submit"], button:not([type])');form.insertBefore(section,submit?.parentElement===form?submit:null);
+    }const submit=form.querySelector('button[type="submit"], button:not([type])');let anchor=submit;while(anchor?.parentElement&&anchor.parentElement!==form)anchor=anchor.parentElement;form.insertBefore(section,anchor?.parentElement===form?anchor:null);
     const fillShared=()=>{const values=new FormData(form), profile={};for(const key of ["legalName","country","email"])profile[key]=values.get("billing_"+key)||"";const merged=clientBillingDefaults({name:values.get("name"),country:values.get("country"),loginEmail:values.get("loginEmail"),billingProfile:profile});let changed=false;for(const key of ["legalName","country","email"]){const input=form.elements["billing_"+key];if(!input.value.trim()&&merged[key]){input.value=merged[key];changed=true;}}if(changed)form.elements.billing_confirmed.checked=false;};
     form.addEventListener("change",e=>{if(["name","country","loginEmail"].includes(e.target.name))fillShared();});section.addEventListener("toggle",()=>{if(section.open)fillShared();});
   }
