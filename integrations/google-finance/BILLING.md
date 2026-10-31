@@ -43,3 +43,6 @@ Invoice payment instructions explicitly separate the verified bank beneficiary (
 
 
 Before final preview, the form reloads current profile/invoice eligibility without discarding edits. This recognizes a just-confirmed profile without a manual refresh. The reason confirmation is locked is shown beside the checkbox; already billed/paid periods remain blocked. Revalidation clears any previous sendable document before checking fresh eligibility.
+
+
+Changing the service month immediately clears the previous period's message and refreshes a read-only sample for the new month. It does not create a draft or reserve a number automatically; final Preview remains explicit. All form edits refresh the visible lock reason so an old billed-period error cannot remain on a newly selected month.
