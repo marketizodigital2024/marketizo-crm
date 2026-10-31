@@ -23,9 +23,12 @@ function googleGet_(url){
 function financeCall_(body){
  const options={headers:{Authorization:'Bearer '+ScriptApp.getIdentityToken()},muteHttpExceptions:true};
  if(body){options.method='post';options.contentType='application/json';options.payload=JSON.stringify(body);}
- const r=UrlFetchApp.fetch(FINANCE_ENDPOINT,options),d=JSON.parse(r.getContentText());
- if(r.getResponseCode()!==200||!d.ok)throw new Error(d.error||'Marketizo server nije potvrdio prijem.');
- return d;
+ for(let attempt=0;attempt<3;attempt++){
+  const r=UrlFetchApp.fetch(FINANCE_ENDPOINT,options);let d;try{d=JSON.parse(r.getContentText());}catch{d={error:'Marketizo server nije potvrdio prijem.'};}
+  if(r.getResponseCode()===200&&d.ok)return d;
+  const transient=[429,502,503,504].includes(r.getResponseCode())||/Online baza nije odgovorila na vreme|Drugi upis izvora je u toku/.test(d.error||'');
+  if(!transient||attempt===2)throw new Error(d.error||'Marketizo server nije potvrdio prijem.');Utilities.sleep(750*(attempt+1));
+ }
 }
 function syncMarketizoFinance(){
  const lock=LockService.getUserLock();if(!lock.tryLock(1000))return;
