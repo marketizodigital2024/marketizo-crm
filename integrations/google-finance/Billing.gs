@@ -78,3 +78,10 @@ function testMarketizoBilling(){
   console.log(JSON.stringify({test:true,recipient:'buchhaltung@marketizo.com',sentVerified:true,driveVerified:true,numberAllocated:false,messageId:sent,driveFileId:archived.driveFileId}));
  }finally{lock.releaseLock();}
 }
+
+// Read-only end-to-end PDF check; no Gmail/Drive write and no invoice numbering.
+function checkMarketizoBillingPdf(){
+ const pdf=billingCall_('test-pdf'),bytes=Utilities.base64Decode(pdf.base64);
+ if(Utilities.newBlob(bytes).getDataAsString().slice(0,5)!=='%PDF-'||billingHash_(bytes)!==pdf.sha256)throw Error('Test PDF nije potvrđen.');
+ console.log(JSON.stringify({test:true,pdfVerified:true,bytes:bytes.length,sha256:pdf.sha256,numberAllocated:false,emailSent:false}));
+}
