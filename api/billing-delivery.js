@@ -13,7 +13,7 @@ function createHandler(deps={}){return async(req,res)=>{
   }
   const h=deps.helpers||require('./state.js').helpers,config=h.supabaseConfig();if(!config.configured)throw Error('Baza nije dostupna.');const store=(deps.createStore||require('../lib/billing-store.js').createStore)(config);
   if(['prepared','sending'].includes(body.action)){
-   const doc=await store.rpc('get',{id:body.id}),current=await h.readStoredState(config);core.assertSnapshot(current.payload,doc.snapshot);await h.preserveDailyPrewriteBackup(config,current);
+   const doc=await store.rpc('get',{id:body.id}),current=await h.readStoredState(config);core.assertSnapshot(require('../lib/billing-oneoff.js').expand(current.payload),doc.snapshot);await h.preserveDailyPrewriteBackup(config,current);
   }
   if(body.action==='sent'){const current=await h.readStoredState(config);await h.preserveDailyPrewriteBackup(config,current);}
   const data=await store.rpc(body.action,body);return json(res,200,{ok:true,data});
