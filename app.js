@@ -1436,6 +1436,8 @@ function migrateState(data) {
     rejectedAt: absence.rejectedAt || "",
     rejectedBy: absence.rejectedBy || "",
     rejectionReason: absence.rejectionReason || "",
+    ...(absence.cancelledAt ? { cancelledAt: absence.cancelledAt } : {}),
+    ...(absence.cancelledBy ? { cancelledBy: absence.cancelledBy } : {}),
     hidden: Boolean(absence.hidden),
   }));
   const employeeWorkLogs = (data.employeeWorkLogs || []).map((log) => ({
@@ -5228,6 +5230,7 @@ async function cancelCompTimeAbsence(id) {
   const before = structuredClone(state);
   absence.status = "Otkazano";
   absence.cancelledAt = new Date().toISOString();
+  absence.cancelledBy = "Admin";
   notifyOnce({ key: `comp-time-cancelled-${id}`, scope: "employee", targetId: absence.employeeId, type: "info", title: "Slobodno za prekovremene sate je otkazano", message: `Odsustvo ${formatDate(absence.startDate)} – ${formatDate(absence.endDate)} je otkazano. Automatsko zaduženje salda je poništeno.` });
   if (!(await confirmAdminSave(before))) return;
   renderAll();
