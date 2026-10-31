@@ -36,6 +36,7 @@ async function transactions(key) {
   throw new Error('Bank response exceeds limit');
 }
 module.exports = async function handler(req, res) {
+ if(require('../lib/environment.js').blockProductionFeatureInPreview(res,typeof process==='undefined'?{}:process.env))return;
   if (req.method !== 'GET') { res.setHeader('Allow','GET'); return json(res,405,{ok:false,error:'Ovaj prikaz dozvoljava samo čitanje bankarskih uplata.'}); }
   if (!/^Bearer\s+\S+/i.test(String(req.headers?.authorization || ''))) return json(res,401,{ok:false,error:'Prijava je obavezna.'});
   const config = supabaseConfig();

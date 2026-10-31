@@ -32,7 +32,7 @@ function verifyAccessToken(token, key) {
   try {
     const [encoded, signature] = String(token || "").split(".");
     if (!encoded || !signature) return null;
-    const secret = process.env.EMPLOYEE_SESSION_SECRET || key;
+    const secret = require('../lib/environment.js').sessionSecret(process.env.EMPLOYEE_SESSION_SECRET || key,process.env);
     const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
     const left = Buffer.from(signature);
     const right = Buffer.from(expected);

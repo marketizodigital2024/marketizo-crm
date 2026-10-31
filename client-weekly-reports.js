@@ -64,7 +64,8 @@
     const pending = ownPending();
     notice.hidden = !pending && !sourceError;
     notice.textContent = sourceError ? `Pregled klijenata: ${sourceError} Pokušaćemo ponovo; spisak nije označen kao prazan.` : pending ? `Obavezno: pregled klijenata za ${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)}. Popuni do kraja radnog vremena u ponedeljak; ako je rok prošao, popuni sada.` : '';
-    if (saving || document.querySelector('dialog[open]')) return;
+    if (saving || document.querySelector('dialog[open], form[data-saving="true"]')) return;
+    if (document.activeElement?.matches?.('input,textarea,select,[contenteditable="true"]')) return;
     if (pending) {
       const form = el('clientWeeklyForm');
       if (form.dataset.reportId !== pending.id || form.dataset.actorId !== activeEmployee.id) {

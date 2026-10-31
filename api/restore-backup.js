@@ -1,3 +1,4 @@
+const system = require('../lib/system-backup.js');
 const production = require('../lib/work-production-backup.js');
 const questionnaires = require('../lib/questionnaire-backup.js');
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
@@ -64,7 +65,7 @@ module.exports = async function handler(req, res) {
       if (accessSession(req,current.payload,key)?.role !== "full-admin" || body.confirm) return send(res,401,{ok:false,error:"Unauthorized"});
     }
     const pathname = String(body.pathname || "");
-    if (!pathname.startsWith(BACKUP_PREFIX) || !pathname.endsWith(".json")) {
+    if (!/^marketizo-crm\/daily\/\d{4}-\d{2}-\d{2}(?:-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})?\.json$/.test(pathname)) {
       return send(res, 400, { ok: false, error: "Nevažeća putanja backupa." });
     }
     const blob = await import("@vercel/blob");
@@ -76,14 +77,16 @@ module.exports = async function handler(req, res) {
     if (!validBackup(document)) return send(res, 422, { ok: false, error: "Backup nije prošao proveru strukture." });
 
     if(document.workProductionRequired && !production.verifyDocument(document)) return send(res,422,{ok:false,error:"Backup nije prošao proveru kontrolnog zbira."});
+    if(document.systemDomainsRequired && (!system.valid(document.systemDomains)||!production.verifyDocument(document))) return send(res,422,{ok:false,error:"Backup dodatnih domena nije potvrđen."});
+    const systemCounts = system.summary(document.systemDomains);
     const productionCounts = production.summary(document.workProduction);
     if(document.workProductionRequired && !productionCounts.included) return send(res,422,{ok:false,error:"Backup nema obavezne podatke o količini."});
     const questionnaireCounts = questionnaires.summary(document.questionnaires);
-    const currentQuestionnaires = await questionnaires.readSnapshot(url,key);
-    const current = await production.readSnapshot(url,key,fetch);
-    const kpiResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.marketizo-kpi-v1&select=payload,updated_at`, { headers: supabaseHeaders(key) });
-    if (!kpiResponse.ok) throw new Error(`KPI fetch failed (${kpiResponse.status})`);
-    const currentKpi = (await kpiResponse.json())[0];
+    const current = await system.readSnapshot(url,key,fetch);
+    const currentQuestionnaires = current.questionnaires;
+    const currentKpi = current.kpi;
+
+    const domainRecovery=system.recoveryCheck(document.systemDomains,current.systemDomains);
     const result = {
       ok: true,
       dryRun: body.confirm !== "RESTORE_MARKETIZO_BACKUP",
@@ -95,13 +98,17 @@ module.exports = async function handler(req, res) {
       includesKpi: document.kpi != null,
       questionnaires: questionnaireCounts,
       workProduction: productionCounts,
+      systemDomains: systemCounts,
+      currentSystemDomains: system.summary(current.systemDomains),
+      domainRecovery,
+      systemRecoveryPolicy: "preserve-existing-recover-missing",
       currentWorkProduction: production.summary(current.production),
-      restoreAllowed: productionCounts.included || current.production.outputs.length===0,
+      restoreAllowed: domainRecovery.allowed && (productionCounts.included || current.production.outputs.length===0),
       currentQuestionnaires: questionnaires.summary(currentQuestionnaires),
       includesEmployeeAuth: true,
     };
     if (result.dryRun) return send(res, 200, result);
-    if(!result.restoreAllowed) return send(res,409,{ok:false,error:"Stara kopija ne sadrži količine. Vraćanje bi ih razdvojilo od sati; koristi potpunu noviju kopiju."});
+    if(!result.restoreAllowed) return send(res,409,{ok:false,error:"Kopija nema potrebne podatke o količinama ili se postojeći dokumenti/finansijski zapisi razlikuju. Potrebna je odvojena provera; live podaci nisu menjani."});
     if (!current?.payload || !current.updated_at) throw new Error("Trenutno live stanje nije pronađeno.");
 
     const now = new Date();
@@ -116,16 +123,18 @@ module.exports = async function handler(req, res) {
       questionnaires: currentQuestionnaires,
       workProduction: current.production,
       workProductionRequired: true,
+      systemDomains: current.systemDomains,
+      systemDomainsRequired: true,
     };
     emergencyDocument.integrity = production.documentIntegrity(emergencyDocument);
     await blob.put(emergencyPath, JSON.stringify(emergencyDocument), { access: "private", contentType: "application/json", addRandomSuffix: false });
     const emergencyRead = await blob.get(emergencyPath, { access:"private", useCache:false });
     if (!emergencyRead || emergencyRead.statusCode !== 200 || !emergencyRead.stream || !questionnaires.equal(JSON.parse(await new Response(emergencyRead.stream).text()), emergencyDocument)) throw new Error("Sigurnosna kopija pre vraćanja nije potvrđena.");
 
-    const restoreResponse = await fetch(`${url}/rest/v1/rpc/marketizo_restore_complete_backup_with_production`, {
+    const restoreResponse = await fetch(`${url}/rest/v1/rpc/marketizo_restore_complete_system_backup`, {
       method: "POST",
       headers: supabaseHeaders(key),
-      body: JSON.stringify({ p_state: document.state, p_kpi: document.kpi || null, p_expected_state_at: current.updated_at, p_expected_kpi_at: currentKpi?.updated_at || null, p_questionnaires: document.questionnaires || null, p_expected_questionnaires: currentQuestionnaires, p_production: document.workProduction || null, p_expected_production: current.production }),
+      body: JSON.stringify({ p_state: document.state, p_kpi: document.kpi || null, p_expected_state_at: current.updated_at, p_expected_kpi_at: currentKpi?.updated_at || null, p_questionnaires: document.questionnaires || null, p_expected_questionnaires: currentQuestionnaires, p_production: document.workProduction || null, p_expected_production: current.production, p_domains:document.systemDomains||null, p_expected_domains:current.systemDomains }),
     });
     if (!restoreResponse.ok) throw new Error(`Restore failed (${restoreResponse.status})`);
     const restored = await restoreResponse.json();

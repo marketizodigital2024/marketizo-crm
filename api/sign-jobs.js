@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const { createWorkflow } = require('../lib/sign-workflow.js');
 function createHandler(deps = {}) { return async (req, res) => {
+  if (require('../lib/environment.js').blockProductionFeatureInPreview(res, typeof process === 'undefined' ? {} : process.env)) return;
  res.setHeader('Cache-Control', 'no-store'); res.setHeader('Content-Type', 'application/json');
  const expected = process.env.CRON_SECRET, provided = String(req.headers?.authorization || '');
  const left = Buffer.from(provided), right = Buffer.from('Bearer ' + expected);

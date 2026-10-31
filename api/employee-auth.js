@@ -18,7 +18,7 @@ function send(res, status, payload) {
 }
 
 function secret() {
-  return process.env.EMPLOYEE_SESSION_SECRET || SUPABASE_KEY;
+  return require('../lib/environment.js').sessionSecret(process.env.EMPLOYEE_SESSION_SECRET || SUPABASE_KEY,process.env);
 }
 
 function sign(payload) {

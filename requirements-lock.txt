@@ -1,0 +1,5 @@
+# Locked complete Python dependency set for Vercel and PDF tests.
+charset-normalizer==3.5.2
+pillow==13.0.0
+pypdf==6.21.4
+reportlab==4.4.9

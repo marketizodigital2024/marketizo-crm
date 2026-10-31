@@ -5151,9 +5151,9 @@ function renderEmployeeReportRows(monthKey) {
       <tr>
         <td>${formatDate(report.date)}</td>
         <td>${escapeInvoiceText(employee?.name || "Zaposleni")}</td>
-        <td>${recipient}</td>
-        <td>${report.positive || ""}</td>
-        <td>${report.negative || ""}</td>
+        <td>${escapeInvoiceText(recipient)}</td>
+        <td>${escapeInvoiceText(report.positive || "")}</td>
+        <td>${escapeInvoiceText(report.negative || "")}</td>
         <td>${escapeInvoiceText(report.note || "")}</td>
       </tr>`;
     });
