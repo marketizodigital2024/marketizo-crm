@@ -13,18 +13,6 @@
     {
       "source": "/admin/",
       "destination": "/"
-    },
-    {
-      "source": "/clients",
-      "destination": "/index.html#clients"
-    },
-    {
-      "source": "/reports",
-      "destination": "/index.html#reports"
-    },
-    {
-      "source": "/calendar",
-      "destination": "/index.html#calendar"
     }
   ],
   "crons": [
@@ -195,5 +183,22 @@
     "api/billing-delivery.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/clients",
+      "destination": "/#clients",
+      "permanent": false
+    },
+    {
+      "source": "/reports",
+      "destination": "/#reports",
+      "permanent": false
+    },
+    {
+      "source": "/calendar",
+      "destination": "/#calendar",
+      "permanent": false
+    }
+  ]
 }
