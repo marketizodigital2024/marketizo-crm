@@ -40,7 +40,7 @@ window.MarketizoQuickSign.init({templates:[],people:[],sender:{name:'Fixture Own
   assert.equal(saved.length,1);assert.equal(saved[0].data.recipientCompletion,true);
   assert.equal(saved[0].data.recipients[0].company,'Test Firma');assertReady(validateDraft(saved[0].data));
   const text=saved[0].data.content.blocks.flatMap(b=>b.runs.map(r=>r.text)).join('\n');
-  for(const term of ['Scenarije šaljemo tri dana pre snimanja', '24 sata od prijema', 'bez izmena scenarija', 'svaki scenario, klip i dizajn', 'najviše jedna revizija', 'Ne snimamo vikendom', 'doplatu', '24 sata od ulaska u sistem','Pre dolaska naše ekipe','jasne potvrde u zajedničkoj grupi','ne preuzima odgovornost za zatvaranje prodaje','plaćeni oglasi se ne prikazuju','potpisujemo pre njegovog završetka'])assert.ok(text.includes(term),term);
+  for(const term of ['Scenarije šaljemo tri dana pre snimanja', '24 sata od prijema', 'bez izmena scenarija', 'svaki scenario, klip i dizajn', 'najviše jedna revizija', 'Ne snimamo vikendom', 'Tokom dana imamo više snimanja', 'Mesečni sastanci su obavezni', 'Odlaganje ili nedolazak klijenta', 'za nekoliko dana zbog organizacije novog sastanka', 'termin se ne produžava', 'nesnimljeni materijal se ne nadoknađuje', 'doplate', '24 sata od ulaska u sistem','Pre dolaska naše ekipe','jasne potvrde u zajedničkoj grupi','ne preuzima odgovornost za zatvaranje prodaje','plaćeni oglasi se ne prikazuju','potpisujemo pre njegovog završetka'])assert.ok(text.includes(term),term);
   assert.equal(sent.length,0,'Preview must not send or sign');
   get('quickConfirm').checked=true;await get('quickCreateLink').listeners.click();await new Promise(setImmediate);
   assert.equal(sent.length,1);assert.equal(sent[0].delivery,'link');

@@ -1,7 +1,7 @@
 'use strict';
 (() => {
  const $=id=>document.getElementById(id);
- const fieldLabels={name:'Ime i prezime',company:'Naziv firme',address:'Adresa',taxId:'Poreski broj / PIB',registrationId:'Registracioni broj firme',personalId:'JMBG / identifikacioni broj',country:'Zemlja (AT, DE, RS…)'};
+ const fieldLabels={name:'Ime i prezime',company:'Naziv firme',address:'Adresa',postalCode:'Poštanski broj',taxId:'Poreski broj / PIB',registrationId:'Registracioni broj firme',personalId:'JMBG / identifikacioni broj',country:'Zemlja (AT, DE, RS…)'};
  let config=null,state=null,busy=false;
  function onboarding(){return window.MarketizoOnboarding?.isDocument(state?.source)===true;}
  function fingerprint(value){if(Array.isArray(value))return '['+value.map(fingerprint).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+fingerprint(value[k])).join(',')+'}';return JSON.stringify(value);}
@@ -29,7 +29,7 @@
   $('quickNoTemplates').textContent=variant?'Nema šablona za izabranu varijantu. Izaberi drugu varijantu ili sačuvaj poseban šablon.':'Nema šablona na izabranom jeziku. Promeni jezik ili dodaj šablon u biblioteci.';$('quickNoTemplates').hidden=items.length>0;controls(false);
  }
  function identity(values={}){
-  $('quickIdentityFields').replaceChildren(...Object.entries(fieldLabels).map(([key,label])=>{const wrap=node('label',label),input=node('input',null,{id:'quickField-'+key,type:'text','data-quick-field':key,maxlength:String(({name:160,company:180,address:300,capacity:120,country:2})[key]||80)});input.value=values[key]||'';input.placeholder=({name:'Npr. Marko Marković',company:'Npr. Marko Marković PR Studio Primer',address:'Npr. Ulica primera 12, 11000 Beograd',taxId:'Npr. 123456789',registrationId:'Npr. 12345678',personalId:'JMBG / identifikacioni broj',country:'Npr. RS'})[key]||'';if(key==='country')input.pattern='[A-Za-z]{2}';wrap.append(input);return wrap;}));
+  $('quickIdentityFields').replaceChildren(...Object.entries(fieldLabels).map(([key,label])=>{const wrap=node('label',label),input=node('input',null,{id:'quickField-'+key,type:'text','data-quick-field':key,maxlength:String(({name:160,company:180,address:300,postalCode:20,capacity:120,country:2})[key]||80)});input.value=values[key]||'';input.placeholder=({name:'Npr. Marko Marković',company:'Npr. Marko Marković PR Studio Primer',address:'Npr. Ulica primera 12, Beograd',postalCode:'Npr. 11000',taxId:'Npr. 123456789',registrationId:'Npr. 12345678',personalId:'JMBG / identifikacioni broj',country:'Npr. RS'})[key]||'';if(key==='country')input.pattern='[A-Za-z]{2}';wrap.append(input);return wrap;}));
   if(onboarding()) document.querySelectorAll('[data-quick-field]').forEach(input=>{const needed=['name','company','country'].includes(input.dataset.quickField);input.required=false;input.parentElement.hidden=!needed;});
  }
  function recipientStep(){

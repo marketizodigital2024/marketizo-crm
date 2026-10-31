@@ -18,6 +18,35 @@ spec.loader.exec_module(helper)
 
 
 class SignPdfTests(unittest.TestCase):
+    def test_readable_onboarding_two_pages_and_frozen_signature(self):
+        doc = {"title":"Pravila saradnje — Marketizo Digital", "note":"marketizo-onboarding:v4", "category":"clients", "recipientCompletion":True,
+               "recipients":[{"name":"Marketizo Test","company":"TEST","email":"","country":"AT","role":"counterparty"}],
+               "content":{"version":1,"blocks":[]}}
+        for i in range(1,10):
+            if i==5: doc['content']['blocks'].append({"type":"heading","runs":[{"text":"Rezultati i zajedničke obaveze"}]})
+            doc['content']['blocks'].append({"type":"paragraph","runs":[{"text":f"{i}. Pravilo. ","bold":True},{"text":"Dogovoreni uslovi saradnje i odgovornost. "*4}]})
+        original=helper.render_original({"document":doc});raw=base64.b64decode(original['base64']);reader=PdfReader(io.BytesIO(raw))
+        self.assertEqual(len(reader.pages),2)
+        self.assertIn('4. Pravilo.',reader.pages[0].extract_text());self.assertIn('9. Pravilo.',reader.pages[1].extract_text())
+        sizes=[]
+        reader.pages[0].extract_text(visitor_text=lambda text,cm,tm,font,size: sizes.append(size) if 'Dogovoreni uslovi' in text else None)
+        self.assertTrue(sizes and min(sizes)>=12.5)
+        result=helper.render_final({"originalBase64":original['base64'],"originalSha256":original['sha256'],"manifestSha256":"a"*64,
+            "evidence":{"title":doc['title'],"requestId":"00000000-0000-4000-8000-000000000001","signers":[{"name":"Marketizo Test","email":"","acceptedAt":"2026-10-30T12:00:00Z","consentText":"NEOBAVEZUJUĆI TEST","strokes":[]}]}})
+        final=base64.b64decode(result['base64']);self.assertTrue(final.startswith(raw));self.assertEqual(len(PdfReader(io.BytesIO(final)).pages),2)
+        self.assertIn('30.10.2026.',PdfReader(io.BytesIO(final)).pages[1].extract_text())
+
+    def test_client_party_cards_postal_code_and_gap(self):
+        texts=['UGOVOR O USLUGAMA','Instagram, Facebook','Između:','Marketizo Digital e.U.','Adresa: Test adresa 24','UID: TEST-UID','IBAN: TEST-IBAN','Predmet ugovora:','Test paket — 997 EUR','Firma: TEST KLIJENT','Adresa: Test ulica 12 (poštanski broj: 11000)','PIB: TEST-PIB','Ime i prezime: Test Klijent','Klauzula 1: Usluge','Test sadržaj ugovora.']
+        doc={"title":"TEST — NEOBAVEZUJUĆE","category":"clients","contractDetails":{"language":"sr","audience":"client"},"recipients":[{"role":"counterparty","name":"Test Klijent","company":"TEST KLIJENT","address":"Test ulica 12","postalCode":"11000","country":"RS","email":"test@example.invalid"}],"content":{"version":1,"blocks":[{"type":"heading" if text.startswith('Klauzula') else 'paragraph',"runs":[{"text":text}]} for text in texts]}}
+        original=helper.render_original({"document":doc,"issuer":{"name":"Marketizo Digital e.U."}})
+        reader=PdfReader(io.BytesIO(base64.b64decode(original['base64'])));layout=json.loads(reader.metadata['/MarketizoLayout'])
+        self.assertIn('IBAN: TEST-IBAN',layout['readingIntro']['left']);self.assertIn('Poštanski broj: 11000',layout['readingIntro']['right']);self.assertEqual(layout['readingIntro']['subject'],texts[7:9])
+        positions={}
+        reader.pages[0].extract_text(visitor_text=lambda text,cm,tm,font,size: positions.update({text.strip():tm[5]}) if text.strip() else None)
+        text=reader.pages[0].extract_text();self.assertIn('997 EUR',text);self.assertIn('TEST-UID',text);self.assertIn('11000',text)
+        preview=helper.preview_pdf({"pdfBase64":original['base64'],"pdfSha256":original['sha256']});self.assertEqual(preview['readingIntro']['right'],layout['readingIntro']['right'])
+
     def test_compact_onboarding_stays_one_page_with_bold_clauses(self):
         doc = self.document()
         doc.update(note="marketizo-onboarding:v2", category="clients", recipientCompletion=False,
@@ -129,7 +158,7 @@ class SignPdfTests(unittest.TestCase):
         self.assertIn("Čćžšđ ÄÖÜ", text)
         self.assertIn("2. Druga obaveza", text)
         self.assertGreater(len(first.pages), 1)
-        self.assertEqual(original["renderer"], "marketizo-pdf-5")
+        self.assertEqual(original["renderer"], "marketizo-pdf-6")
         self.assert_stationery(first)
         again = helper.render_original({"document": self.document()})
         self.assertEqual(original["sha256"], again["sha256"])

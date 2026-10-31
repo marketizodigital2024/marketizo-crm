@@ -21,7 +21,7 @@ async function flush(){for(let i=0;i<12;i++)await new Promise(setImmediate);}
  assert.equal(get('signSteps').children[0].attributes['aria-current'],'step');
  assert.match(get('detailsHint').textContent,/Ovo još nije potpisivanje/);
  const fields=get('detailsFields').querySelectorAll('input');
- assert.equal(fields.some(x=>x.name==='capacity'),false);
+ assert.equal(fields.some(x=>x.name==='capacity'),false);assert.equal(fields.find(x=>x.name==='postalCode').maxLength,20);
  assert.ok(fields.every(x=>x.placeholder),'Every visible identity input has an example');
  assert.equal(fields.find(x=>x.name==='taxId').placeholder,'Npr. 123456789 (PIB)');
  await get('detailsForm').listeners.submit({preventDefault(){}});await flush();
@@ -58,5 +58,6 @@ async function flush(){for(let i=0;i<12;i++)await new Promise(setImmediate);}
  await get('detailsForm').listeners.submit({preventDefault(){}});await flush();
  assert.equal(get('detailsSection').hidden,true);assert.equal(get('signatureSection').hidden,true);
  assert.equal(get('signSteps').children[2].attributes['aria-current'],'step');assert.equal(accepts,0);
+ const html=fs.readFileSync(require.resolve('../sign.html'),'utf8');assert.ok(html.indexOf('id="startSigning"')>html.indexOf('id="documentPages"'),'Signature action follows the full agreement');
  console.log('PASS identity examples, removed capacity, and explicit data -> read -> signature stages without automatic acceptance');
 })().catch(e=>{console.error(e);process.exitCode=1;});
