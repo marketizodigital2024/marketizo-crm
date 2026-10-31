@@ -7290,7 +7290,7 @@ function employeeHasSmm(value) { return employeeRoles(value).some(role => ['Soci
 // Load counting controls on admin forms without duplicating the script across CRM pages.
 if (document.getElementById("employeeWorkForm")) {
   const workProductionScript = document.createElement("script");
-  workProductionScript.src = "work-production.js?v=20261031-production";
+  workProductionScript.src = "work-production.js?v=20261031-simple-quantity";
   workProductionScript.onload = () => {
     const form = document.getElementById("employeeWorkForm");
     window.MarketizoProduction?.attach(form, () => ({ employeeId: form.elements.employeeId.value, activityId: form.elements.activityId.value, clientId: form.elements.clientId.value }));

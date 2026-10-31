@@ -18,5 +18,12 @@ assert.deepEqual((await payload()).unrelated,original.unrelated);assert.deepEqua
 const o2={...out,batchId:'new-batch',label:'Next batch'};assert.equal((await call({...log,id:'next'},o2)).ok,true);
 await db.exec("update marketizo_activity_metrics set unit='task' where activity_id='act'");assert.equal((await call({...log,id:'next-end'},{...o2,completed:true,quantity:1})).ok,true,'A started series keeps its original unit');
 assert.equal((await call({...log,id:'new-unit'},{...o2,batchId:'wrong-unit'})).status,409);
+// The simple form sends one completed quantity with each time entry.
+const simpleLog={...log,id:'simple-quantity',minutes:60},simpleOutput={batchId:'simple-batch',label:'3 zadataka',unit:'task',quantity:3,completed:true};
+assert.equal((await call(simpleLog,simpleOutput)).ok,true);assert.equal((await call(simpleLog,simpleOutput)).duplicate,true);
+const simpleRows=(await db.query("select * from marketizo_work_outputs where batch_id='simple-batch'")).rows;assert.equal(simpleRows.length,1);assert.equal(simpleRows[0].quantity,3);
+const {default:analytics}=await import('../work-analytics-core.js');
+const summary=analytics.analyze({employees:original.employees,activities:original.employeeActivities,logs:(await payload()).employeeWorkLogs,outputs:simpleRows},{unit:'task'});
+assert.equal(summary.averageUnit,20,'60 minutes / 3 units is 20 minutes per unit');assert.equal(summary.unitTotals.task.quantity,3,'Retry never doubles quantity');
 await db.exec('set role anon');await assert.rejects(db.query('select * from marketizo_work_outputs'),/permission denied/);await assert.rejects(call(),/permission denied/);await db.exec('reset role');
 await db.close();console.log('PASS PostgreSQL production: additive history preservation, atomic hours+counts, no duplicate completion/retry, role/client isolation, unit snapshots, backup and anonymous denial');
