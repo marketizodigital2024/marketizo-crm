@@ -4447,3 +4447,5 @@ body.employee-profile-page .employee-summary-grid article:nth-child(4n + 4)::bef
 .wa-filter-help-heading {font-size:15px; margin:0 0 12px;}
 .work-analytics-page .wa-kpi-label {display:block;padding-right:0;line-height:1.6;}
 .wa-table-wrap th>.dashboard-help-trigger {margin-left:3px;}
+
+.invoice-save-notice{position:sticky;top:12px;z-index:45;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;margin-bottom:18px;border:1px solid #edb47d;border-radius:12px;background:#fff5e9;color:#71421c;font-size:13px;line-height:1.5}.invoice-save-notice[hidden]{display:none}.invoice-save-notice button{flex-shrink:0}select[data-invoice-pending="true"]{outline:2px solid #edb47d;outline-offset:2px}@media(max-width:700px){.invoice-save-notice{top:8px;flex-wrap:wrap}}
