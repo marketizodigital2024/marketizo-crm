@@ -2129,8 +2129,44 @@ function notificationClass(type) {
   return "ok";
 }
 
+const pendingAbsenceDecisions = new Map();
+
+function pendingAdminRequests() {
+  const requests = new Map((state.employeeAbsences || []).filter(item => item.status === "Zatraženo").map(item => [item.id, item]));
+  pendingAbsenceDecisions.forEach((item, id) => requests.set(id, item));
+  return [...requests.values()].sort((a, b) => String(a.requestedAt || a.startDate).localeCompare(String(b.requestedAt || b.startDate)));
+}
+
+function isPendingAbsenceNotification(notification) {
+  const key = String(notification.key || "");
+  return key.startsWith("absence-request-") && pendingAdminRequests().some(item => key === `absence-request-${item.id}`);
+}
+
+function renderPendingAdminRequests() {
+  const header = document.querySelector(".main > .topbar");
+  if (!header) return;
+  let target = document.getElementById("adminPendingApprovals");
+  if (!target) {
+    target = document.createElement("section");
+    target.id = "adminPendingApprovals";
+    target.className = "pending-approvals";
+    target.setAttribute("aria-label", "Zahtevi koji čekaju odluku administratora");
+    header.after(target);
+  }
+  const requests = pendingAdminRequests();
+  const wasOpen = target.querySelector("details")?.open;
+  target.hidden = !requests.length;
+  if (!requests.length) { target.innerHTML = ""; return; }
+  target.innerHTML = `<details ${(wasOpen === undefined ? requests.length <= 3 : wasOpen) ? "open" : ""}><summary><strong>Zahtevi čekaju odluku <span class="pending-approval-count">${requests.length}</span></strong><span>Odobri ili odbij zahtev</span></summary><div class="pending-approval-list">${requests.map(item => {
+    const busy = pendingAbsenceDecisions.has(item.id);
+    return `<article class="pending-approval-row"><div><strong>${escapeInvoiceText(employeeById(item.employeeId)?.name || "Zaposleni")}</strong><span>${escapeInvoiceText(item.type)} · ${formatDate(item.startDate)} – ${formatDate(item.endDate)}</span>${item.note ? `<small>${escapeInvoiceText(item.note)}</small>` : ""}</div><div class="notification-actions"><button type="button" class="mini-action approve-absence" data-absence-id="${escapeInvoiceText(item.id)}" ${busy ? "disabled" : ""}>${busy ? "Čuvanje…" : "Odobri"}</button><button type="button" class="mini-action danger-action reject-absence" data-absence-id="${escapeInvoiceText(item.id)}" ${busy ? "disabled" : ""}>Odbij</button></div></article>`;
+  }).join("")}</div></details>`;
+  target.querySelectorAll(".approve-absence").forEach(button => button.addEventListener("click", () => approveAbsence(button.dataset.absenceId)));
+  target.querySelectorAll(".reject-absence").forEach(button => button.addEventListener("click", () => rejectAbsence(button.dataset.absenceId)));
+}
+
 function isNotificationHidden(notification) {
-  return notification.hiddenUntil && new Date(notification.hiddenUntil).getTime() > Date.now();
+  return !isPendingAbsenceNotification(notification) && notification.hiddenUntil && new Date(notification.hiddenUntil).getTime() > Date.now();
 }
 
 async function hideNotification(id) {
@@ -2139,6 +2175,7 @@ async function hideNotification(id) {
 
   const notification = (state.notifications || []).find((item) => item.id === id);
   if (!notification) return;
+  if (isPendingAbsenceNotification(notification)) { showToast("Zahtev čeka odluku", "Prvo odobri ili odbij zahtev.", "warn"); return; }
   notification.hiddenUntil = addDays(currentDateKey(), 7);
   if (!(await confirmAdminSave(_confirmedBefore))) return;
   renderAll();
@@ -2163,6 +2200,7 @@ async function deleteNotification(id) {
 
   const notification = (state.notifications || []).find((item) => item.id === id);
   if (!notification) return;
+  if (isPendingAbsenceNotification(notification)) { showToast("Zahtev čeka odluku", "Prvo odobri ili odbij zahtev.", "warn"); return; }
   state.dismissedNotificationKeys = state.dismissedNotificationKeys || [];
   if (notification.key && !state.dismissedNotificationKeys.includes(notification.key)) {
     state.dismissedNotificationKeys.push(notification.key);
@@ -2188,8 +2226,10 @@ function showAdminNotificationPopups(notifications) {
 }
 
 function renderAdminNotifications() {
-  const scopedNotifications = (state.notifications || []).filter((notification) => notification.scope === "admin");
-  const activeNotifications = scopedNotifications.filter((notification) => !isNotificationHidden(notification)).slice(0, 8);
+  const requests = pendingAdminRequests();
+  const pendingNotifications = requests.map(item => ({ id: `required-absence-${item.id}`, key: `absence-request-${item.id}`, scope: "admin", type: "warn", title: "Zahtev za odsustvo", message: `${employeeById(item.employeeId)?.name || "Zaposleni"}: ${item.type}, ${formatDate(item.startDate)} – ${formatDate(item.endDate)}.` }));
+  const scopedNotifications = [...pendingNotifications, ...(state.notifications || []).filter(notification => notification.scope === "admin" && !String(notification.key || "").startsWith("absence-request-"))];
+  const activeNotifications = scopedNotifications.filter((notification) => !isNotificationHidden(notification)).slice(0, Math.max(8, requests.length));
   const hiddenNotifications = scopedNotifications.filter(isNotificationHidden).slice(0, 6);
   setText("adminNotificationCount", `${activeNotifications.length} aktivno`);
   const target = document.getElementById("adminNotificationList");
@@ -2203,7 +2243,7 @@ function renderAdminNotifications() {
             <span>${escapeInvoiceText(notification.title)}<br />${escapeInvoiceText(notification.message)}</span>
             <div class="notification-actions">
               ${String(notification.key || "").startsWith("absence-request-")
-                ? `<button class="mini-action approve-absence" data-absence-id="${String(notification.key).slice("absence-request-".length)}" type="button">Prihvati</button><button class="mini-action danger-action reject-absence" data-absence-id="${String(notification.key).slice("absence-request-".length)}" type="button">Odbij</button>`
+                ? `<button class="mini-action approve-absence" data-absence-id="${escapeInvoiceText(String(notification.key).slice("absence-request-".length))}" type="button">Prihvati</button><button class="mini-action danger-action reject-absence" data-absence-id="${escapeInvoiceText(String(notification.key).slice("absence-request-".length))}" type="button">Odbij</button>`
                 : `<button class="mini-action" data-hide-notification="${escapeInvoiceText(notification.id)}" type="button">Sakrij 7 dana</button><button class="mini-action danger-action" data-delete-notification="${escapeInvoiceText(notification.id)}" type="button">Obriši</button>`}
             </div>
           </div>`
@@ -5170,6 +5210,8 @@ async function approveAbsence(id) {
   if (!absence || absence.status !== "Zatraženo") return;
   const employee = employeeById(absence.employeeId);
   if (!confirm(`Prihvatiti zahtev za ${absence.type} zaposlenog ${employee?.name || "Zaposleni"}?`)) return;
+  pendingAbsenceDecisions.set(id, structuredClone(absence));
+  renderPendingAdminRequests();
   absence.status = "Odobreno";
   absence.approvedAt = new Date().toISOString();
   absence.approvedBy = "Admin";
@@ -5189,7 +5231,11 @@ async function approveAbsence(id) {
     title: "Odmor odobren",
     message: `${employee?.name || "Zaposleni"} ima odobren ${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)}.`,
   });
-  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  let confirmed = false;
+  try { confirmed = await confirmAdminSave(_confirmedBefore); }
+  catch (error) { state = _confirmedBefore; window.MarketizoRemote?.cache?.(state); showToast("Nije sačuvano", "Zahtev ostaje otvoren. Pokušaj ponovo.", "warn"); }
+  finally { pendingAbsenceDecisions.delete(id); renderPendingAdminRequests(); }
+  if (!confirmed) return;
   renderAll();
 }
 
@@ -5205,6 +5251,8 @@ async function rejectAbsence(id) {
     alert("Razlog odbijanja je obavezan. Zahtev nije promenjen.");
     return;
   }
+  pendingAbsenceDecisions.set(id, structuredClone(absence));
+  renderPendingAdminRequests();
   absence.status = "Odbijeno";
   absence.rejectedAt = new Date().toISOString();
   absence.rejectedBy = "Admin";
@@ -5218,7 +5266,11 @@ async function rejectAbsence(id) {
     title: "Zahtev za odmor je odbijen",
     message: `${absence.type} od ${formatDate(absence.startDate)} do ${formatDate(absence.endDate)} nije odobren. Razlog: ${reason}`,
   });
-  if (!(await confirmAdminSave(_confirmedBefore))) return;
+  let confirmed = false;
+  try { confirmed = await confirmAdminSave(_confirmedBefore); }
+  catch (error) { state = _confirmedBefore; window.MarketizoRemote?.cache?.(state); showToast("Nije sačuvano", "Zahtev ostaje otvoren. Pokušaj ponovo.", "warn"); }
+  finally { pendingAbsenceDecisions.delete(id); renderPendingAdminRequests(); }
+  if (!confirmed) return;
   renderAll();
   showToast("Zahtev je odbijen", `${employee?.name || "Zaposleni"} će videti razlog odbijanja.`, "warn");
 }
@@ -5763,6 +5815,7 @@ function renderAll() {
   const notificationCount = (state.notifications || []).length;
   generateSystemNotifications();
   if ((state.notifications || []).length !== notificationCount) saveState({ remote: false });
+  renderPendingAdminRequests();
   renderAdminPanel();
   if (document.getElementById("clientCards")) renderClients();
   if (document.getElementById("leadCards")) renderLeadCrm();

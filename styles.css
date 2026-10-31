@@ -4392,3 +4392,15 @@ body.employee-profile-page .employee-summary-grid article:nth-child(4n + 4)::bef
 .company-activity-detail-row small { display:block; color:#7a897f; margin-top:3px; }
 .company-activity-detail-head { position:sticky; top:0; background:#edf4ee; font-weight:800; border-top:0; }
 @media(max-width:560px){.company-activity-detail-row{grid-template-columns:minmax(140px,2fr) repeat(3,90px);gap:10px;}.company-activity-details{max-height:360px;}}
+
+/* Unresolved approvals stay visible across administrator sections. */
+.pending-approvals{position:sticky;top:12px;z-index:30;margin:0 0 22px;padding:14px 18px;border:1px solid #ebc99e;border-left:4px solid #ed7a21;border-radius:16px;background:#fffaf2;box-shadow:0 8px 24px #243c2910}
+.pending-approvals[hidden]{display:none}
+.pending-approvals summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;color:#294d3b}
+.pending-approvals summary>span{font-size:12px;color:#76583a}
+.pending-approval-count{display:inline-flex;align-items:center;justify-content:center;min-width:25px;min-height:25px;border-radius:50%;background:#ed7a21;color:white;margin-left:6px}
+.pending-approval-list{max-height:38vh;overflow:auto;margin-top:10px}
+.pending-approval-row{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:12px 0;border-top:1px solid #eddcca}
+.pending-approval-row>div:first-child{display:grid;gap:3px;min-width:0;overflow-wrap:anywhere}
+.pending-approval-row span,.pending-approval-row small{font-size:12px;color:#665b4f}
+@media(max-width:640px){.pending-approvals{top:6px;padding:12px}.pending-approvals summary{align-items:flex-start}.pending-approvals summary>span{display:none}.pending-approval-row{align-items:flex-start;flex-direction:column;gap:8px}}
