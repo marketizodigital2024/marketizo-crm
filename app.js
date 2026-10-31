@@ -1439,6 +1439,7 @@ function migrateState(data) {
     hidden: Boolean(absence.hidden),
   }));
   const employeeWorkLogs = (data.employeeWorkLogs || []).map((log) => ({
+    ...(log.production ? { production: log.production } : {}),
     id: log.id || crypto.randomUUID(),
     employeeId: log.employeeId || employees[0]?.id || "",
     date: log.date || currentDateKey(),
@@ -4533,6 +4534,11 @@ function buildStructuredSidebar() {
     <a class="work-entry-navigation-link" data-work-entry-link="late" href="employees-hours.html#work/late">Dodaj kašnjenje</a>
   `;
   navigation.insertAdjacentElement("afterend", workEntryNavigation);
+  const analyticsNavigation = document.createElement("nav");
+  analyticsNavigation.className = "team-navigation";
+  analyticsNavigation.setAttribute("aria-label", "Analitika");
+  analyticsNavigation.innerHTML = `<span class="sidebar-section-label">Analitika</span><a class="team-navigation-link" href="work-analytics.html">Analiza vremena rada</a>`;
+  workEntryNavigation.insertAdjacentElement("afterend", analyticsNavigation);
 
   const syncActiveLink = () => {
     const current = location.hash || "#admin";
@@ -6199,12 +6205,15 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
     alert("Za Druge aktivnosti obavezno ukratko opiši šta si radio/la.");
     return;
   }
-  const fingerprint = JSON.stringify([employeeId,date,activity.id,client?.id || "",minutes,formData.get("note")]);
+  let production;
+  try { production = window.MarketizoProduction?.read(form); } catch(error) { alert(error.message); return; }
+  const fingerprint = JSON.stringify([employeeId,date,activity.id,client?.id || "",minutes,formData.get("note"),production||null]);
   if (form.dataset.pendingWorkFingerprint !== fingerprint) {
     form.dataset.pendingWorkId = crypto.randomUUID();
     form.dataset.pendingWorkFingerprint = fingerprint;
   }
   const workLog = {
+    ...(production ? {production} : {}),
     id: form.dataset.pendingWorkId,
     employeeId,
     date,
@@ -7331,3 +7340,14 @@ function setupEmployeePositionSelection() {
 setupEmployeePositionSelection();
 
 
+
+// Load counting controls on admin forms without duplicating the script across CRM pages.
+if (document.getElementById("employeeWorkForm")) {
+  const workProductionScript = document.createElement("script");
+  workProductionScript.src = "work-production.js?v=20261031-production";
+  workProductionScript.onload = () => {
+    const form = document.getElementById("employeeWorkForm");
+    window.MarketizoProduction?.attach(form, () => ({ employeeId: form.elements.employeeId.value, activityId: form.elements.activityId.value, clientId: form.elements.clientId.value }));
+  };
+  document.head.append(workProductionScript);
+}
