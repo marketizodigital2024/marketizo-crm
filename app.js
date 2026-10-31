@@ -2029,7 +2029,7 @@ function renderAdminActionSummary(active, monthKey) {
   const cards = [
     { view: "reports", tone: "warn", value: unsent.length, label: "računa nije poslato", detail: monthLabel(monthKey) },
     { view: "reports", tone: "danger", value: currency.format(overdueTotal), label: "duga preko 30 dana", detail: `${overdue.length} klijenata` },
-    { view: "employees", tone: "warn", value: teamExceptions.length, label: "odstupanja kapaciteta", detail: "ispod 80% ili preko 110%" },
+    { view: "employees", tone: "warn", value: teamExceptions.length, label: "zaposlenih odstupa od plana sati", detail: "ispod 80% ili preko 110%" },
     { view: "clients", tone: "info", value: contracts.length, label: "ugovora ističe uskoro", detail: "narednih 30 dana" },
   ];
   target.innerHTML = cards.map((card, index) => `<div class="dashboard-action-wrap"><button class="dashboard-action-card ${card.tone}" type="button" data-go-view="${card.view}"><strong>${dashboardEscape(card.value)}</strong><span>${card.label}</span><small>${dashboardEscape(card.detail)}</small></button><button type="button" class="dashboard-help-trigger action-help" data-dashboard-help="action-${index}" aria-label="Objašnjenje: ${dashboardEscape(card.label)}" aria-expanded="false" aria-controls="dashboardHelpPanel">?</button></div>`).join("");
@@ -2076,7 +2076,7 @@ function renderRevenueTrend(endMonth) {
   const line = (field) => points.map((point, index) => xy(point[field], index).join(",")).join(" ");
   const latest = points.at(-1), previous = points.at(-2);
   const delta = previous?.billed ? Math.round(((latest.billed - previous.billed) / previous.billed) * 100) : latest.billed ? null : 0;
-  target.innerHTML = `<div class="chart-legend"><span><i class="legend-dot billed"></i>Fakturisano</span><span><i class="legend-dot paid"></i>Naplaćeno</span></div><div class="line-chart-wrap"><svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafikon fakturisanog i naplaćenog prihoda">${[0, .25, .5, .75, 1].map((ratio) => `<line x1="${padX}" y1="${padY + chartHeight * ratio}" x2="${width - padX}" y2="${padY + chartHeight * ratio}" class="chart-gridline" />`).join("")}<polyline points="${line("billed")}" class="trend-line billed" /><polyline points="${line("paid")}" class="trend-line paid" />${points.map((point, index) => { const billed = xy(point.billed, index), paid = xy(point.paid, index); return `<circle cx="${billed[0]}" cy="${billed[1]}" r="5" class="trend-dot billed"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.billed)}</title></circle><circle cx="${paid[0]}" cy="${paid[1]}" r="5" class="trend-dot paid"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.paid)}</title></circle>`; }).join("")}</svg></div><div class="chart-axis">${points.map((point) => `<span>${dashboardEscape(shortMonthLabel(point.month))}</span>`).join("")}</div><div class="trend-summary"><span><b>${currency.format(latest.billed)}</b> fakturisano</span><span><b>${currency.format(latest.paid)}</b> naplaćeno</span><span class="${delta >= 0 ? "positive" : "negative"}"><b>${delta === null ? "Nema osnovice" : `${delta >= 0 ? "+" : ""}${delta}%`}</b> prema prethodnom mesecu</span></div>`;
+  target.innerHTML = `<div class="chart-legend"><span><i class="legend-dot billed"></i>Fakturisano</span><span><i class="legend-dot paid"></i>Naplaćeno</span></div><div class="line-chart-wrap"><svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafikon fakturisanog i naplaćenog prihoda">${[0, .25, .5, .75, 1].map((ratio) => `<line x1="${padX}" y1="${padY + chartHeight * ratio}" x2="${width - padX}" y2="${padY + chartHeight * ratio}" class="chart-gridline" />`).join("")}<polyline points="${line("billed")}" class="trend-line billed" /><polyline points="${line("paid")}" class="trend-line paid" />${points.map((point, index) => { const billed = xy(point.billed, index), paid = xy(point.paid, index); return `<circle cx="${billed[0]}" cy="${billed[1]}" r="5" class="trend-dot billed"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.billed)}</title></circle><circle cx="${paid[0]}" cy="${paid[1]}" r="5" class="trend-dot paid"><title>${dashboardEscape(monthLabel(point.month))}: ${currency.format(point.paid)}</title></circle>`; }).join("")}</svg></div><div class="chart-axis">${points.map((point) => `<span>${dashboardEscape(shortMonthLabel(point.month))}</span>`).join("")}</div><div class="trend-summary"><span><b>${currency.format(latest.billed)}</b> fakturisano</span><span><b>${currency.format(latest.paid)}</b> naplaćeno</span><span class="${delta >= 0 ? "positive" : "negative"}"><b>${delta === null ? "—" : `${delta >= 0 ? "+" : ""}${delta}%`}</b> ${delta === null ? "prethodni mesec je bio 0 €" : "prema prethodnom mesecu"}</span></div>`;
 }
 
 function renderPaymentDonut(clients, monthKey) {
@@ -4315,7 +4315,7 @@ function renderEmployeeGoalRows() {
           <div class="setup-item alert-item ${status}" data-admin-goal-id="${escapeInvoiceText(goal.id)}">
             <strong>${goal.progress || 0}%</strong>
             <span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(goal.category || "Razvoj")} · ${escapeInvoiceText(goal.title)}<br />${escapeInvoiceText(goal.target || "")} · ${deadline}</span>
-            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div>
+            <div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Napredak za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj napredak</button></div>
           </div>`;
         })
         .join("")
@@ -4341,7 +4341,7 @@ function renderEmployeeGoalRows() {
       }
       if (!(await confirmAdminSave(_confirmedBefore))) return;
       renderAll();
-      showToast("Progres sačuvan", `${employeeById(goal.employeeId)?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+      showToast("Napredak sačuvan", `${employeeById(goal.employeeId)?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
     });
   });
 
@@ -4733,7 +4733,7 @@ function setupClientCostAnalysis() {
       <article><span>Interno / Marketizo</span><strong id="clientCostInternal">€ 0</strong></article>
       <article><span>Neraspoređeno vreme</span><strong id="clientCostUnassigned">€ 0</strong></article>
     </section>
-    <section class="panel"><p>Trošak prijavljenog rada po bruto plati i prosečnom mesečnom fondu sati. Bruto obračun ostaje zaseban. Fiksni trošak se dodaje samo za mesece sa sačuvanim podešavanjem; posebni troškovi prikazuju se kao mesečni iznos. Tekući mesec je privremen dok se vreme upisuje.</p><p id="clientCostWarnings" role="status"></p></section>
+    <section class="panel"><p>Trošak rada računa se iz bruto plate i prosečnog broja radnih sati mesečno. Troškovi firme dodaju se samo kada su uneti za taj mesec. Posebni troškovi dodaju se izabranom klijentu. Za tekući mesec rezultat se menja dok zaposleni upisuju vreme.</p><p id="clientCostWarnings" role="status"></p></section>
     <section class="panel client-cost-results"><div class="panel-head"><div><p class="eyebrow">Analiza</p><h2>Utrošak po klijentu i zaposlenom</h2></div><span id="clientCostRange"></span></div><div id="clientCostRows"></div></section>`;
   main.append(view);
 
@@ -4762,7 +4762,7 @@ function setupClientCostAnalysis() {
   const overhead = window.MarketizoOverhead;
   const settingsPanel = document.createElement('section');
   settingsPanel.className = 'panel company-cost-settings';
-  settingsPanel.innerHTML = `<details><summary><strong>Fiksni i posebni troškovi po mesecu</strong></summary><p>Unesi troškove bez bruto plata. Fond je sačuvan za izabrani mesec i uključuje osnivače. Početak/kraj angažovanja u toku meseca računa se srazmerno kalendarskim danima.</p><form id="overheadSettingsForm" class="client-cost-filter-grid"><label>Mesec<input name="month" type="month" required /></label><label>Fiksni troškovi bez plata (€)<input name="amount" type="number" min="0" max="10000000" step="0.01" required placeholder="Unesi mesečni iznos" /></label><label><input name="refreshCapacity" type="checkbox" /> Ponovo izračunaj fond iz ugovorenih sati</label><button class="primary-button" type="submit">Sačuvaj mesec</button></form><p id="overheadCapacityInfo"></p><details><summary>Ko ulazi u fond sati</summary><div id="overheadCapacityPeople"></div></details><form id="overheadExtraForm" class="client-cost-filter-grid"><label>Klijent<select name="clientId" required></select></label><label>Posebni troškovi klijenta za ovaj mesec (€)<input name="amount" type="number" min="0" max="10000000" step="0.01" required /></label><label>Opis<input name="note" maxlength="500" placeholder="Put, spoljni saradnik…" /></label><button class="secondary-button" type="submit">Sačuvaj posebni trošak</button></form><p>Posebni trošak je mesečni zbir za izabranog klijenta; ne dodaj ovde stavke koje su već u fiksnim troškovima ili platama.</p><p id="overheadSaveStatus" role="status"></p></details>`;
+  settingsPanel.innerHTML = `<details><summary><strong>Fiksni i posebni troškovi po mesecu</strong></summary><p>Unesi mesečne troškove firme bez plata. Ti troškovi se raspoređuju prema sačuvanim radnim satima zaposlenih, uključujući osnivače. Za početak ili kraj rada tokom meseca uzima se srazmeran deo sati.</p><form id="overheadSettingsForm" class="client-cost-filter-grid"><label>Mesec<input name="month" type="month" required /></label><label>Fiksni troškovi bez plata (€)<input name="amount" type="number" min="0" max="10000000" step="0.01" required placeholder="Unesi mesečni iznos" /></label><label><input name="refreshCapacity" type="checkbox" /> Ponovo izračunaj sate za raspodelu troškova</label><button class="primary-button" type="submit">Sačuvaj mesec</button></form><p id="overheadCapacityInfo"></p><details><summary>Čiji sati ulaze u raspodelu troškova</summary><div id="overheadCapacityPeople"></div></details><form id="overheadExtraForm" class="client-cost-filter-grid"><label>Klijent<select name="clientId" required></select></label><label>Posebni troškovi klijenta za ovaj mesec (€)<input name="amount" type="number" min="0" max="10000000" step="0.01" required /></label><label>Opis<input name="note" maxlength="500" placeholder="Put, spoljni saradnik…" /></label><button class="secondary-button" type="submit">Sačuvaj posebni trošak</button></form><p>Posebni trošak je mesečni zbir za izabranog klijenta; ne dodaj ovde stavke koje su već u fiksnim troškovima ili platama.</p><p id="overheadSaveStatus" role="status"></p></details>`;
   view.insertBefore(settingsPanel, view.querySelector('.client-cost-kpis'));
   const settingForm = settingsPanel.querySelector('#overheadSettingsForm');
   const extraForm = settingsPanel.querySelector('#overheadExtraForm');
@@ -4775,7 +4775,7 @@ function setupClientCostAnalysis() {
     settingForm.elements.refreshCapacity.checked = false;
     const people = saved?.capacity || overhead.capacity(state.employees, month);
     const total = people.reduce((n,e)=>n+e.monthlyHours,0);
-    settingsPanel.querySelector('#overheadCapacityInfo').textContent = `${saved?'Sačuvan':'Predloženi'} fond: ${hours(total*60)}. ${saved?'Izmena iznosa zadržava ovaj fond dok ne označiš ponovni obračun.':'Mesec još nije podešen; fiksni trošak se ne pretpostavlja.'}`;
+    settingsPanel.querySelector('#overheadCapacityInfo').textContent = `${saved?'Sačuvani':'Predloženi'} sati za raspodelu troškova: ${hours(total*60)}. ${saved?'Promena iznosa ne menja broj ovih sati. Označi polje iznad ako želiš da se sati ponovo izračunaju.':'Troškovi firme još nisu uneti za ovaj mesec.'}`;
     settingsPanel.querySelector('#overheadCapacityPeople').textContent = people.map(e=>`${e.name}: ${hours(e.monthlyHours*60)}`).join(' · ');
     extraForm.elements.clientId.innerHTML = `<option value="">Izaberi klijenta</option>${(state.clients||[]).filter(c=>!/^marketizo digital/i.test(c.name)).map(c=>`<option value="${escapeInvoiceText(c.id)}">${escapeInvoiceText(c.name)}</option>`).join('')}`;
     extraForm.elements.amount.value = ''; extraForm.elements.note.value = '';
@@ -5103,7 +5103,7 @@ function setupExistingGoalProgressEditor() {
     const employeeId = employeeSelect.value;
     const employee = employeeById(employeeId);
     const goals = (state.employeeGoals || []).filter((goal) => goal.employeeId === employeeId).sort((a,b) => String(b.endDate || "").localeCompare(String(a.endDate || "")));
-    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${escapeInvoiceText(employee?.name || "zaposleni")}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${escapeInvoiceText(goal.id)}"><div><strong>${escapeInvoiceText(goal.title)}</strong><span>${escapeInvoiceText(goal.target || "Bez opisa")} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Progres za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj progres</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
+    section.innerHTML = `<div class="panel-head"><div><p class="eyebrow">Aktivni razvoj</p><h3>Postojeći ciljevi: ${escapeInvoiceText(employee?.name || "zaposleni")}</h3></div><span>${goals.length} ciljeva</span></div>${goals.length ? goals.map((goal) => `<div class="existing-goal-row" data-existing-goal-id="${escapeInvoiceText(goal.id)}"><div><strong>${escapeInvoiceText(goal.title)}</strong><span>${escapeInvoiceText(goal.target || "Bez opisa")} · rok ${formatDate(goal.endDate)}</span></div><div class="admin-goal-progress"><input type="range" min="0" max="100" step="5" value="${goal.progress || 0}" aria-label="Napredak za ${escapeInvoiceText(goal.title)}" /><output>${goal.progress || 0}%</output><button type="button">Sačuvaj napredak</button></div></div>`).join("") : `<div class="empty-state">Ovaj zaposleni nema unetih ciljeva.</div>`}`;
     section.querySelectorAll("[data-existing-goal-id]").forEach((row) => {
       const slider = row.querySelector('input[type="range"]');
       const output = row.querySelector("output");
@@ -5119,7 +5119,7 @@ function setupExistingGoalProgressEditor() {
         else if (goal.status === "Završeno") { goal.status = "U toku"; goal.completedDate = ""; }
         if (!(await confirmAdminSave(_confirmedBefore))) return;
         render();
-        showToast("Progres sačuvan", `${employee?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
+        showToast("Napredak sačuvan", `${employee?.name || "Zaposleni"}: ${goal.progress}%`, "ok");
       });
     });
   };
