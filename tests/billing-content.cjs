@@ -35,3 +35,5 @@ assert.equal(c.registry([{status:'queued',snapshot:s}]).length,0);console.log('P
  const ambiguous={client:{id:'one',name:'Legal GmbH'},_confirmedBefore:{clients:[{id:'one',name:'Duplicate'},{id:'two',name:'Duplicate'}]},state:{leads:[{client:'Duplicate'}]}};vm.createContext(ambiguous);vm.runInContext(source.slice(start,end),ambiguous);assert.equal(ambiguous.state.leads[0].clientId,undefined);
  console.log('PASS client rename: ID links and unique legacy lead/team links preserved; ambiguous names never guessed');
 }
+
+assert.throws(()=>c.snapshot({...client,billingProfile:{...client.billingProfile,email:'placeholder@marketizo.local'}},input),/Stvarni e-mail/);
