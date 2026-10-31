@@ -40,3 +40,6 @@ Invoice editing supports additional paid work (`extraItems`) assigned only to pr
 Read-only samples show the current planned number from the read-only settings action, marked ENTWURF / TEST and explicitly not reserved. The counter is unchanged until actual issuing, and the existing SQL next-number check still requires a new final preview if another invoice consumes the planned number.
 
 Invoice payment instructions explicitly separate the verified bank beneficiary (`issuer.accountHolder`), unchanged IBAN/BIC and invoice-specific payment reference. The beneficiary is not inferred from the proprietor line. Keep the bank holder independently verified if the legal branding changes. Stationery version 3 removes the apartment suffix from the issuer street address. Existing issued PDF bytes remain immutable.
+
+
+Before final preview, the form reloads current profile/invoice eligibility without discarding edits. This recognizes a just-confirmed profile without a manual refresh. The reason confirmation is locked is shown beside the checkbox; already billed/paid periods remain blocked. Revalidation clears any previous sendable document before checking fresh eligibility.
