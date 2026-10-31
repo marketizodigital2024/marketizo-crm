@@ -4,7 +4,7 @@ begin;
 set local lock_timeout='3s';
 -- Bounded, read-only export: no large aggregate or long SHARE locks in live backups.
 create or replace function public.marketizo_system_domains_manifest()
-returns jsonb language plpgsql stable security invoker set search_path='' set statement_timeout='10s' as $$
+returns jsonb language plpgsql stable security invoker set search_path='' set statement_timeout='30s' as $$
 declare r record; entries jsonb:='{}'; columns jsonb; keys jsonb; ordering text; n bigint; fingerprint text; inventory jsonb; keyargs text; sortselect text; sortnames text;
 begin
  for r in select n.nspname ns,c.relname name,c.oid from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
