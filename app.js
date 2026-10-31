@@ -2905,7 +2905,7 @@ function openEditClient(id) {
   form.elements.billingDay.value = Number(client.billingDay || 1);
   form.elements.contactName.value = client.contactName || "";
   form.elements.contactPhone.value = client.contactPhone || "";
-  form.elements.loginEmail.value = client.loginEmail || "";
+  form.elements.email.value = client.email ?? client.billingProfile?.email ?? (/@marketizo\.local$/i.test(client.loginEmail||"")?"":client.loginEmail||"");
   form.elements.contractNote.value = client.contractNote || "";
   document.getElementById("editClientModal").showModal();
 }
@@ -5721,7 +5721,7 @@ function renderClients() {
             <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
             <td><span class="status ${statusClass(client)}">${escapeInvoiceText(client.status || "Aktivan")}</span></td>
             <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
-            <td>${escapeInvoiceText(client.loginEmail || "Nije unet")}</td>
+            <td>${escapeInvoiceText(client.email || client.billingProfile?.email || client.loginEmail || "Nije unet")}</td>
             <td>${escapeInvoiceText(client.contactName || "Nije unet")}<br /><span>${escapeInvoiceText(client.contactPhone || client.whatsapp || "Telefon nije unet")}</span></td>
             <td>
               <div class="row-actions">
@@ -5999,7 +5999,7 @@ function applyOperationalAdminAccess() {
   document.body.classList.add("operational-admin-mode");
   document.querySelectorAll('[data-view="admin"], [data-view="reports"], [href*="employees-settings"], #exportBtn, #backupNowBtn, #employeeProfilePanel, #openEmployeeProfileForm, [data-edit-employee], [data-delete-employee], [data-client-delete], [data-delete-client], [data-remove-client], .client-cost-nav').forEach((item) => { item.hidden = true; });
   document.getElementById("selectedEmployeeSalary")?.closest("article, div")?.setAttribute("hidden", "");
-  const protectedClientFields = ["package", "revenue", "invoiceStartMonth", "billingDay", "websitePrice", "hostingPrice", "domainPrice"];
+  const protectedClientFields = ["email", "package", "revenue", "invoiceStartMonth", "billingDay", "websitePrice", "hostingPrice", "domainPrice"];
   protectedClientFields.forEach((name) => document.querySelectorAll(`[name="${name}"]`).forEach((input) => {
     const label = input.closest("label");
     if (label) label.hidden = true;
@@ -6831,7 +6831,7 @@ function billingProfileFromForm(data) {
   const billingProfile={};for(const key of ["street","postalCode","city","vatId","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
   if(billingProfile.taxMode==="exempt"&&data.get("billing_taxFreeMode")==="reverse-charge")billingProfile.taxMode="reverse-charge";
   if(billingProfile.taxMode==="standard20")billingProfile.taxNote="";
-  const shared=clientBillingDefaults({name:data.get("name"),country:data.get("country"),loginEmail:data.get("loginEmail")});
+  const shared=clientBillingDefaults({name:data.get("name"),country:data.get("country"),email:String(data.get("email")||"").trim().toLowerCase()});
   billingProfile.legalName=String(shared.legalName||"").trim();billingProfile.country=String(shared.country||"");billingProfile.email=String(shared.email||"").trim().toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
   return {billingProfile};
 }
@@ -6850,7 +6850,7 @@ function setupClientBillingFields(){
       input.name="billing_"+key;holder.append(input);section.append(holder);
     }const submit=form.querySelector('button[type="submit"], button:not([type])');let anchor=submit;while(anchor?.parentElement&&anchor.parentElement!==form)anchor=anchor.parentElement;form.insertBefore(section,anchor?.parentElement===form?anchor:null);
     const note=form.elements.billing_taxNote?.closest("label");const updateTaxNote=()=>{if(note)note.hidden=!['reverse-charge','exempt'].includes(form.elements.billing_taxMode.value);};form.elements.billing_taxMode.addEventListener("change",updateTaxNote);section.addEventListener("toggle",updateTaxNote);updateTaxNote();
-    form.addEventListener("input",e=>{if(["name","country","loginEmail"].includes(e.target.name)||e.target.name?.startsWith("billing_")&&e.target.name!=="billing_confirmed")form.elements.billing_confirmed.checked=false;});
+    form.addEventListener("input",e=>{if(["name","country","email"].includes(e.target.name)||e.target.name?.startsWith("billing_")&&e.target.name!=="billing_confirmed")form.elements.billing_confirmed.checked=false;});
   }
 }
 setupClientBillingFields();
@@ -6865,8 +6865,8 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const form = _confirmedTarget;
   const formData = new FormData(form);
   const name = String(formData.get("name") || "").trim();
-  const loginEmail = String(formData.get("loginEmail") || "").trim().toLowerCase();
-  const duplicate = state.clients.some((item) => String(item.name || "").trim().toLowerCase() === name.toLowerCase() || (loginEmail && String(item.loginEmail || "").trim().toLowerCase() === loginEmail));
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const duplicate = state.clients.some((item) => String(item.name || "").trim().toLowerCase() === name.toLowerCase());
   if (duplicate) {
     showToast("Klijent već postoji", "Proveri naziv ili e-mail pre novog unosa.", "warn");
     return;
@@ -6905,7 +6905,8 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     package: values.package,
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
-    loginEmail,
+    email,
+    loginEmail: "",
     billingDay: Number(formData.get("billingDay")),
     paymentStatus,
     invoiceStatus,
@@ -6989,7 +6990,7 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     billingDay: Number(formData.get("billingDay")),
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
-    loginEmail: formData.get("loginEmail"),
+    email: String(formData.get("email")||"").trim().toLowerCase(),
     contractNote: formData.get("contractNote"),
   });
   if (contractFile?.name) {
