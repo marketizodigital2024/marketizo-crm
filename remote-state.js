@@ -269,15 +269,16 @@
     finally { window.clearTimeout(timer); }
   }
 
-  async function exportSnapshot() {
+  async function exportSnapshot(options = {}) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 12000);
     try {
-      const response = await fetch("/api/state", { cache: "no-store", headers: accessHeaders(), signal: controller.signal });
+      const response = await fetch(options.complete ? "/api/backup?inspect=1&download=1" : "/api/state", { cache: "no-store", headers: accessHeaders(), signal: controller.signal });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.payload) return { ok: false, error: data.error || "Potpun izvoz nije dostupan." };
+      const exported = options.complete ? data.document : data.payload;
+      if (!response.ok || !exported) return { ok: false, error: data.error || "Potpun izvoz nije dostupan." };
       // Export must not advance the revision of an unrelated pending edit.
-      return { ok: true, payload: data.payload };
+      return { ok: true, payload: exported };
     } catch (error) { return { ok: false, error: error?.message || "Izvoz nije dostupan." }; }
     finally { window.clearTimeout(timer); }
   }

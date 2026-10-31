@@ -1,3 +1,4 @@
+const production = require('../lib/work-production-backup.js');
 const questionnaires = require('../lib/questionnaire-backup.js');
 const TABLE = process.env.SUPABASE_TABLE || "agency_crm_state";
 const ROW_ID = process.env.CRM_STATE_ID || "marketizo-main";
@@ -74,13 +75,12 @@ module.exports = async function handler(req, res) {
     const document = JSON.parse(await new Response(downloaded.stream).text());
     if (!validBackup(document)) return send(res, 422, { ok: false, error: "Backup nije prošao proveru strukture." });
 
+    if(document.workProductionRequired && !production.verifyDocument(document)) return send(res,422,{ok:false,error:"Backup nije prošao proveru kontrolnog zbira."});
+    const productionCounts = production.summary(document.workProduction);
+    if(document.workProductionRequired && !productionCounts.included) return send(res,422,{ok:false,error:"Backup nema obavezne podatke o količini."});
     const questionnaireCounts = questionnaires.summary(document.questionnaires);
     const currentQuestionnaires = await questionnaires.readSnapshot(url,key);
-    const sourceResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(ROW_ID)}&select=payload,updated_at`, {
-      headers: supabaseHeaders(key),
-    });
-    if (!sourceResponse.ok) throw new Error(`State fetch failed (${sourceResponse.status})`);
-    const current = (await sourceResponse.json())[0];
+    const current = await production.readSnapshot(url,key,fetch);
     const kpiResponse = await fetch(`${url}/rest/v1/${TABLE}?id=eq.marketizo-kpi-v1&select=payload,updated_at`, { headers: supabaseHeaders(key) });
     if (!kpiResponse.ok) throw new Error(`KPI fetch failed (${kpiResponse.status})`);
     const currentKpi = (await kpiResponse.json())[0];
@@ -94,10 +94,14 @@ module.exports = async function handler(req, res) {
       currentCounts: counts(current?.payload),
       includesKpi: document.kpi != null,
       questionnaires: questionnaireCounts,
+      workProduction: productionCounts,
+      currentWorkProduction: production.summary(current.production),
+      restoreAllowed: productionCounts.included || current.production.outputs.length===0,
       currentQuestionnaires: questionnaires.summary(currentQuestionnaires),
       includesEmployeeAuth: true,
     };
     if (result.dryRun) return send(res, 200, result);
+    if(!result.restoreAllowed) return send(res,409,{ok:false,error:"Stara kopija ne sadrži količine. Vraćanje bi ih razdvojilo od sati; koristi potpunu noviju kopiju."});
     if (!current?.payload || !current.updated_at) throw new Error("Trenutno live stanje nije pronađeno.");
 
     const now = new Date();
@@ -110,15 +114,18 @@ module.exports = async function handler(req, res) {
       state: current.payload,
       kpi: currentKpi?.payload || null,
       questionnaires: currentQuestionnaires,
+      workProduction: current.production,
+      workProductionRequired: true,
     };
+    emergencyDocument.integrity = production.documentIntegrity(emergencyDocument);
     await blob.put(emergencyPath, JSON.stringify(emergencyDocument), { access: "private", contentType: "application/json", addRandomSuffix: false });
     const emergencyRead = await blob.get(emergencyPath, { access:"private" });
     if (!emergencyRead || emergencyRead.statusCode !== 200 || !emergencyRead.stream || !questionnaires.equal(JSON.parse(await new Response(emergencyRead.stream).text()), emergencyDocument)) throw new Error("Sigurnosna kopija pre vraćanja nije potvrđena.");
 
-    const restoreResponse = await fetch(`${url}/rest/v1/rpc/marketizo_restore_complete_backup`, {
+    const restoreResponse = await fetch(`${url}/rest/v1/rpc/marketizo_restore_complete_backup_with_production`, {
       method: "POST",
       headers: supabaseHeaders(key),
-      body: JSON.stringify({ p_state: document.state, p_kpi: document.kpi || null, p_expected_state_at: current.updated_at, p_expected_kpi_at: currentKpi?.updated_at || null, p_questionnaires: document.questionnaires || null, p_expected_questionnaires: currentQuestionnaires }),
+      body: JSON.stringify({ p_state: document.state, p_kpi: document.kpi || null, p_expected_state_at: current.updated_at, p_expected_kpi_at: currentKpi?.updated_at || null, p_questionnaires: document.questionnaires || null, p_expected_questionnaires: currentQuestionnaires, p_production: document.workProduction || null, p_expected_production: current.production }),
     });
     if (!restoreResponse.ok) throw new Error(`Restore failed (${restoreResponse.status})`);
     const restored = await restoreResponse.json();
