@@ -164,9 +164,10 @@ module.exports = async function handler(req, res) {
         if (!downloaded || downloaded.statusCode !== 200 || !downloaded.stream) return send(res, 404, { ok: false, error: "Backup nije pronađen." });
         const document = JSON.parse(await new Response(downloaded.stream).text());
         const state = document.state;
-        if (document.systemDomainsRequired && (!system.valid(document.systemDomains) || !production.verifyDocument(document))) return send(res,422,{ok:false,error:"Backup dodatnih domena nije potvrđen."});
+        const integrityVerified = production.verifyDocument(document);
+        if (document.systemDomainsRequired && (!system.valid(document.systemDomains) || !integrityVerified)) return send(res,422,{ok:false,error:"Backup dodatnih domena nije potvrđen."});
         if (document.format !== "marketizo-crm-backup-v1" || !state || Array.isArray(state) || !Array.isArray(state.employees) || !state.employees.length || !Array.isArray(state.clients) || !Array.isArray(state.employeeWorkLogs)) return send(res, 422, { ok: false, error: "Backup nije prošao proveru strukture." });
-        if(document.workProductionRequired && !production.verifyDocument(document)) return send(res,422,{ok:false,error:"Backup nije prošao proveru kontrolnog zbira."});
+        if(document.workProductionRequired && !integrityVerified) return send(res,422,{ok:false,error:"Backup nije prošao proveru kontrolnog zbira."});
         if(document.workProductionRequired && !production.summary(document.workProduction).included) return send(res,422,{ok:false,error:"Backup nema obavezne podatke o količini."});
         const checksum = require("node:crypto").createHash("sha256").update(JSON.stringify(state)).digest("hex");
         return send(res, 200, { ok: true, verified: true, pathname, backupDate: document.backupDate,
@@ -174,7 +175,7 @@ module.exports = async function handler(req, res) {
           questionnaires: questionnaires.summary(document.questionnaires),
           systemDomains: system.summary(document.systemDomains),
           workProduction: production.summary(document.workProduction),
-          integrityVerified: production.verifyDocument(document),
+          integrityVerified,
           counts: backupCounts(state), checksum, includesKpi: document.kpi != null,
           contractFiles: state.clients.filter(client => Boolean(client.contractFileData)).length,
           credentialsHashed: [...state.employees.map(e => e.password), ...state.clients.map(c => c.loginPassword)]
