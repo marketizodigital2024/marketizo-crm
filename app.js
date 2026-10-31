@@ -1368,7 +1368,7 @@ function clientsForInvoiceMonth(clients, monthKey) {
 }
 
 function financeClientsForMonth(clients, monthKey) {
-  return clientsForInvoiceMonth(clients, monthKey).filter((client) => client.status !== "Arhiviran");
+  return clientsForInvoiceMonth(clients, monthKey).filter((client) => client.status !== "Arhiviran" || invoiceHasFinancialHistory(client.invoices[monthKey]));
 }
 
 function invoiceAmount(client, monthKey = selectedMonthKey()) {
@@ -2074,7 +2074,7 @@ function clientLeadStats(client) {
 }
 
 function renderAdminPanel() {
-  const scopedClients = dashboardClients();
+  const scopedClients = dashboardFinanceClients();
   const monthKey = monthFilter || currentMonthKey();
   const active = financeClientsForMonth(scopedClients, monthKey);
   const mrr = active.reduce((sum, client) => sum + invoiceAmount(client, monthKey), 0);
@@ -2085,7 +2085,7 @@ function renderAdminPanel() {
   const unpaidTotal = totals.remaining;
   const unsentClients = active.filter((client) => monthlyInvoice(client, monthKey).invoiceStatus !== "Poslat");
 
-  setText("adminTotalClients", active.length);
+  setText("adminTotalClients", financeClientsForMonth(dashboardClients(), monthKey).filter(client => client.status !== "Arhiviran").length);
   setText("adminMrr", currency.format(mrr));
   setText("adminPaidTotal", currency.format(paidTotal));
   setText("adminPaidCount", `${paidClients.length} bez ostatka za naplatu`);
@@ -2102,7 +2102,7 @@ function renderAdminPanel() {
   renderTopDebtors(monthKey);
   renderRevenueBreakdown(active, monthKey);
   renderAdminNotifications();
-  renderAdminClientSnapshot(active);
+  renderAdminClientSnapshot(financeClientsForMonth(dashboardClients(), monthKey).filter(client => client.status !== "Arhiviran"));
   renderAdminEmployeeRisk(monthKey);
   renderContractExpiryList();
   window.MarketizoDashboardHelp?.refresh();
@@ -2110,6 +2110,10 @@ function renderAdminPanel() {
 
 function dashboardClients() {
   return state.clients.filter((client) => bySearch(client) && byCountry(client) && byDateRange(client));
+}
+
+function dashboardFinanceClients() {
+  return [...state.clients, ...(state.billingOneOffClients || [])].filter((client) => bySearch(client) && byCountry(client) && byDateRange(client));
 }
 
 function dashboardInvoiceTotals(clients, monthKey) {
@@ -2148,7 +2152,7 @@ function dashboardContractRows() {
 
 function dashboardOutstandingRows(endMonth) {
   const totals = new Map();
-  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(dashboardClients(), month).forEach((client) => {
+  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(dashboardFinanceClients(), month).forEach((client) => {
     const remaining = invoiceRemainingAmount(client, month);
     if (!remaining) return;
     const age = invoiceAgeDays(monthlyInvoice(client, month), month);
@@ -2210,7 +2214,7 @@ function renderRevenueTrend(endMonth) {
   if (!target) return;
   const months = dashboardMonths(endMonth);
   const points = months.map((month) => {
-    const clients = financeClientsForMonth(dashboardClients(), month);
+    const clients = financeClientsForMonth(dashboardFinanceClients(), month);
     return { month, billed: clients.reduce((sum, client) => sum + invoiceAmount(client, month), 0), paid: clients.reduce((sum, client) => sum + invoicePaidAmount(client, month), 0) };
   });
   const max = Math.max(1, ...points.flatMap((point) => [point.billed, point.paid]));
@@ -2261,7 +2265,7 @@ function renderInvoiceAging(endMonth) {
   const target = document.getElementById("adminInvoiceAging");
   if (!target) return;
   const buckets = [{ label: "0–7 dana", min: 0, max: 7, value: 0 }, { label: "8–14 dana", min: 8, max: 14, value: 0 }, { label: "15–30 dana", min: 15, max: 30, value: 0 }, { label: "Preko 30 dana", min: 31, max: Infinity, value: 0 }];
-  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(dashboardClients(), month).forEach((client) => {
+  dashboardMonths(endMonth, 12).forEach((month) => financeClientsForMonth(dashboardFinanceClients(), month).forEach((client) => {
     const remaining = invoiceRemainingAmount(client, month);
     if (!remaining) return;
     const age = invoiceAgeDays(monthlyInvoice(client, month), month);
@@ -5743,14 +5747,27 @@ function renderReports() {
   const monthKey = selectedMonthKey();
   // Invoice roster changes are explicit business actions, never render side effects.
   const invoiceClients = financeClientsForMonth(clients, monthKey);
-  const revenueByCountry = groupInvoiceSum(invoiceClients, "country", monthKey);
-  const revenueByStatus = groupInvoiceSum(invoiceClients, "status", monthKey);
+  const allInvoiceClients = financeClientsForMonth(dashboardFinanceClients(), monthKey);
+  const revenueByCountry = groupInvoiceSum(allInvoiceClients, "country", monthKey);
+  const revenueByStatus = groupInvoiceSum(allInvoiceClients, "status", monthKey);
   renderBars("countryBars", revenueByCountry, "€");
   renderBars("revenueBars", revenueByStatus, "€");
   setText("invoiceMonthLabel", monthLabel(monthKey));
   renderInvoiceCarryover(clients, monthKey);
-  renderInvoiceSummary(invoiceClients, monthKey);
+  renderInvoiceSummary(allInvoiceClients, monthKey);
   renderMonthlyInvoices(invoiceClients, monthKey);
+  renderFinanceHistoryReview(clients, monthKey);
+}
+
+function renderFinanceHistoryReview(clients, monthKey) {
+  const invoiceGroups = document.getElementById("invoiceStatusGroups");
+  if (!invoiceGroups) return;
+  let target = document.getElementById("invoiceHistoryReview");
+  if (!target) { target = document.createElement("div"); target.id = "invoiceHistoryReview"; invoiceGroups.after(target); }
+  const once = financeClientsForMonth(dashboardFinanceClients().filter(client => client.billingOneOff), monthKey);
+  const pending = clients.filter(client => client.status === "Arhiviran").flatMap(client => Object.entries(client.invoices || {}).filter(([month, invoice]) => !invoiceHasFinancialHistory(invoice)).map(([month, invoice]) => ({client, month})));
+  target.innerHTML = (once.length ? `<details class="invoice-status-group"><summary><strong>Jednokratni računi</strong><span>${once.length} računa</span><b>${currency.format(once.reduce((total, client) => total + invoiceAmount(client, monthKey), 0))}</b></summary><div class="invoice-status-list">${once.map(client => `<div class="setup-item"><strong>${escapeInvoiceText(client.name)}</strong><span>${currency.format(invoiceAmount(client, monthKey))} · Preostalo ${currency.format(invoiceRemainingAmount(client, monthKey))}</span></div>`).join("")}<a href="/billing-invoices?type=once">Otvori jednokratne račune</a></div></details>` : "")
+    + (pending.length ? `<details class="invoice-status-group"><summary><strong>Stari nacrti arhiviranih klijenata — za proveru</strong><span>${pending.length} zapisa</span></summary><p>Nisu poslati i nemaju evidenciju izdavanja ili uplate. Sačuvani su i nisu uključeni u dugovanja. Pre promene proveri da li je račun zaista izdat.</p><div class="invoice-status-list">${pending.map(({client, month}) => `<div class="setup-item"><strong>${escapeInvoiceText(client.name)}</strong><span>${escapeInvoiceText(monthLabel(month))} · ${currency.format(invoiceAmount(client, month))}</span></div>`).join("")}</div></details>` : "");
 }
 
 function selectedPortalClient() {

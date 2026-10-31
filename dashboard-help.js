@@ -10,7 +10,7 @@
         "Izabrani mesec",
         "Broj klijenata"
       ],
-      "scope": "Važe pretraga, država i početak saradnje. Arhivirani klijenti su isključeni, kao i u Finansijama."
+      "scope": "Važe pretraga, država i početak saradnje. Jednokratni primaoci se ne broje kao redovni klijenti."
     },
     "adminMrr": {
       "title": "Fakturisano",
@@ -20,7 +20,7 @@
         "Sabiranje",
         "Ukupan iznos"
       ],
-      "scope": "Ako iznos nije posebno sačuvan, koristi se mesečna cena klijenta, pa cena paketa. Sačuvana nula ostaje nula. Važe filteri klijenata; arhivirani su isključeni."
+      "scope": "Ako iznos nije posebno sačuvan, koristi se mesečna cena klijenta, pa cena paketa. Sačuvana nula ostaje nula. Važe filteri klijenata; uključeni su jednokratni računi i računi arhiviranih klijenata koji imaju slanje ili finansijsku evidenciju."
     },
     "adminPaidTotal": {
       "title": "Naplaćeno za račune meseca",
@@ -70,7 +70,7 @@
         "Status nije „Poslat“",
         "Broj računa"
       ],
-      "scope": "Važe filteri klijenata i pravilo Finansija koje isključuje arhivirane. Klik na karticu otvara Finansije."
+      "scope": "Važe filteri klijenata i jednokratni računi i sačuvana finansijska istorija arhiviranih klijenata. Klik na karticu otvara Finansije."
     },
     "action-1": {
       "title": "Otvoreno preko 30 dana",
@@ -150,7 +150,7 @@
         "Najveći zbir prvo",
         "Prvih 5"
       ],
-      "scope": "Poslednjih 12 meseci do izabranog meseca, uz filtere klijenata; arhivirani su isključeni. Klik otvara Finansije."
+      "scope": "Poslednjih 12 meseci do izabranog meseca, uz filtere klijenata; uključeni su jednokratni računi i računi arhiviranih klijenata koji imaju slanje ili finansijsku evidenciju. Klik otvara Finansije."
     },
     "adminTeamUtilization": {
       "title": "Upisani sati i plan",

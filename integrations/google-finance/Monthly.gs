@@ -67,10 +67,17 @@ function installMonthlyCollector(){
 function installOctoberCollector(){return installMonthlyCollector();}
 function collectOctoberInvoices(){return collectMonthlyInvoices();}
 function collectMonthlyInvoices(){
+ const month=Utilities.formatDate(new Date(),'Europe/Vienna','yyyy-MM');
+ collectMonthInvoices_(month);
+ const previous=new Date(month+'-01T12:00:00Z');previous.setUTCMonth(previous.getUTCMonth()-1);
+ collectMonthInvoices_(Utilities.formatDate(previous,'Europe/Vienna','yyyy-MM'));
+}
+function collectOctoberBackfill(){return collectMonthInvoices_('2026-10');}
+function collectMonthInvoices_(month){
  const lock=LockService.getUserLock();if(!lock.tryLock(1000))return;
  let pending=false;try{
- const month=Utilities.formatDate(new Date(),'Europe/Vienna','yyyy-MM'),prefix=month==='2026-10'?'octoberSources':'monthlySources'+month;
- const until=Date.now()+240000,properties=PropertiesService.getUserProperties();let saved='';for(let i=0;i<Number(properties.getProperty(prefix+'Chunks')||0);i++)saved+=properties.getProperty(prefix+'Chunk'+i)||'';
+ const prefix=month==='2026-10'?'octoberSources':'monthlySources'+month;
+ const until=Date.now()+110000,properties=PropertiesService.getUserProperties();let saved='';for(let i=0;i<Number(properties.getProperty(prefix+'Chunks')||0);i++)saved+=properties.getProperty(prefix+'Chunk'+i)||'';
  let done=JSON.parse(saved||properties.getProperty(prefix+'V1')||'{}');const account=googleGet_('https://gmail.googleapis.com/gmail/v1/users/me/profile').emailAddress;
  if(!['office@marketizo.com','buchhaltung@marketizo.com'].includes(account))throw Error('Nalog nije odobren.');
  monthlyContext_(month,account==='office@marketizo.com');
