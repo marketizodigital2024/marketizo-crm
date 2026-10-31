@@ -2,7 +2,7 @@
 begin;
 set local lock_timeout = '5s';
 create table if not exists public.marketizo_activity_metrics (
-  activity_id text primary key, unit text not null check (unit in ('scenario','scenario_revision','clip','clip_revision','story','post','task','call','shoot','clip_check','none')),
+  activity_id text primary key, unit text not null check (unit in ('scenario','scenario_revision','clip','clip_revision','story','post','task','call','shoot','clip_check','voiceover','none')),
   updated_at timestamptz not null default now(), updated_by text not null
 );
 create table if not exists public.marketizo_work_outputs (

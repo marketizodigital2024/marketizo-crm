@@ -2,7 +2,7 @@ const production = require('../lib/work-production-backup.js');
 const dbFetch = (...args) => require('../lib/database-request.js').request(fetch, ...args);
 const { accessSession, supabaseConfig, supabaseHeaders } = require('./state.js').helpers;
 const { employeeRoles } = require('../lib/employee-roles.js');
-const UNITS = ['scenario','scenario_revision','clip','clip_revision','story','post','task','call','shoot','clip_check','none'];
+const UNITS = ['scenario','scenario_revision','clip','clip_revision','story','post','task','call','shoot','clip_check','voiceover','none'];
 function reply(res,status,data) { res.statusCode=status; res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','private, no-store');res.end(JSON.stringify(data)); }
 function projection(payload) {
  return {

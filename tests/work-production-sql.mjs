@@ -25,5 +25,7 @@ const simpleRows=(await db.query("select * from marketizo_work_outputs where bat
 const {default:analytics}=await import('../work-analytics-core.js');
 const summary=analytics.analyze({employees:original.employees,activities:original.employeeActivities,logs:(await payload()).employeeWorkLogs,outputs:simpleRows},{unit:'task'});
 assert.equal(summary.averageUnit,20,'60 minutes / 3 units is 20 minutes per unit');assert.equal(summary.unitTotals.task.quantity,3,'Retry never doubles quantity');
+await db.exec("update marketizo_activity_metrics set unit='voiceover' where activity_id='act'");
+const voice={...simpleOutput,batchId:'voiceover-batch',unit:'voiceover',label:'3 voiceovera'};assert.equal((await call({...simpleLog,id:'voiceover-entry'},voice)).ok,true);
 await db.exec('set role anon');await assert.rejects(db.query('select * from marketizo_work_outputs'),/permission denied/);await assert.rejects(call(),/permission denied/);await db.exec('reset role');
 await db.close();console.log('PASS PostgreSQL production: additive history preservation, atomic hours+counts, no duplicate completion/retry, role/client isolation, unit snapshots, backup and anonymous denial');
