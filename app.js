@@ -1859,16 +1859,14 @@ function byCountry(client) {
 
 function byDateRange(client) {
   if (!dateFromFilter && !dateToFilter) return true;
-  if (!client.startDate) return true;
-  const start = new Date(client.startDate);
-  // Period filter shows clients already active during the selected period,
-  // not only clients whose cooperation started inside that exact range.
-  if (dateToFilter && start > new Date(dateToFilter)) return false;
-  return true;
+  if (!client.startDate) return false;
+  return (!dateFromFilter || client.startDate >= dateFromFilter)
+    && (!dateToFilter || client.startDate <= dateToFilter);
 }
 
 function byMonth(client) {
   if (!monthFilter) return true;
+  if (client.invoices?.[monthFilter]) return true;
   if (!client.startDate) return true;
   const [year, month] = monthFilter.split("-").map(Number);
   const periodEnd = new Date(year, month, 0, 23, 59, 59);
@@ -1968,9 +1966,7 @@ function renderAdminPanel() {
 }
 
 function dashboardClients() {
-  return state.clients.filter((client) => bySearch(client) && byCountry(client)
-    && (!dateFromFilter || (client.startDate && client.startDate >= dateFromFilter))
-    && (!dateToFilter || (client.startDate && client.startDate <= dateToFilter)));
+  return state.clients.filter((client) => bySearch(client) && byCountry(client) && byDateRange(client));
 }
 
 function dashboardInvoiceTotals(clients, monthKey) {
@@ -7058,8 +7054,7 @@ updateContextActions("admin");
 // Compact filters and current-period defaults added for the admin workspace.
 (() => {
   const currentLocalMonth = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return currentMonthKey();
   };
 
   const setHomeCurrentMonth = () => {
@@ -7069,6 +7064,8 @@ updateContextActions("admin");
     month.value = currentLocalMonth();
     const from = document.getElementById("dateFromFilter");
     const to = document.getElementById("dateToFilter");
+    dateFromFilter = "";
+    dateToFilter = "";
     if (from) from.value = "";
     if (to) to.value = "";
     month.dispatchEvent(new Event("input", { bubbles: true }));
