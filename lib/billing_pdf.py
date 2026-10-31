@@ -55,9 +55,29 @@ def render(payload):
     if not bounds:raise ValueError('Empty invoice logo')
     x0,y0,x1,y1=bounds;scale=min(100/(x1-x0),82/(y1-y0))
     left=480+(100-(x1-x0)*scale)/2;bottom=h-108+(82-(y1-y0)*scale)/2
-    c.drawImage(ImageReader(logo),left-x0*scale,bottom-(lh-y1)*scale,width=lw*scale,height=lh*scale,mask='auto')
-    for i,v in enumerate([issuer['phone'],issuer['email'],issuer['website']]):para(v,70,h-50-i*13,size=9)
-    c.setStrokeColor(colors.HexColor(b['colors']['accent']));c.setLineWidth(2);c.line(70,h-104,476,h-104)
+    def draw_brand():
+        c.drawImage(ImageReader(logo),left-x0*scale,bottom-(lh-y1)*scale,width=lw*scale,height=lh*scale,mask='auto')
+        for i,v in enumerate([issuer['phone'],issuer['email'],issuer['website']]):para(v,70,h-50-i*13,size=9)
+        c.setStrokeColor(colors.HexColor(b['colors']['accent']));c.setLineWidth(2);c.line(70,h-104,476,h-104)
+    page=1
+    def draw_footer():
+        c.setStrokeColor(colors.HexColor('#595959'));c.setLineWidth(2);c.line(70,70,526,70)
+        footer=[[issuer['proprietor'],issuer['street'],issuer['postalCode']+' '+issuer['city']],['Firmenbuchnummer '+issuer['companyNumber'],'UID '+issuer['vatId']],[issuer['bank'],'IBAN '+issuer['iban'],'BIC '+issuer['bic']]]
+        for x,lines in zip([70,246,429],footer):
+            for i,v in enumerate(lines):para(v,x,61-i*7,width=172,size=5.5)
+        para('Seite '+str(page),480,84,width=46,size=7)
+    def next_page():
+        nonlocal page,y
+        draw_footer();c.showPage();page+=1;draw_brand()
+        para(('ENTWURF / TEST – Rechnung ' if test else 'Rechnung ')+str(number).zfill(6)+' – Fortsetzung',70,h-130,bold=True,size=10)
+        y=h-155
+    def flow(value,gap=0,size=10,bold=False):
+        nonlocal y
+        par=Paragraph(text(value),ParagraphStyle('flow',fontName='InvoiceBold' if bold else 'Invoice',fontSize=size,leading=size*1.25))
+        _,height=par.wrap(450,1000)
+        if y-height<95:next_page()
+        par.drawOn(c,70,y-height);y-=height+gap
+    draw_brand()
     y=h-152
     for v in [p['legalName'],p['street'],p['postalCode']+' '+p['city'],p['country']]+(['UID: '+p['vatId']] if p['vatId'] else []):y-=para(v,70,y,width=340,size=10)+2
     date='.'.join(reversed(s['issueDate'].split('-')))
@@ -68,23 +88,32 @@ def render(payload):
     vat='20 %' if p['taxMode']=='standard20' else '0 %'
     item_rows=[[Paragraph(text(item['description']),ParagraphStyle('description',fontName='Invoice',fontSize=10,leading=13)),str(item['quantity']),money(item['unitCents']),vat,money(item['netCents'])] for item in display_items]
     rows=[b['columns']]+item_rows+[['','','Nettosumme','',money(s['netCents'])],['','','Umsatzsteuer '+vat,'',money(s['vatCents'])],['','','Bruttosumme','',money(s['grossCents'])]]
-    table=Table(rows,colWidths=[205,48,89,47,67]);table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'Invoice'),('FONTNAME',(0,0),(-1,0),'InvoiceBold'),('FONTNAME',(2,-1),(-1,-1),'InvoiceBold'),('FONTSIZE',(0,0),(-1,-1),9),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#F7CAAC')),('BACKGROUND',(2,-1),(-1,-1),colors.HexColor('#F7CAAC')),('ALIGN',(1,1),(-1,-1),'RIGHT'),('ALIGN',(2,len(display_items)+1),(3,-1),'LEFT'),('SPAN',(2,len(display_items)+1),(3,len(display_items)+1)),('SPAN',(2,len(display_items)+2),(3,len(display_items)+2)),('SPAN',(2,len(display_items)+3),(3,len(display_items)+3)),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),2),('RIGHTPADDING',(0,0),(-1,-1),2),('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),('LINEBELOW',(0,len(display_items)),(-1,len(display_items)),.5,colors.black)]))
-    _,th=table.wrap(456,400);y=h-352-th;table.drawOn(c,70,y);y-=34
+    table=Table(rows,colWidths=[205,48,89,47,67],repeatRows=1);table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'Invoice'),('FONTNAME',(0,0),(-1,0),'InvoiceBold'),('FONTNAME',(2,-1),(-1,-1),'InvoiceBold'),('FONTSIZE',(0,0),(-1,-1),9),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#F7CAAC')),('BACKGROUND',(2,-1),(-1,-1),colors.HexColor('#F7CAAC')),('ALIGN',(1,1),(-1,-1),'RIGHT'),('ALIGN',(2,len(display_items)+1),(3,-1),'LEFT'),('SPAN',(2,len(display_items)+1),(3,len(display_items)+1)),('SPAN',(2,len(display_items)+2),(3,len(display_items)+2)),('SPAN',(2,len(display_items)+3),(3,len(display_items)+3)),('NOSPLIT',(0,-4),(-1,-1)),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),2),('RIGHTPADDING',(0,0),(-1,-1),2),('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),('LINEBELOW',(0,len(display_items)),(-1,len(display_items)),.5,colors.black)]))
+    y=h-352
+    while True:
+        _,th=table.wrap(456,10000)
+        if th<=y-95:
+            table.drawOn(c,70,y-th);y-=th+24;break
+        parts=table.split(456,y-95)
+        if not parts:
+            if page>1:raise ValueError('Invoice row exceeds printable page')
+            next_page();continue
+        first=parts[0];_,fh=first.wrap(456,10000);first.drawOn(c,70,y-fh)
+        table=parts[1];next_page()
     year,month=map(int,s['serviceMonth'].split('-'));last=calendar.monthrange(year,month)[1]
-    y-=para(f'Leistungszeitraum: 01.{month:02d}.{year} – {last:02d}.{month:02d}.{year}',70,y)+14
-    if p['taxMode']!='standard20':y-=para(p['taxNote'],70,y)+14
-    if s.get('note'):y-=para(s['note'],70,y)+14
-    y-=para('Zahlungsbedingung: '+b['defaults']['paymentTerms'],70,y)+12
-    y-=para('Zahlungsempfänger: '+issuer.get('accountHolder',issuer['legalName']),70,y,bold=True,size=9)+4
+    flow(f'Leistungszeitraum: 01.{month:02d}.{year} – {last:02d}.{month:02d}.{year}',10)
+    if p['taxMode']!='standard20':flow(p['taxNote'],10)
+    if s.get('note'):flow(s['note'],10)
+    flow('Zahlungsbedingung: '+b['defaults']['paymentTerms'],10)
+    # Keep the beneficiary, bank details and reference together on one page.
+    if y-58<95:next_page()
+    flow('Zahlungsempfänger: '+issuer.get('accountHolder',issuer['legalName']),4,size=9,bold=True)
     iban=' '.join(issuer['iban'][i:i+4] for i in range(0,len(issuer['iban']),4))
-    y-=para('IBAN: '+iban+' · BIC: '+issuer['bic'],70,y,size=9)+4
-    y-=para('Verwendungszweck: Rechnung '+str(number).zfill(6),70,y,size=9)+12
-    y-=para(b['defaults']['questions'],70,y)+16
-    y-=para(b['defaults']['closing'],70,y)+12
-    y-=para(issuer['legalName'],70,y)
-    if y<95:raise ValueError('Invoice content exceeds one page; shorten description or tax note')
-    c.setStrokeColor(colors.HexColor('#595959'));c.setLineWidth(2);c.line(70,70,526,70)
-    footer=[[issuer['proprietor'],issuer['street'],issuer['postalCode']+' '+issuer['city']],['Firmenbuchnummer '+issuer['companyNumber'],'UID '+issuer['vatId']],[issuer['bank'],'IBAN '+issuer['iban'],'BIC '+issuer['bic']]]
-    for x,lines in zip([70,246,429],footer):
-        for i,v in enumerate(lines):para(v,x,61-i*7,width=172,size=5.5)
+    flow('IBAN: '+iban+' · BIC: '+issuer['bic'],4,size=9)
+    flow('Verwendungszweck: Rechnung '+str(number).zfill(6),12,size=9)
+    flow(b['defaults']['questions'],12)
+    if y-50<95:next_page()
+    flow(b['defaults']['closing'],10)
+    flow(issuer['legalName'])
+    draw_footer()
     c.showPage();c.save();data=out.getvalue();return{'base64':base64.b64encode(data).decode(),'sha256':hashlib.sha256(data).hexdigest()}

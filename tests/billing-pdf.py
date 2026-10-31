@@ -22,3 +22,23 @@ print('PASS numbered draft: planned 000634 visible with explicit non-accounting/
 
 for value in ['Zahlungsempfänger: Example Agency e.U.','Verwendungszweck: Rechnung 000634','IBAN: AT00 0000 0000 0000 0000']:assert value in draft_text,value
 print('PASS clearly separated beneficiary, IBAN/BIC and invoice payment reference')
+
+# Long permitted content must paginate without losing rows or monetary totals.
+import copy,os
+long_s=copy.deepcopy(s);long_s['note']='Additional agreed work. '*12
+long_s['profile']['taxNote']='Steuerschuldnerschaft des Leistungsempfängers – Reverse Charge gemäß Art. 44 und 196 MwStSystRL.'
+long_s['items']=[]
+for i in range(10):
+ item={'description':f'Service {i+1:02d}: '+('Detailed filming and editing work for this client. '*8),'quantity':1,'unitCents':10000,'netCents':10000,'vatCents':0,'grossCents':10000}
+ long_s['items'].append(item)
+long_s.update(quantity=1,unitCents=100000,netCents=100000,vatCents=0,grossCents=100000)
+long_payload={**payload,'snapshot':long_s};rendered=m.render(long_payload);raw=base64.b64decode(rendered['base64']);pages=PdfReader(io.BytesIO(raw)).pages
+assert len(pages)>1
+all_text='\n'.join(page.extract_text() for page in pages)
+for i in range(10):assert all_text.count(f'Service {i+1:02d}:')==1
+for value in ['Bruttosumme','Verwendungszweck: Rechnung 000634','Additional agreed work.']:assert value in all_text
+assert all_text.count('Bruttosumme')==1
+assert all(page.images for page in pages),'Brand logo on every page'
+assert rendered==m.render(long_payload),'Pagination remains deterministic'
+if os.environ.get('BILLING_PAGINATION_PDF'):Path(os.environ['BILLING_PAGINATION_PDF']).write_bytes(raw)
+print('PASS long reverse-charge invoice: all ten lines, totals, note and bank reference survive deterministic pagination')
