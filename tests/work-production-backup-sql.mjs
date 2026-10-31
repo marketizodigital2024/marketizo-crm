@@ -1,4 +1,7 @@
-import {PGlite} from '@electric-sql/pglite';import fs from 'node:fs';import assert from 'node:assert/strict';
+import core from '../work-analytics-core.js';import {PGlite} from '@electric-sql/pglite';import fs from 'node:fs';import assert from 'node:assert/strict';
+const originalSql=fs.readFileSync(new URL('../database/work-production.sql',import.meta.url),'utf8'),backupSql=fs.readFileSync(new URL('../database/work-production-backup.sql',import.meta.url),'utf8');
+const rpcBody=s=>{const a=s.lastIndexOf('create or replace function public.marketizo_append_work_log_with_output(');return s.slice(a,s.indexOf('\nrevoke all on function',a));};
+assert.equal(rpcBody(backupSql).replace(' perform public.marketizo_capture_work_production_prewrite();\n',''),rpcBody(originalSql),'Future append validations must stay identical with backup enabled');
 const db=new PGlite();await db.waitReady;
 await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
 create table agency_crm_state(id text primary key,payload jsonb,updated_at timestamptz);
@@ -30,6 +33,7 @@ assert.equal((await restore(null,newer.production)).legacyProductionMissing,true
 const bad=structuredClone(saved.production);bad.outputs[0].quantity=-1;await assert.rejects(restore(bad,newer.production));assert.deepEqual(await snap(),newer,'Failed metadata restore rolls back core hours/KPI/auth too');
 assert.equal((await restore(saved.production,newer.production)).ok,true);
 const restored=await snap();assert.deepEqual(restored.production,saved.production);assert.deepEqual(restored.payload,saved.payload);
+const measured=core.analyze({...restored.payload,logs:restored.payload.employeeWorkLogs,activities:restored.payload.employeeActivities,outputs:restored.production.outputs,rules:restored.production.rules},{unit:'clip'});assert.equal(measured.totalMinutes,40);assert.equal(measured.averageUnit,20);assert.equal(measured.unitTotals.clip.quantity,2,'Restored quantities reproduce the exact measured average');
 assert.equal((await db.query("select password from agency_crm_employee_auth where id='emp-miljan'")).rows[0].password,'fixture');
 assert.equal((await db.query("select has_function_privilege('anon','marketizo_work_production_snapshot()','execute') allowed")).rows[0].allowed,false);
 await db.close();console.log('PASS full recovery: prewrite contains hours+rules+counts; complete production roundtrip; concurrent metadata/state guards; legacy protection; failed restore rolls back all domains; anonymous access denied');
