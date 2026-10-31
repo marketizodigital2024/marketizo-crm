@@ -1781,6 +1781,15 @@ function queueInvoiceStatusChange(control) {
   updateInvoiceStatusSaveNotice(); scheduleInvoiceStatusSave();
 }
 
+function renderInvoiceStatusChangesWhenIdle() {
+  const focused = document.activeElement;
+  if (focused?.matches?.("select[data-invoice-field]")) {
+    focused.addEventListener("blur", () => setTimeout(renderInvoiceStatusChangesWhenIdle, 0), { once: true });
+    return;
+  }
+  if (!invoiceStatusSaving) renderAll();
+}
+
 async function flushInvoiceStatusChanges() {
   if (invoiceStatusSaving || invoiceStatusSaveFailed || !invoiceStatusChanges.size || adminConfirmedSaveInFlight) return;
   invoiceStatusSaving = true;
@@ -1813,7 +1822,7 @@ async function flushInvoiceStatusChanges() {
     showToast("Nije sačuvano", error.message || "Izbori su zadržani. Pokušaj ponovo.", "warn");
   } finally {
     invoiceStatusSaving = false;
-    if (!invoiceStatusChanges.size || invoiceStatusSaveFailed) renderAll();
+    if (!invoiceStatusChanges.size || invoiceStatusSaveFailed) renderInvoiceStatusChangesWhenIdle();
     updateInvoiceStatusSaveNotice();
     if (saved && !invoiceStatusChanges.size) showToast("Sačuvano", "Sve izmene statusa računa su potvrđene.", "ok");
     else scheduleInvoiceStatusSave();
