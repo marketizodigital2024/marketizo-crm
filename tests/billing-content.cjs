@@ -37,3 +37,11 @@ assert.equal(c.registry([{status:'queued',snapshot:s}]).length,0);console.log('P
 }
 
 assert.throws(()=>c.snapshot({...client,billingProfile:{...client.billingProfile,email:'placeholder@marketizo.local'}},input),/Stvarni e-mail/);
+
+{
+ const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync(__dirname+'/../app.js','utf8');assert(source.includes('[["standard20","Sa porezom (20%)"],["exempt","Bez poreza"]]'));
+ const begin=source.indexOf('function billingProfileFromForm('),end=source.indexOf('\nfunction setupClientBillingFields',begin),ctx={clientBillingDefaults:require('../client-billing-defaults.js'),String};vm.createContext(ctx);vm.runInContext(source.slice(begin,end),ctx);
+ const fields={name:'Example',country:'Nemačka',loginEmail:'billing@example.test',billing_street:'Test 1',billing_city:'Berlin',billing_postalCode:'10000',billing_taxMode:'exempt',billing_taxFreeMode:'reverse-charge',billing_taxNote:'Reverse charge',billing_vatId:'DE123456789',billing_confirmed:'on'},get={has:k=>k in fields,get:k=>fields[k]};assert.equal(ctx.billingProfileFromForm(get).billingProfile.taxMode,'reverse-charge','Existing legal basis survives the two-option UI');fields.billing_taxFreeMode='exempt';assert.equal(ctx.billingProfileFromForm(get).billingProfile.taxMode,'exempt');fields.billing_taxMode='standard20';assert.equal(ctx.billingProfileFromForm(get).billingProfile.taxNote,'');
+ const ui=fs.readFileSync(__dirname+'/../billing-invoices.js','utf8'),html=fs.readFileSync(__dirname+'/../billing-invoices.html','utf8');assert(html.includes('id="billOpenPdf"'));assert(html.includes('Pregled računa pre slanja'));assert(ui.includes("$('billOpenPdf').href=pdfUrl"));assert(ui.includes("scrollIntoView({behavior:'smooth',block:'center'})"));
+ console.log('PASS two tax choices preserve existing reverse-charge basis; preview is displayed and available full-screen before sending');
+}
