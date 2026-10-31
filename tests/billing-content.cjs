@@ -54,3 +54,5 @@ assert.throws(()=>c.snapshot({...client,billingProfile:{...client.billingProfile
 }
 
 {const brand=require('../lib/billing-brand.js');assert.equal(brand.issuer.street,'Simmeringer Hauptstraße 24');assert(!brand.issuer.street.includes('/ 221'));console.log('PASS requested invoice address keeps house number 24 without the apartment suffix');}
+
+{const brand=require('../lib/billing-brand.js');assert.equal(brand.issuer.accountHolder,'Marketizo Digital e.U.');assert.equal(brand.issuer.iban,'AT081200010034820943');console.log('PASS bank-confirmed beneficiary and original IBAN preserved independently from proprietor name');}

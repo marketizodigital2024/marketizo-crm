@@ -38,3 +38,5 @@ Invoice editing supports additional paid work (`extraItems`) assigned only to pr
 
 
 Read-only samples show the current planned number from the read-only settings action, marked ENTWURF / TEST and explicitly not reserved. The counter is unchanged until actual issuing, and the existing SQL next-number check still requires a new final preview if another invoice consumes the planned number.
+
+Invoice payment instructions explicitly separate the verified bank beneficiary (`issuer.accountHolder`), unchanged IBAN/BIC and invoice-specific payment reference. The beneficiary is not inferred from the proprietor line. Keep the bank holder independently verified if the legal branding changes. Stationery version 3 removes the apartment suffix from the issuer street address. Existing issued PDF bytes remain immutable.

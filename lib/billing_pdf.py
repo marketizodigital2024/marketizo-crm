@@ -74,8 +74,12 @@ def render(payload):
     y-=para(f'Leistungszeitraum: 01.{month:02d}.{year} – {last:02d}.{month:02d}.{year}',70,y)+14
     if p['taxMode']!='standard20':y-=para(p['taxNote'],70,y)+14
     if s.get('note'):y-=para(s['note'],70,y)+14
-    y-=para('Zahlungsbedingung: '+b['defaults']['paymentTerms'],70,y)+22
-    y-=para(b['defaults']['questions'],70,y)+28
+    y-=para('Zahlungsbedingung: '+b['defaults']['paymentTerms'],70,y)+12
+    y-=para('Zahlungsempfänger: '+issuer.get('accountHolder',issuer['legalName']),70,y,bold=True,size=9)+4
+    iban=' '.join(issuer['iban'][i:i+4] for i in range(0,len(issuer['iban']),4))
+    y-=para('IBAN: '+iban+' · BIC: '+issuer['bic'],70,y,size=9)+4
+    y-=para('Verwendungszweck: Rechnung '+str(number).zfill(6),70,y,size=9)+12
+    y-=para(b['defaults']['questions'],70,y)+16
     y-=para(b['defaults']['closing'],70,y)+12
     y-=para(issuer['legalName'],70,y)
     if y<95:raise ValueError('Invoice content exceeds one page; shorten description or tax note')

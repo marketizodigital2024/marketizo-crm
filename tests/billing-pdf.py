@@ -19,3 +19,6 @@ print('PASS billing PDF: branded single page, Unicode, exact net/VAT/gross, orig
 s['grossCents']=s['netCents']+s['vatCents'];numbered=m.render({**payload,'test':True});draft=PdfReader(io.BytesIO(base64.b64decode(numbered['base64'])));draft_text=draft.pages[0].extract_text();assert len(draft.pages)==1
 for value in ['ENTWURF / TEST','Rechnung 000634','KEIN GÜLTIGER BELEG','Nummer noch nicht reserviert']:assert value in draft_text,value
 print('PASS numbered draft: planned 000634 visible with explicit non-accounting/unreserved warning, one page')
+
+for value in ['Zahlungsempfänger: Example Agency e.U.','Verwendungszweck: Rechnung 000634','IBAN: AT00 0000 0000 0000 0000']:assert value in draft_text,value
+print('PASS clearly separated beneficiary, IBAN/BIC and invoice payment reference')
