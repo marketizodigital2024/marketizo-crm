@@ -37,7 +37,7 @@ begin
  select payload into source from public.agency_crm_state where id='marketizo-main' for update;
  select e into actor from jsonb_array_elements(source->'employees') e where e->>'id'=p_actor_id and coalesce(e->>'status','')<>'Neaktivan' and coalesce(e->>'active','true')<>'false';
  if actor is null or p_actor_id not in ('emp-miljan','emp-ivana') then return jsonb_build_object('ok',false,'status',403,'error','Samo vlasnik menja jedinice aktivnosti.'); end if;
- if p_unit is null or p_unit not in ('scenario','scenario_revision','clip','clip_revision','story','post','task','call','shoot','clip_check','none') or not exists(select 1 from jsonb_array_elements(source->'employeeActivities') a where a->>'id'=p_activity_id) then
+ if p_unit is null or p_unit not in ('scenario','scenario_revision','clip','clip_revision','story','post','task','call','shoot','clip_check','voiceover','none') or not exists(select 1 from jsonb_array_elements(source->'employeeActivities') a where a->>'id'=p_activity_id) then
  return jsonb_build_object('ok',false,'status',400,'error','Neispravna aktivnost ili jedinica.'); end if;
  perform public.marketizo_capture_work_production_prewrite();
  insert into public.marketizo_activity_metrics(activity_id,unit,updated_by,updated_at) values(p_activity_id,p_unit,p_actor_id,clock_timestamp())
