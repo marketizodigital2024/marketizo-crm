@@ -1,3 +1,9 @@
+// Keep persisted category identifiers stable for historical logs and older tabs.
+function workActivityCategoryLabel(category) {
+  const value = String(category || "Ostalo");
+  return ["ostalo", "druge aktivnosti"].includes(value.trim().toLowerCase()) ? "Druge aktivnosti" : value;
+}
+
 const stages = ["Novi lead", "Kvalifikovan", "Poziv zakazan", "Ponuda poslata", "Zatvoren"];
 const roles = ["Scenarista", "Snimatelj", "Editor", "Media buyer", "SMM"];
 const leadSlaHours = 24;
@@ -2338,7 +2344,7 @@ function openEmployeeActivitiesDialog(employeeId, monthKey = currentMonthKey()) 
   dialog.innerHTML = `<div class="employee-activities-dialog-card">
     <div class="panel-head"><div><p class="eyebrow">${monthLabel(monthKey)}</p><h2>${escapeInvoiceText(employee.name)} · aktivnosti</h2></div><button class="icon-button" data-close-employee-activities type="button">×</button></div>
     <div class="employee-activities-summary"><strong>${logs.length}</strong><span>aktivnosti</span><strong>${totalMinutes} min</strong><span>ukupno</span></div>
-    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${escapeInvoiceText(log.activityName || "Rad")}</strong><span>${escapeInvoiceText(log.activityCategory || "Ostalo")} · ${formatDate(log.date)}</span></div><b>${window.MarketizoCosts.minutes(log)} min</b><p>${escapeInvoiceText(log.clientName || "Bez klijenta")}${log.note ? ` · ${escapeInvoiceText(log.note)}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
+    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${escapeInvoiceText(log.activityName || "Rad")}</strong><span>${escapeInvoiceText(workActivityCategoryLabel(log.activityCategory || "Ostalo"))} · ${formatDate(log.date)}</span></div><b>${window.MarketizoCosts.minutes(log)} min</b><p>${escapeInvoiceText(log.clientName || "Bez klijenta")}${log.note ? ` · ${escapeInvoiceText(log.note)}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
   </div>`;
   dialog.querySelector("[data-close-employee-activities]").addEventListener("click", () => dialog.close());
   dialog.showModal();
@@ -3359,6 +3365,12 @@ function syncAdminWorkClientRequirement() {
   const internal = String(activity?.category || "").trim().toLowerCase() === "interno";
   clientSelect.required = !internal;
   clientSelect.disabled = internal;
+  const noteInput = document.querySelector('#employeeWorkForm [name="note"]');
+  if (noteInput) {
+    const required = ["ostalo", "druge aktivnosti"].includes(String(activity?.category || "Ostalo").trim().toLowerCase());
+    noteInput.required = required;
+    noteInput.placeholder = required ? "Obavezno: ukratko opiši šta si radio/la." : "Opciono: rezultat ili detalj aktivnosti.";
+  }
   if (internal) clientSelect.value = "";
 }
 document.getElementById("workActivitySelect")?.addEventListener("change", syncAdminWorkClientRequirement);
@@ -3379,7 +3391,7 @@ function renderEmployeeOptions() {
     const selected = activitySelect.value;
     const activities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
     activitySelect.innerHTML = activities.length
-      ? activities.map((activity) => `<option value="${escapeInvoiceText(activity.id)}">${escapeInvoiceText(activity.category || "Ostalo")} · ${escapeInvoiceText(activity.name)}</option>`).join("")
+      ? activities.map((activity) => `<option value="${escapeInvoiceText(activity.id)}">${escapeInvoiceText(workActivityCategoryLabel(activity.category || "Ostalo"))} · ${escapeInvoiceText(activity.name)}</option>`).join("")
       : `<option value="">Admin prvo dodaje aktivnost</option>`;
     if (activities.some((activity) => activity.id === selected)) activitySelect.value = selected;
   }
@@ -3830,7 +3842,7 @@ function openWorkLogEditor(id) {
     document.body.append(dialog);
   }
   const activityOptions = (state.employeeActivities || []).filter((item) => item.active !== false)
-    .map((item) => `<option value="${escapeInvoiceText(item.id)}" ${item.id === log.activityId ? "selected" : ""}>${escapeInvoiceText(item.category || "Ostalo")} · ${escapeInvoiceText(item.name)}</option>`).join("");
+    .map((item) => `<option value="${escapeInvoiceText(item.id)}" ${item.id === log.activityId ? "selected" : ""}>${escapeInvoiceText(workActivityCategoryLabel(item.category || "Ostalo"))} · ${escapeInvoiceText(item.name)}</option>`).join("");
   const clientOptions = (state.clients || []).filter((item) => item.status === "Aktivan")
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((item) => `<option value="${escapeInvoiceText(item.id)}" ${item.id === log.clientId ? "selected" : ""}>${escapeInvoiceText(item.name)}</option>`).join("");
@@ -3886,7 +3898,7 @@ function renderEmployeeActivities() {
     ...activities.map((activity) => activity.category),
   ].filter(Boolean))];
   target.innerHTML = activities.length
-    ? activities.map((activity) => `<div class="setup-item activity-category-row"><strong>${escapeInvoiceText(activity.name)}</strong><label class="activity-category-control"><span>Kategorija</span><select data-activity-category="${escapeInvoiceText(activity.id)}" aria-label="Kategorija za ${escapeInvoiceText(activity.name)}">${categoryChoices.map((category) => `<option value="${escapeInvoiceText(category)}" ${category === (activity.category || "Ostalo") ? "selected" : ""}>${escapeInvoiceText(category)}</option>`).join("")}</select></label><button class="edit-button danger-action" data-delete-activity="${escapeInvoiceText(activity.id)}" type="button">Obriši</button></div>`).join("")
+    ? activities.map((activity) => `<div class="setup-item activity-category-row"><strong>${escapeInvoiceText(activity.name)}</strong><label class="activity-category-control"><span>Kategorija</span><select data-activity-category="${escapeInvoiceText(activity.id)}" aria-label="Kategorija za ${escapeInvoiceText(activity.name)}">${categoryChoices.map((category) => `<option value="${escapeInvoiceText(category)}" ${category === (activity.category || "Ostalo") ? "selected" : ""}>${escapeInvoiceText(workActivityCategoryLabel(category))}</option>`).join("")}</select></label><button class="edit-button danger-action" data-delete-activity="${escapeInvoiceText(activity.id)}" type="button">Obriši</button></div>`).join("")
     : `<div class="empty-state">Dodaj prvu aktivnost koju zaposleni mogu da izaberu.</div>`;
   target.querySelectorAll("[data-activity-category]").forEach((select) => select.addEventListener("change", async () => {
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
@@ -4893,7 +4905,7 @@ function setupEmployeeActivityCategories() {
   knownCategories.forEach((category) => {
     if (!category) return;
     if ([...select.options].some((option) => option.value === category)) return;
-    select.querySelector('option[value="__new__"]').insertAdjacentHTML("beforebegin", `<option>${escapeInvoiceText(category)}</option>`);
+    select.querySelector('option[value="__new__"]').insertAdjacentHTML("beforebegin", `<option value="${escapeInvoiceText(category)}">${escapeInvoiceText(workActivityCategoryLabel(category))}</option>`);
   });
   select.addEventListener("change", () => {
     const creating = select.value === "__new__";
@@ -6181,6 +6193,10 @@ document.getElementById("employeeWorkForm")?.addEventListener("submit", async (e
   const isInternal = String(activity.category || "").trim().toLowerCase() === "interno";
   if (!isInternal && !client) {
     alert("Izaberi aktivnog klijenta za ovu aktivnost.");
+    return;
+  }
+  if (["ostalo", "druge aktivnosti"].includes(String(activity.category || "Ostalo").trim().toLowerCase()) && !String(formData.get("note") || "").trim()) {
+    alert("Za Druge aktivnosti obavezno ukratko opiši šta si radio/la.");
     return;
   }
   const fingerprint = JSON.stringify([employeeId,date,activity.id,client?.id || "",minutes,formData.get("note")]);

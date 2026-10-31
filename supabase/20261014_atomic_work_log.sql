@@ -39,6 +39,9 @@ begin
   if employee is null then return jsonb_build_object('ok',false,'status',400,'error','Zaposleni nije pronađen ili nalog nije aktivan.'); end if;
   select a into activity from jsonb_array_elements(source.payload->'employeeActivities') a where a->>'id'=p_work_log->>'activityId' and coalesce(a->>'active','true')<>'false';
   if activity is null then return jsonb_build_object('ok',false,'status',400,'error','Aktivnost više nije dostupna.'); end if;
+  if lower(btrim(coalesce(activity->>'category','Ostalo'))) in ('ostalo','druge aktivnosti') and coalesce(p_work_log->>'note','') !~ '[^[:space:]]' then
+    return jsonb_build_object('ok',false,'status',400,'error','Za Druge aktivnosti obavezno ukratko opiši šta si radio/la.');
+  end if;
   internal=lower(btrim(coalesce(activity->>'category','')))='interno';
   if not internal then
     select c into client from jsonb_array_elements(source.payload->'clients') c where c->>'id'=p_work_log->>'clientId';

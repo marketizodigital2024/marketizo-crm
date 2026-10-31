@@ -149,6 +149,9 @@ module.exports = async function handler(req, res) {
       if (!employee) return json(res, 400, { ok: false, error: "Zaposleni nije pronađen ili nalog nije aktivan." });
       const activity = (payload.employeeActivities || []).find((item) => item.id === submittedLog.activityId && item.active !== false);
       if (!activity) return json(res, 400, { ok: false, error: "Aktivnost više nije dostupna. Osveži stranicu i izaberi je ponovo." });
+      if (["ostalo", "druge aktivnosti"].includes(String(activity.category || "Ostalo").trim().toLowerCase()) && !String(submittedLog.note || "").trim()) {
+        return json(res, 400, { ok: false, error: "Za Druge aktivnosti obavezno ukratko opiši šta si radio/la." });
+      }
       const isPause = String(activity.name || "").trim().toLowerCase() === "pauza";
       const isInternal = String(activity.category || "").trim().toLowerCase() === "interno";
       const client = (payload.clients || []).find((item) => item.id === submittedLog.clientId);

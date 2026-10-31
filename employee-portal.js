@@ -1,3 +1,9 @@
+// Keep persisted category identifiers stable for historical logs and older tabs.
+function workActivityCategoryLabel(category) {
+  const value = String(category || "Ostalo");
+  return ["ostalo", "druge aktivnosti"].includes(value.trim().toLowerCase()) ? "Druge aktivnosti" : value;
+}
+
 const PENDING_WORK_LOGS_KEY = "marketizoPendingEmployeeWorkLogsV1";
 const defaultEmployees = [
   {
@@ -385,10 +391,10 @@ function renderPortalActivityOptions() {
   const query = normalizedActivitySearch(selectedActivity && activityInput.value === selectedActivity.name ? "" : activityInput.value);
   const activeActivities = (state.employeeActivities || []).filter((activity) => activity.active !== false);
   const activities = query
-    ? activeActivities.filter((activity) => normalizedActivitySearch(`${activity.name} ${activity.category || "Ostalo"}`).includes(query))
+    ? activeActivities.filter((activity) => normalizedActivitySearch(`${activity.name} ${workActivityCategoryLabel(activity.category)}`).includes(query))
     : activeActivities;
   const groups = activities.reduce((result, activity) => {
-    (result[activity.category || "Ostalo"] ||= []).push(activity);
+    (result[workActivityCategoryLabel(activity.category)] ||= []).push(activity);
     return result;
   }, {});
   activityOptions.innerHTML = activities.length
@@ -1060,6 +1066,12 @@ function setupPauseActivityEntry() {
     const isInternal = String(selected?.category || "").trim().toLowerCase() === "interno";
     clientSelect.required = !isInternal;
     clientSelect.disabled = isInternal;
+    const noteInput = form.querySelector('[name="note"]');
+    if (noteInput) {
+      const required = ["ostalo", "druge aktivnosti"].includes(String(selected?.category || "Ostalo").trim().toLowerCase());
+      noteInput.required = required;
+      noteInput.placeholder = required ? "Obavezno: ukratko opiši šta si radio/la." : "Opciono: rezultat ili detalj aktivnosti.";
+    }
     note.hidden = !isInternal;
     note.textContent = isPause
       ? "Pauza se evidentira u dnevnom prisustvu, ali se ne vezuje za klijenta niti ulazi u trošak klijenta."
@@ -1362,7 +1374,7 @@ function renderPortalHourRows(logs) {
             <span>${window.MarketizoCosts.minutes(log)} min · ${log.locked === false ? "Otključano" : "Zaključano"}</span>
           </div>
         </header>
-        <p><b>Aktivnost:</b> ${escapePortalText(log.activityCategory || "Ostalo")} · ${escapePortalText(log.activityName || "Rad")}</p>
+        <p><b>Aktivnost:</b> ${escapePortalText(workActivityCategoryLabel(log.activityCategory || "Ostalo"))} · ${escapePortalText(log.activityName || "Rad")}</p>
         <p><b>Klijent:</b> ${escapePortalText(log.clientName || "Nije naveden")}</p>
         <p><b>Napomena:</b> ${escapePortalText(log.note || "-")}</p>
         <div class="work-log-feedback">
@@ -2357,6 +2369,10 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   const isInternal = String(activity.category || "").trim().toLowerCase() === "interno";
   if (!isInternal && !client) {
     alert("Izaberi klijenta za kog si radio/la ovu aktivnost.");
+    return;
+  }
+  if (["ostalo", "druge aktivnosti"].includes(String(activity.category || "Ostalo").trim().toLowerCase()) && !String(formData.get("note") || "").trim()) {
+    alert("Za Druge aktivnosti obavezno ukratko opiši šta si radio/la.");
     return;
   }
   const submittedFormValues = {
