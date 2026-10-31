@@ -1,6 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
 const production=require('../lib/work-production-backup.js'),q=require('../lib/questionnaire-backup.js');
-const at='2026-10-31T00:00:00Z',state={employees:[{id:'emp-miljan'}],clients:[],employeeWorkLogs:[{id:'l',minutes:30}],employeeActivities:[]};
+const at='2026-10-31T00:00:00Z',state={employeeReports:[{id:'client-weekly-fixture',isClientWeeklyReport:true,employeeId:'a',clients:[{clientId:'c',clientName:'Fixture'}],clientAnswers:[{clientId:'c',positive:'Good',negative:'None',help:'None'}]}],employees:[{id:'emp-miljan'}],clients:[],employeeWorkLogs:[{id:'l',minutes:30}],employeeActivities:[]};
 const snapshot={format:production.FORMAT,rules:[{activity_id:'act',unit:'clip',updated_at:at,updated_by:'emp-miljan'}],outputs:[{log_id:'l',employee_id:'a',activity_id:'act',client_id:'c',batch_id:'b',label:'Fixture',unit:'clip',quantity:2,completed:true,recorded_at:at,recorded_by:'a'}]};
 const qs={format:'marketizo-questionnaires-v1',namespace:'production',rows:[]};assert.equal(production.validSnapshot(snapshot),true);
 let mode='',writes=[],restores=[],files=new Map();

@@ -24,7 +24,8 @@
       } catch {}
     </script>
   <link rel="stylesheet" href="kodeks.css?v=20261023-1"><script src="kodeks-notifications.js?v=20261023-1" defer></script>
-  </head>
+    <link rel="stylesheet" href="client-weekly-reports.css?v=20261031-1" />
+</head>
   <body class="client-login-body">
     <main class="client-auth" id="employeeLoginScreen">
       <section class="panel login-card">
@@ -334,7 +335,13 @@
           </section>
         </section>
 
+        <div id="clientWeeklyNotice" role="status" hidden></div>
         <section class="client-tab" id="employeeReportsTab">
+          <section class="panel" id="clientWeeklyLeaderPanel" hidden>
+            <div class="panel-head"><div><p class="eyebrow">Priprema za utorak</p><h2>Nedeljni pregled klijenata</h2></div><label>Nedelja <select id="clientWeeklyPeriod" aria-label="Nedelja pregleda klijenata"></select></label></div>
+            <p class="muted">Ponedeljkom od 12h · prethodna nedelja · klijenti iz ClickUp raspodele. Pozitivno, negativno i potrebna pomoć.</p>
+            <p id="clientWeeklyTeamStatus" role="status"></p><div id="clientWeeklyTeamList"></div><details><summary>Aktuelna ClickUp raspodela</summary><p id="clientWeeklyAssignmentStatus" class="muted"></p><div id="clientWeeklyAssignmentList"></div></details>
+          </section>
           <section class="panel weekly-report-panel">
             <div class="panel-head">
               <div>
@@ -584,10 +591,24 @@
       <section class="modal-card daily-report-modal">
         <div class="modal-head">
           <div><p class="eyebrow">Upitnik je popunjen</p><h2 id="weeklyCompletedTitle">Stigao je novi nedeljni izveštaj</h2></div>
-          <button id="closeWeeklyCompletedDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
         </div>
         <div id="weeklyCompletedContent"></div>
         <div class="modal-actions"><button id="ackWeeklyCompleted" class="primary-button" type="button">Pročitao/la sam izveštaj</button></div>
+      </section>
+    </dialog>
+    <dialog id="clientWeeklyDialog" class="daily-report-dialog" aria-labelledby="clientWeeklyTitle">
+      <form id="clientWeeklyForm" class="modal-card daily-report-modal">
+        <div class="modal-head"><div><p class="eyebrow">Priprema za sastanak o klijentima</p><h2 id="clientWeeklyTitle">Nedeljni pregled klijenata</h2></div></div>
+        <p id="clientWeeklyPeriodLabel" class="muted"></p>
+        <p>Za svakog klijenta napiši kratko šta je pozitivno, šta je negativno i da li ti treba pomoć. Ako nema problema ili ne treba pomoć, napiši to. Ako nije bilo rada, navedi to u odgovoru. Popuni do kraja radnog vremena u ponedeljak; ako je rok prošao, popuni sada.</p>
+        <div id="clientWeeklyFields"></div><p id="clientWeeklyFormStatus" role="status"></p>
+        <div class="modal-actions"><button id="clientWeeklySubmit" class="primary-button" type="submit">Pošalji lideru</button></div>
+      </form>
+    </dialog>
+    <dialog id="clientWeeklyReadDialog" class="daily-report-dialog" aria-labelledby="clientWeeklyReadTitle">
+      <section class="modal-card daily-report-modal"><div class="modal-head"><h2 id="clientWeeklyReadTitle">Pregled klijenata</h2></div>
+        <p id="clientWeeklyReadPeriod" class="muted"></p><div id="clientWeeklyReadContent"></div>
+        <div class="modal-actions"><button id="clientWeeklyReadAck" class="primary-button" type="button">Pročitao/la sam izveštaj</button></div>
       </section>
     </dialog>
     <dialog id="lateAckDialog">
@@ -608,7 +629,8 @@
     <script src="remote-state.js?v=20261014-audit-fix-r7"></script>
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-production"></script>
-    <script src="employee-portal.js?v=20261029-friday-hours"></script>
+    <script src="employee-portal.js?v=20261031-weekly-receipts"></script>
+    <script src="client-weekly-reports.js?v=20261031-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
   <script src="questionnaire-nav.js?v=20261020-1" defer></script>
   </body>
