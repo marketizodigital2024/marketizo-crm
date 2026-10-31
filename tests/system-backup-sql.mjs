@@ -13,12 +13,21 @@ insert into marketizo_sign_documents values('doc','Signed fixture');insert into 
 insert into agency_crm_state values('finance-monthly-documents-2026-11','{"documents":{"hash":{"copy":{"verified":true}}}}','2026-10-31T00:00:00Z');
 insert into marketizo_private.work_log_audit(recorded_at,transaction_id,log_id,action,actor_id,write_source,before_record,after_record) values(clock_timestamp(),1,'fixture','update','emp-miljan','fixture','{}','{}');`);
 await load('database/system-backup.sql');
-const snapshot=async()=>{
- const core=(await db.query('select marketizo_work_production_snapshot() s')).rows[0].s,manifest=(await db.query('select marketizo_system_domains_manifest() s')).rows[0].s;
+const anchoredDomains=async manifest=>{
  const domains={format:'marketizo-system-domains-v1',schema:{},tables:{},stateRows:[],primaryKeys:{}};
- for(const [name,meta] of [...Object.entries(manifest.tables),['stateRows',manifest.stateRows]]){const rows=[];for(let offset=0;offset<meta.count;offset+=5)rows.push(...(await db.query('select marketizo_system_domains_page($1,$2,5) s',[name,offset])).rows[0].s);if(name==='stateRows')domains.stateRows=rows;else{domains.tables[name]=rows;domains.schema[name]=meta.schema;domains.primaryKeys[name]=meta.keys;}}
- return {...core,kpi:(await db.query("select to_jsonb(s) v from agency_crm_state s where id='marketizo-kpi-v1'")).rows[0].v,questionnaires:(await db.query('select marketizo_questionnaire_snapshot() s')).rows[0].s,systemDomains:domains};
+ for(const [name,meta] of [...Object.entries(manifest.tables),['stateRows',manifest.stateRows]]){const rows=[];for(let offset=0;offset<meta.count;offset+=5){const expected=meta.rows.slice(offset,offset+5),page=(await db.query('select marketizo_system_domains_keyed_page($1,$2) s',[name,expected.map(r=>r.key)])).rows[0].s;assert.deepEqual(page.fingerprints,expected.map(r=>r.hash));rows.push(...page.rows);}if(name==='stateRows')domains.stateRows=rows;else{domains.tables[name]=rows;domains.schema[name]=meta.schema;domains.primaryKeys[name]=meta.keys;}}
+ return domains;
 };
+const snapshot=async()=>{const s=(await db.query('select marketizo_backup_export_anchor() s')).rows[0].s;const domains=await anchoredDomains(s.manifest);delete s.manifest;return {...s,systemDomains:domains};};
+// Appends after the single MVCC anchor do not alter its exact row set or core data.
+const anchored=(await db.query('select marketizo_backup_export_anchor() s')).rows[0].s;
+await db.exec("insert into marketizo_private.work_log_audit(recorded_at,transaction_id,log_id,action,actor_id,write_source,after_record) values(clock_timestamp(),2,'after-anchor','insert','emp-miljan','fixture','{}');update agency_crm_state set payload=payload||'{\"duringBackup\":true}' where id='marketizo-main'");
+assert.equal(anchored.payload.duringBackup,undefined);const anchoredCopy=await anchoredDomains(anchored.manifest);assert.equal(anchoredCopy.tables['marketizo_private.work_log_audit'].length,1);assert.equal((await db.query('select count(*) n from marketizo_private.work_log_audit')).rows[0].n,2);
+const financeKey=anchored.manifest.stateRows.rows[0];await db.exec("update agency_crm_state set payload=payload||'{\"changedDuringCopy\":true}' where id like 'finance-%'");const drift=(await db.query("select marketizo_system_domains_keyed_page('stateRows',$1) s",[[financeKey.key]])).rows[0].s;assert.notEqual(drift.fingerprints[0],financeKey.hash,'Changed existing rows cannot masquerade as the anchor');
+await assert.rejects(db.query("select marketizo_system_domains_keyed_page('public.agency_crm_employee_auth','[{}]')"),/Invalid snapshot/);
+assert.equal((await db.query("select marketizo_system_domains_keyed_page('stateRows','[{\"id\":\"marketizo-main\"}]') s")).rows[0].s.rows.length,0);
+assert.equal((await db.query("select provolatile from pg_proc where oid='marketizo_backup_export_anchor()'::regprocedure")).rows[0].provolatile,'s');
+
 const manifest=(await db.query('select marketizo_system_domains_manifest() s')).rows[0].s;assert.equal(manifest.format,'marketizo-system-manifest-v1');assert.ok(manifest.tables['public.marketizo_sign_receipts'].fingerprint);const page=(await db.query("select marketizo_system_domains_page('public.marketizo_sign_receipts',0,5) s")).rows[0].s;assert.equal(page[0].final_pdf,'\\x255044462d');await assert.rejects(db.query("select marketizo_system_domains_page('public.agency_crm_employee_auth',0,5)"),/Invalid snapshot/);
 const saved=await snapshot();assert.equal(saved.systemDomains.tables['public.marketizo_sign_receipts'][0].final_pdf,'\\x255044462d');assert.equal(saved.systemDomains.stateRows.length,1);assert.equal(saved.payload.employeeWorkLogs[0].minutes,40);
 const restore=async(target,current,domains=target.systemDomains)=>(await db.query('select marketizo_restore_complete_system_backup($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) r',[target.payload,target.kpi.payload,current.updated_at,current.kpi.updated_at,target.questionnaires,current.questionnaires,target.production,current.production,domains,current.systemDomains])).rows[0].r;
