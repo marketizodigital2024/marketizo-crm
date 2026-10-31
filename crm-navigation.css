@@ -16,3 +16,9 @@
  .kpi-workspace { padding:20px!important; }
  .kpi-workspace .quick-nav { overflow-x:auto;max-width:100%; }
 }
+/* Keep the table's hidden action label inside its own horizontal scroller. */
+.sign-table-wrap { position:relative;max-width:100%; }
+@media(max-width:780px){
+ #employees .employee-performance-overview>.panel-head { flex-direction:column;align-items:stretch; }
+ #employees .employee-profile-filter { min-width:0;width:100%; }
+}

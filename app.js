@@ -4317,7 +4317,7 @@ function renderEmployeePerformanceOverview() {
     const activateProfileTab = () => {
       profileTarget.querySelectorAll("[data-profile-panel]").forEach((panel) => panel.hidden = panel.dataset.profilePanel !== employeeProfileTab);
       profileTarget.querySelectorAll("[data-profile-tab]").forEach((button) => button.classList.toggle("active", button.dataset.profileTab === employeeProfileTab));
-      if (employeeProfileTab === "clients" && !profileTarget.dataset.ratingsRequested) { profileTarget.dataset.ratingsRequested = "true"; renderProfileClientRatings(employee.id); }
+      if (["summary", "clients"].includes(employeeProfileTab) && !profileTarget.dataset.ratingsRequested) { profileTarget.dataset.ratingsRequested = "true"; renderProfileClientRatings(employee.id); }
     };
     profileTarget.querySelectorAll("[data-profile-tab]").forEach((button) => button.addEventListener("click", () => {
       employeeProfileTab = button.dataset.profileTab;
@@ -6050,7 +6050,9 @@ function setActiveView(viewName, updateUrl = false) {
     if (dashboardMonth) dashboardMonth.value = monthFilter;
     if (invoiceMonth) invoiceMonth.value = monthFilter;
   }
-  setText("pageTitle", button.textContent);
+  const employeeTitles = { "employees-overview": "Pregled tima", "employee-profile": "Lična karta", "employees-absences": "Odmori i kalendar", "employees-recognitions": "1:1 sastanci", "employees-ratings": "Učinak i ciljevi", "employees-goals": "Aktivnosti", "employees-settings": "Podešavanja" };
+  const routeFile = location.pathname.split("/").pop().replace(/\.html$/, "");
+  setText("pageTitle", viewName === "employees" ? employeeTitles[routeFile] || button.textContent : button.textContent);
   updateContextActions(viewName);
   if (updateUrl && !location.pathname.split("/").pop().startsWith("employees-")) {
     if (location.hash !== `#${viewName}`) history.pushState(null, "", `#${viewName}`);
