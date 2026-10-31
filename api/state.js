@@ -484,12 +484,12 @@ module.exports = async function handler(req, res) {
         if (!payload || typeof payload !== "object" || Array.isArray(payload)) return json(res, 400, { configured: true, error: "Neispravno stanje nakon izmene." });
       }
       if (["full-admin", "operational-admin"].includes(access.role)) {
-        const adjustments = payload.employeeHourAdjustments || current.payload.employeeHourAdjustments || [];
+        const adjustments = (payload.employeeHourAdjustments || current.payload.employeeHourAdjustments || []).filter(item => !require("../comp-time.js").isAutomatic(item));
         if (Array.isArray(adjustments) && new Set(adjustments.map((item) => item.id)).size !== adjustments.length) return json(res, 400, { configured: true, error: "Duplirana korekcija salda." });
         if (!Array.isArray(adjustments) || adjustments.some((item) => !item.id || !current.payload.employees.some((employee) => employee.id === item.employeeId) || !Number.isInteger(Number(item.minutes)) || Number(item.minutes) < 1 || Number(item.minutes) > 10000 || !/^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")) || !Number.isFinite(Date.parse(item.date + "T12:00:00Z")) || new Date(item.date + "T12:00:00Z").toISOString().slice(0, 10) !== item.date || !String(item.reason || "").trim())) {
           return json(res, 400, { configured: true, error: "Neispravna korekcija salda." });
         }
-        const previous = new Map((current.payload.employeeHourAdjustments || []).map((item) => [item.id, item]));
+        const previous = new Map((current.payload.employeeHourAdjustments || []).filter(item => !require("../comp-time.js").isAutomatic(item)).map((item) => [item.id, item]));
         const desired = new Map(adjustments.map((item) => [item.id, item]));
         payload.employeeHourAdjustments = adjustments.map((item) => previous.get(item.id) || { ...item, minutes: Number(item.minutes), actorId: access.employee.id, createdAt: new Date().toISOString() });
         payload.hourAdjustmentAudit = [...(current.payload.hourAdjustmentAudit || []),
@@ -512,6 +512,10 @@ module.exports = async function handler(req, res) {
       if (access.role === "full-admin") {
         if (!Object.hasOwn(payload, "companyCostsByMonth") && current.payload.companyCostsByMonth) payload.companyCostsByMonth = current.payload.companyCostsByMonth;
         if (!require("../company-overhead.js").validate(payload.companyCostsByMonth)) return json(res, 400, { configured: true, error: "Neispravni mesečni troškovi ili fond sati." });
+      }
+      if (["full-admin", "operational-admin"].includes(access.role)) {
+        try { payload = require("../lib/comp-time.js").sync(current.payload, payload, access.employee); }
+        catch (error) { return json(res, 400, { configured: true, error: error.message }); }
       }
       const unsafeShrink = unsafeCollectionShrink(payload, current.payload, body.deletedIds);
       if (unsafeShrink) {

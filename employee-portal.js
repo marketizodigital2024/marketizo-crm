@@ -288,6 +288,7 @@ function loadState(sourceData = null) {
     active: activity.active !== false,
   }));
   data.employeeHourAdjustments = (data.employeeHourAdjustments || []).map((adjustment) => ({
+    ...adjustment,
     id: adjustment.id || createId(),
     employeeId: adjustment.employeeId || "",
     date: adjustment.date || currentDateKey(),
@@ -1394,10 +1395,11 @@ function renderPortalAbsences() {
     ? absences
         .map((absence) => {
           const days = workdayKeysBetween(absence.startDate, absence.endDate).length;
+          const used = absence.type === "Slobodno za prekovremene sate" ? window.MarketizoCompTime?.total(state, absence.id) || 0 : 0;
           return `
           <div class="setup-item">
             <strong>${days}</strong>
-            <span>${escapePortalText(absence.type)} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br /><b>${escapePortalText(absence.status || "Odobreno")}</b>${absence.note ? ` · ${escapePortalText(absence.note)}` : ""}</span>
+            <span>${escapePortalText(absence.type)} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br /><b>${escapePortalText(absence.status || "Odobreno")}</b>${absence.note ? ` · ${escapePortalText(absence.note)}` : ""}${used ? `<br /><small>Skinuto iz salda: ${used} min</small>` : ""}</span>
           </div>`;
         })
         .join("")

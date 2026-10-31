@@ -1464,6 +1464,7 @@ function migrateState(data) {
     active: activity.active !== false,
   }));
   const employeeHourAdjustments = (data.employeeHourAdjustments || []).map((adjustment) => ({
+    ...adjustment,
     id: adjustment.id || crypto.randomUUID(),
     employeeId: adjustment.employeeId || "",
     date: adjustment.date || currentDateKey(),
@@ -3628,7 +3629,7 @@ function renderSelectedEmployeeAbsenceList(employeeId, year) {
               (absence) => `
               <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : "warn"}">
                 <strong>${workdayKeysBetween(absence.startDate, absence.endDate).length}</strong>
-                <span>${escapeInvoiceText(absence.type)} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br />${escapeInvoiceText(absence.status || "")} ${absence.note ? `· ${escapeInvoiceText(absence.note)}` : ""}</span>
+                <span>${escapeInvoiceText(absence.type)} · ${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}<br />${escapeInvoiceText(absence.status || "")} ${absence.note ? `· ${escapeInvoiceText(absence.note)}` : ""}${absence.type === "Slobodno za prekovremene sate" && window.MarketizoCompTime?.total(state, absence.id) ? `<br /><small>Skinuto iz salda: ${window.MarketizoCompTime.total(state, absence.id)} min</small>` : ""}</span>
               </div>`
             )
             .join("")
@@ -5032,9 +5033,10 @@ function renderEmployeeHourAdjustments() {
   target.innerHTML = adjustments.length
     ? adjustments.slice(0, 20).map((adjustment) => {
       const employee = (state.employees || []).find((item) => item.id === adjustment.employeeId);
-      return `<div class="setup-item hour-deduction-row"><strong>−${adjustment.minutes} min</strong><span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${formatDate(adjustment.date)}<br />${escapeInvoiceText(adjustment.reason)}</span><button class="edit-button" data-undo-hour-deduction="${escapeInvoiceText(adjustment.id)}" type="button">Poništi korekciju</button></div>`;
+      return `<div class="setup-item hour-deduction-row"><strong>−${adjustment.minutes} min</strong><span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${formatDate(adjustment.date)}<br />${escapeInvoiceText(adjustment.reason)}</span>${window.MarketizoCompTime?.isAutomatic(adjustment) ? `<button class="edit-button" data-cancel-comp-time="${escapeInvoiceText(adjustment.absenceId)}" type="button">Otkaži odsustvo</button>` : `<button class="edit-button" data-undo-hour-deduction="${escapeInvoiceText(adjustment.id)}" type="button">Poništi korekciju</button>`}</div>`;
     }).join("")
     : `<div class="empty-state">Još nema korekcija salda.</div>`;
+  target.querySelectorAll("[data-cancel-comp-time]").forEach(button => button.addEventListener("click", () => cancelCompTimeAbsence(button.dataset.cancelCompTime)));
   target.querySelectorAll("[data-undo-hour-deduction]").forEach((button) => button.addEventListener("click", async () => {
     const adjustment = (state.employeeHourAdjustments || []).find((item) => item.id === button.dataset.undoHourDeduction);
     if (!adjustment || !confirm(`Poništiti korekciju od ${adjustment.minutes} minuta?`)) return;
@@ -5202,6 +5204,36 @@ function renderEmployeeReportRows(monthKey) {
   if (reportRows) reportRows.innerHTML = rows.join("") || `<tr><td colspan="6">Nema izveštaja za ovaj mesec.</td></tr>`;
 }
 
+function confirmCompTimeAbsence(absence) {
+  if (absence.type !== "Slobodno za prekovremene sate") return true;
+  const comp = window.MarketizoCompTime;
+  if (!comp) { alert("Obračun slobodnih sati nije učitan. Osveži stranicu pa pokušaj ponovo."); return false; }
+  try {
+    const planned = comp.plan(state, absence, isAustrianWorkingDay).reduce((sum, day) => sum + day.minutes, 0);
+    const change = planned - comp.total(state, absence.id);
+    if (change <= 0) return true;
+    const employee = employeeById(absence.employeeId);
+    const balance = employeeHourBalance(employee, currentMonthKey());
+    const after = Math.round((balance - change / 60) * 100) / 100;
+    return confirm(`Slobodno za prekovremene sate: ${change} min (${Math.round(change / 60 * 100) / 100} h) biće skinuto iz salda nakon čuvanja.\nTrenutni saldo: ${formatHourBalance(balance)}. Posle odobrenja: ${formatHourBalance(after)}.${after < 0 ? "\nUPOZORENJE: saldo prelazi u minus. Odobravanje je dozvoljeno." : ""}\nPotvrdi odobravanje?`);
+  } catch (error) { alert(error.message); return false; }
+}
+
+async function cancelCompTimeAbsence(id) {
+  if (adminConfirmedSaveInFlight) return;
+  const absence = (state.employeeAbsences || []).find(item => item.id === id);
+  if (!absence || absence.type !== "Slobodno za prekovremene sate" || absence.status !== "Odobreno") return;
+  const minutes = window.MarketizoCompTime?.total(state, id) || 0;
+  if (!confirm(`Otkazati ovo odsustvo? Automatsko zaduženje od ${minutes} min biće poništeno nakon čuvanja. Za protekle datume ponovo važi obaveza upisa rada.`)) return;
+  const before = structuredClone(state);
+  absence.status = "Otkazano";
+  absence.cancelledAt = new Date().toISOString();
+  notifyOnce({ key: `comp-time-cancelled-${id}`, scope: "employee", targetId: absence.employeeId, type: "info", title: "Slobodno za prekovremene sate je otkazano", message: `Odsustvo ${formatDate(absence.startDate)} – ${formatDate(absence.endDate)} je otkazano. Automatsko zaduženje salda je poništeno.` });
+  if (!(await confirmAdminSave(before))) return;
+  renderAll();
+  showToast("Odsustvo otkazano", "Automatsko zaduženje salda je poništeno.", "ok");
+}
+
 async function approveAbsence(id) {
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
@@ -5209,7 +5241,7 @@ async function approveAbsence(id) {
   const absence = state.employeeAbsences.find((item) => item.id === id);
   if (!absence || absence.status !== "Zatraženo") return;
   const employee = employeeById(absence.employeeId);
-  if (!confirm(`Prihvatiti zahtev za ${absence.type} zaposlenog ${employee?.name || "Zaposleni"}?`)) return;
+  if (absence.type === "Slobodno za prekovremene sate" ? !confirmCompTimeAbsence(absence) : !confirm(`Prihvatiti zahtev za ${absence.type} zaposlenog ${employee?.name || "Zaposleni"}?`)) return;
   pendingAbsenceDecisions.set(id, structuredClone(absence));
   renderPendingAdminRequests();
   absence.status = "Odobreno";
@@ -5404,7 +5436,7 @@ function renderAdminTeamCalendar() {
             <span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(absence.type)}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)} · ${escapeInvoiceText(absence.status || "Odobreno")}${absence.note ? ` · ${escapeInvoiceText(absence.note)}` : ""}</span>
             <div class="notification-actions">
               <button class="mini-action" data-hide-absence="${escapeInvoiceText(absence.id)}" type="button">Sakrij</button>
-              <button class="mini-action danger-action" data-delete-absence="${escapeInvoiceText(absence.id)}" type="button">Obriši</button>
+              ${absence.type === "Slobodno za prekovremene sate" && absence.status === "Odobreno" ? `<button class="mini-action danger-action" data-cancel-comp-time="${escapeInvoiceText(absence.id)}" type="button">Otkaži odsustvo</button>` : `<button class="mini-action danger-action" data-delete-absence="${escapeInvoiceText(absence.id)}" type="button">Obriši</button>`}
             </div>
           </div>`;
         })
@@ -5419,7 +5451,7 @@ function renderAdminTeamCalendar() {
           <span>${escapeInvoiceText(employee?.name || "Zaposleni")} · ${escapeInvoiceText(absence.type)}<br />${formatDate(absence.startDate)} - ${formatDate(absence.endDate)}</span>
           <div class="notification-actions">
             <button class="mini-action" data-unhide-absence="${escapeInvoiceText(absence.id)}" type="button">Vrati</button>
-            <button class="mini-action danger-action" data-delete-absence="${escapeInvoiceText(absence.id)}" type="button">Obriši</button>
+            ${absence.type === "Slobodno za prekovremene sate" && absence.status === "Odobreno" ? `<button class="mini-action danger-action" data-cancel-comp-time="${escapeInvoiceText(absence.id)}" type="button">Otkaži odsustvo</button>` : `<button class="mini-action danger-action" data-delete-absence="${escapeInvoiceText(absence.id)}" type="button">Obriši</button>`}
           </div>
         </div>`;
       }).join("")}
@@ -5446,6 +5478,7 @@ function renderAdminTeamCalendar() {
     if (!(await confirmAdminSave(_confirmedBefore))) return;
     renderAll();
   }));
+  target.querySelectorAll("[data-cancel-comp-time]").forEach(button => button.addEventListener("click", () => cancelCompTimeAbsence(button.dataset.cancelCompTime)));
   target.querySelectorAll("[data-delete-absence]").forEach((button) => button.addEventListener("click", async () => {
   if (adminConfirmedSaveInFlight) { showToast("Čuvanje je u toku", "Sačekaj potvrdu prethodne izmene pa pokušaj ponovo.", "warn"); return; }
   const _confirmedBefore = structuredClone(state);
@@ -6216,6 +6249,7 @@ document.getElementById("employeeAbsenceForm")?.addEventListener("submit", async
     approvedAt: new Date().toISOString(),
     approvedBy: "Admin",
   };
+  if (absence.type === "Slobodno za prekovremene sate" && !confirmCompTimeAbsence(absence)) return;
   addConfirmedRecord(state.employeeAbsences, absence);
   selectedEmployeeId = employeeId;
   notifyOnce({
