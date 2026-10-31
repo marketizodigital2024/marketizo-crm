@@ -2893,7 +2893,6 @@ function openEditClient(id) {
   for (const [key,value] of Object.entries(clientBillingDefaults(client))) {
     const input=form.elements["billing_"+key];if(input){if(input.type==="checkbox")input.checked=value===true;else input.value=value || "";}
   }
-  if (!client.billingProfile) form.querySelectorAll('[name^="billing_"]').forEach(input=>{if(input.type==="checkbox")input.checked=false;else input.value="";});
   form.elements.name.value = client.name || "";
   form.elements.niche.value = client.niche || "";
   form.elements.country.value = client.country || "Austrija";
