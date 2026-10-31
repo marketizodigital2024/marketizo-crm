@@ -4,20 +4,21 @@ begin;
 set local lock_timeout='3s';
 -- Bounded, read-only export: no large aggregate or long SHARE locks in live backups.
 create or replace function public.marketizo_system_domains_manifest()
-returns jsonb language plpgsql security invoker set search_path='' set statement_timeout='10s' as $$
-declare r record; entries jsonb:='{}'; columns jsonb; keys jsonb; ordering text; n bigint; fingerprint text;
+returns jsonb language plpgsql stable security invoker set search_path='' set statement_timeout='10s' as $$
+declare r record; entries jsonb:='{}'; columns jsonb; keys jsonb; ordering text; n bigint; fingerprint text; inventory jsonb; keyargs text; sortselect text; sortnames text;
 begin
  for r in select n.nspname ns,c.relname name,c.oid from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
  where c.relkind='r' and ((n.nspname='public' and (c.relname like 'marketizo\_sign\_%' escape '\' or c.relname in ('marketizo_codeks_portal_links','marketizo_audits'))) or (n.nspname='marketizo_private' and c.relname in ('work_log_audit','work_log_recovery_plan'))) order by n.nspname,c.relname loop
   select string_agg(format('t.%I',a.attname),',' order by k.ord) into ordering from pg_catalog.pg_index i cross join lateral unnest(i.indkey) with ordinality k(attnum,ord) join pg_catalog.pg_attribute a on a.attrelid=i.indrelid and a.attnum=k.attnum where i.indrelid=r.oid and i.indisprimary;
   if ordering is null then raise exception 'Snapshot table requires primary key'; end if;
   select jsonb_agg(a.attname order by k.ord) into keys from pg_catalog.pg_index i cross join lateral unnest(i.indkey) with ordinality k(attnum,ord) join pg_catalog.pg_attribute a on a.attrelid=i.indrelid and a.attnum=k.attnum where i.indrelid=r.oid and i.indisprimary;
-  execute format($query$select count(*),md5(coalesce(string_agg(md5(to_jsonb(t)::text),'' order by %s),'')) from %I.%I t$query$,ordering,r.ns,r.name) into n,fingerprint;
+  select string_agg(format('%L,to_jsonb(t.%I)',a.attname,a.attname),',' order by k.ord),string_agg(format('t.%I as s%s',a.attname,k.ord),',' order by k.ord),string_agg(format('s%s',k.ord),',' order by k.ord) into keyargs,sortselect,sortnames from pg_catalog.pg_index i cross join lateral unnest(i.indkey) with ordinality k(attnum,ord) join pg_catalog.pg_attribute a on a.attrelid=i.indrelid and a.attnum=k.attnum where i.indrelid=r.oid and i.indisprimary;
+  execute format($query$with serial as materialized(select jsonb_build_object(%s) k,md5(to_jsonb(t)::text) h,%s from %I.%I t) select count(*),md5(coalesce(string_agg(h,'' order by %s),'')),coalesce(jsonb_agg(jsonb_build_object('key',k,'hash',h) order by %s),'[]') from serial$query$,keyargs,sortselect,r.ns,r.name,sortnames,sortnames) into n,fingerprint,inventory;
   select jsonb_agg(jsonb_build_object('name',a.attname,'type',pg_catalog.format_type(a.atttypid,a.atttypmod),'generated',a.attgenerated,'identity',a.attidentity) order by a.attnum) into columns from pg_catalog.pg_attribute a where a.attrelid=r.oid and a.attnum>0 and not a.attisdropped;
-  entries=entries||jsonb_build_object(r.ns||'.'||r.name,jsonb_build_object('count',n,'fingerprint',fingerprint,'schema',columns,'keys',keys));
+  entries=entries||jsonb_build_object(r.ns||'.'||r.name,jsonb_build_object('count',n,'fingerprint',fingerprint,'schema',columns,'keys',keys,'rows',inventory));
  end loop;
- select count(*),md5(coalesce(string_agg(md5(to_jsonb(t)::text),'' order by t.id),'')) into n,fingerprint from public.agency_crm_state t where t.id not like 'backup-%' and t.id not in ('marketizo-main','marketizo-kpi-v1','marketizo-smm-preview-v1','marketizo-kpi-preview-v1');
- return jsonb_build_object('format','marketizo-system-manifest-v1','tables',entries,'stateRows',jsonb_build_object('count',n,'fingerprint',fingerprint));
+ with serial as materialized(select t.id,md5(to_jsonb(t)::text) h from public.agency_crm_state t where t.id not like 'backup-%' and t.id not in ('marketizo-main','marketizo-kpi-v1','marketizo-smm-preview-v1','marketizo-kpi-preview-v1')) select count(*),md5(coalesce(string_agg(h,'' order by id),'')),coalesce(jsonb_agg(jsonb_build_object('key',jsonb_build_object('id',id),'hash',h) order by id),'[]') into n,fingerprint,inventory from serial;
+ return jsonb_build_object('format','marketizo-system-manifest-v1','tables',entries,'stateRows',jsonb_build_object('count',n,'fingerprint',fingerprint,'rows',inventory));
 end $$;
 revoke all on function public.marketizo_system_domains_manifest() from public,anon,authenticated;
 grant execute on function public.marketizo_system_domains_manifest() to service_role;
@@ -38,6 +39,38 @@ begin
 end $$;
 revoke all on function public.marketizo_system_domains_page(text,integer,integer) from public,anon,authenticated;
 grant execute on function public.marketizo_system_domains_page(text,integer,integer) to service_role;
+
+-- One read-only MVCC statement binds core state and the exact domain row keys.
+-- Later work logs may continue; they belong to the next backup, not this anchor.
+create or replace function public.marketizo_backup_export_anchor()
+returns jsonb language sql stable security invoker set search_path='' as $$
+ select jsonb_build_object('payload',s.payload,'updated_at',s.updated_at,
+  'kpi',(select to_jsonb(k) from public.agency_crm_state k where k.id='marketizo-kpi-v1'),
+  'production',jsonb_build_object('format','marketizo-work-production-v1',
+    'rules',(select coalesce(jsonb_agg(to_jsonb(r) order by r.activity_id),'[]') from public.marketizo_activity_metrics r),
+    'outputs',(select coalesce(jsonb_agg(to_jsonb(o) order by o.log_id),'[]') from public.marketizo_work_outputs o)),
+  'questionnaires',public.marketizo_questionnaire_snapshot(),
+  'manifest',public.marketizo_system_domains_manifest())
+ from public.agency_crm_state s where s.id='marketizo-main';
+$$;
+revoke all on function public.marketizo_backup_export_anchor() from public,anon,authenticated;
+grant execute on function public.marketizo_backup_export_anchor() to service_role;
+create or replace function public.marketizo_system_domains_keyed_page(p_table text,p_keys jsonb)
+returns jsonb language plpgsql stable security invoker set search_path='' set statement_timeout='10s' as $$
+declare target regclass; join_keys text; filter text:=''; result jsonb;
+begin
+ if jsonb_typeof(p_keys) is distinct from 'array' or jsonb_array_length(p_keys) not between 1 and 250 then raise exception 'Invalid page keys';end if;
+ if p_table='stateRows' then target='public.agency_crm_state'::regclass;filter=$where$ where t.id not like 'backup-%' and t.id not in ('marketizo-main','marketizo-kpi-v1','marketizo-smm-preview-v1','marketizo-kpi-preview-v1')$where$;
+ elsif p_table ~ '^(public\.marketizo_(sign_[a-z_]+|codeks_portal_links|audits)|marketizo_private\.work_log_(audit|recovery_plan))$' then target=pg_catalog.to_regclass(p_table);
+ else raise exception 'Invalid snapshot table';end if;
+ if target is null then raise exception 'Unknown snapshot table';end if;
+ select string_agg(format('t.%I=k.%I',a.attname,a.attname),' and ' order by key.ord) into join_keys from pg_catalog.pg_index i cross join lateral unnest(i.indkey) with ordinality key(attnum,ord) join pg_catalog.pg_attribute a on a.attrelid=i.indrelid and a.attnum=key.attnum where i.indrelid=target and i.indisprimary;
+ if join_keys is null then raise exception 'Snapshot table requires primary key';end if;
+ execute format($query$select jsonb_build_object('rows',coalesce(jsonb_agg(to_jsonb(t) order by wanted.ord),'[]'),'fingerprints',coalesce(jsonb_agg(md5(to_jsonb(t)::text) order by wanted.ord),'[]')) from jsonb_array_elements($1) with ordinality wanted(v,ord) cross join lateral jsonb_populate_record(null::%s,wanted.v) k join %s t on %s%s$query$,target,target,join_keys,filter) into result using p_keys;
+ return result;
+end $$;
+revoke all on function public.marketizo_system_domains_keyed_page(text,jsonb) from public,anon,authenticated;
+grant execute on function public.marketizo_system_domains_keyed_page(text,jsonb) to service_role;
 
 -- No UPDATE/DELETE of Sign history, no disabling triggers or constraints.
 -- SECURITY DEFINER is necessary to recover missing audit rows/sequences without
