@@ -233,7 +233,7 @@
             </div>
             <form id="adminClientForm" class="admin-form">
               <div class="form-grid">
-                <label>Ime biznisa<input name="name" required placeholder="npr. Balkan Express" /></label>
+                <label>Ime biznisa / naziv firme na računu<input name="name" required placeholder="npr. Balkan Express" /></label>
                 <label>Niša<input name="niche" required placeholder="npr. restoran" /></label>
                 <label>Država
                   <select name="country">
@@ -251,7 +251,7 @@
                     <option>Custom</option>
                   </select>
                 </label>
-                <label>Mesečna cena (€)<input name="revenue" type="number" min="0" step="1" value="997" /></label>
+                <label>Cena netto (€)<input name="revenue" type="number" min="0" step="1" value="997" /></label>
                 <label>Ugovor
                   <select name="contractMonths">
                     <option value="3">3 meseca</option>
@@ -272,22 +272,10 @@
                 </label>
                 <label>Kontakt osoba<input name="contactName" required placeholder="npr. vlasnik / menadžer" /></label>
                 <label>Telefon za pozive<input name="contactPhone" required placeholder="+436601112233" /></label>
-                <label>WhatsApp povezivanje<input disabled value="Klijent podešava u svom CRM-u" /></label>
-                <label>Login email<input name="loginEmail" type="email" placeholder="klijent@firma.com" /></label>
-                <label>Login lozinka<input name="loginPassword" placeholder="npr. 123456" /></label>
+                <label>E-mail (kontakt i računi)<input name="loginEmail" type="email" placeholder="klijent@firma.com" /></label>
                 <label>Dan naplate<input name="billingDay" type="number" min="1" max="31" value="1" /></label>
                 <label>Meta Page ID<input name="metaPageId" placeholder="kasnije povezujemo" /></label>
-                <label>Izrada sajta
-                  <select name="websiteService"><option value="Ne">Ne</option><option value="Da">Da</option></select>
-                </label>
-                <label>Cena izrade sajta (€)<input name="websitePrice" type="number" min="0" step="1" value="0" /></label>
-                <label>Hosting provajder<input name="hostingProvider" placeholder="npr. Hostinger" /></label>
-                <label>Hosting ističe<input name="hostingExpiresAt" type="date" /></label>
-                <label>Hosting godišnje (€)<input name="hostingPrice" type="number" min="0" step="1" value="0" /></label>
-                <label>Domen<input name="domainName" placeholder="npr. klijent.at" /></label>
-                <label>Domen ističe<input name="domainExpiresAt" type="date" /></label>
-                <label>Domen godišnje (€)<input name="domainPrice" type="number" min="0" step="1" value="0" /></label>
-              </div>
+                </div>
               <div class="admin-submit">
                 <button class="primary-button" type="submit">Sačuvaj klijenta</button>
               </div>
@@ -916,7 +904,7 @@
         </div>
         <input type="hidden" name="id" />
         <div class="form-grid">
-          <label>Ime biznisa<input name="name" required /></label>
+          <label>Ime biznisa / naziv firme na računu<input name="name" required /></label>
           <label>Niša<input name="niche" /></label>
           <label>Država
             <select name="country">
@@ -934,7 +922,7 @@
               <option>Custom</option>
             </select>
           </label>
-          <label>Mesečna cena (€)<input name="revenue" type="number" min="0" step="1" /></label>
+          <label>Cena netto (€)<input name="revenue" type="number" min="0" step="1" /></label>
           <label>Ugovor
             <select name="contractMonths">
               <option value="3">3 meseca</option>
@@ -956,21 +944,8 @@
           <label>Dan naplate<input name="billingDay" type="number" min="1" max="31" /></label>
           <label>Kontakt osoba<input name="contactName" /></label>
           <label>Telefon<input name="contactPhone" /></label>
-          <label>WhatsApp povezivanje<input disabled value="Klijent podešava u svom CRM-u" /></label>
-          <label>Login email<input name="loginEmail" type="email" /></label>
-          <label>Login lozinka<input name="loginPassword" /></label>
-          <label>Izrada sajta
-            <select name="websiteService"><option value="Ne">Ne</option><option value="Da">Da</option></select>
-          </label>
-          <label>Cena izrade sajta (€)<input name="websitePrice" type="number" min="0" step="1" /></label>
-          <label>Hosting provajder<input name="hostingProvider" /></label>
-          <label>Hosting ističe<input name="hostingExpiresAt" type="date" /></label>
-          <label>Hosting godišnje (€)<input name="hostingPrice" type="number" min="0" step="1" /></label>
-          <label>Domen<input name="domainName" /></label>
-          <label>Domen ističe<input name="domainExpiresAt" type="date" /></label>
-          <label>Domen godišnje (€)<input name="domainPrice" type="number" min="0" step="1" /></label>
-        </div>
-        <section class="client-lead-summary" id="editClientLeadSummary"></section>
+          <label>E-mail (kontakt i računi)<input name="loginEmail" type="email" /></label>
+          </div>
         <menu class="modal-actions">
           <button class="secondary-button" value="cancel" type="button" id="cancelEditClient">Otkaži</button>
           <button class="primary-button" value="default" type="submit">Sačuvaj</button>
@@ -987,8 +962,8 @@
     <script src="crm-navigation.js?v=20261031-billing-1"></script><script src="mobile-crm-nav.js?v=20261031-mobile-1"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
     <script src="dashboard-help.js?v=20261031-plain-language-1"></script>
-    <script src="client-billing-defaults.js?v=1"></script>
-    <script src="app.js?v=billing-profile-2"></script>
+    <script src="client-billing-defaults.js?v=2"></script>
+    <script src="app.js?v=client-clean-3"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
     <script src="finance-bank-matches.js?v=20261031-billing-1"></script>
   <script src="finance-bank-auto.js?v=20261031-plain-language-1"></script>

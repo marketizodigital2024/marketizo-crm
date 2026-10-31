@@ -1406,8 +1406,7 @@ function migrateState(data) {
         package: "Starter",
         contactName: "",
         contactPhone: "",
-        whatsapp: "",
-        billingDay: 1,
+            billingDay: 1,
         paymentStatus: "Nije plaćeno",
         invoiceStatus: "Nije poslat",
         paymentMethod: "Firma",
@@ -2906,42 +2905,7 @@ function openEditClient(id) {
   form.elements.contactName.value = client.contactName || "";
   form.elements.contactPhone.value = client.contactPhone || "";
   form.elements.loginEmail.value = client.loginEmail || "";
-  form.elements.loginPassword.value = client.loginPassword || "";
   form.elements.contractNote.value = client.contractNote || "";
-  const leadStats = clientLeadStats(client);
-  const recentLeads = clientLeads(client)
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-    .slice(0, 5);
-  const summary = document.getElementById("editClientLeadSummary");
-  if (summary) {
-    summary.innerHTML = `
-      <div class="setup-item alert-item ${leadStats.late ? "danger" : leadStats.open ? "warn" : "ok"}">
-        <strong>${leadStats.contacted}/${leadStats.total}</strong>
-        <span>Kontaktirano leadova<br />${leadStats.open} nije kontaktirano · ${leadStats.late} kasni preko 48h</span>
-      </div>
-      <div class="setup-item">
-        <strong>WA</strong>
-        <span>WhatsApp podešava klijent u svom CRM-u. Trenutno: ${client.whatsapp || "nije povezano"}</span>
-      </div>
-      <div class="client-lead-detail-list">
-        <h3>Poslednji leadovi</h3>
-        ${
-          recentLeads.length
-            ? recentLeads
-                .map((lead) => {
-                  const contacted = isClientLeadContacted(lead);
-                  const late = !contacted && (lead.status || "Novi") === "Novi" && lead.createdAt && hoursSince(lead.createdAt) >= clientLeadSlaHours;
-                  return `
-                    <div class="setup-item alert-item ${late ? "danger" : contacted ? "ok" : "warn"}">
-                      <strong>${contacted ? "Zvao" : "Nije"}</strong>
-                      <span>${escapeInvoiceText(lead.name || "Lead")} · ${escapeInvoiceText(lead.phone || "telefon nije unet")}<br />${normalizeLeadStatus(lead.status)} · stigao ${lead.createdAt ? formatDate(lead.createdAt) : "nije uneto"}${lead.calledAt ? ` · pozvan ${formatDate(lead.calledAt)}` : ""}${lead.customFields && Object.keys(lead.customFields).length ? `<br />Forma: ${Object.entries(lead.customFields).map(([key, value]) => `${escapeInvoiceText(key)}: ${escapeInvoiceText(value)}`).join(" · ")}` : ""}</span>
-                    </div>`;
-                })
-                .join("")
-            : `<div class="empty-state">Još nema leadova za ovog klijenta.</div>`
-        }
-      </div>`;
-  }
   document.getElementById("editClientModal").showModal();
 }
 
@@ -5756,7 +5720,7 @@ function renderClients() {
             <td>${formatDate(client.startDate)}<br /><span>${contractLabel}${daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? ` · ${daysLeft} dana` : ""}</span><br />${contractDownload}</td>
             <td><span class="status ${statusClass(client)}">${escapeInvoiceText(client.status || "Aktivan")}</span></td>
             <td><span class="status ${leadClass}">${leadStats.contacted}/${leadStats.total}</span><br /><span>${leadStats.open} nov · ${leadStats.late} kasni 48h</span></td>
-            <td>${client.loginEmail || "Nije unet"}<br /><span>Šifra: ${client.loginPassword || "Nije uneta"}</span></td>
+            <td>${escapeInvoiceText(client.loginEmail || "Nije unet")}</td>
             <td>${escapeInvoiceText(client.contactName || "Nije unet")}<br /><span>${escapeInvoiceText(client.contactPhone || client.whatsapp || "Telefon nije unet")}</span></td>
             <td>
               <div class="row-actions">
@@ -6862,26 +6826,27 @@ document.getElementById("openClientModal").addEventListener("click", () => {
 });
 
 function billingProfileFromForm(data) {
-  if (typeof data.has!=="function" || !data.has("billing_legalName")) return {};
-  const billingProfile={};for(const key of ["legalName","street","postalCode","city","country","vatId","email","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
-  billingProfile.country=billingProfile.country.toUpperCase();billingProfile.email=billingProfile.email.toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
-  return {billingProfile:clientBillingDefaults({name:data.get("name"),country:data.get("country"),loginEmail:data.get("loginEmail"),billingProfile})};
+  if (typeof data.has!=="function" || !data.has("billing_street")) return {};
+  const billingProfile={};for(const key of ["street","postalCode","city","vatId","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
+  const shared=clientBillingDefaults({name:data.get("name"),country:data.get("country"),loginEmail:data.get("loginEmail")});
+  billingProfile.legalName=String(shared.legalName||"").trim();billingProfile.country=String(shared.country||"");billingProfile.email=String(shared.email||"").trim().toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
+  return {billingProfile};
 }
 function setupClientBillingFields(){
   if(typeof getAdminSession === "function" && getAdminSession()?.role === "operational-admin")return;
-  for(const id of ["adminClientForm","editClientForm"]){const form=document.getElementById(id);if(!form||form.querySelector('[name="billing_legalName"]'))continue;
-    const frequencyLabel=document.createElement("label");frequencyLabel.textContent="Izdavanje računa";const frequency=document.createElement("select");frequency.name="billingFrequency";frequency.required=true;frequency.append(new Option("Mesečno","monthly"),new Option("Jednokratno — jedan račun","once"));frequencyLabel.append(frequency);const priceLabel=form.querySelector('[name="revenue"]')?.closest("label");if(priceLabel){priceLabel.parentNode.insertBefore(frequencyLabel,priceLabel);const caption=[...priceLabel.childNodes].find(node=>node.nodeType===3);if(caption)caption.textContent="Cena usluge (€)";}else form.append(frequencyLabel);
+  for(const id of ["adminClientForm","editClientForm"]){const form=document.getElementById(id);if(!form||form.querySelector('[name="billing_street"]'))continue;
+    const frequencyLabel=document.createElement("label");frequencyLabel.textContent="Izdavanje računa";const frequency=document.createElement("select");frequency.name="billingFrequency";frequency.required=true;frequency.append(new Option("Mesečno","monthly"),new Option("Jednokratno — jedan račun","once"));frequencyLabel.append(frequency);const priceLabel=form.querySelector('[name="revenue"]')?.closest("label");if(priceLabel){priceLabel.parentNode.insertBefore(frequencyLabel,priceLabel);const caption=[...priceLabel.childNodes].find(node=>node.nodeType===3);if(caption)caption.textContent="Cena netto (€)";}else form.append(frequencyLabel);
     const section=document.createElement("details");section.className="billing-client-profile";section.style.gridColumn="1 / -1";
     const summary=document.createElement("summary");summary.textContent="Podaci za račune";section.append(summary);
-    const info=document.createElement("p");info.textContent="Obavezno pre izdavanja računa. Jednokratni klijent ima račun samo u izabranom početnom mesecu. Naziv, država i e-mail se preuzimaju iz ovog profila. Ako se razlikuju za račun, ispravi ih ovde. Cena se preuzima iz polja Cena usluge. Sve se čuva u istom profilu klijenta.";section.append(info);
-    for(const [key,label]of [["legalName","Naziv firme"],["street","Ulica i broj"],["postalCode","Poštanski broj"],["city","Grad"],["country","Država (AT, RS…)"],["vatId","UID / PDV broj"],["email","E-mail za račune"],["taxMode","Poreski tretman"],["taxNote","Obrazloženje bez PDV-a"],["confirmed","Potvrđujem podatke i poreski tretman"]]){
+    const info=document.createElement("p");info.textContent="Naziv firme, država, e-mail i cena netto uzimaju se iz gornjih polja. Ovde dopuni samo adresu i poreske podatke potrebne za račun.";section.append(info);
+    for(const [key,label]of [["street","Ulica i broj"],["postalCode","Poštanski broj"],["city","Grad"],["vatId","UID / PDV broj"],["taxMode","Poreski tretman"],["taxNote","Obrazloženje bez PDV-a"],["confirmed","Potvrđujem podatke i poreski tretman"]]){
       const holder=document.createElement("label");holder.textContent=label;let input;
       if(key==="taxMode"){input=document.createElement("select");for(const [v,t]of [["","Izaberi nakon provere"],["standard20","20% PDV"],["reverse-charge","Reverse Charge"],["exempt","Bez PDV-a uz obrazloženje"]])input.append(new Option(t,v));}
       else{input=document.createElement("input");input.type=key==="confirmed"?"checkbox":key==="email"?"email":"text";input.maxLength=key==="taxNote"?500:key==="email"?254:180;}
       input.name="billing_"+key;holder.append(input);section.append(holder);
     }const submit=form.querySelector('button[type="submit"], button:not([type])');let anchor=submit;while(anchor?.parentElement&&anchor.parentElement!==form)anchor=anchor.parentElement;form.insertBefore(section,anchor?.parentElement===form?anchor:null);
-    const fillShared=()=>{const values=new FormData(form), profile={};for(const key of ["legalName","country","email"])profile[key]=values.get("billing_"+key)||"";const merged=clientBillingDefaults({name:values.get("name"),country:values.get("country"),loginEmail:values.get("loginEmail"),billingProfile:profile});let changed=false;for(const key of ["legalName","country","email"]){const input=form.elements["billing_"+key];if(!input.value.trim()&&merged[key]){input.value=merged[key];changed=true;}}if(changed)form.elements.billing_confirmed.checked=false;};
-    form.addEventListener("change",e=>{if(["name","country","loginEmail"].includes(e.target.name))fillShared();});section.addEventListener("toggle",()=>{if(section.open)fillShared();});
+    const note=form.elements.billing_taxNote?.closest("label");const updateTaxNote=()=>{if(note)note.hidden=!['reverse-charge','exempt'].includes(form.elements.billing_taxMode.value);};form.elements.billing_taxMode.addEventListener("change",updateTaxNote);section.addEventListener("toggle",updateTaxNote);updateTaxNote();
+    form.addEventListener("input",e=>{if(["name","country","loginEmail"].includes(e.target.name)||e.target.name?.startsWith("billing_")&&e.target.name!=="billing_confirmed")form.elements.billing_confirmed.checked=false;});
   }
 }
 setupClientBillingFields();
@@ -6899,7 +6864,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
   const loginEmail = String(formData.get("loginEmail") || "").trim().toLowerCase();
   const duplicate = state.clients.some((item) => String(item.name || "").trim().toLowerCase() === name.toLowerCase() || (loginEmail && String(item.loginEmail || "").trim().toLowerCase() === loginEmail));
   if (duplicate) {
-    showToast("Klijent već postoji", "Proveri naziv ili login email pre novog unosa.", "warn");
+    showToast("Klijent već postoji", "Proveri naziv ili e-mail pre novog unosa.", "warn");
     return;
   }
   const submitButton = form.querySelector('[type="submit"]');
@@ -6936,9 +6901,7 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     package: values.package,
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
-    whatsapp: "",
     loginEmail,
-    loginPassword: formData.get("loginPassword"),
     billingDay: Number(formData.get("billingDay")),
     paymentStatus,
     invoiceStatus,
@@ -6960,14 +6923,6 @@ document.getElementById("adminClientForm").addEventListener("submit", async (eve
     contractNote: formData.get("contractNote"),
     metaPageId: formData.get("metaPageId"),
     metaFormId: formData.get("metaFormId") || "",
-    websiteService: formData.get("websiteService") || "Ne",
-    websitePrice: Number(formData.get("websitePrice") || 0),
-    hostingProvider: formData.get("hostingProvider") || "",
-    hostingExpiresAt: formData.get("hostingExpiresAt") || "",
-    hostingPrice: Number(formData.get("hostingPrice") || 0),
-    domainName: formData.get("domainName") || "",
-    domainExpiresAt: formData.get("domainExpiresAt") || "",
-    domainPrice: Number(formData.get("domainPrice") || 0),
   });
   withLoginDefaults(state.clients[0]);
   if (!(await confirmAdminSave(_confirmedBefore))) return;
@@ -7031,18 +6986,8 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
     contactName: formData.get("contactName"),
     contactPhone: formData.get("contactPhone"),
     loginEmail: formData.get("loginEmail"),
-    loginPassword: formData.get("loginPassword"),
     contractNote: formData.get("contractNote"),
-    websiteService: formData.get("websiteService") || "Ne",
-    websitePrice: Number(formData.get("websitePrice") || 0),
-    hostingProvider: formData.get("hostingProvider") || "",
-    hostingExpiresAt: formData.get("hostingExpiresAt") || "",
-    hostingPrice: Number(formData.get("hostingPrice") || 0),
-    domainName: formData.get("domainName") || "",
-    domainExpiresAt: formData.get("domainExpiresAt") || "",
-    domainPrice: Number(formData.get("domainPrice") || 0),
   });
-  if (formData.has("whatsapp")) client.whatsapp = formData.get("whatsapp");
   if (contractFile?.name) {
     client.contractFileName = contractFile.name;
     client.contractFileData = contractFileData;
@@ -7053,6 +6998,12 @@ document.getElementById("editClientForm")?.addEventListener("submit", async (eve
       ...client.invoices[selectedMonthKey()],
       amount: values.revenue,
     };
+  }
+  const previousClient=_confirmedBefore.clients.find(item=>item.id===client.id);
+  if(previousClient?.name!==client.name){
+    for(const rows of [state.leads||[],state.teamMembers||[]])for(const row of rows){
+      if(row.clientId===client.id||(!row.clientId&&row.client===previousClient?.name&&_confirmedBefore.clients.filter(item=>item.name===previousClient.name).length===1)){row.clientId=client.id;row.client=client.name;}
+    }
   }
   withLoginDefaults(client);
   if (!(await confirmAdminSave(_confirmedBefore))) return;

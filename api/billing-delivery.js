@@ -8,7 +8,7 @@ function createHandler(deps={}){return async(req,res)=>{
   const raw=typeof req.body==='string'?req.body:JSON.stringify(req.body);if(!raw||raw.length>20000)throw Error('Neispravan zahtev.');const body=JSON.parse(raw),allowed=['heartbeat','claim','prepared','sending','uncertain','sent','archived','defer','test-pdf'];if(!allowed.includes(body.action))throw Error('Radnja nije dozvoljena.');
   if(body.action==='test-pdf'){
    const profile=core.profile({legalName:'TEST – KEIN GÜLTIGER BELEG',street:'Teststraße 1',postalCode:'1010',city:'Wien',country:'AT',email:'buchhaltung@marketizo.com',taxMode:'standard20',confirmed:true});
-   const snapshot=core.snapshot({id:'connection-test',name:'TEST',billingProfile:profile},{quantity:1,unitCents:100,serviceMonth:core.today().slice(0,7),description:'TEST – Kein gültiger Beleg. Keine Zahlung erforderlich.'});
+   const snapshot=core.snapshot({id:'connection-test',name:profile.legalName,billingProfile:profile},{quantity:1,unitCents:100,serviceMonth:core.today().slice(0,7),description:'TEST – Kein gültiger Beleg. Keine Zahlung erforderlich.'});
    const pdf=await (deps.render||require('../lib/billing-store.js').render)(snapshot,0,true);return json(res,200,{ok:true,data:{...pdf,issueDate:snapshot.issueDate}});
   }
   const h=deps.helpers||require('./state.js').helpers,config=h.supabaseConfig();if(!config.configured)throw Error('Baza nije dostupna.');const store=(deps.createStore||require('../lib/billing-store.js').createStore)(config);

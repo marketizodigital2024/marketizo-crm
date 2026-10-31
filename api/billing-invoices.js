@@ -1,5 +1,5 @@
 'use strict';
-const core=require('../lib/billing-content.js'),{createStore,render}=require('../lib/billing-store.js'),{request}=require('../lib/database-request.js');
+const core=require('../lib/billing-content.js'),{createStore,render}=require('../lib/billing-store.js');
 const json=(res,status,body)=>{res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','private, no-store');res.end(JSON.stringify(body));};
 function createHandler(deps={}){return async(req,res)=>{
  if(require('../lib/environment.js').blockProductionFeatureInPreview(res))return;
@@ -12,18 +12,10 @@ function createHandler(deps={}){return async(req,res)=>{
   const store=(deps.createStore||createStore)(config),query=new URL(req.url,'https://app.marketizo.com').searchParams;
   if(req.method==='GET'){
    if(query.get('action')==='pdf'){const doc=await store.rpc('get',{id:query.get('id')});const b=core.verifyPdf({base64:doc.pdfBase64,sha256:doc.pdfSha256});res.statusCode=200;res.setHeader('Content-Type','application/pdf');res.setHeader('Cache-Control','private, no-store');res.setHeader('Content-Disposition','inline; filename="Rechnung_'+String(doc.number||doc.previewNumber).padStart(6,'0')+'.pdf"');return res.end(b);}
-   return json(res,200,{ok:true,...await store.rpc('list'),defaults:core.brand.defaults,clients:(current.payload.clients||[]).filter(c=>c.status!=='Arhiviran').map(c=>({id:c.id,name:c.name,revenue:c.revenue,billingFrequency:c.billingFrequency==='once'?'once':'monthly',invoiceStartMonth:String(c.invoiceStartMonth||c.startDate||'').slice(0,7),profile:core.profile(require('../client-billing-defaults.js')(c)),profileHash:core.hash(core.profile(c.billingProfile)),missing:core.missing(c.billingProfile),invoices:Object.entries(c.invoices||{}).filter(([,v])=>v.originalInvoice||v.invoiceStatus==='Poslat'||v.payments?.length||Number(v.paidAmount)>0).map(([k])=>k)}))});
+   return json(res,200,{ok:true,...await store.rpc('list'),defaults:core.brand.defaults,clients:(current.payload.clients||[]).filter(c=>c.status!=='Arhiviran').map(c=>({id:c.id,name:c.name,revenue:c.revenue,billingFrequency:c.billingFrequency==='once'?'once':'monthly',invoiceStartMonth:String(c.invoiceStartMonth||c.startDate||'').slice(0,7),profile:core.profile(require('../client-billing-defaults.js')(c)),profileHash:core.hash(core.profile(c.billingProfile)),missing:core.clientMissing(c),invoices:Object.entries(c.invoices||{}).filter(([,v])=>v.originalInvoice||v.invoiceStatus==='Poslat'||v.payments?.length||Number(v.paidAmount)>0).map(([k])=>k)}))});
   }
   if(!String(req.headers?.['content-type']||'').startsWith('application/json'))throw Error('Neispravan zahtev.');const raw=typeof req.body==='string'?req.body:JSON.stringify(req.body);if(!raw||raw.length>10000)throw Error('Zahtev je prevelik.');const body=JSON.parse(raw);
-  if(body.action==='profile'){
-   const profile=core.profile(body.profile);
-   for(let n=0;n<5;n++){
-    if(h.accessSession(req,current.payload,config.key)?.role!=='full-admin')throw Error('Pristup je istekao.');
-    const c=current.payload.clients?.find(c=>c.id===body.clientId);if(!c)throw Error('Klijent nije pronađen.');if(core.hash(core.profile(c.billingProfile))!==body.previousHash)throw Error('Profil je promenjen u drugom prozoru. Osveži prikaz.');
-    await h.preserveDailyPrewriteBackup(config,current);const next=structuredClone(current.payload);next.clients.find(c=>c.id===body.clientId).billingProfile=profile;
-    const at=new Date(Math.max(Date.now(),Date.parse(current.updatedAt)+1)).toISOString();const r=await request(fetch,`${config.url}/rest/v1/${process.env.SUPABASE_TABLE||'agency_crm_state'}?id=eq.${encodeURIComponent(process.env.CRM_STATE_ID||'marketizo-main')}&updated_at=eq.${encodeURIComponent(current.updatedAt)}&select=updated_at`,{method:'PATCH',headers:{...h.supabaseHeaders(config.key),Prefer:'return=representation'},body:JSON.stringify({payload:next,updated_at:at})});if(!r.ok)throw Error('Profil nije sačuvan.');if((await r.json()).length===1){const check=await h.readStoredState(config);if(core.hash(core.profile(check.payload.clients.find(c=>c.id===body.clientId)?.billingProfile))!==core.hash(profile))throw Error('Čuvanje profila nije potvrđeno.');return json(res,200,{ok:true,verifiedReadback:true});}current=await h.readStoredState(config);
-   }throw Error('Drugi upis je u toku. Pokušaj ponovo.');
-  }
+  if(body.action==='profile')throw Error('Podatke za račun izmeni u Klijenti → Izmena klijenta, pa osveži ovaj prikaz.');
   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(body.id||''))throw Error('Neispravan ID računa.');
   if(body.action==='draft'){
    const client=current.payload.clients?.find(c=>c.id===body.clientId);if(!client)throw Error('Izaberi klijenta.');const snapshot=core.snapshot(client,body);await h.preserveDailyPrewriteBackup(config,current);const doc=await store.rpc('draft',{id:body.id,revision:body.revision||0,snapshot,actor:h.accessSession(req,current.payload,config.key)?.employee?.id||'owner'});return json(res,200,{ok:true,invoice:doc});
