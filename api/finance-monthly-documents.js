@@ -59,7 +59,10 @@ module.exports=async(req,res)=>{
    if(!folderId||!/^[a-f0-9]{64}$/.test(body.sha256||'')||!docs.id(body.fileId)||body.folderId!==folderId||body.actualSha256!==body.sha256)throw Error('Kopija nije potvrđena čitanjem sadržaja.');
    await changeMonth(d=>{const x=d.documents[body.sha256];if(!x||x.lease?.account!==google.email)throw Error('Kopiranje nije rezervisano za ovaj nalog.');if(!x.copy?.verified)x.copy={fileId:body.fileId,folderId,verified:true,account:google.email,at:new Date().toISOString()};return d;});return json(res,200,{ok:true,verifiedReadback:(await readMonth()).data.documents[body.sha256]?.copy?.verified===true});
   }
-  if(body.kind==='heartbeat'){await changeMonth(d=>{d.accounts[google.email]={at:new Date().toISOString(),complete:body.complete===true,pending:body.pending===true,error:String(body.error||'').slice(0,200)};return d;});return json(res,200,{ok:true});}
+  if(body.kind==='heartbeat'){
+   const manualReview=(Array.isArray(body.manualReview)?body.manualReview:[]).slice(0,100).filter(x=>x&&/^[a-zA-Z0-9_-]{8,180}$/.test(x.messageId||'')&&Number.isSafeInteger(x.size)&&x.size>1500000).map(x=>({messageId:x.messageId,name:String(x.name||'Prilog').slice(0,300),size:x.size,reason:'Prilog je veći od 1,5 MB; proveri ručno u Gmail-u.'}));
+   await changeMonth(d=>{d.accounts[google.email]={at:new Date().toISOString(),complete:body.complete===true&&manualReview.length===0,pending:body.pending===true||manualReview.length>0,error:String(body.error||'').slice(0,200),manualReview};return d;});return json(res,200,{ok:true});
+  }
   throw Error('Nepoznata vrsta zahteva.');
  }
  if(req.method!=='GET')return json(res,401,{ok:false,error:'Potrebna je Google veza.'});

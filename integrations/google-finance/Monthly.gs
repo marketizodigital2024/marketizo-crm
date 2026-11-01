@@ -82,7 +82,7 @@ function collectOctoberBackfill(){return collectMonthInvoices_('2026-10');}
 function collectMonthInvoices_(month){
  // Separate from the source/billing user lock; serialize all monthly runs in this project.
  const lock=LockService.getScriptLock();if(!lock.tryLock(1000))return;
- let pending=false;try{
+ let pending=false,manualReview=[];try{
  const prefix=month==='2026-10'?'octoberSources':'monthlySources'+month;
  const until=Date.now()+110000,properties=PropertiesService.getUserProperties();let saved='';for(let i=0;i<Number(properties.getProperty(prefix+'Chunks')||0);i++)saved+=properties.getProperty(prefix+'Chunk'+i)||'';
  let done=JSON.parse(saved||properties.getProperty(prefix+'V1')||'{}');const account=googleGet_('https://gmail.googleapis.com/gmail/v1/users/me/profile').emailAddress;
@@ -112,15 +112,15 @@ function collectMonthInvoices_(month){
    if(Utilities.formatDate(new Date(receivedAt),'Europe/Vienna','yyyy-MM')!==month||(m.labelIds||[]).some(l=>['SENT','DRAFT','TRASH','SPAM'].includes(l)))continue;
    const headers=m.payload.headers||[],header=n=>(headers.find(h=>h.name.toLowerCase()===n)||{}).value||'',parts=[];
    function walk(p){if(/\.(pdf|docx)$/i.test(p.filename||''))parts.push(p);(p.parts||[]).forEach(walk);}walk(m.payload);let complete=true;
-   for(const p of parts){if(p.body.size>1500000){complete=false;pending=true;continue;}let b=p.body.data;if(!b&&p.body.attachmentId)b=googleGet_('https://gmail.googleapis.com/gmail/v1/users/me/messages/'+m.id+'/attachments/'+p.body.attachmentId).data;if(!b){complete=false;continue;}
+   for(const p of parts){if(p.body.size>1500000){complete=false;pending=true;if(manualReview.length<100)manualReview.push({messageId:m.id,name:p.filename,size:p.body.size,reason:'Prilog je veći od 1,5 MB; proveri ručno u Gmail-u.'});continue;}let b=p.body.data;if(!b&&p.body.attachmentId)b=googleGet_('https://gmail.googleapis.com/gmail/v1/users/me/messages/'+m.id+'/attachments/'+p.body.attachmentId).data;if(!b){complete=false;continue;}
     if(!monthlyCopy_({source:'gmail',sourceId:m.id+'_'+p.partId.replace(/\./g,'_'),name:p.filename,mimeType:/\.pdf$/i.test(p.filename)?'application/pdf':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',receivedAt,from:header('from'),subject:header('subject'),sent:false},Utilities.base64DecodeWebSafe(b)))complete=false;
    }
    if(complete)done['m:'+item.id]=true;else pending=true;count++;
   }
-  if(pending)break;next=page.nextPageToken||'';
+  if(Date.now()>until||count>=MONTHLY_BATCH_LIMIT)break;next=page.nextPageToken||'';
  }while(next);
  const encoded=JSON.stringify(done),chunks=Math.ceil(encoded.length/7500);for(let i=0;i<chunks;i++)properties.setProperty(prefix+'Chunk'+i,encoded.slice(i*7500,(i+1)*7500));properties.setProperty(prefix+'Chunks',String(chunks));
- monthlyCall_({kind:'heartbeat',complete:!pending,pending});console.log(JSON.stringify({account,month,checked:count,processedSources:Object.keys(done).length,pending}));
+ monthlyCall_({kind:'heartbeat',complete:!pending,pending,manualReview});console.log(JSON.stringify({account,month,checked:count,processedSources:Object.keys(done).length,pending,manualReview}));
  }catch(e){try{monthlyCall_({kind:'heartbeat',complete:false,error:e.message});}catch(_){}throw e;}finally{lock.releaseLock();}
 }
 
