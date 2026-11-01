@@ -67,34 +67,6 @@
         </header>
 
         <section class="view active" id="admin">
-          <div class="admin-kpi-grid dashboard-kpis">
-            <article class="metric metric-link" data-go-view="clients">
-              <span>Klijenti sa računom</span>
-              <strong id="adminTotalClients">0</strong>
-              <small>u izabranom mesecu</small>
-            </article>
-            <article class="metric metric-link" data-go-view="reports">
-              <span>Fakturisano</span>
-              <strong id="adminMrr">€0</strong>
-              <small>ukupna vrednost računa</small>
-            </article>
-            <article class="metric metric-link" data-go-view="reports">
-              <span>Naplaćeno za račune meseca</span>
-              <strong id="adminPaidTotal">€0</strong>
-              <small id="adminPaidCount">0 klijenata</small>
-            </article>
-            <article class="metric metric-link" data-go-view="reports">
-              <span>Otvorena naplata</span>
-              <strong id="adminUnpaidTotal">€0</strong>
-              <small id="adminUnpaidCount">0 klijenata</small>
-            </article>
-            <article class="metric metric-link collection-metric" data-go-view="reports">
-              <span>Stopa naplate</span>
-              <strong id="adminCollectionRate">0%</strong>
-              <small>naplaćeno od fakturisanog</small>
-            </article>
-          </div>
-
           <details class="panel filter-panel dashboard-filter-panel">
             <summary>
               <div>
@@ -129,6 +101,34 @@
           <div class="dashboard-filter-notice" id="adminFilterNotice" hidden>
             <div><strong>Aktivni filteri</strong><span id="adminFilterNoticeText"></span></div>
             <button class="secondary-button" id="clearDashboardFiltersBtn" type="button">Prikaži sve</button>
+          </div>
+
+          <div class="admin-kpi-grid dashboard-kpis">
+            <article class="metric metric-link" data-go-view="clients">
+              <span>Klijenti sa računom</span>
+              <strong id="adminTotalClients">0</strong>
+              <small>u izabranom mesecu</small>
+            </article>
+            <article class="metric metric-link" data-go-view="reports">
+              <span>Fakturisano</span>
+              <strong id="adminMrr">€0</strong>
+              <small>ukupna vrednost računa</small>
+            </article>
+            <article class="metric metric-link" data-go-view="reports">
+              <span>Naplaćeno za račune meseca</span>
+              <strong id="adminPaidTotal">€0</strong>
+              <small id="adminPaidCount">0 klijenata</small>
+            </article>
+            <article class="metric metric-link" data-go-view="reports">
+              <span>Otvorena naplata</span>
+              <strong id="adminUnpaidTotal">€0</strong>
+              <small id="adminUnpaidCount">0 klijenata</small>
+            </article>
+            <article class="metric metric-link collection-metric" data-go-view="reports">
+              <span>Stopa naplate</span>
+              <strong id="adminCollectionRate">0%</strong>
+              <small>naplaćeno od fakturisanog</small>
+            </article>
           </div>
 
           <section class="panel dashboard-action-panel">
