@@ -2823,18 +2823,18 @@ function renderInvoiceCarryover(clients, monthKey) {
     if (initialTarget) initialTarget.innerHTML = `<div class="empty-state">Praćenje prenosa otvorenih računa počinje od avgusta 2026.</div>`;
     return;
   }
-  const open = clientsForInvoiceMonth(clients, previousMonth).filter((client) => monthlyInvoice(client, previousMonth).paymentStatus !== "Plaćeno");
+  const open = financeClientsForMonth(clients, previousMonth).filter((client) => invoiceRemainingAmount(client, previousMonth) > 0);
   setText("invoiceCarryoverCount", `${open.length} otvorenih`);
   const target = document.getElementById("invoiceCarryoverList");
   if (!target) return;
   const sent = open.filter((client) => monthlyInvoice(client, previousMonth).invoiceStatus === "Poslat");
   const notSent = open.filter((client) => monthlyInvoice(client, previousMonth).invoiceStatus !== "Poslat");
   const carryoverGroup = (items, key, label) => `<details class="invoice-status-group invoice-status-${key}">
-    <summary><span class="invoice-status-dot"></span><strong>${escapeInvoiceText(label)}</strong><span>${items.length} klijenata</span><b>${currency.format(items.reduce((sum, client) => sum + invoiceAmount(client, previousMonth), 0))}</b></summary>
+    <summary><span class="invoice-status-dot"></span><strong>${escapeInvoiceText(label)}</strong><span>${items.length} klijenata</span><b>${currency.format(items.reduce((sum, client) => sum + invoiceRemainingAmount(client, previousMonth), 0))}</b></summary>
     <div class="invoice-status-list">${items.map((client) => {
         const invoice = monthlyInvoice(client, previousMonth);
         return `<div class="setup-item carryover-item invoice-carryover-compact">
-          <strong>${currency.format(invoiceAmount(client, previousMonth))}</strong>
+          <strong>${currency.format(invoiceRemainingAmount(client, previousMonth))}</strong>
           <span>${escapeInvoiceText(client.name)}<br />${monthLabel(previousMonth)} · ${invoice.invoiceStatus} · ${invoice.paymentStatus}</span>
         </div>`;
       }).join("") || `<div class="empty-state">Nema klijenata u ovoj grupi.</div>`}</div></details>`;
@@ -5757,7 +5757,7 @@ function renderReports() {
   renderBars("countryBars", revenueByCountry, "€");
   renderBars("revenueBars", revenueByStatus, "€");
   setText("invoiceMonthLabel", monthLabel(monthKey));
-  renderInvoiceCarryover(clients, monthKey);
+  renderInvoiceCarryover(dashboardFinanceClients(), monthKey);
   renderInvoiceSummary(allInvoiceClients, monthKey);
   renderMonthlyInvoices(invoiceClients, monthKey);
   renderFinanceHistoryReview(clients, monthKey);
