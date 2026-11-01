@@ -1873,6 +1873,7 @@ window.addEventListener("marketizo-state-conflict", (event) => {
 
 function setAdminLoadStatus(ready, message = "Učitavanje online podataka…") {
   document.body.classList.toggle("crm-online-loading", !ready);
+  document.getElementById("admin")?.setAttribute("aria-busy", String(!ready));
   let notice = document.getElementById("crmOnlineLoadNotice");
   if (!notice) {
     notice = document.createElement("aside");
@@ -1901,7 +1902,9 @@ async function hydrateOnlineState() {
   setAdminLoadStatus(false);
   let result;
   try {
-    result = await window.MarketizoRemote.load();
+    // Normalize and adopt the baseline before caching; avoid serializing the
+    // entire database twice on the critical path to the first dashboard paint.
+    result = await window.MarketizoRemote.load({ writeLocal: false });
   } catch (error) {
     console.error("Online state load failed", error);
     showToast("Online baza nije dostupna", "Podaci nisu poslati da se postojeća baza ne bi prepisala.", "warn");
@@ -1913,8 +1916,10 @@ async function hydrateOnlineState() {
     window.MarketizoRemote.adoptBaseline?.(state);
     onlineHydrationComplete = true;
     setAdminLoadStatus(true);
-    saveState({ remote: false });
-    renderAll();
+    renderAll({ cacheNotifications: false });
+    const cacheLoadedState = () => window.setTimeout(() => window.MarketizoRemote?.cache?.(state), 0);
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(cacheLoadedState);
+    else cacheLoadedState();
     showToast("Online baza", "Podaci su učitani iz zajedničke baze.", "ok");
     window.dispatchEvent(new Event("marketizo-cost-data-ready"));
     return;
@@ -6088,14 +6093,14 @@ function renderCurrentAdminView() {
   window.MarketizoDashboardHelp?.refresh();
 }
 
-function renderAll() {
+function renderAll(options = {}) {
   if (!onlineHydrationComplete && location.protocol !== "file:") return;
   adminRenderRevision += 1;
   withAdminRenderCache(() => {
     setupOperationalAdminField();
     const notificationCount = (state.notifications || []).length;
     generateSystemNotifications();
-    if ((state.notifications || []).length !== notificationCount) saveState({ remote: false });
+    if (options.cacheNotifications !== false && (state.notifications || []).length !== notificationCount) saveState({ remote: false });
     renderPendingAdminRequests();
     renderLeadClientOptions();
     renderCurrentAdminView();

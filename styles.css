@@ -4353,6 +4353,14 @@ body.employee-profile-page .employee-summary-grid article:nth-child(4n + 4)::bef
 .employee-profile-inline-link:hover { text-decoration: underline; }
 /* Keep pending/failed online loads distinct from real zero-valued records. */
 .crm-online-loading main > section { display: none !important; }
+/* Show the dashboard frame immediately, while keeping unconfirmed values and
+   interactive controls hidden until the authenticated online load completes. */
+.crm-online-loading main > #admin.active { display: block !important; pointer-events: none; }
+.crm-online-loading #admin > :not(.dashboard-kpis) { display: none !important; }
+.crm-online-loading #admin .dashboard-kpis strong,
+.crm-online-loading #admin .dashboard-kpis small[id] { visibility: hidden; }
+.crm-online-loading #admin .dashboard-kpis .metric { position: relative; }
+.crm-online-loading #admin .dashboard-kpis .metric::after { content: ""; position: absolute; left: 24px; bottom: 24px; width: 46%; height: 22px; border-radius: 6px; background: #e8eee9; }
 #crmOnlineLoadNotice { display: flex; align-items: center; gap: 16px; padding: 24px; margin: 16px 0; border: 1px solid #dedede; border-radius: 12px; background: #fff; color: #222; }
 #crmOnlineLoadNotice[hidden] { display: none; }
 
