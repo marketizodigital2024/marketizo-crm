@@ -14,7 +14,8 @@ insert into agency_crm_state values('finance-billing-invoice-fixture','{"status"
 insert into agency_crm_state values('finance-billing-settings-fixture','{"nextNumber":635}','2026-10-31T00:00:00Z');
 insert into agency_crm_state values('finance-monthly-documents-2026-11','{"documents":{"hash":{"copy":{"verified":true}}}}','2026-10-31T00:00:00Z');
 insert into marketizo_private.work_log_audit(recorded_at,transaction_id,log_id,action,actor_id,write_source,before_record,after_record) values(clock_timestamp(),1,'fixture','update','emp-miljan','fixture','{}','{}');`);
-await load('database/system-backup.sql');
+await load('database/system-backup.sql');await load('database/backup-page-reliability.sql');
+assert.ok((await db.query("select proconfig from pg_proc where oid='marketizo_system_domains_keyed_page(text,jsonb)'::regprocedure")).rows[0].proconfig.includes('statement_timeout=15s')); 
 const anchoredDomains=async manifest=>{
  const domains={format:'marketizo-system-domains-v1',schema:{},tables:{},stateRows:[],primaryKeys:{}};
  for(const [name,meta] of [...Object.entries(manifest.tables),['stateRows',manifest.stateRows]]){const rows=[];for(let offset=0;offset<meta.count;offset+=5){const expected=meta.rows.slice(offset,offset+5),page=(await db.query('select marketizo_system_domains_keyed_page($1,$2) s',[name,expected.map(r=>r.key)])).rows[0].s;assert.deepEqual(page.fingerprints,expected.map(r=>r.hash));rows.push(...page.rows);}if(name==='stateRows')domains.stateRows=rows;else{domains.tables[name]=rows;domains.schema[name]=meta.schema;domains.primaryKeys[name]=meta.keys;}}

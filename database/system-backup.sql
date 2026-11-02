@@ -56,7 +56,7 @@ $$;
 revoke all on function public.marketizo_backup_export_anchor() from public,anon,authenticated;
 grant execute on function public.marketizo_backup_export_anchor() to service_role;
 create or replace function public.marketizo_system_domains_keyed_page(p_table text,p_keys jsonb)
-returns jsonb language plpgsql stable security invoker set search_path='' set statement_timeout='10s' as $$
+returns jsonb language plpgsql stable security invoker set search_path='' set statement_timeout='15s' as $$
 declare target regclass; join_keys text; filter text:=''; result jsonb;
 begin
  if jsonb_typeof(p_keys) is distinct from 'array' or jsonb_array_length(p_keys) not between 1 and 250 then raise exception 'Invalid page keys';end if;
