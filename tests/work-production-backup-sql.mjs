@@ -13,6 +13,7 @@ const original={employees:[{id:'emp-miljan',status:'Aktivan',email:'owner@fixtur
 await db.query("insert into agency_crm_state values('marketizo-main',$1,'2026-10-31T00:00:00Z')",[original]);
 await db.query("insert into agency_crm_state values('marketizo-kpi-v1',$1,'2026-10-31T00:00:00Z')",[{fixture:1}]);
 await load('database/work-production.sql');await load('database/work-production-backup.sql');await load('database/work-log-integrity.sql');await load('database/work-log-required-client.sql');await load('database/work-log-other-note.sql');
+await load("database/work-log-save-performance.sql");
 const snap=async()=> (await db.query('select marketizo_work_production_snapshot() s')).rows[0].s;
 assert.deepEqual((await snap()).payload,original);
 const base={employeeId:'a',activityId:'act',clientId:'c',date:'2026-10-31',minutes:20,note:'Fixture'};
