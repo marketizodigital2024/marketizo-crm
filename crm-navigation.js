@@ -34,7 +34,22 @@
     const view=activeView||hash.replace(/^#/,'').split('/')[0]||'admin';
     return{primary:view,finance:view==='reports'?'payments':'',team:view==='employees'?(hash.split('/')[1]||'overview'):''};
   }
-  const api={team,work,primary,route,setup};
+  // Only destinations whose panels already exist in the main CRM document.
+  // Standalone tools keep their normal document navigation and authentication.
+  function coreRoute(pathname,hash=''){
+    if(!/^\/(?:index|employee-profile|employees-(?:overview|absences|recognitions|ratings|goals|settings|hours))?(?:\.html)?\/?$/.test(pathname))return null;
+    const file=pathname.replace(/\/+$/,'').split('/').pop().replace(/\.html$/,'');
+    const sections={'employees-overview':'overview','employee-profile':'overview','employees-absences':'leave','employees-recognitions':'meetings','employees-ratings':'performance','employees-goals':'activities','employees-settings':'settings','employees-hours':'entries'};
+    const workSection=hash.startsWith('#work/')?hash.split('/')[1]:'hours';
+    if(Object.hasOwn(sections,file))return{view:'employees',section:sections[file],profile:file==='employee-profile',work:file==='employees-hours'?(['history','absence','hours','late'].includes(workSection)?workSection:'hours'):''};
+    if(file!==''&&file!=='index')return null;
+    const view=hash.replace(/^#/,'').split('/')[0]||'admin';
+    if(!['admin','clients','employees','calendar','reports'].includes(view))return null;
+    const section=hash.startsWith('#employees/')?hash.split('/')[1]:'overview';
+    if(view==='employees'&&!Object.values(sections).includes(section))return null;
+    return{view,section,profile:false,work:''};
+  }
+  const api={team,work,primary,route,coreRoute,setup};
   if(typeof module==='object'&&module.exports)module.exports=api;
   if(typeof document==='undefined')return;
   function setup(){
@@ -95,7 +110,7 @@
       if(current.primary==='reports')nav.querySelector('.finance-nav-menu').open=true;
       nav.dataset.currentCategory=current.primary;
     };
-    window.addEventListener('hashchange',sync);window.addEventListener('popstate',sync);window.addEventListener('load',sync);
+    window.addEventListener('hashchange',sync);window.addEventListener('popstate',sync);window.addEventListener('load',sync);window.addEventListener('marketizo-route-change',sync);
     new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['data-active-view']});
     sync();
   }

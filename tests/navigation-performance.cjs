@@ -30,3 +30,43 @@ ctx.onlineHydrationComplete=false;active='reports';ctx.renderCurrentAdminView();
 const files=['index','employees-overview','employee-profile','employees-absences','employees-recognitions','employees-ratings','employees-goals','employees-hours','employees-settings','work-analytics','kodeks','marketizo-sign','kpi'];
 for(const name of files){const html=fs.readFileSync(__dirname+'/../'+name+'.html','utf8');assert.match(html,/crm-navigation\.js/);assert.match(html,/crm-navigation\.css/);assert.match(html,/mobile-crm-nav\.js/);}
 console.log('PASS shared navigation: all destinations, team/work routes, Sign modes; fresh per-render cache, exception cleanup, active-view invalidation, hydration gate, complete 3124-row pagination and 13 page integrations');
+
+for(const [, ,url]of nav.team.concat(nav.work)){
+ const u=new URL(url,'https://test.local');assert.equal(nav.coreRoute(u.pathname,u.hash).view,'employees');
+}
+assert.equal(nav.coreRoute('/employee-profile').profile,true);
+assert.equal(nav.coreRoute('/employees-hours','#work/history').work,'history');
+assert.equal(nav.coreRoute('/employees-hours','#work/invalid').work,'hours');
+for(const path of ['/work-analytics','/kodeks','/kpi','/billing-invoices','/other/employees-overview'])assert.equal(nav.coreRoute(path),null,path);
+assert.equal(nav.coreRoute('/','#reports').view,'reports');
+assert.equal(nav.coreRoute('/','#employees/activities').section,'activities');
+assert.equal(nav.coreRoute('/','#employees/unknown'),null);
+
+const events={},windowEvents={},pushes=[],renders=[],classes=new Set();
+const draft={id:'employeeWorkForm',dataset:{navigationDirty:'true'},elements:[]};
+const field={name:'employeeId',type:'select-one',value:'employee-a',form:draft};draft.elements.push(field);
+const root={dataset:{},querySelectorAll:()=>[]};
+const routeContext={URL,Event,Set,Map,location:new URL('https://test.local/'),onlineHydrationComplete:true,adminConfirmedSaveInFlight:false,adminRenderedViews:new Map([['["employees","old"]','old'],['reports','keep']]),
+ document:{title:'CRM',querySelector:s=>s==='.dashboard-kpis'?{}:null,getElementById:id=>['employeeCompleteHistory','workClientSelect'].includes(id)?{}:id==='employees'?root:id===draft.id?draft:null,
+ body:{classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name);}}},addEventListener(name,cb){(events[name]||=[]).push(cb);}},
+ history:{pushState(_,__,url){pushes.push(url);routeContext.location=new URL(url,routeContext.location);}},
+ window:{MarketizoNavigation:nav,activateEmployeeAdminSection(section){root.dataset.employeeSection=section;},scrollTo(){},dispatchEvent(){},addEventListener(name,cb){windowEvents[name]=cb;}},
+ setupWorkEntrySubsections(){routeContext.window.activateWorkEntrySubsection=section=>root.dataset.workEntrySubsection=section;},
+ setActiveView(view){renders.push(view);field.value='employee-b';},normalizeVisibleLayouts(){},updateEmployeeMonthlyPreview(){},showToast(){routeContext.toasts++;},toasts:0};
+vm.createContext(routeContext);vm.runInContext(fn('setupFastAdminNavigation'),routeContext);routeContext.setupFastAdminNavigation();
+const navigate=routeContext.window.navigateAdminRoute;assert.equal(typeof navigate,'function');
+assert.equal(navigate('/employee-profile?employee=employee-b'),true);assert.equal(classes.has('employee-profile-page'),true);assert.equal(field.value,'employee-a','An unrelated employee selection must not change the pending work employee');
+assert.equal(routeContext.adminRenderedViews.has('["employees","old"]'),false);assert.equal(routeContext.adminRenderedViews.get('reports'),'keep','Changing employee routes must not invalidate unrelated form views');
+assert.equal(navigate('/employees-hours#work/history'),true);assert.equal(root.dataset.workEntrySubsection,'history');assert.equal(classes.has('employee-profile-page'),false);
+assert.equal(navigate('/#clients'),true);assert.equal(renders.at(-1),'clients');
+let writes=pushes.length;routeContext.adminConfirmedSaveInFlight=true;assert.equal(navigate('/#reports'),true);assert.equal(pushes.length,writes);assert.equal(routeContext.toasts,1);
+routeContext.adminConfirmedSaveInFlight=false;routeContext.onlineHydrationComplete=false;assert.equal(navigate('/employees-overview'),false);assert.equal(pushes.length,writes);
+routeContext.onlineHydrationComplete=true;for(const destination of ['https://external.test/employees-overview','/work-analytics','/billing-invoices','/?unexpected=1'])assert.equal(navigate(destination),false);
+routeContext.location=new URL('https://test.local/employees-goals');windowEvents.popstate();assert.equal(pushes.length,writes,'Back navigation must not push another history entry');assert.equal(root.dataset.employeeSection,'activities');
+const anchor={href:'https://test.local/employees-overview',target:'',hasAttribute:()=>false};
+const click={button:0,ctrlKey:true,target:{closest:s=>s==='a[href]'?anchor:null},preventDefault(){throw Error('Modified click must retain native behavior');},stopImmediatePropagation(){}};
+events.click[0](click);assert.equal(pushes.length,writes);
+events.reset[0]({target:draft});assert.equal(draft.dataset.navigationDirty,undefined);
+let pendingEmployeeSelection='';const selectedField={form:{dataset:{navigationDirty:'true'}},options:[{value:'employee-b'}],set value(v){pendingEmployeeSelection=v;}};
+const selectionContext={document:{getElementById:()=>selectedField}};vm.createContext(selectionContext);vm.runInContext(fn('setSelectedEmployeeOnForms'),selectionContext);selectionContext.setSelectedEmployeeOnForms('employee-b');assert.equal(pendingEmployeeSelection,'','Dirty work forms retain their own employee');
+console.log('PASS core document reuse: clean/deep routes, profile/work visibility, history, native modified links, hydration/save guards and pending form employee preservation');
