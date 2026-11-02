@@ -110,8 +110,13 @@ async function clickupRoster() {
 }
 
 function roster(client,employees,overrides,source=[],links=[]) {
-  const linkedName=links.find(x=>x.clientId===client.id)?.clickupName;
-  const row=linkedName?source.find(x=>x.Klijent===linkedName):source.find(x=>norm(x.Klijent)===norm(client.name));
+  const explicit=String(client.clickupName||'').trim();
+  const linkedName=explicit||links.find(x=>x.clientId===client.id)?.clickupName;
+  const matchName=value=>String(value||'').normalize('NFC').toLowerCase().replace(/\s+/g,' ').trim();
+  const candidates=source.filter(x=>!x.archived&&(explicit?matchName(x.Klijent)===matchName(explicit):norm(x.Klijent)===norm(linkedName||client.name)));
+  if(explicit&&candidates.length!==1)return [];
+  if(candidates.length>1)return [];
+  const row=candidates[0];
   if(row) return roles.flatMap(role=>splitPeople(row[role]).map(name=>({role,name,employeeId:employees.find(e=>norm(e.name)===norm(name))?.id||null})));
   const manual=overrides.find(x=>x.clientId===client.id);
   return manual?.roles||[];
@@ -183,8 +188,8 @@ async function handler(req,res) {
     if(req.method==='GET' && action==='admin') {
       const main=await read(mainId), clients=main.payload.clients||[], employees=main.payload.employees||[];
       const source=await clickupRoster();
-      const unmatched=source.rows.filter(row=>!clients.some(client=>norm(client.name)===norm(row.Klijent))&&!(data.links||[]).some(link=>link.clickupName===row.Klijent)).map(row=>row.Klijent);
-      return json(res,200,{clients:clients.map(c=>({id:c.id,name:c.name,status:c.status})),employees:employees.map(e=>({id:e.id,name:e.name})),questions:data.questions.filter(q=>q.target!=='Checking'),assignments:data.assignments.map(item=>({...item,roles:item.roles.filter(role=>role.role!=='Checking')})),links:data.links||[],invites:data.invites.map(({tokenHash,...i})=>i),responses:data.responses,clickup:source,unmatched});
+      const unmatched=source.rows.filter(row=>!clients.some(client=>norm(client.clickupName||client.name)===norm(row.Klijent))&&!(data.links||[]).some(link=>link.clickupName===row.Klijent)).map(row=>row.Klijent);
+      return json(res,200,{clients:clients.map(c=>({id:c.id,name:c.clickupName||c.name,status:c.status})),employees:employees.map(e=>({id:e.id,name:e.name})),questions:data.questions.filter(q=>q.target!=='Checking'),assignments:data.assignments.map(item=>({...item,roles:item.roles.filter(role=>role.role!=='Checking')})),links:data.links||[],invites:data.invites.map(({tokenHash,...i})=>i),responses:data.responses,clickup:source,unmatched});
     }
     if(req.method!=='POST') return json(res,405,{error:'Metod nije podržan.'});
     const body=req.body||{};
@@ -204,6 +209,7 @@ async function handler(req,res) {
     } else if(action==='link') {
       const main=await read(mainId), client=(main.payload.clients||[]).find(c=>c.id===body.clientId);
       const source=await clickupRoster();
+      if(client?.clickupName&&String(client.clickupName).trim()!==String(body.clickupName||'').trim())return json(res,400,{error:'Naziv iz ClickUp-a promeni u profilu klijenta.'});
       if(!client||!source.rows.some(x=>x.Klijent===body.clickupName)) return json(res,400,{error:'Klijent ili ClickUp red nije pronađen.'});
       data.links=(data.links||[]).filter(x=>x.clientId!==client.id&&x.clickupName!==body.clickupName);
       data.links.push({clientId:client.id,clickupName:body.clickupName});
@@ -216,7 +222,7 @@ async function handler(req,res) {
       const source=await clickupRoster();
       if(!source.live && !data.assignments.some(x=>x.clientId===client.id)) return json(res,503,{error:'ClickUp sinhronizacija nije aktivna. Podesi token ili ručno sačuvaj tim pre slanja.'});
       const team=roster(client,main.payload.employees||[],data.assignments,source.rows,data.links||[]);
-      if(!team.length) return json(res,400,{error:'Za ovog klijenta prvo odredi članove tima.'});
+      if(!team.length) return json(res,400,{error:client.clickupName?'Proveri naziv klijenta u ClickUp-u i osnovna polja tima u raspodeli. Nije pronađen jednoznačan tim.':'Za ovog klijenta prvo odredi članove tima.'});
       const activeRoles=new Set(team.map(x=>x.role));
       const questions=data.questions.filter(q=>q.target==='team'||activeRoles.has(q.target)).flatMap(q=>{
         if(q.target==='team') return [q];
@@ -224,7 +230,7 @@ async function handler(req,res) {
         return people.map((person,index)=>({...q,id:`${q.id}:${index}`,text:`${q.text} (${person.name})`,targetEmployeeId:person.employeeId,targetName:person.name}));
       });
       const token=crypto.randomBytes(32).toString('hex');
-      const invite={id:crypto.randomUUID(),tokenHash:sha(token),clientId:client.id,clientName:client.name,month:body.month,team,questions,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+45*86400000).toISOString(),usedAt:null};
+      const invite={id:crypto.randomUUID(),tokenHash:sha(token),clientId:client.id,clientName:client.clickupName||client.name,month:body.month,team,questions,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+45*86400000).toISOString(),usedAt:null};
       data.invites.push(invite);
       await write(rowId,data,row.updated_at);
       return json(res,200,{ok:true,url:`https://${req.headers.host}/feedback.html?token=${token}`});
@@ -238,4 +244,4 @@ module.exports = (req,res) => databaseRequest.withRequestBudget(() => handler(re
 module.exports._test={norm,roster,validQuestion,publicInvite,parseClickup};
 
 // Server-only assignment source, shared with weekly client reporting.
-module.exports.internal = { clickupRoster };
+module.exports.internal = { clickupRoster, roster };

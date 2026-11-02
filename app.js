@@ -2571,7 +2571,7 @@ function openEmployeeActivitiesDialog(employeeId, monthKey = currentMonthKey()) 
   dialog.innerHTML = `<div class="employee-activities-dialog-card">
     <div class="panel-head"><div><p class="eyebrow">${monthLabel(monthKey)}</p><h2>${escapeInvoiceText(employee.name)} · aktivnosti</h2></div><button class="icon-button" data-close-employee-activities type="button">×</button></div>
     <div class="employee-activities-summary"><strong>${logs.length}</strong><span>aktivnosti</span><strong>${totalMinutes} min</strong><span>ukupno</span></div>
-    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${escapeInvoiceText(log.activityName || "Rad")}</strong><span>${escapeInvoiceText(workActivityCategoryLabel(log.activityCategory || "Ostalo"))} · ${formatDate(log.date)}</span></div><b>${window.MarketizoCosts.minutes(log)} min</b><p>${escapeInvoiceText(log.clientName || "Bez klijenta")}${log.note ? ` · ${escapeInvoiceText(log.note)}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
+    <div class="employee-activities-detail-list">${logs.length ? logs.map((log) => `<article><div><strong>${escapeInvoiceText(log.activityName || "Rad")}</strong><span>${escapeInvoiceText(workActivityCategoryLabel(log.activityCategory || "Ostalo"))} · ${formatDate(log.date)}</span></div><b>${window.MarketizoCosts.minutes(log)} min</b><p>${escapeInvoiceText(workLogClientLabel(log))}${log.note ? ` · ${escapeInvoiceText(log.note)}` : ""}</p></article>`).join("") : `<div class="empty-state">Nema aktivnosti za izabrani mesec.</div>`}</div>
   </div>`;
   dialog.querySelector("[data-close-employee-activities]").addEventListener("click", () => dialog.close());
   dialog.showModal();
@@ -3627,8 +3627,8 @@ function renderEmployeeOptions() {
     const selected = workClientSelect.value;
     const clients = (state.clients || [])
       .filter((client) => client.status === "Aktivan")
-      .sort((a, b) => a.name.localeCompare(b.name));
-    workClientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${escapeInvoiceText(client.id)}">${escapeInvoiceText(client.name)}</option>`).join("")}`;
+      .sort((a, b) => workClientLabel(a).localeCompare(workClientLabel(b)));
+    workClientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${escapeInvoiceText(client.id)}">${escapeInvoiceText(workClientLabel(client))}</option>`).join("")}`;
     if (clients.some((client) => client.id === selected)) workClientSelect.value = selected;
   }
   syncAdminWorkClientRequirement();
@@ -4007,8 +4007,8 @@ function renderEmployeeWorkRows(monthKey) {
     clientFilter.innerHTML = `<option value="all">Svi klijenti</option>${state.clients
       .filter((client) => client.status === "Aktivan")
       .slice()
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((client) => `<option value="${escapeInvoiceText(client.id)}">${escapeInvoiceText(client.name)}</option>`)
+      .sort((a, b) => workClientLabel(a).localeCompare(workClientLabel(b)))
+      .map((client) => `<option value="${escapeInvoiceText(client.id)}">${escapeInvoiceText(workClientLabel(client))}</option>`)
       .join("")}`;
     clientFilter.value = state.clients.some((client) => client.id === selectedValue && client.status === "Aktivan") ? selectedValue : "all";
     employeeWorkClientFilter = clientFilter.value;
@@ -4041,7 +4041,7 @@ function renderEmployeeWorkRows(monthKey) {
         <td>${escapeInvoiceText(employee?.name || "Obrisan zaposleni")}</td>
         <td>${window.MarketizoCosts.minutes(log)} min<br /><span>${formatHours(log.hours || 0)}h</span></td>
         <td><strong>${escapeInvoiceText(log.activityName || "Rad")}</strong>${log.note ? `<br /><span>${escapeInvoiceText(log.note)}</span>` : ""}</td>
-        <td>${escapeInvoiceText(log.clientName || "Bez klijenta")}</td>
+        <td>${escapeInvoiceText(workLogClientLabel(log))}</td>
         <td><strong>+</strong> ${escapeInvoiceText(log.positive || "-")}<br /><strong>-</strong> ${escapeInvoiceText(log.negative || "-")}</td>
         <td><span class="status ok">${log.locked === false ? "Otključano" : "Zaključano"}</span><br /><button class="edit-button" data-edit-work-log="${escapeInvoiceText(log.id)}" type="button">Izmeni</button> <button class="edit-button danger-action" data-delete-work-log="${escapeInvoiceText(log.id)}" type="button">Obriši</button></td>
       </tr>`;
@@ -6853,6 +6853,8 @@ document.getElementById("openClientModal").addEventListener("click", () => {
   firstInput?.focus();
 });
 
+function workLogClientLabel(log) { return (state.clients || []).find(client => client.id === log.clientId)?.clickupName || log.clientName || "Bez klijenta"; }
+function workClientLabel(client) { return String(client?.clickupName || client?.name || "").trim(); }
 function billingProfileFromForm(data) {
   if (typeof data.has!=="function" || !data.has("billing_street")) return {};
   const billingProfile={};for(const key of ["street","postalCode","city","vatId","taxMode","taxNote"]){billingProfile[key]=String(data.get("billing_"+key)||"").normalize("NFC").trim();}
@@ -6861,22 +6863,24 @@ function billingProfileFromForm(data) {
   const shared=clientBillingDefaults({name:data.get("name"),billingName:data.get("billingDifferentName")==="on"?String(data.get("billingName")||"").trim():"",country:data.get("country"),email:String(data.get("email")||"").trim().toLowerCase()});
   billingProfile.legalName=String(shared.legalName||"").trim();billingProfile.country=String(shared.country||"");billingProfile.email=String(shared.email||"").trim().toLowerCase();billingProfile.vatId=billingProfile.vatId.replace(/\s/g,"").toUpperCase();billingProfile.confirmed=data.get("billing_confirmed")==="on";
   const routing={};if(data.has("billingRecipientId")){routing.billingRecipientId=String(data.get("billingRecipientId")||"");routing.billingGroupId=String(data.get("billingGroupId")||"");routing.billingName=data.get("billingDifferentName")==="on"?String(data.get("billingName")||"").trim():"";}
-  return {billingProfile,...routing};
+  return {billingProfile,...routing,...(data.has("clickupName")?{clickupName:String(data.get("clickupName")||"").trim()}:{}),...(data.has("paymentPayerNames")?{paymentPayerNames:[...new Set(String(data.get("paymentPayerNames")||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean))]}:{})};
 }
 function refreshBillingRouting(form,client){
  if(!form.elements.billingRecipientId)return;
  const id=client?.id||form.elements.id?.value||"",all=(state.clients||[]).filter(c=>c.status!=="Arhiviran");
  for(const key of ["billingRecipientId","billingGroupId"]){const field=form.elements[key];if(!field)continue;const value=client?String(client[key]||""):field.value;field.replaceChildren(new Option(key==="billingRecipientId"?"Sam klijent":"Ne — poseban račun","") ,...all.filter(c=>key==="billingGroupId"||c.id!==id).map(c=>new Option(key==="billingGroupId"?(c.id===id?"Nosilac zajedničkog računa":"Zajedno sa "+c.name):c.name,c.id)));field.value=value;}
- if(client){form.elements.billingName.value=client.billingName||"";form.elements.billingDifferentName.checked=!!client.billingName;}
+ if(client){form.elements.clickupName.value=client.clickupName||"";form.elements.paymentPayerNames.value=(client.paymentPayerNames||[]).join("\n");form.elements.billingName.value=client.billingName||"";form.elements.billingDifferentName.checked=!!client.billingName;}
  form.dispatchEvent(new Event("billing-routing-refresh"));
 }
 function setupClientBillingFields(){
   if(typeof getAdminSession === "function" && getAdminSession()?.role === "operational-admin")return;
   for(const id of ["adminClientForm","editClientForm"]){const form=document.getElementById(id);if(!form||form.querySelector('[name="billing_street"]'))continue;
     const frequencyLabel=document.createElement("label");frequencyLabel.textContent="Izdavanje računa";const frequency=document.createElement("select");frequency.name="billingFrequency";frequency.required=true;frequency.append(new Option("Mesečno","monthly"),new Option("Jednokratno — jedan račun","once"));frequencyLabel.append(frequency);const priceLabel=form.querySelector('[name="revenue"]')?.closest("label");if(priceLabel){priceLabel.parentNode.insertBefore(frequencyLabel,priceLabel);const caption=[...priceLabel.childNodes].find(node=>node.nodeType===3);if(caption)caption.textContent="Cena netto (€)";}else form.append(frequencyLabel);
+    const workLabel=document.createElement("label");workLabel.textContent="Naziv klijenta u ClickUp-u";const workInput=document.createElement("input");workInput.name="clickupName";workInput.maxLength=180;workInput.placeholder="Tačan naziv iz raspodele klijenata";workLabel.append(workInput);const nameLabel=form.elements.name?.closest("label");if(nameLabel)nameLabel.after(workLabel);else form.append(workLabel);
     const section=document.createElement("details");section.className="billing-client-profile";section.style.gridColumn="1 / -1";
     const summary=document.createElement("summary");summary.textContent="Podaci za račune";section.append(summary);
     const info=document.createElement("p");info.textContent="Za običan račun koristimo gornje podatke. Ako druga firma prima račun ili više projekata ide na jedan račun, izaberi to ovde.";section.append(info);
+    const payerLabel=document.createElement("label");payerLabel.textContent="Ime / naziv uplatioca (jedan po redu)";const payer=document.createElement("textarea");payer.name="paymentPayerNames";payer.maxLength=2000;payer.rows=2;payer.placeholder="Naziv sa bankarske uplate";payerLabel.append(payer);section.append(payerLabel);
     for(const [name,label]of [["billingRecipientId","Firma koja prima račun"],["billingGroupId","Zajednički račun"]]){const holder=document.createElement("label");holder.textContent=label;const select=document.createElement("select");select.name=name;holder.append(select);section.append(holder);select.addEventListener("focus",()=>refreshBillingRouting(form));select.addEventListener("change",()=>form.dispatchEvent(new Event("billing-routing-refresh")));}
     const different=document.createElement("label"),differentInput=document.createElement("input");differentInput.type="checkbox";differentInput.name="billingDifferentName";different.append(differentInput,document.createTextNode("Naziv firme na računu se razlikuje od naziva projekta"));section.append(different);
     const legalHolder=document.createElement("label");legalHolder.textContent="Naziv firme na računu";const legal=document.createElement("input");legal.name="billingName";legal.maxLength=180;legalHolder.append(legal);section.append(legalHolder);
