@@ -3580,6 +3580,7 @@ function setSelectedEmployeeOnForms(employeeId) {
   ["absenceEmployeeSelect", "workEmployeeSelect", "hourDeductionEmployeeSelect", "lateEmployeeSelect", "goalEmployeeSelect", "ratingEmployeeSelect", "recognitionEmployeeSelect", "oneOnOneEmployeeSelect"].forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
+    if (select.form?.dataset.navigationDirty === "true") return;
     select.value = [...select.options].some((option) => option.value === employeeId) ? employeeId : "";
   });
 }
@@ -4284,7 +4285,7 @@ function renderEmployeePerformanceOverview() {
     if (!profileSelect.dataset.bound) {
       profileSelect.dataset.bound = "true";
       profileSelect.addEventListener("change", () => {
-        if (isEmployeeProfilePage) {
+        if (/\/employee-profile(?:\.html)?$/.test(location.pathname)) {
           selectedEmployeeId = profileSelect.value;
           setSelectedEmployeeOnForms(selectedEmployeeId);
           history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
@@ -4332,6 +4333,7 @@ function renderEmployeePerformanceOverview() {
       }).join("")
     : `<tr><td colspan="5"><div class="empty-state">Nema zaposlenih za prikaz.</div></td></tr>`;
   const profileTarget = document.getElementById("employeeCompleteHistory");
+  if (profileTarget) profileTarget.hidden = !isEmployeeProfilePage;
   const employee = employees[0];
   if (profileTarget && employee && isEmployeeProfilePage) {
     const ratings = (state.employeeRatings || []).filter((item) => item.employeeId === employee.id).sort((a, b) => String(b.month).localeCompare(String(a.month)));
@@ -4435,6 +4437,7 @@ function renderEmployeePerformanceOverview() {
       nameCell.append(editButton);
     }
     const openEmployee = () => {
+      if (!isEmployeeProfilePage && window.navigateAdminRoute?.(`/employee-profile?employee=${row.dataset.performanceEmployee}`)) return;
       selectedEmployeeId = row.dataset.performanceEmployee;
       setSelectedEmployeeOnForms(selectedEmployeeId);
       renderAll();
@@ -4442,7 +4445,8 @@ function renderEmployeePerformanceOverview() {
         history.replaceState({}, "", `/employee-profile?employee=${selectedEmployeeId}`);
         document.getElementById("employeeCompleteHistory")?.scrollIntoView({ behavior: "smooth", block: "start" });
       } else {
-        location.href = `/employee-profile?employee=${selectedEmployeeId}`;
+        const destination = `/employee-profile?employee=${selectedEmployeeId}`;
+        if (!window.navigateAdminRoute?.(destination)) location.href = destination;
       }
     };
     row.addEventListener("click", (event) => {
@@ -4660,7 +4664,7 @@ function setupEmployeeAdminSections() {
   const mobileNav = document.createElement("nav");
   const sideNav = document.createElement("div");
 
-  const activate = (section) => {
+  const activate = (section, options = {}) => {
     if (!validSections.has(section)) section = "overview";
     root.dataset.employeeSection = section;
     root.querySelectorAll(".panel[data-employee-sections]").forEach((panel) => {
@@ -4673,7 +4677,7 @@ function setupEmployeeAdminSections() {
     const pageTitle = document.querySelector(".main .topbar h1");
     if (pageTitle) pageTitle.textContent = section === "overview" ? "Zaposleni" : sectionLabel;
     if (location.hash.startsWith("#employees")) history.replaceState(null, "", `#employees/${section}`);
-    root.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (options.scroll !== false) root.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   window.activateEmployeeAdminSection = activate;
 
@@ -4852,12 +4856,14 @@ function setupWorkEntrySubsections() {
   const pageTitle = document.querySelector(".main .topbar h1");
   if (pageTitle) {
     new MutationObserver(() => {
+      if (!/\/employees-hours(?:\.html)?\/?$/.test(location.pathname)) return;
       const section = root.dataset.workEntrySubsection || "hours";
       const expectedTitle = sections[section]?.label || sections.hours.label;
       if (pageTitle.textContent.trim() !== expectedTitle) pageTitle.textContent = expectedTitle;
     }).observe(pageTitle, { childList: true, characterData: true, subtree: true });
   }
 
+  window.activateWorkEntrySubsection = activate;
   activate(location.hash.startsWith("#work/") ? location.hash.split("/")[1] : "hours");
   window.addEventListener("hashchange", () => {
     if (location.hash.startsWith("#work/")) activate(location.hash.split("/")[1]);
@@ -6076,7 +6082,7 @@ function renderCurrentAdminView() {
   if (!onlineHydrationComplete && location.protocol !== "file:") return;
   const view = document.querySelector(".view.active")?.id;
   const root = document.getElementById(view);
-  const viewKey = view === "employees" ? JSON.stringify([view, root?.dataset.employeeSection, root?.dataset.workEntrySubsection, selectedEmployeeId]) : view;
+  const viewKey = view === "employees" ? JSON.stringify([view, location.pathname, root?.dataset.employeeSection, root?.dataset.workEntrySubsection, selectedEmployeeId]) : view;
   const stamp = `${adminRenderRevision}:${currentDateKey()}`;
   if (!view || adminRenderedViews.get(viewKey) === stamp) return;
   withAdminRenderCache(() => {
@@ -6147,6 +6153,81 @@ function setActiveView(viewName, updateUrl = false) {
   }
   renderCurrentAdminView();
 }
+
+function setupFastAdminNavigation() {
+  // Employee documents contain older, smaller dashboard markup. Keep their
+  // native navigation; enable reuse only in the complete main CRM document.
+  if (!document.querySelector(".dashboard-kpis") || !document.getElementById("employeeCompleteHistory") || !document.getElementById("workClientSelect") || !window.MarketizoNavigation?.coreRoute) return;
+  const draftForms = new Set(["employeeWorkForm", "employeeAbsenceForm", "employeeLateForm"]);
+  const editableFields = (form) => [...form.elements].filter((field) => field.name && !["file", "password", "submit", "button", "reset"].includes(field.type));
+  const rememberDrafts = () => [...draftForms].flatMap((id) => {
+    const form = document.getElementById(id);
+    return form?.dataset.navigationDirty === "true" ? [{ form, fields: editableFields(form).map((field) => ({ field, value: field.value, checked: field.checked })) }] : [];
+  });
+  const restoreDrafts = (drafts) => {
+    drafts.forEach(({ form, fields }) => {
+      fields.forEach(({ field, value, checked }) => { field.value = value; if (["checkbox", "radio"].includes(field.type)) field.checked = checked; });
+      form.dataset.navigationDirty = "true";
+    });
+    if (drafts.some(({ form }) => form.id === "employeeWorkForm")) updateEmployeeMonthlyPreview();
+  };
+  const navigate = (destination, mode = "push") => {
+    const target = new URL(destination, location.href);
+    const route = window.MarketizoNavigation.coreRoute(target.pathname, target.hash);
+    if (target.origin !== location.origin || !route || [...target.searchParams.keys()].some((key) => key !== "employee") || !onlineHydrationComplete) return false;
+    if (adminConfirmedSaveInFlight || document.querySelector("form[data-saving='true']")) {
+      showToast("Čuvanje je u toku", "Sačekaj potvrdu čuvanja pre prelaska na drugu sekciju.", "warn");
+      return true;
+    }
+    const drafts = rememberDrafts();
+    if (mode === "push" && target.href !== location.href) history.pushState(null, "", target.pathname + target.search + target.hash);
+    document.body.classList.toggle("employee-profile-page", route.profile);
+    document.title = route.profile ? "Dosije zaposlenog | Marketizo CRM" : "Agency CRM";
+    const employeeRoot = document.getElementById("employees");
+    if (route.view === "employees") {
+      window.activateEmployeeAdminSection?.(route.section, { scroll: false });
+      if (route.work) {
+        setupWorkEntrySubsections();
+        window.activateWorkEntrySubsection?.(route.work);
+      } else {
+        if (employeeRoot) delete employeeRoot.dataset.workEntrySubsection;
+        employeeRoot?.querySelectorAll(".work-entry-subsection-hidden").forEach((panel) => panel.classList.remove("work-entry-subsection-hidden"));
+      }
+    }
+    setActiveView(route.view, false);
+    if (route.work) window.activateWorkEntrySubsection?.(route.work);
+    restoreDrafts(drafts);
+    normalizeVisibleLayouts();
+    window.dispatchEvent(new Event("marketizo-route-change"));
+    if (mode === "push") window.scrollTo({ top: 0, behavior: "auto" });
+    return true;
+  };
+  window.navigateAdminRoute = navigate;
+  document.addEventListener("input", (event) => {
+    const form = event.target.form;
+    if (form && draftForms.has(form.id)) form.dataset.navigationDirty = "true";
+  }, true);
+  document.addEventListener("change", (event) => {
+    const form = event.target.form;
+    if (form && draftForms.has(form.id)) form.dataset.navigationDirty = "true";
+  }, true);
+  document.addEventListener("reset", (event) => {
+    if (draftForms.has(event.target.id)) delete event.target.dataset.navigationDirty;
+  }, true);
+  document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = event.target.closest?.("a[href]");
+    const button = event.target.closest?.(".sidebar .nav-item[data-view]");
+    let destination;
+    if (anchor && !anchor.hasAttribute("download") && (!anchor.target || anchor.target === "_self")) destination = anchor.href;
+    else if (button && ["admin", "clients", "employees", "calendar", "reports"].includes(button.dataset.view)) destination = button.dataset.view === "employees" ? "/employees-overview" : "/#" + button.dataset.view;
+    if (destination && navigate(destination)) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
+  window.addEventListener("popstate", () => navigate(location.href, "none"));
+  window.addEventListener("hashchange", () => navigate(location.href, "none"));
+}
+
+setupFastAdminNavigation();
 
 function activateMainRoute() {
   if (location.hash === "#client-costs") {

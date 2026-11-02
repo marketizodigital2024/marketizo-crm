@@ -360,6 +360,7 @@
             <article class="metric">
               <span>Odmor iskorišćen</span>
               <strong id="employeeVacationUsed">0</strong>
+              <small id="employeeVacationReserved">0 rezervisano</small>
             </article>
             <article class="metric">
               <span>Bolovanje</span>
@@ -598,6 +599,8 @@
 	              </label>
 	              <label>Datum<input name="date" type="date" required /></label>
 	              <label>Aktivnost<select id="workActivitySelect" name="activityId" required></select></label>
+                  <label>Klijent (obavezno za rad)<select id="workClientSelect" name="clientId" required aria-describedby="workClientRequirement"><option value="">Izaberi klijenta</option></select></label>
+                  <p id="workClientRequirement">Za rad za firmu izaberi Marketizo Digital. Pauza i aktivnosti iz kategorije Interno ne zahtevaju klijenta.</p>
 	              <label>Minuta<input name="minutes" type="number" min="1" max="960" step="1" value="60" required /></label>
 	              <label class="span-2">Napomena<input name="note" placeholder="opciono: rezultat ili detalj aktivnosti" /></label>
               <button class="primary-button" type="submit">Dodaj sate</button>
@@ -761,6 +764,9 @@
               </label>
               <label>Mesec
                 <input id="employeeWorkMonthFilter" type="month" />
+              </label>
+              <label>Klijent
+                <select id="employeeWorkClientFilter"><option value="all">Svi klijenti</option></select>
               </label>
               <button class="secondary-button" id="resetEmployeeWorkFilters" type="button">Prikaži sve</button>
             </div>
@@ -959,11 +965,11 @@
     <script src="remote-state.js?v=20261031-invoice-save-1"></script>
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="company-overhead.js?v=20261015-overhead-r16d"></script>
-    <script src="crm-navigation.js?v=20261031-billing-1"></script><script src="mobile-crm-nav.js?v=20261031-mobile-1"></script>
+    <script src="crm-navigation.js?v=20261102-fast-routes-1"></script><script src="mobile-crm-nav.js?v=20261031-mobile-1"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
     <script src="dashboard-help.js?v=20261031-plain-language-1"></script>
     <script src="client-billing-defaults.js?v=4"></script>
-    <script src="app.js?v=20261102-client-work-label-1"></script>
+    <script src="app.js?v=20261102-fast-routes-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
     <script src="finance-bank-matches.js?v=20261031-group-2"></script>
   <script src="finance-bank-auto.js?v=20261031-plain-language-1"></script>
