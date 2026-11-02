@@ -2,7 +2,7 @@ const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:a
 const source = fs.readFileSync(__dirname + '/../employee-portal.js', 'utf8');
 function named(name) { const start = source.indexOf('function ' + name + '('); return source.slice(start, source.indexOf('\n}', start) + 2); }
 const start = source.indexOf('document.getElementById("portalHoursForm")?.addEventListener'), end = source.indexOf('\ndocument.getElementById("closeDailyReportDialog")', start);
-let handler, release, calls = 0, sequence = 0, clears = 0;
+let handler, release, calls = 0, sequence = 0, clears = 0, renders = 0, caches = 0;
 const fields = { date: '2026-10-14', activityId: 'act', clientId: 'client', minutes: '7', note: 'QA fixture' };
 const button = { disabled: false }, form = { dataset: {}, inert: false, querySelector: () => button };
 const queue = [{ workLog: { id: 'foreign', employeeId: 'other', date: '2026-10-14', minutes: 8, activityId: 'act', clientId: 'client', note: 'foreign draft' } }];
@@ -12,7 +12,7 @@ const ctx = { state: { employees: [{ id: 'qa' }], employeeActivities: [{ id: 'ac
   FormData: class { get(key) { return fields[key]; } }, createId: () => 'qa-' + (++sequence), normalizedActivitySearch: value => String(value || '').toLowerCase(), parseNumber: Number, cloneState: structuredClone,
   readPendingWorkLogs: () => queue, queuePendingWorkLog(log, recipientId) { const index = queue.findIndex(item => item.workLog.id === log.id); if (index !== -1) queue.splice(index, 1); queue.push({ workLog: log, recipientId }); },
   removePendingWorkLog(id) { const index = queue.findIndex(item => item.workLog.id === id); if (index !== -1) queue.splice(index, 1); },
-  reportRecipientId: () => 'leader', renderEmployeePortal() {}, saveState() {}, restorePortalHoursForm(_, values) { for (const key of Object.keys(fields)) fields[key] = values[key]; },
+  reportRecipientId: () => 'leader', renderEmployeePortal() { renders++; }, saveState() { caches++; }, restorePortalHoursForm(_, values) { for (const key of Object.keys(fields)) fields[key] = values[key]; },
   clearPortalHoursForm() { clears++; for (const key of Object.keys(fields)) fields[key] = ''; },
   postEmployeeWorkLog(log) { calls++; received.push(structuredClone(log)); return new Promise(resolve => release = resolve); },
   showToast: (...args) => notices.push(args), expectedMinutesForDate: () => 1, loggedMinutesForDate: () => 999, hasFinalDailyReport: () => false, openDailyReportDialog() { throw Error("Daily popup must remain disabled"); }, Date, JSON, window: { setTimeout() { throw Error("Time-entry save must not schedule a daily popup"); } }, alert() { throw Error('Unexpected validation alert'); } };
@@ -21,6 +21,10 @@ const event = () => ({ currentTarget: form, preventDefault() {} });
 (async () => {
   const captured = { ...fields }; const firstEvent = event(), first = handler(firstEvent); firstEvent.currentTarget = null;
   assert.equal(form.inert, true); assert.equal(button.disabled, true); assert.equal(clears, 0);
+  assert.equal(renders, 0, 'The database request starts before a full portal render');
+  assert.equal(caches, 0, 'Full-state cache serialization cannot delay the request');
+  assert.equal(notices.length, 0, 'Normal saving does not launch a wait notification');
+  assert.equal(ctx.state.employeeWorkLogs.length, 0, 'An unconfirmed write is not marked saved');
   await handler(event()); assert.equal(calls, 1);
   release({ ok: false, retryable: true, error: 'Lost acknowledgement' }); await first;
   const id = received[0].id; assert.equal(form.inert, false); assert.equal(button.disabled, false); assert.deepEqual(fields, captured);
@@ -35,6 +39,16 @@ const event = () => ({ currentTarget: form, preventDefault() {} });
   ctx.activeEmployee = { id: 'other' }; release({ ok: true }); await afterReload;
   assert.equal(clears, 1, 'An old request must not clear the new actor form');
   assert.equal(queue.length, 1); assert.equal(queue[0].workLog.id, 'foreign');
+  assert(!notices.some(item => item[0] === 'Slanje je u toku'));
+  // Exercise the actual reset, including stale hidden activity/quantity values.
+  const resetFields = Object.fromEntries(['date', 'minutes', 'clientId', 'note', 'positive', 'negative', 'productionQuantity'].map(key => [key, { value: key === 'date' ? '2026-10-30' : 'old choice' }]));
+  const search = { value: 'Edit' }, hiddenActivity = { value: 'act', dispatchEvent() {} };
+  const resetForm = { elements: resetFields, reset() { Object.values(resetFields).forEach(field => field.value = 'default'); } };
+  const resetContext = { currentDateKey: () => '2026-11-02', Event: class {}, document: { getElementById: id => id === 'portalActivitySearch' ? search : id === 'portalActivityId' ? hiddenActivity : null }, setPortalActivityOptionsOpen(open) { assert.equal(open, false); } };
+  vm.createContext(resetContext); vm.runInContext(named('clearPortalHoursForm'), resetContext); resetContext.clearPortalHoursForm(resetForm);
+  assert.equal(resetFields.date.value, '2026-10-30');
+  for (const key of ['minutes', 'clientId', 'note', 'positive', 'negative', 'productionQuantity']) assert.equal(resetFields[key].value, '', key);
+  assert.equal(search.value, ''); assert.equal(hiddenActivity.value, '');
   const calendar = { isAustrianWorkingDay: require('../lib/business-calendar.js').isWorkingDay, employeeWeeklyHoursForMonth: employee => employee.weeklyHours, parseNumber: Number, Date };
   vm.createContext(calendar); vm.runInContext(named('scheduledMinutesForDate') + '\n' + named('expectedMinutesForDate'), calendar);
   assert.equal(calendar.expectedMinutesForDate({ startDate: '2026-10-15', weeklyHours: 38.5 }, '2026-10-14'), 0);

@@ -2364,11 +2364,13 @@ document.addEventListener("click", (event) => {
 });
 
 function clearPortalHoursForm(form) {
+  const selectedDate = form.elements.date?.value || currentDateKey();
   form.reset();
-  ["date", "minutes", "note", "positive", "negative", "clientId"].forEach((fieldName) => {
+  ["minutes", "note", "positive", "negative", "clientId", "productionQuantity"].forEach((fieldName) => {
     const field = form.elements[fieldName];
     if (field) field.value = "";
   });
+  if (form.elements.date) form.elements.date.value = selectedDate;
   const activitySearch = document.getElementById("portalActivitySearch");
   if (activitySearch) activitySearch.value = "";
   const activityIdInput = document.getElementById("portalActivityId");
@@ -2510,13 +2512,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     return;
   }
 
-  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
-  state.employeeWorkLogs.unshift(workLog);
-  saveState({ remote: false });
-  renderEmployeePortal();
-  restorePortalHoursForm(form, submittedFormValues);
-  showToast("Slanje je u toku", "Unos je sačuvan na ovom uređaju. Sačekaj potvrdu da je stigao u aplikaciju.", "warn");
-
+  // Send the queued intent immediately. Rendering/caching the complete portal
+  // must not delay the request or re-populate the form before acknowledgement.
   form.inert = true;
   let saveResult;
   try { saveResult = await postEmployeeWorkLog(workLog, recipientId); }
@@ -2532,6 +2529,10 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   }
   if (!saveResult.ok) {
     if (saveResult.retryable) {
+      state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
+      state.employeeWorkLogs.unshift(workLog);
+      saveState({ remote: false });
+      renderEmployeePortal();
       restorePortalHoursForm(form, submittedFormValues);
       showToast(
         saveResult.authRequired ? "Unos čeka novu prijavu" : "Unos čeka slanje",
@@ -2554,6 +2555,10 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   clearPortalWorkRetryId(form);
   clearPortalHoursForm(form);
   window.MarketizoProduction?.saved(form);
+  state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
+  state.employeeWorkLogs.unshift(workLog);
+  saveState({ remote: false });
+  renderEmployeePortal();
   showToast("Uspešno sačuvano", "Sati su uspešno sačuvani u aplikaciji.", "ok");
   // A successful time entry must not launch a daily-report dialog.
 });
