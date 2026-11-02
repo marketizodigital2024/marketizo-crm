@@ -43,6 +43,10 @@
     {
       "path": "/api/client-weekly-report",
       "schedule": "0 10,11 * * 1"
+    },
+    {
+      "path": "/api/clickup-capacity",
+      "schedule": "* * * * *"
     }
   ],
   "headers": [
@@ -181,6 +185,9 @@
       "maxDuration": 120
     },
     "api/billing-delivery.js": {
+      "maxDuration": 60
+    },
+    "api/clickup-capacity.js": {
       "maxDuration": 60
     }
   },
