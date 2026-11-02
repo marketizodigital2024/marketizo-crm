@@ -57,10 +57,10 @@ async function handler(req, res) {
             source ||= await require('./kpi.js').internal.clickupRoster();
             if (!source.live) return send(res,503,{ok:false,error:'ClickUp raspodela trenutno nije dostupna. Odgovori nisu menjani.'});
             const currentClients=core.assignments(actor,payload.employees,source.rows);
-            if(JSON.stringify(currentClients)!==JSON.stringify(report.clients)||actor.leaderId!==report.recipientId)return send(res,409,{ok:false,assignmentChanged:true,error:'ClickUp raspodela se promenila. Odgovori su zadržani; ponovo otvori pregled da učitaš novi spisak.'});
+            if(!core.sameAssignments(currentClients,report.clients)||actor.leaderId!==report.recipientId)return send(res,409,{ok:false,assignmentChanged:true,error:'ClickUp raspodela se promenila. Odgovori su zadržani; ponovo otvori pregled da učitaš novi spisak.'});
           }
           const answers = core.cleanAnswers(report, body.answers);
-          if (report.submittedAt && JSON.stringify(answers) !== JSON.stringify(report.clientAnswers)) return send(res, 409, { ok: false, error: 'Izveštaj je već poslat. Sačuvani odgovori nisu promenjeni.' });
+          if (report.submittedAt && JSON.stringify(answers) !== JSON.stringify(core.cleanAnswers(report, report.clientAnswers))) return send(res, 409, { ok: false, error: 'Izveštaj je već poslat. Sačuvani odgovori nisu promenjeni.' });
           if (!report.submittedAt) { Object.assign(report, { clientAnswers: answers, submittedAt: new Date().toISOString(), status: 'completed' }); changed = true; }
         } else {
           if (!actor.isLeader || !report.submittedAt || report.employeeId === actor.id) return send(res, 403, { ok: false, error: 'Samo lider potvrđuje primljeni izveštaj.' });
