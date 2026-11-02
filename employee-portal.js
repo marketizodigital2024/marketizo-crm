@@ -1,3 +1,6 @@
+function portalWorkClientLabel(log) {
+  return (state.clients || []).find(client => client.id === log.clientId)?.clickupName || log.clientName || "Bez klijenta";
+}
 // Keep persisted category identifiers stable for historical logs and older tabs.
 function workActivityCategoryLabel(category) {
   const value = String(category || "Ostalo");
@@ -1211,8 +1214,8 @@ function renderEmployeePortal() {
   const clientSelect = document.getElementById("portalClientSelect");
   if (clientSelect) {
     const selected = clientSelect.value;
-    const clients = (state.clients || []).filter((client) => client.status === "Aktivan").sort((a, b) => a.name.localeCompare(b.name, "sr"));
-    clientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${escapePortalText(client.id)}">${escapePortalText(client.name)}</option>`).join("")}`;
+    const clients = (state.clients || []).filter((client) => client.status === "Aktivan").sort((a, b) => (a.clickupName || a.name).localeCompare(b.clickupName || b.name, "sr"));
+    clientSelect.innerHTML = `<option value="">Izaberi klijenta</option>${clients.map((client) => `<option value="${escapePortalText(client.id)}">${escapePortalText(client.clickupName || client.name)}</option>`).join("")}`;
     if (clients.some((client) => client.id === selected)) clientSelect.value = selected;
   }
   if (absenceStart && !absenceStart.value) absenceStart.value = currentDateKey();
@@ -1376,7 +1379,7 @@ function renderPortalHourRows(logs) {
           </div>
         </header>
         <p><b>Aktivnost:</b> ${escapePortalText(workActivityCategoryLabel(log.activityCategory || "Ostalo"))} · ${escapePortalText(log.activityName || "Rad")}</p>
-        <p><b>Klijent:</b> ${escapePortalText(log.clientName || "Nije naveden")}</p>
+        <p><b>Klijent:</b> ${escapePortalText(portalWorkClientLabel(log))}</p>
         <p><b>Napomena:</b> ${escapePortalText(log.note || "-")}</p>
         <div class="work-log-feedback">
           <span><b>Pozitivno:</b> ${log.positive || "-"}</span>
@@ -1720,7 +1723,7 @@ function renderLeaderPanel() {
           return `
           <div class="setup-item activity-log-row">
             <strong>${formatNumber(minutes)} min</strong>
-            <span>${escapePortalText(employee?.name || "Zaposleni")} · ${escapePortalText(log.activityName || "Aktivnost")}<br /><b>Klijent: ${escapePortalText(log.clientName || "Bez klijenta")}</b> · ${formatDate(log.date)}${log.note ? ` · ${escapePortalText(log.note)}` : ""}</span>
+            <span>${escapePortalText(employee?.name || "Zaposleni")} · ${escapePortalText(log.activityName || "Aktivnost")}<br /><b>Klijent: ${escapePortalText(portalWorkClientLabel(log))}</b> · ${formatDate(log.date)}${log.note ? ` · ${escapePortalText(log.note)}` : ""}</span>
           </div>`;
         })
         .join("")
@@ -2022,7 +2025,7 @@ function renderLeaderReportsPage() {
             <div class="panel-head"><div><h3>${escapePortalText(employee.name || "Zaposleni")}</h3><p class="muted">Upisano ${formatNumber(minutes)} od ${formatNumber(expected)} min${missing ? ` · nedostaje ${formatNumber(missing)} min` : " · dnevni fond ispunjen"}</p></div><strong>${formatHours(minutes / 60)}h</strong></div>
             ${employeeLogs.map((log) => {
               const logMinutes = window.MarketizoCosts.minutes(log);
-              return `<div class="setup-item activity-log-row"><strong>${formatNumber(logMinutes)} min</strong><span><b>${escapePortalText(log.activityName || "Aktivnost")}</b><br />Klijent: ${escapePortalText(log.clientName || "Bez klijenta")}${log.note ? `<br />${escapePortalText(log.note)}` : ""}</span></div>`;
+              return `<div class="setup-item activity-log-row"><strong>${formatNumber(logMinutes)} min</strong><span><b>${escapePortalText(log.activityName || "Aktivnost")}</b><br />Klijent: ${escapePortalText(portalWorkClientLabel(log))}${log.note ? `<br />${escapePortalText(log.note)}` : ""}</span></div>`;
             }).join("")}
           </div>`;
         }).join("")

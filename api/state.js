@@ -61,7 +61,7 @@ function accessSession(req, current, key) {
   return null;
 }
 
-const clientFinancialKeys = ["email", "revenue", "cpl", "package", "billingDay", "paymentStatus", "invoiceStatus", "paymentMethod", "invoices", "invoiceStartMonth", "invoiceExcludedMonths", "websitePrice", "hostingPrice", "domainPrice", "cashReceipts", "financePaymentActions", "billingFrequency", "billingProfile", "billingName", "billingRecipientId", "billingGroupId", "billingDescription"];
+const clientFinancialKeys = ["email", "revenue", "cpl", "package", "billingDay", "paymentStatus", "invoiceStatus", "paymentMethod", "invoices", "invoiceStartMonth", "invoiceExcludedMonths", "websitePrice", "hostingPrice", "domainPrice", "cashReceipts", "financePaymentActions", "billingFrequency", "billingProfile", "billingName", "paymentPayerNames", "billingRecipientId", "billingGroupId", "billingDescription"];
 
 function hideOperationalFinancials(payload) {
   const copy = hidePasswords(payload);
@@ -90,7 +90,7 @@ function hideEmployeeState(payload, employee) {
   copy.employeeDirectory = (copy.employees || []).map(({ id, name, leaderId }) => ({ id, name, leaderId }));
   copy.employees = (copy.employees || []).filter((item) => visibleEmployeeIds.has(item.id));
   copy.employeeAbsences = (copy.employeeAbsences || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
-  copy.clients = (copy.clients || []).map(({ id, name, status }) => ({ id, name, status }));
+  copy.clients = (copy.clients || []).map(({ id, name, status, clickupName }) => ({ id, name, status, ...(clickupName ? {clickupName} : {}) }));
   copy.leads = [];
   copy.clientLeads = [];
   copy.teamMembers = [];
@@ -182,6 +182,7 @@ function refreshWorkSummaries(payload) {
 function hideClientState(payload, client) {
   const safeClient = { ...client };
   delete safeClient.loginPassword;
+  delete safeClient.paymentPayerNames;
   const financialKeys = ["revenue", "cpl", "paymentStatus", "invoiceStatus", "paymentMethod", "invoices"];
   financialKeys.forEach((key) => delete safeClient[key]);
   return {
