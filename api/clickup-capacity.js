@@ -38,7 +38,8 @@ async function handler(req,res){
     if(apply){
       // Stay below ClickUp's smallest 100 requests/min limit. Remaining changes converge next minute.
       for(const w of plan.writes.slice(0,40)){
-        if(w.kind==='field')await clickup(`/task/${encodeURIComponent(w.taskId)}/field/${encodeURIComponent(w.fieldId)}`,'POST',{value:w.value});
+        if(w.kind==='clear')await clickup(`/task/${encodeURIComponent(w.taskId)}/field/${encodeURIComponent(w.fieldId)}`,'DELETE');
+        else if(w.kind==='field')await clickup(`/task/${encodeURIComponent(w.taskId)}/field/${encodeURIComponent(w.fieldId)}`,'POST',{value:w.value});
         else await clickup(`/task/${encodeURIComponent(w.taskId)}`,'PUT',{markdown_description:w.value});
         changed++;
       }

@@ -24,6 +24,15 @@ assert.throws(()=>core.plan([client('bad','Loš izbor',{'Paid Ads':'unknown'})],
 assert.throws(()=>core.shares(employee('bad','Loša podela',20,'Raspodela kapaciteta: SMM 70%; Scenarista 50%')),/100%/);
 assert.throws(()=>core.plan([], [employee('x','Atila Varga'),employee('y','Atila Varga')], definitions),/Duplo ime/);
 assert.equal(core.norm('Slađan Simić'),'sladan simic');
+// Zero-client team members remain visible, and charts use the role's capacity share.
+const chartTeam=[employee('d','Dominik Grdic'),employee('t','Teodora Marković',38.5,'Raspodela kapaciteta: SMM 50%; Scenarista 50%.')];
+for(const e of chartTeam)for(const r of core.ROLES)e.custom_fields.push(f(`Zauzeće ${r.name} %`,null));
+const charts=core.plan([client('tc','Klijent',{SMM:'Teodora Markovic',Scenarista:'Teodora Markovic'})],chartTeam,definitions);
+assert.equal(charts.rows.find(r=>r.id==='d').roles[0].percent,0);
+assert(charts.writes.some(w=>w.taskId==='d'&&w.fieldId==='Zauzeće Snimatelj %'&&w.value===0));
+assert(charts.writes.some(w=>w.taskId==='t'&&w.fieldId==='Zauzeće SMM %'&&w.value===13.2));
+chartTeam[0].custom_fields.find(f=>f.name==='Zauzeće Paid Ads %').value=50;
+assert(core.plan([],chartTeam,definitions).writes.some(w=>w.taskId==='d'&&w.fieldId==='Zauzeće Paid Ads %'&&w.kind==='clear'));
 assert.equal(core.description({description:'Napomena\n\n'+core.description({},a)+'\nKraj'},a).includes('Kraj'),true);
 // API security and full pagination, with no real network or production data.
 const api=require('../api/clickup-capacity.js');
