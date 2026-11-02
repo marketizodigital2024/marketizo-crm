@@ -18,6 +18,7 @@ function setup(actor,initial){
  vm.createContext(ctx);vm.runInContext(source,ctx);return{ctx,node,form,storage,posts,timers,setMode:v=>mode=v,release:()=>release(),setServer:v=>server=clone(v)};
 }
 (async()=>{
+ const exempt=setup('leader',[{...fixture,employeeId:'leader',recipientId:'elsewhere'}]);await flush();assert.equal(exempt.node('clientWeeklyDialog').open,false,'Leader cannot be asked to fill a client review');
  const focused=setup('worker',[fixture]);focused.ctx.document.activeElement={matches:()=>true};await flush();assert.equal(focused.node('clientWeeklyDialog').open,false,'Do not interrupt typing');focused.ctx.document.activeElement=null;focused.ctx.tick();await flush();assert.equal(focused.node('clientWeeklyDialog').open,true,'Obligation opens once typing finishes');
  const ui=setup('worker',[fixture]);await flush();assert.equal(ui.node('clientWeeklyDialog').open,true);assert.match(ui.node('clientWeeklyFields').innerHTML,/Ivica &lt;script&gt;/);assert.equal((ui.node('clientWeeklyFields').innerHTML.match(/ required /g)||[]).length,3);
  let prevented=false;ui.node('clientWeeklyDialog').listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
@@ -28,6 +29,7 @@ function setup(actor,initial){
  prevented=false;lead.node('clientWeeklyReadDialog').listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,0,'Opening never marks read');
  lead.setMode('holdRead');lead.ctx.focus();await flush();
  await lead.node('clientWeeklyReadAck').listeners.click();lead.setMode('ok');lead.release();await flush();assert.equal(lead.node('clientWeeklyReadDialog').open,false);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,1);
+ const moved=setup('worker',[fixture]);await flush();for(const key of ['positive','negative','help'])moved.form.elements[key+'-0'].value='Old client answer';moved.form.listeners.input();moved.setServer([{...fixture,clients:[{clientId:'new-client',clientName:'New client',roles:['Editor']}]}]);moved.ctx.focus();await flush();assert.match(moved.node('clientWeeklyFields').innerHTML,/New client/);assert.equal(moved.form.elements['positive-0'].value,'','Old answers must never shift to a different client');assert([...moved.storage.values()].some(v=>v.includes('Old client answer')),'Removed client draft retained locally');
  const identity=setup('worker',[fixture]);await flush();identity.ctx.activeEmployee={id:'other'};identity.ctx.tick();assert.equal(identity.node('clientWeeklyDialog').open,false,'Account change hides previous employee form');
  console.log('PASS weekly client UI: three required fields/client, escaped content, scoped drafts, failed-send retention, duplicate-click guard, explicit receipt and identity isolation');
 })().catch(e=>{console.error(e);process.exitCode=1;});

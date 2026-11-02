@@ -51,7 +51,14 @@ async function handler(req, res) {
         report = (payload.employeeReports || []).find(r => r.id === body.reportId && r.isClientWeeklyReport);
         if (!report || !canView(actor, report)) return send(res, 403, { ok: false, error: 'Izveštaj nije dodeljen ovom nalogu.' });
         if (action === 'submit') {
+          if (actor.isLeader) return send(res,403,{ok:false,error:'Lideri ne popunjavaju nedeljni pregled klijenata; čitaju preglede svog tima.'});
           if (report.employeeId !== actor.id) return send(res, 403, { ok: false, error: 'Možeš popuniti samo svoj izveštaj.' });
+          if (!report.submittedAt) {
+            source ||= await require('./kpi.js').internal.clickupRoster();
+            if (!source.live) return send(res,503,{ok:false,error:'ClickUp raspodela trenutno nije dostupna. Odgovori nisu menjani.'});
+            const currentClients=core.assignments(actor,payload.employees,source.rows);
+            if(JSON.stringify(currentClients)!==JSON.stringify(report.clients)||actor.leaderId!==report.recipientId)return send(res,409,{ok:false,assignmentChanged:true,error:'ClickUp raspodela se promenila. Odgovori su zadržani; ponovo otvori pregled da učitaš novi spisak.'});
+          }
           const answers = core.cleanAnswers(report, body.answers);
           if (report.submittedAt && JSON.stringify(answers) !== JSON.stringify(report.clientAnswers)) return send(res, 409, { ok: false, error: 'Izveštaj je već poslat. Sačuvani odgovori nisu promenjeni.' });
           if (!report.submittedAt) { Object.assign(report, { clientAnswers: answers, submittedAt: new Date().toISOString(), status: 'completed' }); changed = true; }
@@ -65,7 +72,7 @@ async function handler(req, res) {
         if (!update.ok) throw new Error('Čuvanje izveštaja nije uspelo.');
         if (!(await update.json()).length) continue;
       }
-      return send(res, 200, { ok: true, report, reports: (payload.employeeReports || []).filter(r => r.isClientWeeklyReport && (cron || canView(actor, r))), window: windowInfo, syncedAt: source?.syncedAt, assignmentPreview: source ? (payload.employees || []).filter(e => core.active(e, windowInfo.today) && (cron || e.id === actor.id || (actor.isLeader && (e.leaderId === actor.id || ['emp-miljan', 'emp-ivana'].includes(actor.id))))).map(e => ({ employeeId: e.id, employeeName: e.name, clients: core.assignments(e, payload.employees, source.rows) })) : undefined });
+      return send(res, 200, { ok: true, report, reports: (payload.employeeReports || []).filter(r => r.isClientWeeklyReport && (r.submittedAt || (!(payload.employees||[]).find(e=>e.id===r.employeeId)?.isLeader && r.clients?.length)) && (cron || canView(actor, r))), window: windowInfo, syncedAt: source?.syncedAt, assignmentPreview: source ? (payload.employees || []).filter(e => !e.isLeader && core.active(e, windowInfo.today) && (cron || e.id === actor.id || (actor.isLeader && (e.leaderId === actor.id || ['emp-miljan', 'emp-ivana'].includes(actor.id))))).map(e => ({ employeeId: e.id, employeeName: e.name, clients: core.assignments(e, payload.employees, source.rows) })) : undefined });
     }
     return send(res, 409, { ok: false, error: 'Baza je zauzeta. Odgovori su zadržani; pokušaj ponovo.' });
   } catch (error) { return send(res, 400, { ok: false, error: error.message || 'Izveštaj nije sačuvan.' }); }
