@@ -2222,25 +2222,41 @@ document.querySelectorAll("[data-employee-tab]").forEach((button) => {
   });
 });
 
-document.getElementById("employeePortalMonth")?.addEventListener("input", (event) => {
-  portalMonth = event.target.value || currentMonthKey();
-  const dateFilter = document.getElementById("portalHoursDateFilter");
-  if (dateFilter?.value && !dateFilter.value.startsWith(portalMonth)) dateFilter.value = "";
-  renderEmployeePortal();
+["input", "change"].forEach((type) => {
+  document.getElementById("employeePortalMonth")?.addEventListener(type, (event) => {
+    const month = event.target.value || currentMonthKey();
+    if (month === portalMonth) return;
+    portalMonth = month;
+    const dateFilter = document.getElementById("portalHoursDateFilter");
+    if (dateFilter?.value && !dateFilter.value.startsWith(portalMonth)) dateFilter.value = "";
+    renderEmployeePortal();
+  });
 });
 
-document.getElementById("portalHoursDateFilter")?.addEventListener("input", () => {
-  renderPortalHourRows(employeeWorkLogs(portalMonth));
+function selectPortalActivityDate(inputId) {
+  const date = document.getElementById(inputId)?.value || "";
+  const selectedMonth = date.slice(0, 7);
+  if (/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(date) && selectedMonth !== portalMonth) {
+    portalMonth = selectedMonth;
+    ["portalHoursDateFilter", "leaderActivityDateFilter"].forEach((id) => {
+      const filter = document.getElementById(id);
+      if (filter?.value && !filter.value.startsWith(portalMonth)) filter.value = "";
+    });
+    const monthInput = document.getElementById("employeePortalMonth");
+    if (monthInput) monthInput.value = portalMonth;
+    renderEmployeePortal();
+  } else if (inputId === "leaderActivityDateFilter") renderLeaderPanel();
+  else renderPortalHourRows(employeeWorkLogs(portalMonth));
+}
+
+["portalHoursDateFilter", "leaderActivityDateFilter"].forEach((id) => {
+  ["input", "change"].forEach((type) => document.getElementById(id)?.addEventListener(type, () => selectPortalActivityDate(id)));
 });
 
 document.getElementById("portalHoursDateReset")?.addEventListener("click", () => {
   const dateFilter = document.getElementById("portalHoursDateFilter");
   if (dateFilter) dateFilter.value = "";
   renderPortalHourRows(employeeWorkLogs(portalMonth));
-});
-
-document.getElementById("leaderActivityDateFilter")?.addEventListener("input", () => {
-  renderLeaderPanel();
 });
 
 document.getElementById("leaderActivityDateReset")?.addEventListener("click", () => {
