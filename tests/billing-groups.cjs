@@ -1,6 +1,9 @@
 'use strict';
 const assert=require('node:assert/strict'),core=require('../lib/billing-content.js'),f=require('./billing-groups-fixture.cjs'),actions=require('../lib/finance-payment-actions.js'),auto=require('../lib/bank-posting.js');
-const p=f.payload(),single=core.snapshotFor(p,f.input(f.ids.recipient)),child=core.snapshotFor(p,f.input(f.ids.project)),group=core.snapshotFor(p,f.groupInput());
+// Keep fixture issuance before its fixed sent-mail evidence, regardless of the
+// day the regression suite runs. Production validation remains unchanged.
+const issuedAt=new Date('2026-11-01T10:00:00Z');
+const p=f.payload(),single=core.snapshotFor(p,f.input(f.ids.recipient),issuedAt),child=core.snapshotFor(p,f.input(f.ids.project),issuedAt),group=core.snapshotFor(p,f.groupInput(),issuedAt);
 assert.equal(single.profile.legalName,child.profile.legalName);assert.notEqual(single.clientId,child.clientId);assert.equal(group.clientId,f.ids.group);assert.equal(group.items.length,2);assert.deepEqual([group.netCents,group.vatCents,group.grossCents],[199400,39880,239280]);core.assertSnapshot(p,group);
 for(const change of [x=>x.clients[3].billingGroupId='',x=>x.clients[2].billingProfile.email='changed@example.test',x=>x.clients[3].status='Neaktivan',x=>x.clients[3].billingRecipientId=f.ids.recipient]){const x=f.payload();change(x);assert.throws(()=>core.assertSnapshot(x,group));}
 assert.throws(()=>core.snapshotFor(p,{...f.groupInput(),items:[f.groupInput().items[0],f.groupInput().items[0]]}));
