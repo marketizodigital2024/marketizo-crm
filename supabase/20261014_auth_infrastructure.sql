@@ -95,7 +95,7 @@ begin
     elsif p_role='employee' then
       select array_agg(e->>'id') into visible_ids from jsonb_array_elements(source.payload->'employees') e
         where e->>'id'=p_employee_id or (actor->>'isLeader'='true' and (p_employee_id in ('emp-miljan','emp-ivana') or e->>'leaderId'=p_employee_id));
-      result=jsonb_set(source.payload,'{clients}',coalesce((select jsonb_agg(jsonb_build_object('id',c->>'id','name',c->>'name','status',c->>'status')) from jsonb_array_elements(coalesce(source.payload->'clients','[]'::jsonb)) c),'[]'::jsonb));
+      result=jsonb_set(source.payload,'{clients}',coalesce((select jsonb_agg(jsonb_build_object('id',c->>'id','name',c->>'name','status',c->>'status','clickupName',c->>'clickupName')) from jsonb_array_elements(coalesce(source.payload->'clients','[]'::jsonb)) c),'[]'::jsonb));
       result=jsonb_set(result,'{employeeWorkLogs}',coalesce((select jsonb_agg(l) from jsonb_array_elements(coalesce(source.payload->'employeeWorkLogs','[]'::jsonb)) l where l->>'employeeId'=any(visible_ids)),'[]'::jsonb));
     else return null; end if;
   end if;
