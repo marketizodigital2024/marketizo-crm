@@ -46,7 +46,7 @@ const events={},windowEvents={},pushes=[],renders=[],classes=new Set();
 const draft={id:'employeeWorkForm',dataset:{navigationDirty:'true'},elements:[]};
 const field={name:'employeeId',type:'select-one',value:'employee-a',form:draft};draft.elements.push(field);
 const root={dataset:{},querySelectorAll:()=>[]};
-const routeContext={URL,Event,Set,Map,location:new URL('https://test.local/'),onlineHydrationComplete:true,adminConfirmedSaveInFlight:false,
+const routeContext={URL,Event,Set,Map,location:new URL('https://test.local/'),onlineHydrationComplete:true,adminConfirmedSaveInFlight:false,adminRenderedViews:new Map([['["employees","old"]','old'],['reports','keep']]),
  document:{title:'CRM',querySelector:s=>s==='.dashboard-kpis'?{}:null,getElementById:id=>['employeeCompleteHistory','workClientSelect'].includes(id)?{}:id==='employees'?root:id===draft.id?draft:null,
  body:{classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name);}}},addEventListener(name,cb){(events[name]||=[]).push(cb);}},
  history:{pushState(_,__,url){pushes.push(url);routeContext.location=new URL(url,routeContext.location);}},
@@ -56,6 +56,7 @@ const routeContext={URL,Event,Set,Map,location:new URL('https://test.local/'),on
 vm.createContext(routeContext);vm.runInContext(fn('setupFastAdminNavigation'),routeContext);routeContext.setupFastAdminNavigation();
 const navigate=routeContext.window.navigateAdminRoute;assert.equal(typeof navigate,'function');
 assert.equal(navigate('/employee-profile?employee=employee-b'),true);assert.equal(classes.has('employee-profile-page'),true);assert.equal(field.value,'employee-a','An unrelated employee selection must not change the pending work employee');
+assert.equal(routeContext.adminRenderedViews.has('["employees","old"]'),false);assert.equal(routeContext.adminRenderedViews.get('reports'),'keep','Changing employee routes must not invalidate unrelated form views');
 assert.equal(navigate('/employees-hours#work/history'),true);assert.equal(root.dataset.workEntrySubsection,'history');assert.equal(classes.has('employee-profile-page'),false);
 assert.equal(navigate('/#clients'),true);assert.equal(renders.at(-1),'clients');
 let writes=pushes.length;routeContext.adminConfirmedSaveInFlight=true;assert.equal(navigate('/#reports'),true);assert.equal(pushes.length,writes);assert.equal(routeContext.toasts,1);

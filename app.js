@@ -6175,7 +6175,7 @@ function setupFastAdminNavigation() {
     const target = new URL(destination, location.href);
     const route = window.MarketizoNavigation.coreRoute(target.pathname, target.hash);
     if (target.origin !== location.origin || !route || [...target.searchParams.keys()].some((key) => key !== "employee") || !onlineHydrationComplete) return false;
-    if (adminConfirmedSaveInFlight || document.querySelector("form[data-saving='true']")) {
+    if (mode === "push" && (adminConfirmedSaveInFlight || document.querySelector("form[data-saving='true']"))) {
       showToast("Čuvanje je u toku", "Sačekaj potvrdu čuvanja pre prelaska na drugu sekciju.", "warn");
       return true;
     }
@@ -6185,6 +6185,9 @@ function setupFastAdminNavigation() {
     document.title = route.profile ? "Dosije zaposlenog | Marketizo CRM" : "Agency CRM";
     const employeeRoot = document.getElementById("employees");
     if (route.view === "employees") {
+      // These routes share the same DOM panels; a prior route's cached render
+      // cannot prove that the currently displayed employee panel is correct.
+      for (const key of adminRenderedViews.keys()) if (key.startsWith('["employees",')) adminRenderedViews.delete(key);
       window.activateEmployeeAdminSection?.(route.section, { scroll: false });
       if (route.work) {
         setupWorkEntrySubsections();
@@ -6192,6 +6195,7 @@ function setupFastAdminNavigation() {
       } else {
         if (employeeRoot) delete employeeRoot.dataset.workEntrySubsection;
         employeeRoot?.querySelectorAll(".work-entry-subsection-hidden").forEach((panel) => panel.classList.remove("work-entry-subsection-hidden"));
+        employeeRoot?.querySelectorAll(".work-entry-grid-empty").forEach((grid) => grid.classList.remove("work-entry-grid-empty"));
       }
     }
     setActiveView(route.view, false);
