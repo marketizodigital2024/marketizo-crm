@@ -1,18 +1,19 @@
 /* Weekly client review: isolated report API, scoped drafts, no work-log writes. */
 (() => {
   let revision = 0;
+  let editingReport = null;
   let reports = [], busy = false, saving = false, lastEnsure = 0, lastRead = 0, loadedActor = '', sourceError = '', assignmentPreview = [], assignmentSyncedAt = '';
   const el = id => document.getElementById(id);
   const escape = value => escapePortalText(String(value || ''));
   const draftKey = report => `marketizoClientWeekly:${activeEmployee?.id}:${report.id}`;
-  const ownPending = () => reports.filter(r => r.employeeId === activeEmployee?.id && !r.submittedAt).sort((a, b) => a.date.localeCompare(b.date))[0];
+  const ownPending = () => reports.filter(r => !activeEmployee?.isLeader && r.employeeId === activeEmployee?.id && !r.submittedAt && r.clients?.length).sort((a, b) => a.date.localeCompare(b.date))[0];
   const receivedUnread = () => reports.filter(r => r.recipientId === activeEmployee?.id && r.submittedAt && !r.acknowledgedAt).sort((a, b) => a.date.localeCompare(b.date))[0];
   async function request(body) {
     const controller = new AbortController(), timer = window.setTimeout(() => controller.abort(), 28000);
     try {
       const response = await fetch('/api/client-weekly-report', { method: body ? 'POST' : 'GET', headers: { ...employeeApiHeaders(), ...(body ? { 'Content-Type': 'application/json' } : {}) }, cache: 'no-store', signal: controller.signal, ...(body ? { body: JSON.stringify(body) } : {}) });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.ok) throw new Error(result.error || 'Izveštaji nisu dostupni.');
+      if (!response.ok || !result.ok) {const error=new Error(result.error || 'Izveštaji nisu dostupni.');error.assignmentChanged=result.assignmentChanged===true;throw error;}
       return result;
     } finally { window.clearTimeout(timer); }
   }
@@ -20,9 +21,9 @@
     return report.clients.map((client, index) => ({ clientId: client.clientId, ...Object.fromEntries(['positive', 'negative', 'help'].map(field => [field, form.elements[`${field}-${index}`]?.value || ''])) }));
   }
   function saveDraft() {
-    const form = el('clientWeeklyForm'), report = reports.find(r => r.id === form?.dataset.reportId && r.employeeId === activeEmployee?.id);
+    const form = el('clientWeeklyForm'), report = editingReport?.employeeId===activeEmployee?.id ? editingReport : null;
     if (!report) return;
-    try { localStorage.setItem(draftKey(report), JSON.stringify(collect(form, report))); } catch { el('clientWeeklyFormStatus').textContent = 'Nacrt nije sačuvan na uređaju. Ostavi ovaj prozor otvoren do slanja.'; }
+    try { localStorage.setItem(draftKey(report), JSON.stringify([...new Map([...(JSON.parse(localStorage.getItem(draftKey(report))||'[]')),...collect(form,report)].map(a=>[a.clientId,a])).values()])); } catch { el('clientWeeklyFormStatus').textContent = 'Nacrt nije sačuvan na uređaju. Ostavi ovaj prozor otvoren do slanja.'; }
   }
   function answerHtml(report) {
     return report.clients.map(client => {
@@ -62,19 +63,23 @@
     renderHistory();
     const notice = el('clientWeeklyNotice');
     const pending = ownPending();
+    if (!saving && el('clientWeeklyDialog').open && (!pending || JSON.stringify(pending.clients)!==JSON.stringify(editingReport?.clients))) {
+      if(document.activeElement?.matches?.('input,textarea,select,[contenteditable="true"]'))return;
+      saveDraft();el('clientWeeklyDialog').close();
+    }
     notice.hidden = !pending && !sourceError;
     notice.textContent = sourceError ? `Pregled klijenata: ${sourceError} Pokušaćemo ponovo; spisak nije označen kao prazan.` : pending ? `Obavezno: pregled klijenata za ${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)}. Popuni do kraja radnog vremena u ponedeljak; ako je rok prošao, popuni sada.` : '';
     if (saving || document.querySelector('dialog[open], form[data-saving="true"]')) return;
     if (document.activeElement?.matches?.('input,textarea,select,[contenteditable="true"]')) return;
     if (pending) {
       const form = el('clientWeeklyForm');
-      if (form.dataset.reportId !== pending.id || form.dataset.actorId !== activeEmployee.id) {
-        form.dataset.reportId = pending.id; form.dataset.actorId = activeEmployee.id;
+      if (form.dataset.reportId !== pending.id || form.dataset.actorId !== activeEmployee.id || form.dataset.clients !== JSON.stringify(pending.clients)) {
+        form.dataset.reportId = pending.id; form.dataset.actorId = activeEmployee.id;form.dataset.clients=JSON.stringify(pending.clients);editingReport=JSON.parse(JSON.stringify(pending));
         el('clientWeeklyPeriodLabel').textContent = `${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)} · stanje raspodele: ${new Date(pending.assignmentSyncedAt).toLocaleString('sr-RS')}`;
         el('clientWeeklyFields').innerHTML = pending.clients.map((client, index) => `<section class="client-weekly-card"><h3>${escape(client.clientName)}</h3>${[['positive', 'Šta je pozitivno?'], ['negative', 'Šta je negativno?'], ['help', 'Da li ti treba pomoć sa nečim?']].map(([field,label]) => `<label>${label}<textarea name="${field}-${index}" rows="2" maxlength="1600" required placeholder="Kratak odgovor je dovoljan."></textarea></label>`).join('')}</section>`).join('');
         try {
           const draft = JSON.parse(localStorage.getItem(draftKey(pending)) || '[]');
-          pending.clients.forEach((client, index) => { const answer = draft.find(a => a.clientId === client.clientId); for (const field of ['positive','negative','help']) if (answer) form.elements[`${field}-${index}`].value = answer[field] || ''; });
+          pending.clients.forEach((client, index) => { const answer = draft.find(a => a.clientId === client.clientId); for (const field of ['positive','negative','help']) form.elements[`${field}-${index}`].value = answer?.[field] || ''; });
         } catch { /* Keep the blank form usable if local draft storage is unavailable. */ }
         el('clientWeeklyFormStatus').textContent = '';
       }
@@ -102,7 +107,7 @@
       const result = await request();
       if (activeEmployee?.id !== actor || saving || revision !== readRevision) return;
       reports = result.reports; lastRead = Date.now();
-      if (Date.now() - lastEnsure > 300000) {
+      if (Date.now() - lastEnsure > 60000) {
         try {
           const ensured = await request({ action: 'ensure' });
           if (activeEmployee?.id !== actor || saving || revision !== readRevision) return;
@@ -117,7 +122,7 @@
   el('clientWeeklyForm').addEventListener('submit', async event => {
     event.preventDefault(); if (saving) return;
     const form = event.currentTarget, actor = activeEmployee?.id;
-    const report = reports.find(r => r.id === form.dataset.reportId && r.employeeId === actor);
+    const report = editingReport?.id===form.dataset.reportId && editingReport.employeeId===actor ? editingReport : null;
     if (!report || !form.reportValidity()) return;
     saveDraft(); revision += 1; saving = true; form.dataset.saving = 'true'; form.inert = true;
     const button = el('clientWeeklySubmit'); button.disabled = true; button.textContent = 'Slanje…';
@@ -128,7 +133,7 @@
       reports = result.reports;
       try { localStorage.removeItem(draftKey(report)); } catch {}
       el('clientWeeklyDialog').close(); form.dataset.reportId = ''; form.reset();
-    } catch (error) { el('clientWeeklyFormStatus').textContent = `Nije poslato. Odgovori su zadržani. ${error.message}`; }
+    } catch (error) { el('clientWeeklyFormStatus').textContent = `Nije poslato. Odgovori su zadržani. ${error.message}`;if(error.assignmentChanged){try{const refreshed=await request({action:'ensure'});if(activeEmployee?.id===actor){reports=refreshed.reports;lastEnsure=Date.now();}}catch{ /* Keep the existing draft and form if refresh fails. */ }} }
     finally { revision += 1; saving = false; delete form.dataset.saving; form.inert = false; button.disabled = false; button.textContent = 'Pošalji lideru'; render(); }
   });
   el('clientWeeklyReadAck').addEventListener('click', async () => {
