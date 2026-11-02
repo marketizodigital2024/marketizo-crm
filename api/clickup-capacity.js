@@ -19,8 +19,10 @@ async function handler(req,res){
   if(!['GET','POST'].includes(req.method))return send(res,405,{ok:false,error:'Metod nije podržan.'});
   const cron=Boolean(process.env.CRON_SECRET)&&equal(req.headers?.authorization,'Bearer '+process.env.CRON_SECRET);
   if(!cron){
-    const state=require('./state.js').helpers,config=state.supabaseConfig();
     const token=String(req.headers?.authorization||'').replace(/^Bearer\s+/i,'');
+    if(!token)return send(res,401,{ok:false,error:'Prijava administratora je potrebna.'});
+    const state=require('./state.js').helpers,config=state.supabaseConfig();
+    if(!config.configured)return send(res,503,{ok:false,error:'Administratorska provera nije dostupna.'});
     if(!state.verifyAccessToken(token,config.key))return send(res,401,{ok:false,error:'Prijava administratora je potrebna.'});
     const current=await state.readStoredState(config),access=state.accessSession(req,current.payload,config.key);
     if(access?.role!=='full-admin')return send(res,403,{ok:false,error:'Potreban je puni administratorski pristup.'});
