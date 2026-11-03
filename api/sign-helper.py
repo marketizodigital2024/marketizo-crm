@@ -253,7 +253,7 @@ def render_original(payload):
             s["body"] = ParagraphStyle("onboarding-one-page-body", parent=s["body"], fontSize=11, leading=14, spaceAfter=3)
             s["title"] = ParagraphStyle("onboarding-one-page-title", parent=s["title"], fontSize=18, leading=22, spaceAfter=10)
         if two_page_onboarding:
-            s["body"] = ParagraphStyle("onboarding-readable-body", parent=s["body"], fontSize=12.5, leading=18, spaceAfter=9)
+            s["body"] = ParagraphStyle("onboarding-readable-body", parent=s["body"], fontSize=12.5, leading=16, spaceAfter=6)
             s["heading"] = ParagraphStyle("onboarding-readable-heading", parent=s["heading"], fontSize=14, leading=20, spaceBefore=8, spaceAfter=12)
             s["title"] = ParagraphStyle("onboarding-readable-title", parent=s["title"], fontSize=20, leading=27, spaceAfter=18)
     de = doc.get("contractDetails", {}).get("language") == "de"
