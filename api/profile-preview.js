@@ -15,8 +15,8 @@ const PLATFORM_CONFIG = {
   facebook: {
     host: "facebook.com",
     actorEnv: "APIFY_FACEBOOK_ACTOR_ID",
-    fallbackActor: "netdesignr~facebook-posts-scraper",
-    attempts: (url) => [{ startUrls: [{ url }], pageOrProfileUrls: [url], maxPosts: 12, extractionMode: "balanced", includeTopComments: false }],
+    fallbackActor: "apify~facebook-posts-scraper",
+    attempts: (url) => [{ startUrls: [{ url }], resultsLimit: 12, captionText: true }],
   },
   tiktok: {
     host: "tiktok.com",
@@ -63,7 +63,7 @@ async function proxyImage(request, response) {
 }
 
 function imageOf(item) {
-  const candidates = [item.displayUrl, item.imageUrl, item.image, item.thumbnailUrl, item.thumbnail, item.coverImageUrl, item.cover, item.coverPhotoUrl, item.picture, item.images?.[0], item.media?.[0]?.url, item.attachments?.[0]?.media?.image?.src, item.videoMeta?.coverUrl, item.videoMeta?.originalCoverUrl, item.mediaUrl];
+  const candidates = [item.displayUrl, item.imageUrl, item.image, item.thumbnailUrl, item.thumbnail, item.coverImageUrl, item.cover, item.coverPhotoUrl, item.picture, item.images?.[0], item.media?.[0]?.thumbnail, item.media?.[0]?.photo_image?.uri, item.media?.[0]?.url, item.attachments?.[0]?.media?.image?.src, item.videoMeta?.coverUrl, item.videoMeta?.originalCoverUrl, item.mediaUrl];
   return candidates.find((value) => typeof value === "string" && value.startsWith("https://") && !/facebook\.com\/(?:permalink|reel|watch|share)/i.test(value)) || "";
 }
 
@@ -76,26 +76,30 @@ function normalize(platform, url, items, postItems) {
   const profileScore=item=>{const author=authorOf(item);return (item.profilePicUrlHD?12:0)+(item.profilePicUrl?10:0)+(item.ownerProfilePicUrl?9:0)+(item.avatarUrl||item.avatar?8:0)+(author.avatarLarger||author.profilePicUrl?7:0)+(item.biography||item.bio||item.signature?4:0)+(item.fullName||item.ownerFullName||item.nickname?2:0)};
   const profile = [...usable].sort((a,b)=>profileScore(b)-profileScore(a))[0] || {};
   const author = authorOf(profile);
-  const source = Array.isArray(postItems) && postItems.length ? postItems.filter((item) => item && typeof item === "object") : usable;
+  const source = (Array.isArray(postItems) && postItems.length ? postItems.filter((item) => item && typeof item === "object") : usable).filter(item => {
+    // Podaci stranice, avatar i naslovna fotografija nisu objave.
+    if (platform !== 'facebook') return true;
+    return Boolean(item.postId || item.facebookId && (item.text || item.caption) || /\/(posts|reel|videos|permalink)\/|story_fbid=/.test(item.url || item.postUrl || '') || (item.time || item.timestamp || item.publishedAt) && (item.text || item.caption));
+  });
   const posts = source.map((item) => ({
     image: imageOf(item),
-    video: Boolean(item.videoUrl || item.videoMeta?.playUrl || item.videoMeta || item.isVideo || item.type === "Video" || item.mediaType === "VIDEO"),
-    videoUrl: item.videoUrl || item.videoPlayUrl || item.videoMeta?.playUrl || item.videoMeta?.downloadAddr || item.downloadUrl || "",
+    video: Boolean(item.media?.[0]?.__typename === "Video" || item.videoUrl || item.videoMeta?.playUrl || item.videoMeta || item.isVideo || item.type === "Video" || item.mediaType === "VIDEO"),
+    videoUrl: item.videoUrl || item.media?.[0]?.playable_url || item.media?.[0]?.browser_native_hd_url || item.media?.[0]?.browser_native_sd_url || item.videoPlayUrl || item.videoMeta?.playUrl || item.videoMeta?.downloadAddr || item.downloadUrl || "",
     caption: item.caption || item.text || item.description || item.videoDescription || item.title || "",
     likes: item.likesCount ?? item.diggCount ?? item.likes ?? null,
-    comments: item.commentsCount ?? item.commentCount ?? item.comments ?? null,
+    comments: item.commentsCount ?? item.commentsNumber ?? item.commentCount ?? (typeof item.comments === 'number' ? item.comments : null),
     views: item.videoViewCount ?? item.playCount ?? item.viewsCount ?? item.views ?? null,
-    timestamp: item.timestamp || item.createTimeISO || item.date || item.publishedAt || "",
+    timestamp: item.timestamp || item.time || item.createTimeISO || item.date || item.publishedAt || "",
     type: item.type || item.mediaType || (item.videoUrl ? "video" : "image"),
     url: item.url || item.postUrl || item.webVideoUrl || item.shareUrl || "",
   })).filter((post) => post.image).slice(0, 12);
   return {
     platform,
     sourceUrl: url,
-    username: String(profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || author.username || author.uniqueId || author.name || new URL(url).pathname.split("/").filter(Boolean)[0] || platform).replace(/^@/,""),
+    username: decodeURIComponent(String(profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || author.username || author.uniqueId || author.name || new URL(url).pathname.split("/").filter(Boolean)[0] || platform)).replace(/^@/,""),
     displayName: profile.fullName || profile.ownerFullName || profile.nickname || profile.name || profile.title || author.fullName || author.nickname || profile.username || profile.ownerUsername || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
     bio: profile.biography || profile.bio || profile.signature || profile.about || author.biography || author.signature || "",
-    avatar: profile.profilePicUrlHD || profile.profilePicUrl || profile.ownerProfilePicUrlHD || profile.ownerProfilePicUrl || profile.avatarUrl || profile.avatar || profile.profilePicture || profile.pageProfilePictureUrl || profile.personalProfile?.profilePictureLarge || profile.personalProfile?.profilePictureMedium || profile.profileImageUrl || author.profilePicUrlHD || author.profilePicUrl || author.avatarLarger || author.avatarMedium || author.avatar || author.avatarUrl || "",
+    avatar: profile.profilePicUrlHD || profile.profilePicUrl || profile.ownerProfilePicUrlHD || profile.ownerProfilePicUrl || profile.avatarUrl || profile.avatar || profile.profilePicture || profile.pageProfilePictureUrl || profile.personalProfile?.profilePictureLarge || profile.personalProfile?.profilePictureMedium || profile.profileImageUrl || author.profilePicUrlHD || author.profilePicUrl || author.avatarLarger || author.avatarMedium || author.avatar || author.avatarUrl || author.profilePic || "",
     followers: profile.followersCount ?? profile.fans ?? profile.followers ?? null,
     posts,
   };
