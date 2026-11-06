@@ -19,3 +19,8 @@
 
 /* Clear contract hierarchy in the exact-PDF text preview. */
 .quick-preview-page h3{font-size:17px;color:#ed7a23;font-weight:700;margin:24px 0 10px;padding-bottom:8px;border-bottom:1px solid #f4d4b9}.quick-preview-page p{margin-bottom:10px;line-height:1.7}.quick-preview-page .quick-page-number{margin-bottom:20px}.quick-preview-page>h3:first-of-type{margin-top:8px}
+
+/* One mutually exclusive guarantee goal, with compact native controls. */
+#quickGuarantee,#contractGuarantee{border:1px solid #dce2df;border-radius:12px;padding:16px;margin:16px 0}
+#quickGuarantee>label,#contractGuarantee>label{display:flex;align-items:center;gap:10px;cursor:pointer;margin:10px 0}
+#quickGuarantee input[type="radio"],#contractGuarantee input[type="radio"]{width:18px;height:18px;min-height:0;flex:0 0 18px;margin:0;padding:0;accent-color:#f47d26}
