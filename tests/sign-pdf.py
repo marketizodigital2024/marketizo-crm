@@ -36,6 +36,14 @@ class SignPdfTests(unittest.TestCase):
         final=base64.b64decode(result['base64']);self.assertTrue(final.startswith(raw));self.assertEqual(len(PdfReader(io.BytesIO(final)).pages),2)
         self.assertIn('30.10.2026.',PdfReader(io.BytesIO(final)).pages[1].extract_text())
 
+    def test_client_internal_title_is_not_printed(self):
+        doc = {"title":"1997 EUR — Nemački — DE", "category":"clients", "contractDetails":{"language":"de", "audience":"client"}, "recipients":[], "content":{"version":1,"blocks":[{"type":"heading","runs":[{"text":"VERTRAG ÜBER MARKETINGDIENSTLEISTUNGEN"}]},{"type":"paragraph","runs":[{"text":"Vereinbarter Vertragsinhalt bleibt erhalten."}]}]}}
+        result=helper.render_original({"document":doc})
+        text=" ".join(page.extract_text() for page in PdfReader(io.BytesIO(base64.b64decode(result['base64']))).pages)
+        self.assertNotIn(doc['title'],text)
+        self.assertIn("VERTRAG ÜBER MARKETINGDIENSTLEISTUNGEN",text)
+        self.assertIn("Vereinbarter Vertragsinhalt bleibt erhalten.",text)
+
     def test_client_party_cards_postal_code_and_gap(self):
         texts=['UGOVOR O USLUGAMA','Instagram, Facebook','Između:','Marketizo Digital e.U.','Adresa: Test adresa 24','UID: TEST-UID','IBAN: TEST-IBAN','Predmet ugovora:','Test paket — 997 EUR','Firma: TEST KLIJENT','Adresa: Test ulica 12 (poštanski broj: 11000)','PIB: TEST-PIB','Ime i prezime: Test Klijent','Klauzula 1: Usluge','Test sadržaj ugovora.']
         doc={"title":"TEST — NEOBAVEZUJUĆE","category":"clients","contractDetails":{"language":"sr","audience":"client"},"recipients":[{"role":"counterparty","name":"Test Klijent","company":"TEST KLIJENT","address":"Test ulica 12","postalCode":"11000","country":"RS","email":"test@example.invalid"}],"content":{"version":1,"blocks":[{"type":"heading" if text.startswith('Klauzula') else 'paragraph',"runs":[{"text":text}]} for text in texts]}}

@@ -257,7 +257,8 @@ def render_original(payload):
             s["heading"] = ParagraphStyle("onboarding-readable-heading", parent=s["heading"], fontSize=14, leading=20, spaceBefore=8, spaceAfter=12)
             s["title"] = ParagraphStyle("onboarding-readable-title", parent=s["title"], fontSize=20, leading=27, spaceAfter=18)
     de = doc.get("contractDetails", {}).get("language") == "de"
-    story = [Paragraph(plain(doc["title"], 180), s["title"])]
+    # Client document titles are internal library/file labels, not contract terms.
+    story = [] if doc.get("category") == "clients" and not onboarding else [Paragraph(plain(doc["title"], 180), s["title"])]
     client_layout = doc.get("category") == "clients" and not onboarding and len([r for r in doc.get("recipients", []) if r.get("role") != "marketizo"]) == 1
     intro = client_identity_intro(doc, payload.get("issuer", {}), s, de) if client_layout else None
     if intro:
