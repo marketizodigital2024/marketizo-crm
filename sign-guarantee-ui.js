@@ -1,7 +1,7 @@
 'use strict';
 (()=>{
  const marker='[IZBOR GARANCIJE / GARANTIEZIEL]';
- const relevant=doc=>doc?.contractDetails?.audience==='client'&&doc.content?.blocks?.some(b=>b.runs.some(r=>r.text.includes(marker)));
+ const relevant=doc=>doc?.contractDetails?.audience==='client'&&doc.content?.blocks?.some(b=>b.runs.map(r=>r.text).join('').includes(marker));
  function create(parent,id){
   const f=document.createElement('fieldset');f.id=id;f.hidden=true;
   f.innerHTML='<legend>Cilj garancije</legend><p class="sign-hint">Izaberi jednu opciju pre slanja. Izbor i podaci biće upisani u ugovor koji klijent potpisuje.</p><label><input type="radio" name="'+id+'Goal" value="leads"> Najmanje 30 kvalifikovanih leadova</label><label><input type="radio" name="'+id+'Goal" value="reach"> 10× veći doseg</label><div data-reach hidden><label>Platforma<select data-platform><option value="">Izaberi platformu</option><option>Instagram</option><option>Facebook</option></select></label><label>Poslednji dan početnog perioda od 30 dana<input data-baseline-end type="date"></label><label>Početni doseg (broj osoba)<input data-baseline inputmode="numeric" pattern="[0-9]{1,12}" maxlength="12" placeholder="Prazno ako podatak nije dostupan"></label><label>Dogovoreni ciljani doseg (ako je osnova 0 ili nedostupna)<input data-target inputmode="numeric" pattern="[1-9][0-9]{0,12}" maxlength="13"></label><p data-target-hint class="sign-hint"></p></div>';
