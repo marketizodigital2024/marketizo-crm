@@ -1,126 +1,20 @@
-export const config = { maxDuration: 30 };
-
-// Ovde se izdaje pun izvestaj. Bez potvrdjene uplate za bas ovu analizu
-// server ne vraca ni prioritete, ni ocene, ni ideje.
-
-const AUDIT_TABLE = process.env.MARKETIZO_AUDIT_TABLE || "marketizo_audits";
-
-const clean = (value, max = 300) => (typeof value === "string" ? value.trim().slice(0, max) : "");
-
-function store() {
-  const url = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-  if (!url || !key) return null;
-  return { url, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" } };
-}
-
-const stripeGet = (path, secret) =>
-  fetch("https://api.stripe.com/v1" + path, {
-    headers: { Authorization: "Bearer " + secret },
-    signal: AbortSignal.timeout(15000),
-  });
-
-const isPaid = (session) =>
-  Boolean(session) && session.payment_status === "paid" && session.status === "complete";
-
-function amountOk(session) {
-  const min = Number(process.env.MARKETIZO_AUDIT_MIN_AMOUNT || 0);
-  if (!min) return true;
-  return Number(session.amount_total) >= min;
-}
-
-// Rezerva kada se klijent vrati bez oznake sesije, na primer preko linka iz mejla
-// ili sa drugog uredjaja: uplatu trazimo po oznaci analize.
-async function findByAuditId(auditId, secret) {
-  const paymentLink = process.env.MARKETIZO_STRIPE_PAYMENT_LINK_ID;
-  if (!auditId || !paymentLink) return null;
-  const response = await stripeGet(
-    "/checkout/sessions?limit=100&payment_link=" + encodeURIComponent(paymentLink),
-    secret
-  );
-  if (!response.ok) return null;
-  const payload = await response.json().catch(() => ({}));
-  if (!Array.isArray(payload.data)) return null;
-  return payload.data.find((item) => item.client_reference_id === auditId && isPaid(item)) || null;
-}
-
-function release(auditId, row) {
-  const lead = row.lead || {};
-  return {
-    paid: true,
-    auditId,
-    audit: row.audit,
-    evidence: Array.isArray(row.evidence) ? row.evidence : [],
-    lead: { name: clean(lead.name, 120), business: clean(lead.business, 120), location: clean(lead.location, 120) },
-  };
-}
-
-async function markPaid(db, auditId, lead, sessionId) {
-  try {
-    await fetch(`${db.url}/rest/v1/${AUDIT_TABLE}?id=eq.${encodeURIComponent(auditId)}`, {
-      method: "PATCH",
-      headers: { ...db.headers, Prefer: "return=minimal" },
-      body: JSON.stringify({ lead: { ...(lead || {}), paidAt: new Date().toISOString(), sessionId: clean(sessionId, 300) }, updated_at: new Date().toISOString() }),
-      signal: AbortSignal.timeout(8000),
-    });
-  } catch (error) {
-    console.error("Audit paid flag failed", error?.message);
+import {readAudit,writeAudit,authorized,ask,ideasSchema,clean} from '../lib/audit-engine.js';
+export const config={maxDuration:90};
+const WEBHOOK='https://services.leadconnectorhq.com/hooks/J9svmFaKnsH9r8T04I0D/webhook-trigger/dce8189c-7b35-444d-bea6-e2b38641512c';
+export default async function handler(req,res){
+ res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});const body=req.body||{};
+ try{
+  const row=await readAudit(body.auditId);if(!row||!authorized(row,body.accessToken))return res.status(404).json({error:'Link do analize nije potpun ili više nije dostupan. Pokreni novi pregled.'});
+  if(!row.lead.unlocked){const lead=body.lead||{},name=clean(lead.name,120),email=clean(lead.email,200).toLowerCase(),phone=clean(lead.phone,50),business=clean(lead.business,500);
+   if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)||phone.replace(/\D/g,'').length<8||business.length<3||lead.consent!==true)return res.status(400).json({error:'Unesi ime, ispravan email, telefon i delatnost i potvrdi obradu podataka.'});
+   const testMode=/@example\.(com|org|net)$/.test(email)&&name.startsWith('Marketizo QA');
+   row.lead={...row.lead,name,email,phone,business,consentAt:new Date().toISOString(),unlocked:true,crmStatus:testMode?'test':'pending',testMode};await writeAudit(body.auditId,{lead:row.lead});
   }
-}
-
-export default async function handler(request, response) {
-  if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
-
-  const db = store();
-  if (!db) return response.status(503).json({ paid: false, error: "Čuvanje analize još nije povezano." });
-
-  const secret = process.env.STRIPE_SECRET_KEY;
-  if (!secret) return response.status(503).json({ paid: false, error: "Provera uplate još nije povezana." });
-
-  const auditId = clean(request.body?.auditId, 100);
-  const sessionId = clean(request.body?.sessionId, 300);
-  if (!auditId) return response.status(400).json({ paid: false, error: "Nedostaje oznaka analize." });
-
-  // Prvo citamo sacuvanu analizu. Ako je uplata vec jednom potvrdjena, izdajemo je
-  // odmah — bez ponovnog trazenja po Stripe-u, koje na drugom uredjaju ume da omane.
-  let row = null;
-  try {
-    const stored = await fetch(
-      `${db.url}/rest/v1/${AUDIT_TABLE}?id=eq.${encodeURIComponent(auditId)}&select=audit,evidence,lead`,
-      { headers: db.headers, signal: AbortSignal.timeout(12000) }
-    );
-    if (stored.ok) row = (await stored.json().catch(() => []))[0] || null;
-  } catch (error) {
-    console.error("Audit store read failed", error?.message);
-    return response.status(503).json({ paid: false, retry: true, error: "Trenutno ne možemo da otvorimo analizu. Pokušaj za nekoliko sekundi." });
-  }
-
-  if (row?.lead?.paidAt && row.audit) return response.status(200).json(release(auditId, row));
-
-  let session = null;
-  try {
-    if (sessionId.startsWith("cs_")) {
-      const stripeResponse = await stripeGet("/checkout/sessions/" + encodeURIComponent(sessionId), secret);
-      if (stripeResponse.ok) session = await stripeResponse.json().catch(() => null);
-    }
-    if (!isPaid(session) || session.client_reference_id !== auditId) session = await findByAuditId(auditId, secret);
-  } catch (error) {
-    console.error("Stripe lookup failed", error?.message);
-    return response.status(503).json({ paid: false, retry: true, error: "Trenutno ne možemo da proverimo uplatu. Pokušaj za nekoliko sekundi." });
-  }
-
-  if (!isPaid(session) || session.client_reference_id !== auditId) {
-    return response.status(402).json({ paid: false, error: "Uplata za ovu analizu nije potvrđena." });
-  }
-  if (!amountOk(session)) {
-    return response.status(402).json({ paid: false, error: "Iznos uplate ne odgovara ovoj analizi." });
-  }
-
-  if (!row || !row.audit) {
-    return response.status(404).json({ paid: true, error: "Analiza nije pronađena. Javi nam se i poslaćemo je ručno." });
-  }
-
-  // Od sada je ova analiza otkljucana i na svakom drugom uredjaju.
-  await markPaid(db, auditId, row.lead, session.id);
-  return response.status(200).json(release(auditId, row));
+  if(row.lead.crmStatus==='pending'){try{const r=await fetch(WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(8000),body:JSON.stringify({name:row.lead.name,email:row.lead.email,phone:row.lead.phone,business:row.lead.business,source:'Marketizo Brand Audit',event:'audit_free_unlock',audit_id:body.auditId,audit_score:row.audit.overallScore,audit_tag:'marketizo-brand-audit',tags:['marketizo-brand-audit','audit-free']})});if(r.ok)row.lead.crmStatus='accepted';}catch{console.error('audit_crm_pending',body.auditId);}await writeAudit(body.auditId,{lead:row.lead});}
+  if(!row.audit.contentIdeas&&body.generatePlan===true){try{
+   const plan=await ask('Napiši 26 RAZLIČITIH ideja za ovaj biznis: 12 Reelova, 12 storija, jednu objavu, jedan karusel. title je gotova udica do 12 reči, execution je konkretna izvedba do 35 reči: kadar, rečenica, sledeći korak. reason do 18 reči povezanih sa nalazom. postIndex upućuje na stvarnu objavu kao kontekst. Ne prepakuj istu temu 26 puta. Ne izmišljaj iskustva klijenata: predloži da se prikupe ako nisu potvrđena. Pokrij otkrivanje brenda, proces, dokaz, nedoumice i prijavu. Koristi delatnost i publiku sa profila, kontekst vlasnika je dodatak.',ideasSchema,{business:row.lead.business,analysis:row.audit,posts:row.evidence.map(({image,...p})=>p)},[],55000);
+   if(Object.values(plan.contentIdeas).flat().some(x=>!row.evidence[x.postIndex]))throw Error('invalid_plan_references');row.audit.contentIdeas=plan.contentIdeas;await writeAudit(body.auditId,{audit:row.audit});
+  }catch(e){console.error('audit_plan_failed',clean(e.message,160));return res.status(200).json({audit:row.audit,evidence:row.evidence,lead:{name:row.lead.name,business:row.lead.business},unlocked:true,planPending:true,warning:'Analiza je spremna. Mesečni plan trenutno nije dovršen — pokreni ga ponovo dugmetom ispod.'});}}
+  return res.status(200).json({audit:row.audit,evidence:row.evidence,lead:{name:row.lead.name,business:row.lead.business},unlocked:true,planPending:!row.audit.contentIdeas});
+ }catch(e){console.error('audit_report_failed',clean(e.message,200));return res.status(503).json({error:'Izveštaj trenutno nije dostupan. Pokušaj ponovo; već sačuvani kontakt ostaje sačuvan.'});}
 }

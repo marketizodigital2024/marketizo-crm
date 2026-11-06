@@ -79,8 +79,8 @@ function normalize(platform, url, items, postItems) {
   const source = Array.isArray(postItems) && postItems.length ? postItems.filter((item) => item && typeof item === "object") : usable;
   const posts = source.map((item) => ({
     image: imageOf(item),
-    video: Boolean(item.videoUrl || item.isVideo || item.type === "Video" || item.mediaType === "VIDEO"),
-    videoUrl: item.videoUrl || item.videoPlayUrl || item.downloadUrl || item.mediaUrl || "",
+    video: Boolean(item.videoUrl || item.videoMeta?.playUrl || item.videoMeta || item.isVideo || item.type === "Video" || item.mediaType === "VIDEO"),
+    videoUrl: item.videoUrl || item.videoPlayUrl || item.videoMeta?.playUrl || item.videoMeta?.downloadAddr || item.downloadUrl || "",
     caption: item.caption || item.text || item.description || item.videoDescription || item.title || "",
     likes: item.likesCount ?? item.diggCount ?? item.likes ?? null,
     comments: item.commentsCount ?? item.commentCount ?? item.comments ?? null,
@@ -126,7 +126,7 @@ async function runActor(endpoint, token, input, ms, attempt = 0) {
     message = String(error?.message || "").slice(0, 220);
   }
   // Zauzeto ili privremen kvar: jedan ponovni pokusaj posle kratke pauze.
-  if (attempt === 0 && (status === 0 || status === 429 || status >= 500)) {
+  if (attempt === 0 && (status === 429 || status >= 500)) {
     await new Promise((done) => setTimeout(done, 3000));
     return runActor(endpoint, token, input, ms, 1);
   }
@@ -173,10 +173,10 @@ async function fetchProfile(platform, rawUrl, token, debug) {
   // Detalji profila (ime, opis, slika) idu paralelno sa prvim pokusajem.
   const detailCalls = [];
   if (platform === "instagram") {
-    detailCalls.push(runActor(endpoint, token, { directUrls: [url], resultsType: "details", resultsLimit: 1 }, 100000));
+    detailCalls.push(runActor(endpoint, token, { directUrls: [url], resultsType: "details", resultsLimit: 1 }, 45000));
   }
   if (platform === "facebook") {
-    detailCalls.push(runActor(actorEndpoint("apify~facebook-pages-scraper"), token, { startUrls: [{ url }] }, 100000));
+    detailCalls.push(runActor(actorEndpoint("apify~facebook-pages-scraper"), token, { startUrls: [{ url }] }, 45000));
   }
 
   const list = [];
@@ -185,7 +185,7 @@ async function fetchProfile(platform, rawUrl, token, debug) {
   for (let index = 0; index < attempts.length; index += 1) {
     // Instagram ume da odgovori i posle minuta. Kratak rok je ranije obarao
     // profil koji bi se inace uredno ucitao.
-    const budget = index === 0 ? 100000 : 80000;
+    const budget = index === 0 ? 45000 : 25000;
     const batch = await Promise.all([runActor(endpoint, token, attempts[index], budget), ...(index === 0 ? detailCalls : [])]);
     batch.forEach((info) => {
       list.push(...info.items);
@@ -233,6 +233,21 @@ async function fetchProfile(platform, rawUrl, token, debug) {
   return result;
 }
 
+const recentProfiles = new Map();
+const pendingProfiles = new Map();
+async function cachedProfile(platform, rawUrl, token, debug) {
+  const key = platform + ':' + safeUrl(rawUrl, PLATFORM_CONFIG[platform].host);
+  const cached = recentProfiles.get(key);
+  if (!debug && cached && Date.now() - cached.at < 300000) return cached.profile;
+  if (!debug && pendingProfiles.has(key)) return pendingProfiles.get(key);
+  const job = fetchProfile(platform, rawUrl, token, debug).then(profile => {
+    if (recentProfiles.size > 80) recentProfiles.clear();
+    recentProfiles.set(key, { at: Date.now(), profile });
+    return profile;
+  });
+  if (!debug) pendingProfiles.set(key, job);
+  try { return await job; } finally { pendingProfiles.delete(key); }
+}
 export default async function handler(request, response) {
   if (request.method === "GET" && request.query?.image) return proxyImage(request, response);
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
@@ -241,10 +256,8 @@ export default async function handler(request, response) {
   const entries = Object.entries(supplied).filter(([platform, url]) => PLATFORM_CONFIG[platform] && typeof url === "string" && url.trim());
   if (!entries.length) return response.status(400).json({ error: "Dodajte najmanje jedan profil." });
   const debug = request.body?.debug === true;
-  const settled = await Promise.allSettled(entries.map(([platform, url]) => fetchProfile(platform, url.trim(), process.env.APIFY_TOKEN, debug)));
+  const settled = await Promise.allSettled(entries.map(([platform, url]) => cachedProfile(platform, url.trim(), process.env.APIFY_TOKEN, debug)));
   const profiles = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
-  const sharedAvatar = profiles.find((profile) => profile.avatar)?.avatar || "";
-  profiles.forEach((profile) => { if (!profile.avatar && sharedAvatar) profile.avatar = sharedAvatar; });
   const failures = settled.map((item, index) => ({ item, index })).filter(({ item }) => item.status === "rejected").map(({ item, index }) => ({ platform: entries[index]?.[0], message: /[čćžšđ]/i.test(String(item.reason?.message || "")) ? item.reason.message : "Profil nije javno dostupan ili link nije unet tačno.", diagnostics: debug ? item.reason?.diagnostics : undefined }));
   if (!profiles.length) {
     console.error("Profile preview failed", failures);
@@ -252,3 +265,4 @@ export default async function handler(request, response) {
   }
   return response.status(200).json({ profiles, failures, disclosure: "Prikazani su samo javno dostupni podaci sa unetih profila." });
 }
+
