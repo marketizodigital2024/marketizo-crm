@@ -1,10 +1,13 @@
-import {readAudit,writeAudit,authorized,ask,ideasSchema,clean} from '../lib/audit-engine.js';
+import {readAudit,writeAudit,authorized,ask,ideasSchema,clean,polish} from '../lib/audit-engine.js';
 export const config={maxDuration:90};
 const WEBHOOK='https://services.leadconnectorhq.com/hooks/J9svmFaKnsH9r8T04I0D/webhook-trigger/dce8189c-7b35-444d-bea6-e2b38641512c';
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});const body=req.body||{};
  try{
-  const row=await readAudit(body.auditId);if(!row||!authorized(row,body.accessToken))return res.status(404).json({error:'Link do analize nije potpun ili više nije dostupan. Pokreni novi pregled.'});
+  const row=await readAudit(body.auditId);
+  if(row&&!row.lead?.accessHash&&row.lead?.paidAt&&row.audit)return res.status(200).json({audit:polish(row.audit),evidence:row.evidence||[],lead:{name:row.lead.name,business:row.lead.business},unlocked:true,planPending:!row.audit.contentIdeas});
+  if(!row||!authorized(row,body.accessToken))return res.status(404).json({error:'Link do analize nije potpun ili više nije dostupan. Pokreni novi pregled.'});
+  row.audit=polish(row.audit);
   if(!row.lead.unlocked){const lead=body.lead||{},name=clean(lead.name,120),email=clean(lead.email,200).toLowerCase(),phone=clean(lead.phone,50),business=clean(lead.business,500);
    if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)||phone.replace(/\D/g,'').length<8||business.length<3||lead.consent!==true)return res.status(400).json({error:'Unesi ime, ispravan email, telefon i delatnost i potvrdi obradu podataka.'});
    const testMode=/@example\.(com|org|net)$/.test(email)&&name.startsWith('Marketizo QA');

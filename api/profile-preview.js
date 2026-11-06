@@ -97,7 +97,7 @@ function normalize(platform, url, items, postItems) {
     platform,
     sourceUrl: url,
     username: decodeURIComponent(String(profile.username || profile.ownerUsername || profile.uniqueId || profile.pageName || author.username || author.uniqueId || author.name || new URL(url).pathname.split("/").filter(Boolean)[0] || platform)).replace(/^@/,""),
-    displayName: profile.fullName || profile.ownerFullName || profile.nickname || profile.name || profile.title || author.fullName || author.nickname || profile.username || profile.ownerUsername || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
+    displayName: profile.fullName || profile.ownerFullName || profile.nickname || profile.name || profile.title || author.fullName || author.nickname || author.name || profile.pageName || profile.username || profile.ownerUsername || new URL(url).pathname.split("/").filter(Boolean)[0] || platform,
     bio: profile.biography || profile.bio || profile.signature || profile.about || author.biography || author.signature || "",
     avatar: profile.profilePicUrlHD || profile.profilePicUrl || profile.ownerProfilePicUrlHD || profile.ownerProfilePicUrl || profile.avatarUrl || profile.avatar || profile.profilePicture || profile.pageProfilePictureUrl || profile.personalProfile?.profilePictureLarge || profile.personalProfile?.profilePictureMedium || profile.profileImageUrl || author.profilePicUrlHD || author.profilePicUrl || author.avatarLarger || author.avatarMedium || author.avatar || author.avatarUrl || author.profilePic || "",
     followers: profile.followersCount ?? profile.fans ?? profile.followers ?? null,
