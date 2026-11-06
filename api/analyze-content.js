@@ -2,16 +2,22 @@ import {newIdentity,hash,writeAudit,ask,auditSchema,selectEvidence,imageInput,li
 export const config={maxDuration:90};
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
+ const streaming=req.headers?.accept?.includes('application/x-ndjson');let opened=false;
+ const status=(message,phase=1)=>{if(!streaming)return;if(!opened){res.setHeader('Content-Type','application/x-ndjson; charset=utf-8');res.setHeader('X-Accel-Buffering','no');res.flushHeaders?.();opened=true;}res.write(JSON.stringify({event:'status',message,phase})+'\n');};
+ const send=(code,data)=>{if(!opened)return res.status(code).json(data);res.write(JSON.stringify(code>=400?{event:'error',...data}:{event:'result',data})+'\n');return res.end();};
  try{
   const profiles=Array.isArray(req.body?.profiles)?req.body.profiles:[],evidence=selectEvidence(profiles);
-  if(evidence.length<3)return res.status(422).json({error:'Potrebne su najmanje tri dostupne javne objave za pouzdanu analizu.'});
+  if(evidence.length<3)return send(422,{error:'Potrebne su najmanje tri dostupne javne objave za pouzdanu analizu.'});
+  status(`Za analizu je izdvojeno ${evidence.length} stvarnih objava. Proveravamo dostupne slike i govor.`,1);
   const profileInfo=profiles.slice(0,3).map(p=>({platform:p.platform,username:clean(p.username,100),displayName:clean(p.displayName,200),bio:clean(p.bio,1200),sourceUrl:clean(p.sourceUrl,1000)}));
   const chosen=[...new Set(evidence.map(p=>p.platform))].map(platform=>evidence.find(p=>p.platform===platform&&p.image)).filter(Boolean);
   const [imageGroups]=await Promise.all([Promise.all(chosen.map(imageInput)),listenSample(profiles,evidence)]),images=imageGroups.flat();
+  status(`Podaci su prikupljeni. Pišemo nalaze, scenario i predloge za tvoj biznis.`,2);
   const audit=await ask('Napiši preciznu analizu uzorka. headline do 12 reči, mainConclusion 50–80 reči. previewCards: tri RAZLIČITA korisna nalaza, svaki sa konkretnim dokazom i odmah primenljivom promenom (35–55 reči). scores: jasnoća, poverenje, sadržaj, ponuda, put do upita; razlog 15–25 reči. priorities: pet različitih koraka; action je tačan zadatak za ovu nedelju. examples: tri različite stvarne objave i potpuna gotova prepravka uvoda ili opisa. networks: po jedan nalaz za SVAKU poslatu mrežu; ne prenosi zaključak jedne mreže drugoj. Ograničenja iskreno prikaži. Govor je pregledan SAMO kada dokaz ima speechStatus reviewed i speech; za ostale video objave imaš samo opis i naslovnu sliku. starterPack je besplatan praktičan uzorak: jedan POTPUN scenario od 30–45 sekundi na temu stvarne objave koja je privukla pažnju (biraj relevantnost i vidljive reakcije, ne pretpostavljaj prodaju). audience kratko navodi ciljnu grupu, opening prvu rečenicu, body 50–70 reči konkretne priče, closing prirodan poziv, filming jednostavno kako da snimi. Dodaj tri uzastopna storija (text je gotov tekst do 25 reči, visual šta da se vidi do 15 reči) i prva tri slajda jednog novog karusela (title do 8 reči, text do 25 reči). Sve za isti konkretan biznis, sa drugačijim uglovima, bez izmišljenih dokaza ili rezultata. Primeri ne smeju uvoditi nove ponude poput besplatnog časa ako to nije potvrđeno. Svako preostalo polje osim mainConclusion, previewCards i scenarija najviše 30 reči.',auditSchema,{profiles:profileInfo,posts:evidence.map(({image,...x})=>x)},images);
   const spoken=evidence.filter(x=>x.speechStatus==='reviewed').length;
   verifyRefs(audit,evidence);audit.coverage={postsReviewed:evidence.length,networks:profileInfo.map(p=>p.platform),profiles:profileInfo,visualSamples:images.filter(x=>x.type==='input_image').length,videosTranscribed:spoken,basis:`Javne biografije, opisi i dostupne naslovne slike. ${spoken?`Govor je pregledan u ${spoken} video uzorka; ostali videi su ocenjeni prema opisu i naslovnoj slici.`:'Govor u videima nije bio dostupan za ovu analizu.'}`};
+  status('Nalazi su pripremljeni. Čuvamo tvoj pregled…',2);
   const {id,token}=newIdentity();await writeAudit(id,{audit,evidence,lead:{accessHash:hash(token),version:2,createdAt:new Date().toISOString(),unlocked:false}},true);
-  return res.status(200).json({auditId:id,accessToken:token,audit:publicResult(audit),evidence,gated:true});
- }catch(e){console.error('audit_preview_failed',clean(e.message,200));return res.status(503).json({error:/timeout|abort/i.test(e.message)?'Analiza traje duže nego što treba. Pokušaj ponovo; ne prikazujemo izmišljene nalaze.':e.message});}
+  return send(200,{auditId:id,accessToken:token,audit:publicResult(audit),evidence,gated:true});
+ }catch(e){console.error('audit_preview_failed',clean(e.message,200));return send(503,{error:/timeout|abort/i.test(e.message)?'Analiza traje duže nego što treba. Pokušaj ponovo; ne prikazujemo izmišljene nalaze.':e.message});}
 }
