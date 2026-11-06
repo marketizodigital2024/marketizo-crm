@@ -72,7 +72,7 @@
     for (const block of content.blocks) {
       const blockText = block.runs.map(run => run.text).join('').trim();
       if (!blockText) continue;
-      const clauseHeading = blockText.length < 160 && /^(?:Član|Artikel|Abschnitt|Article|§)\s*\d+/.test(blockText);
+      const clauseHeading = blockText.length < 160 && /^(?:Klauzula|Klausel|Član|Artikel|Abschnitt|Article|§)\s*\d+/.test(blockText);
       const el = node(block.type === 'heading' || clauseHeading ? (block.level === 2 ? 'h3' : 'h2') : block.type === 'bullet' || block.type === 'ordered' ? 'li' : 'p', null);
       for (const run of block.runs) {
         let text = document.createTextNode(run.text);
@@ -107,7 +107,7 @@
       if (n.nodeType !== Node.ELEMENT_NODE || skip.has(n.tagName)) return;
       if (['UL', 'OL'].includes(n.tagName)) { for (const child of n.children) block(child, n.tagName === 'UL' ? 'bullet' : 'ordered'); return; }
       if (n.tagName === 'DIV' && [...n.children].some(c => ['P', 'DIV', 'H2', 'H3', 'UL', 'OL'].includes(c.tagName))) { for (const child of n.childNodes) block(child); return; }
-      blocks.push({ type: list || (['H1', 'H2', 'H3'].includes(n.tagName) ? 'heading' : 'paragraph'), level: n.tagName === 'H3' ? 2 : 1, runs: runsOf(n) });
+      blocks.push({ type: list || (['H1', 'H2', 'H3'].includes(n.tagName) || /^(?:Klauzula|Klausel|Član) \d+:/.test(n.textContent.trim()) ? 'heading' : 'paragraph'), level: n.tagName === 'H3' ? 2 : 1, runs: runsOf(n) });
     }
     for (const child of $('contractEditor').childNodes) block(child);
     return { version: 1, blocks };
@@ -174,8 +174,11 @@
   function updateContractFields() { $('contractEngagementLabel').hidden=!['employee','contractor'].includes($('contractAudience').value); $('contractStartLabel').hidden = $('contractAudience').value !== 'client'; }
   $('contractAudience').addEventListener('change', updateContractFields);
   $('documentCategory').addEventListener('change', () => { $('contractAudience').value = $('documentCategory').value === 'employees' ? 'employee' : $('documentCategory').value === 'clients' ? 'client' : 'other'; updateContractFields(); });
+  const guaranteeField=window.MarketizoGuarantee.create($('contractDetails'),'contractGuarantee');
+  guaranteeField.addEventListener('input',()=>setDirty());
+  guaranteeField.addEventListener('change',()=>setDirty());
   function readDraft() {
-    return { ...blank(), dossier: current.kind === 'template' ? null : readDossier(), parentDocumentId: $('parentDocument').value || null, title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, contractDetails: { ...current.data.contractDetails, language: $('contractLanguage').value, audience: $('contractAudience').value, engagement: ['employee','contractor'].includes($('contractAudience').value) ? $('contractEngagement').value : '', place: $('contractPlace').value, startDate: $('contractAudience').value === 'client' ? $('contractStartDate').value : '' }, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
+    return { ...blank(), dossier: current.kind === 'template' ? null : readDossier(), parentDocumentId: $('parentDocument').value || null, title: $('documentTitle').value, category: $('documentCategory').value, note: $('documentNote').value, signatureMethod: $('documentSignatureMethod').value, contractDetails: { ...current.data.contractDetails, guarantee: window.MarketizoGuarantee.read(guaranteeField), language: $('contractLanguage').value, audience: $('contractAudience').value, engagement: ['employee','contractor'].includes($('contractAudience').value) ? $('contractEngagement').value : '', place: $('contractPlace').value, startDate: $('contractAudience').value === 'client' ? $('contractStartDate').value : '' }, content: readEditor(), recipients: current.kind === 'template' ? [] : [...$('recipientRows').children].map(row => Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el => [el.dataset.field, el.value]))) };
   }
   function leaveAllowed() { return !dirty || confirm('Postoje nesačuvane izmene. Napustiti ovaj nacrt?'); }
   function openDocument(doc, kind = 'document', isNew = false) {
@@ -189,6 +192,7 @@
     $('contractEngagement').value = doc.data.contractDetails?.engagement || (/\b(?:part[ -]?time|20\s*(?:sati|h))\b/i.test(doc.data.title)?'part_time':/\bfull[ -]?time\b/i.test(doc.data.title)?'full_time':'');
     $('contractLanguage').value = doc.data.contractDetails?.language || 'sr';
     $('contractPlace').value = doc.data.contractDetails?.place || ''; $('contractStartDate').value = doc.data.contractDetails?.startDate || ''; updateContractFields();
+    window.MarketizoGuarantee.load(guaranteeField,doc.data,kind!=='template'&&doc.status==='draft');
     $('templateSelect').value = ''; $('workspace').hidden = false; $('library').hidden = true; setDirty(isNew); updateControls(); message('');
     $('workspace').scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
@@ -288,7 +292,7 @@
   $('applyTemplate').addEventListener('click', async () => {
     if (!$('templateSelect').value) return;
     if (!confirm('Zameniti tekst i naziv trenutnog nacrta izabranim šablonom?')) return;
-    try { const r = await api({ action: 'get', id: $('templateSelect').value, kind: 'template' }); renderEditor(r.document.data.content); $('documentTitle').value = r.document.title; $('documentCategory').value = r.document.category; $('contractAudience').value = r.document.data.contractDetails?.audience || (r.document.category === 'employees' ? 'employee' : r.document.category === 'clients' ? 'client' : 'other'); $('contractEngagement').value = r.document.data.contractDetails?.engagement || (/\b(?:part[ -]?time|20\s*(?:sati|h))\b/i.test(r.document.title)?'part_time':/\bfull[ -]?time\b/i.test(r.document.title)?'full_time':''); $('contractLanguage').value = r.document.data.contractDetails?.language || 'sr'; $('contractPlace').value = r.document.data.contractDetails?.place || ''; $('contractStartDate').value = r.document.data.contractDetails?.startDate || ''; updateContractFields(); setDirty(); } catch (e) { message(e.message, true); }
+    try { const r = await api({ action: 'get', id: $('templateSelect').value, kind: 'template' }); renderEditor(r.document.data.content); $('documentTitle').value = r.document.title; $('documentCategory').value = r.document.category; $('contractAudience').value = r.document.data.contractDetails?.audience || (r.document.category === 'employees' ? 'employee' : r.document.category === 'clients' ? 'client' : 'other'); $('contractEngagement').value = r.document.data.contractDetails?.engagement || (/\b(?:part[ -]?time|20\s*(?:sati|h))\b/i.test(r.document.title)?'part_time':/\bfull[ -]?time\b/i.test(r.document.title)?'full_time':''); $('contractLanguage').value = r.document.data.contractDetails?.language || 'sr'; $('contractPlace').value = r.document.data.contractDetails?.place || ''; $('contractStartDate').value = r.document.data.contractDetails?.startDate || ''; updateContractFields(); window.MarketizoGuarantee.load(guaranteeField,{...current.data,content:r.document.data.content,contractDetails:r.document.data.contractDetails},current.kind!=='template'); setDirty(); } catch (e) { message(e.message, true); }
   });
   function copy(kind) { const data = readDraft(); if (kind === 'template') { data.recipients = []; data.dossier = null; data.parentDocumentId = null; } data.title = (data.title || 'Novi dokument') + (kind === 'template' ? ' — šablon' : ' — kopija'); openDocument({ id: crypto.randomUUID(), revision: 0, status: 'draft', archived_at: null, data }, kind, true); }
   $('duplicateDocument').addEventListener('click', () => copy('document'));

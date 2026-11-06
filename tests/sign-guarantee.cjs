@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {validateDraft,assertReady}=require('../lib/sign-content');
+const {personalizeDocument,validateFields}=require('../lib/sign-personalization');
+const {MARKER}=require('../lib/sign-guarantee');
+const fixture=(g,lang='sr')=>({title:'Enterprise',category:'clients',contractDetails:{audience:'client',language:lang,...(g?{guarantee:g}:{})},recipients:[{name:'Fixture',email:'fixture@example.invalid',country:'AT'}],content:{version:1,blocks:[MARKER,'☐ LEADS: 30','☐ REACH: 10x','[PODACI O DOSEGU / REICHWEITENDATEN]'].map(text=>({type:'paragraph',runs:[{text}]}))}});
+assert.throws(()=>assertReady(validateDraft(fixture())),/Izaberi cilj/);
+for(const lang of ['sr','de'])for(const g of [{goal:'leads'},{goal:'reach',platform:'Instagram',baseline:'100',target:'999',baselineEnd:'2026-11-05'},{goal:'reach',platform:'Facebook',baseline:'0',target:'50000',baselineEnd:'2026-11-05'},{goal:'reach',platform:'Facebook',baseline:'',target:'20000',baselineEnd:'2026-11-05'}]){const doc=validateDraft(fixture(g,lang)),before=JSON.stringify(doc);assertReady(doc);const out=personalizeDocument(doc),t=out.content.blocks.map(b=>b.runs.map(r=>r.text).join('')).join('\n');assert.equal(JSON.stringify(doc),before);assert(!t.includes(MARKER));assert(!t.includes('[PODACI'));assert(t.includes('[X] '+(g.goal==='leads'?'LEADS:':'REACH:')));assert(t.includes('[ ] '+(g.goal==='leads'?'REACH:':'LEADS:')));if(g.baseline==='100'){assert(t.includes('1000'));assert(t.includes('2026-10-07'));}}
+for(const g of [{goal:'both'},{goal:'reach',platform:'Facebook',baseline:'0',target:'',baselineEnd:'2026-11-05'},{goal:'reach',platform:'META',baseline:'100',target:'',baselineEnd:'2026-11-05'},{goal:'reach',platform:'Facebook',baseline:'100',target:'',baselineEnd:'2026-02-30'}])assert.throws(()=>validateDraft(fixture(g)));
+assert.equal(validateDraft(fixture({goal:'leads'}),'template').contractDetails.guarantee,undefined);assert.throws(()=>validateFields({guarantee:{goal:'leads'}}),/podatke/);const legacy=fixture();legacy.content.blocks=[{type:'paragraph',runs:[{text:'Existing signed contract'}]}];assert.deepEqual(personalizeDocument(validateDraft(legacy)),validateDraft(legacy));
+console.log('PASS guarantee choices, reach calculation, validation, recipient and legacy/source isolation');

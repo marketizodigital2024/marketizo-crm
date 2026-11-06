@@ -3,7 +3,7 @@
 const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
 class Element{
  constructor(){this.value='';this.children=[];this.dataset={};this.listeners={};this.classList={toggle(){}};this.hidden=false;}
- setAttribute(k,v){this[k]=v;}append(...c){this.children.push(...c);}replaceChildren(...c){this.children=c;}
+ setAttribute(k,v){this[k]=v;}append(...c){this.children.push(...c);}insertBefore(e){this.append(e);}replaceChildren(...c){this.children=c;}
  addEventListener(k,f){this.listeners[k]=f;}scrollIntoView(){}reportValidity(){return true;}
  async click(){return this.listeners.click?.({preventDefault(){}});}
 }
@@ -12,7 +12,7 @@ const buttons=['client','employee','contractor'].map(a=>{const e=new Element();e
 const templates=buttons.map((b,i)=>({id:String(i),title:b.dataset.quickAudience+' — SR',category:i?'employees':'clients',contractDetails:{audience:b.dataset.quickAudience}}));
 const source=t=>({title:t.title,category:t.category,contractDetails:t.contractDetails,recipients:[],content:{version:1,blocks:[]}});
 let edited;
-const window={addEventListener(){}};
+const window={MarketizoGuarantee:{create:()=>new Element(),load(){},read(){}},addEventListener(){}};
 vm.runInNewContext(fs.readFileSync(require.resolve('../marketizo-sign-send.js'),'utf8'),{document:{getElementById:get,createElement:()=>new Element(),querySelectorAll:s=>s==='[data-quick-audience]'?buttons:s==='[data-quick-field]'?get('quickIdentityFields').children.map(w=>{const e=w.children[0];e.dataset.quickField=e['data-quick-field'];return e;}):[]},window,structuredClone,URLSearchParams,AbortController,setTimeout,clearTimeout,crypto:require('node:crypto'),location:{assign(){}},localStorage:{getItem:()=>JSON.stringify({token:'fixture',expiresAt:Date.now()+60000})},fetch:async url=>({ok:true,json:async()=>({ok:true,document:{data:source(templates[Number(new URL('http://fixture'+url).searchParams.get('id'))])}})})});
 window.MarketizoQuickSign.init({templates,people:[],sender:{name:'Fixture'},sendingEnabled:true,onOpen(){},onEdit:d=>edited=d});
 (async()=>{

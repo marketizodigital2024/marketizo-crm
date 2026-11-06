@@ -6,13 +6,13 @@ class Element {
   constructor(){this.value='';this.children=[];this.dataset={};this.listeners={};this.classList={toggle(){}};this.hidden=false;}
   setAttribute(k,v){this[k]=v;if(k==='data-quick-field')this.dataset.quickField=v;}
   append(...children){for(const child of children){child.parentElement=this;this.children.push(child);}}
-  replaceChildren(...children){this.children=[];this.append(...children);}
+  insertBefore(e){this.append(e);}replaceChildren(...children){this.children=[];this.append(...children);}
   addEventListener(k,fn){this.listeners[k]=fn;} scrollIntoView(){} reportValidity(){return true;}
 }
 const elements=new Map(), get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
 let edited, saved=[], sent=[], current;
 for(const id of ['quickEmail','quickContact','quickPartyType'])get(id).parentElement=new Element();
-const window={addEventListener(){},MarketizoOnboarding:template};
+const window={MarketizoGuarantee:{create:()=>new Element(),load(){},read(){}},addEventListener(){},MarketizoOnboarding:template};
 const document={getElementById:get,createElement:()=>new Element(),querySelectorAll:selector=>selector==='[data-quick-field]'?get('quickIdentityFields').children.map(e=>e.children[0]):[]};
 const response=data=>({ok:true,json:async()=>({ok:true,...data})});
 vm.runInNewContext(fs.readFileSync(require.resolve('../marketizo-sign-send.js'),'utf8'),{

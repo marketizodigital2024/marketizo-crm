@@ -3,6 +3,8 @@
  const $=id=>document.getElementById(id);
  const fieldLabels={name:'Ime i prezime',company:'Naziv firme',address:'Adresa',postalCode:'Poštanski broj',taxId:'Poreski broj / PIB',registrationId:'Registracioni broj firme',personalId:'JMBG / identifikacioni broj',country:'Zemlja (AT, DE, RS…)'};
  let config=null,state=null,busy=false;
+ const guaranteeField=window.MarketizoGuarantee.create($('quickRecipient'),'quickGuarantee');
+ $('quickRecipient').insertBefore(guaranteeField,$('quickPrefill'));
  function onboarding(){return window.MarketizoOnboarding?.isDocument(state?.source)===true;}
  function fingerprint(value){if(Array.isArray(value))return '['+value.map(fingerprint).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+fingerprint(value[k])).join(',')+'}';return JSON.stringify(value);}
  function node(tag,text,attrs={}){const e=document.createElement(tag);if(text!==null)e.textContent=text;for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;}
@@ -43,6 +45,7 @@
   $('quickMonthlyFee').required=contractor;$('quickBonus').required=contractor;
   $('quickMonthlyFee').value=source.contractDetails?.compensation?.monthlyFee||'';
   $('quickBonus').value=source.contractDetails?.compensation?.bonus||'';
+  window.MarketizoGuarantee.load(guaranteeField,source);
   identity(recipient);$('quickPrefill').open=false;$('quickPlace').value=source.contractDetails?.place||'';$('quickStartDate').value=source.contractDetails?.startDate||'';$('quickStartLabel').hidden=audience!=='client';
   $('quickPrefill').open=false;$('quickStartLabel').hidden=onboarding()||audience!=='client';
   $('quickRecipientTitle').textContent=onboarding()?'2. Napravi link za onboarding':'2. Kome šalješ ugovor?';
@@ -55,7 +58,7 @@
  function data(){
   const recipient={...(state.source.recipients?.[0]||{}),role:'counterparty',email:$('quickEmail').value.trim().toLowerCase(),partyType:$('quickPartyType').value};
   document.querySelectorAll('[data-quick-field]').forEach(e=>recipient[e.dataset.quickField]=e.value.trim());recipient.country=recipient.country.toUpperCase();
-  return {...structuredClone(state.source),recipientCompletion:true,recipients:[recipient],contractDetails:{...state.source.contractDetails,place:$('quickPlace').value.trim(),startDate:$('quickStartDate').value,...(state.source.contractDetails?.audience==='contractor'?{compensation:{monthlyFee:$('quickMonthlyFee').value.trim(),bonus:$('quickBonus').value.trim()}}:{})}};
+  return {...structuredClone(state.source),recipientCompletion:true,recipients:[recipient],contractDetails:{...state.source.contractDetails,guarantee:window.MarketizoGuarantee.read(guaranteeField),place:$('quickPlace').value.trim(),startDate:$('quickStartDate').value,...(state.source.contractDetails?.audience==='contractor'?{compensation:{monthlyFee:$('quickMonthlyFee').value.trim(),bonus:$('quickBonus').value.trim()}}:{})}};
  }
  async function archivePrepared(){
   if(!state.record||state.sendPending)return;
