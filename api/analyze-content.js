@@ -9,7 +9,7 @@ export default async function handler(req,res){
   const profiles=Array.isArray(req.body?.profiles)?req.body.profiles:[],evidence=selectEvidence(profiles);
   if(evidence.length<3)return send(422,{error:'Potrebne su najmanje tri dostupne javne objave za pouzdanu analizu.'});
   status(`Za analizu je izdvojeno ${evidence.length} stvarnih objava. Proveravamo dostupne slike i govor.`,1);
-  const profileInfo=profiles.slice(0,3).map(p=>({platform:p.platform,username:clean(p.username,100),displayName:clean(p.displayName,200),bio:clean(p.bio,1200)||"Biografija nije bila dostupna za čitanje. Ne znamo da li je popunjena. Ne savetuj njeno popunjavanje na osnovu ovoga.",sourceUrl:clean(p.sourceUrl,1000)}));
+  const profileInfo=profiles.slice(0,3).map(p=>({platform:p.platform,username:clean(p.username,100),displayName:clean(p.displayName,200),avatar:clean(p.avatar,2000),bio:clean(p.bio,1200)||"Biografija nije bila dostupna za čitanje. Ne znamo da li je popunjena. Ne savetuj njeno popunjavanje na osnovu ovoga.",sourceUrl:clean(p.sourceUrl,1000)}));
   const chosen=[...new Set(evidence.map(p=>p.platform))].map(platform=>evidence.find(p=>p.platform===platform&&p.image)).filter(Boolean);
   const [imageGroups]=await Promise.all([Promise.all(chosen.map(imageInput)),listenSample(profiles,evidence)]),images=imageGroups.flat();
   status(`Podaci su prikupljeni. Pišemo nalaze, scenario i predloge za tvoj biznis.`,2);
