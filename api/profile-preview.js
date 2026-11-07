@@ -8,8 +8,8 @@ const PLATFORM_CONFIG = {
     // Instagram sve cesce odbija citanje sa data-centar IP adresa i vrati "restricted".
     // Zato prvo idemo preko rezidencijalnog proxija, pa tek onda obicnim putem.
     attempts: (url) => [
-      { directUrls: [url], resultsType: "posts", resultsLimit: 12, proxy: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"] } },
-      { directUrls: [url], resultsType: "posts", resultsLimit: 12 },
+      { directUrls: [url], resultsType: "posts", resultsLimit: 18, proxy: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"] } },
+      { directUrls: [url], resultsType: "posts", resultsLimit: 18 },
     ],
   },
   facebook: {
@@ -92,7 +92,7 @@ function normalize(platform, url, items, postItems) {
     timestamp: item.timestamp || item.time || item.createTimeISO || item.date || item.publishedAt || "",
     type: item.type || item.mediaType || (item.videoUrl ? "video" : "image"),
     url: item.url || item.postUrl || item.webVideoUrl || item.shareUrl || "",
-  })).filter((post) => post.image).slice(0, 12);
+  })).filter((post) => post.image).slice(0, 18);
   return {
     platform,
     sourceUrl: url,
