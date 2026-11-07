@@ -5,7 +5,7 @@ import * as crypto from 'node:crypto';
 import { Blob } from 'node:buffer';
 class FormData {}
 const root=new URL('../',import.meta.url);
-const rows=new Map();let dbFails=false,crmCalls=0,aiResult;
+const rows=new Map();let dbFails=false,crmCalls=0,crmPayload,aiResult;
 const context=vm.createContext({console,Buffer,AbortSignal,URL,Blob,FormData,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://db.example',SUPABASE_SERVICE_ROLE_KEY:'fixture',OPENAI_API_KEY:'fixture'}}});
 context.fetch=async(url,opts={})=>{
  const u=new URL(url);if(u.host==='db.example'){
@@ -15,7 +15,7 @@ context.fetch=async(url,opts={})=>{
  }
  if(u.host==='cdninstagram.com')return {ok:true,headers:{get:k=>k==='content-type'?'image/png':null},arrayBuffer:async()=>Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR5kAAAAASUVORK5CYII=','base64')};
  if(u.host==='api.openai.com')return {ok:true,json:async()=>({status:'completed',output_text:JSON.stringify(aiResult||audit)})};
- if(u.host==='services.leadconnectorhq.com'){crmCalls++;return {ok:true};}throw Error('Unexpected external request in offline test');
+ if(u.host==='services.leadconnectorhq.com'){crmCalls++;crmPayload=JSON.parse(opts.body);return {ok:true};}throw Error('Unexpected external request in offline test');
 };
 const cryptoModule=new vm.SyntheticModule(['randomUUID','randomBytes','createHash','timingSafeEqual'],function(){for(const k of ['randomUUID','randomBytes','createHash','timingSafeEqual'])this.setExport(k,crypto[k]);},{context});
 const engine=new vm.SourceTextModule(await fs.readFile(new URL('lib/audit-engine.js',root),'utf8'),{context});await engine.link(()=>cryptoModule);await engine.evaluate();
@@ -52,3 +52,5 @@ assert.equal((await invokePresentation({auditId:id,accessToken:'0'.repeat(48)}))
 const largerPool=e.selectVisualEvidence([{platform:'instagram',username:'school',posts:Array.from({length:18},(_,i)=>({caption:'Specific school activity photograph number '+i,image:'https://cdninstagram.com/'+i+'.jpg',url:'https://instagram.com/p/'+i}))}]);assert.equal(largerPool.length,18);const highRef=structuredClone(pFixture);highRef.visuals[0]={...highRef.visuals[0],postIndex:17,imageKind:'photo'};e.validatePresentation(highRef,evidence,contentIdeas,largerPool);const graphic=structuredClone(highRef);graphic.visuals[0].imageKind='graphic';e.validatePresentation(graphic,evidence,contentIdeas,largerPool);assert.equal(graphic.visuals[0].postIndex,-1);console.log('PASS: separate 18-photo pool supports relevant older images without changing audited evidence; text-heavy graphics excluded.');
 
 const avatar=await e.inlineProfileAvatar('https://cdninstagram.com/brand.png');assert.ok(avatar.startsWith('data:image/png;base64,'));assert.equal(await e.inlineProfileAvatar('http://127.0.0.1/private'),'');rows.get(autoIdentity.id).audit.coverage={profiles:[{avatar:'https://cdninstagram.com/brand.png'}]};const branded=await invoke({auditId:autoIdentity.id,accessToken:autoIdentity.token});assert.equal(branded.body.brandAvatar,avatar);assert.equal(rows.get(autoIdentity.id).lead.brandAvatar,avatar);assert.equal(branded.body.lead.email,undefined);console.log('PASS: safe inline client logo persists and is returned only in unlocked reports.');
+
+const crmIdentity=e.newIdentity();rows.set(crmIdentity.id,{audit:{...audit,offerRead:'Public client service'},evidence,lead:{accessHash:e.hash(crmIdentity.token),unlocked:false}});await invoke({auditId:crmIdentity.id,accessToken:crmIdentity.token,lead:{name:'Fixture Client',email:'fixture@example.com',phone:'+12025550199',consent:true}});assert.equal(crmCalls,1);assert.equal(crmPayload.audit_report_url,`https://audit.marketizo.com/audit?report=${crmIdentity.id}#access=${crmIdentity.token}`);await invoke({auditId:crmIdentity.id,accessToken:crmIdentity.token});assert.equal(crmCalls,1);console.log('PASS: full protected report URL reaches CRM once; reopening does not duplicate webhook.');
