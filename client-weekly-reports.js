@@ -45,7 +45,8 @@
     const periods = [...new Set(team.map(r => r.periodStart))].sort().reverse();
     select.innerHTML = periods.map(period => `<option value="${escape(period)}">${escape(formatDate(period))}–${escape(formatDate(team.find(r => r.periodStart === period).periodEnd))}</option>`).join('');
     if (periods.includes(previous)) select.value = previous;
-    const visible = team.filter(r => r.periodStart === select.value);
+    const employeeId = el('leaderLiveReportEmployee')?.value;
+    const visible = team.filter(r => r.periodStart === select.value && (!employeeId || r.employeeId === employeeId));
     const submitted = visible.filter(r => r.submittedAt).length;
     el('clientWeeklyTeamStatus').textContent = team.length ? `${submitted}/${visible.length} izveštaja popunjeno · ${visible.filter(r => !r.submittedAt).length} čeka odgovor` : 'Prvi izveštaji stižu od ponedeljka u 12h. Izvor: ClickUp raspodela klijenata.';
     el('clientWeeklyAssignmentStatus').textContent = assignmentSyncedAt ? `ClickUp raspodela proverena: ${new Date(assignmentSyncedAt).toLocaleString('sr-RS')}. Merodavna su osnovna polja (Scenarista, Editor, SMM…).` : 'Proveravamo ClickUp raspodelu…';
@@ -60,8 +61,8 @@
     }
     const list = el('clientWeeklyTeamList');
     const openClients = new Set([...list.querySelectorAll('details[open]')].map(card => card.dataset.clientId));
-    const markup = [...grouped.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, 'sr'))
-      .map(([id, group]) => `<details class="client-weekly-card" data-client-id="${escape(id)}"><summary><strong>${escape(group.name)}</strong></summary>${group.rows.join('')}</details>`).join('');
+    const markup = grouped.size ? [...grouped.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, 'sr'))
+      .map(([id, group]) => `<details class="client-weekly-card" data-client-id="${escape(id)}"><summary><strong>${escape(group.name)}</strong></summary>${group.rows.join('')}</details>`).join('') : '<div class="empty-state">Nema pregleda za izabrane filtere.</div>';
     if (list.dataset.markup !== markup) {
       list.innerHTML = markup;
       list.dataset.markup = markup;
@@ -176,6 +177,7 @@
     el(id).addEventListener('close', () => window.setTimeout(render, 0));
   }
   el('reportSearch')?.addEventListener('input', renderHistory);
+  el('leaderLiveReportEmployee')?.addEventListener('change', renderHistory);
   el('clientWeeklyPeriod').addEventListener('change', renderHistory);
   window.setInterval(() => { if (!activeEmployee) return; render(); refresh(); }, 10000);
   window.addEventListener('focus', () => refresh(true));
