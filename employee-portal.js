@@ -1978,8 +1978,13 @@ function renderLeaderReportsPage() {
   const selectedEmployee = employeeInput?.value || "";
   const visiblePeople = selectedEmployee ? people.filter((employee) => employee.id === selectedEmployee) : people;
   const visibleIds = new Set(visiblePeople.map((employee) => employee.id));
+  const search = (document.getElementById("reportSearch")?.value || "").trim().toLocaleLowerCase("sr-Latn");
   const logs = (state.employeeWorkLogs || [])
     .filter((log) => visibleIds.has(log.employeeId) && log.date === selectedDate)
+    .filter((log) => !search || [
+      people.find(employee => employee.id === log.employeeId)?.name,
+      log.activityName, portalWorkClientLabel(log), log.note
+    ].some(value => String(value || "").toLocaleLowerCase("sr-Latn").includes(search)))
     .sort((a, b) => String(a.createdAt || a.id || "").localeCompare(String(b.createdAt || b.id || "")));
   const totalMinutes = logs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
   setText("leaderLiveReportSummary", `${logs.length} ${logs.length === 1 ? "aktivnost" : "aktivnosti"}`);
@@ -1989,22 +1994,29 @@ function renderLeaderReportsPage() {
 
   const target = document.getElementById("leaderLiveReportList");
   if (target) {
-    target.innerHTML = logs.length
+    const expanded = new Set([...target.querySelectorAll("details[open]")].map(card => card.dataset.employeeId));
+    const markup = logs.length
       ? visiblePeople.map((employee) => {
           const employeeLogs = logs.filter((log) => log.employeeId === employee.id);
           if (!employeeLogs.length) return "";
           const minutes = employeeLogs.reduce((sum, log) => sum + window.MarketizoCosts.minutes(log), 0);
           const expected = expectedMinutesForDate(employee, selectedDate);
           const missing = Math.max(0, expected - minutes);
-          return `<div class="leader-report-day">
-            <div class="panel-head"><div><h3>${escapePortalText(employee.name || "Zaposleni")}</h3><p class="muted">Upisano ${formatNumber(minutes)} od ${formatNumber(expected)} min${missing ? ` · nedostaje ${formatNumber(missing)} min` : " · dnevni fond ispunjen"}</p></div><strong>${formatHours(minutes / 60)}h</strong></div>
+          return `<details class="leader-report-day" data-employee-id="${escapePortalText(employee.id)}">
+            <summary><strong>${escapePortalText(employee.name || "Zaposleni")}</strong> · ${employeeLogs.length} aktivnosti · ${formatHours(minutes / 60)}h</summary>
+            <p class="muted">Upisano ${formatNumber(minutes)} od ${formatNumber(expected)} min${missing ? ` · nedostaje ${formatNumber(missing)} min` : " · dnevni fond ispunjen"}</p>
             ${employeeLogs.map((log) => {
               const logMinutes = window.MarketizoCosts.minutes(log);
               return `<div class="setup-item activity-log-row"><strong>${formatNumber(logMinutes)} min</strong><span><b>${escapePortalText(log.activityName || "Aktivnost")}</b><br />Klijent: ${escapePortalText(portalWorkClientLabel(log))}${log.note ? `<br />${escapePortalText(log.note)}` : ""}</span></div>`;
             }).join("")}
-          </div>`;
+          </details>`;
         }).join("")
       : `<div class="empty-state">Za izabrani datum zaposleni još nema sačuvane aktivnosti.</div>`;
+    if (target.dataset.markup !== markup) {
+      target.innerHTML = markup;
+      target.dataset.markup = markup;
+      for (const card of target.querySelectorAll("details")) card.open = expanded.has(card.dataset.employeeId) || Boolean(selectedEmployee);
+    }
   }
 
   renderLeaderReportStatus();
@@ -2143,7 +2155,7 @@ function renderLeaderReportInbox(reports) {
   list.innerHTML = reports.map((report) => {
     const employee = (state.employees || []).find((item) => item.id === report.employeeId);
     const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
-    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}${report.help ? `<br /><b>Pomoć:</b> ${escapePortalText(report.help)}` : ""}<br />${reportReadByViewer(report, activeEmployee?.id) ? "Pročitano" : `<button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button>`}</span></div>`;
+    return `<details class="leader-report-card"${reports.length === 1 ? " open" : ""}><summary><strong>${formatDate(report.date)} · ${escapePortalText(employee?.name || "Zaposleni")}</strong> · ${formatNumber(minutes)} min</summary><div>${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}${report.help ? `<br /><b>Pomoć:</b> ${escapePortalText(report.help)}` : ""}<br />${reportReadByViewer(report, activeEmployee?.id) ? "Pročitano" : `<button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button>`}</div></details>`;
   }).join("");
 }
 
@@ -2788,7 +2800,7 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
 });
 
 document.getElementById("leaderLiveReportEmployee")?.addEventListener("change", renderLeaderReportsPage);
-document.getElementById("reportSearch")?.addEventListener("input", renderLeaderReportStatus);
+document.getElementById("reportSearch")?.addEventListener("input", renderLeaderReportsPage);
 document.getElementById("leaderLiveReportDate")?.addEventListener("change", renderLeaderReportsPage);
 document.getElementById("leaderReportsNav")?.addEventListener("click", refreshLeaderReportsFromRemote);
 document.getElementById("leaderMeetingEmployee")?.addEventListener("change", renderLeaderMeetingsPage);
