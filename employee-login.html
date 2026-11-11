@@ -336,6 +336,8 @@
         </section>
 
         <div id="clientWeeklyNotice" role="status" hidden></div>
+        <button id="clientWeeklyOpen" type="button" class="secondary-button" hidden>Popuni pregled klijenata</button>
+        <button id="weeklyTaskButton" type="button" class="secondary-button" hidden>Popuni nedeljni upitnik</button>
         <section class="client-tab" id="employeeReportsTab">
           <section class="panel" id="clientWeeklyLeaderPanel" hidden>
             <div class="panel-head"><div><p class="eyebrow">Priprema za utorak</p><h2>Nedeljni pregled klijenata</h2></div><label>Nedelja <select id="clientWeeklyPeriod" aria-label="Nedelja pregleda klijenata"></select></label></div>
@@ -569,7 +571,7 @@
           <div><p class="eyebrow">Četvrtak · priprema za petak</p><h2>Pošalji nedeljni upitnik timu</h2></div>
           <button id="closeWeeklySendDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
         </div>
-        <p>Upitnik će biti poslat svim aktivnim zaposlenima koji su dodeljeni tebi. Zaposleni moraju da ga popune do kraja radnog vremena u četvrtak. Ovaj prozor se zatvara kada je upitnik uspešno poslat.</p>
+        <p>Upitnik će biti poslat svim aktivnim zaposlenima koji su dodeljeni tebi. Zaposleni moraju da ga popune do kraja radnog vremena u četvrtak.</p>
         <div class="modal-actions"><button id="confirmSendWeeklyQuestionnaire" class="primary-button" type="button">Pošalji</button></div>
       </section>
     </dialog>
@@ -579,23 +581,14 @@
           <div><p class="eyebrow">Nedeljni izveštaj</p><h2>Obavezan nedeljni upitnik</h2><p class="muted">Odgovori pomažu lideru da se pripremi za sastanak u petak.</p></div>
 
         </div>
-        <p id="weeklyQuestionnaireDeadline" role="status">Popuni do kraja svog radnog vremena u četvrtak. Prozor se zatvara tek kada su odgovori sačuvani.</p>
+        <p id="weeklyQuestionnaireDeadline" role="status">Popuni do kraja svog radnog vremena u četvrtak.</p>
         <label>1. Koji ti je omiljeni klijent ove nedelje i zašto?<textarea name="answer1" rows="3" maxlength="1600" required></textarea></label>
         <label>2. Koji ti je najneomiljeniji klijent i zašto?<textarea name="answer2" rows="3" maxlength="1600" required></textarea></label>
         <label>3. Šta te je kočilo ove nedelje?<textarea name="answer3" rows="3" maxlength="1600" required></textarea></label>
         <label>4. Šta ti je išlo baš dobro, a da si to osvestio/la?<textarea name="answer4" rows="3" maxlength="1600" required></textarea></label>
         <label>5. Kako ti mogu pomoći da iduća nedelja bude još bolja?<textarea name="answer5" rows="3" maxlength="1600" required></textarea></label>
-        <div class="modal-actions"><button class="primary-button" type="submit">Pošalji lideru</button></div>
+        <div class="modal-actions"><button id="weeklyQuestionnaireLater" class="secondary-button" type="button">Kasnije</button><button class="primary-button" type="submit">Pošalji lideru</button></div>
       </form>
-    </dialog>
-    <dialog id="weeklyCompletedDialog" class="daily-report-dialog">
-      <section class="modal-card daily-report-modal">
-        <div class="modal-head">
-          <div><p class="eyebrow">Upitnik je popunjen</p><h2 id="weeklyCompletedTitle">Stigao je novi nedeljni izveštaj</h2></div>
-        </div>
-        <div id="weeklyCompletedContent"></div>
-        <div class="modal-actions"><button id="ackWeeklyCompleted" class="primary-button" type="button">Pročitao/la sam izveštaj</button></div>
-      </section>
     </dialog>
     <dialog id="clientWeeklyDialog" class="daily-report-dialog" aria-labelledby="clientWeeklyTitle">
       <form id="clientWeeklyForm" class="modal-card daily-report-modal">
@@ -603,13 +596,13 @@
         <p id="clientWeeklyPeriodLabel" class="muted"></p>
         <p>Za svakog klijenta napiši kratko šta je pozitivno, šta je negativno i da li ti treba pomoć. Ako nema problema ili ne treba pomoć, napiši to. Ako nije bilo rada, navedi to u odgovoru. Popuni do kraja radnog vremena u ponedeljak; ako je rok prošao, popuni sada.</p>
         <div id="clientWeeklyFields"></div><p id="clientWeeklyFormStatus" role="status"></p>
-        <div class="modal-actions"><button id="clientWeeklySubmit" class="primary-button" type="submit">Pošalji lideru</button></div>
+        <div class="modal-actions"><button id="clientWeeklyLater" class="secondary-button" type="button">Kasnije</button><button id="clientWeeklySubmit" class="primary-button" type="submit">Pošalji lideru</button></div>
       </form>
     </dialog>
     <dialog id="clientWeeklyReadDialog" class="daily-report-dialog" aria-labelledby="clientWeeklyReadTitle">
       <section class="modal-card daily-report-modal"><div class="modal-head"><h2 id="clientWeeklyReadTitle">Pregled klijenata</h2></div>
         <p id="clientWeeklyReadPeriod" class="muted"></p><div id="clientWeeklyReadContent"></div>
-        <div class="modal-actions"><button id="clientWeeklyReadAck" class="primary-button" type="button">Pročitao/la sam izveštaj</button></div>
+        <div class="modal-actions"><button id="clientWeeklyReadLater" class="secondary-button" type="button">Kasnije</button><button id="clientWeeklyReadAck" class="primary-button" type="button">Pročitao/la sam izveštaj</button></div>
       </section>
     </dialog>
     <dialog id="lateAckDialog">
@@ -631,10 +624,10 @@
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-simple-quantity"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="employee-portal.js?v=20261102-client-work-label-1"></script>
-    <script src="client-weekly-reports.js?v=20261102-leader-exemption-1"></script>
+    <script src="employee-portal.js?v=20261111-1"></script>
+    <script src="client-weekly-reports.js?v=20261111-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
-  <script src="questionnaire-nav.js?v=20261020-1" defer></script>
+  <script src="questionnaire-nav.js?v=20261111-1" defer></script>
   </body>
 </html>
 

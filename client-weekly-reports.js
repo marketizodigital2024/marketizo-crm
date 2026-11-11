@@ -53,10 +53,11 @@
     }
     el('clientWeeklyTeamList').innerHTML = [...grouped.values()].sort((a,b) => a.name.localeCompare(b.name, 'sr')).map(group => `<details class="client-weekly-card"><summary><strong>${escape(group.name)}</strong></summary>${group.rows.join('')}</details>`).join('');
   }
-  function render() {
+  function render(openReport = false) {
     if (loadedActor !== activeEmployee?.id) {
       for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog']) if (el(id)?.open) el(id).close();
       el('clientWeeklyNotice').hidden = true;
+      el('clientWeeklyOpen').hidden = true;
       el('clientWeeklyLeaderPanel').hidden = true;
       return;
     }
@@ -69,8 +70,11 @@
     }
     notice.hidden = !pending && !sourceError;
     notice.textContent = sourceError ? `Pregled klijenata: ${sourceError} Pokušaćemo ponovo; spisak nije označen kao prazan.` : pending ? `Obavezno: pregled klijenata za ${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)}. Popuni do kraja radnog vremena u ponedeljak; ako je rok prošao, popuni sada.` : '';
-    if (saving || document.querySelector('dialog[open], form[data-saving="true"]')) return;
-    if (document.activeElement?.matches?.('input,textarea,select,[contenteditable="true"]')) return;
+    const unread = receivedUnread();
+    const openButton = el('clientWeeklyOpen');
+    openButton.hidden = !pending && !unread;
+    openButton.textContent = pending ? 'Popuni pregled klijenata' : 'Pročitaj pregled klijenata';
+    if (!openReport || saving || document.querySelector('dialog[open], form[data-saving="true"], form[data-work-saving="true"]')) return;
     if (pending) {
       const form = el('clientWeeklyForm');
       if (form.dataset.reportId !== pending.id || form.dataset.actorId !== activeEmployee.id || form.dataset.clients !== JSON.stringify(pending.clients)) {
@@ -84,15 +88,12 @@
         el('clientWeeklyFormStatus').textContent = '';
       }
       el('clientWeeklyDialog').showModal();
-    } else {
-      const unread = receivedUnread();
-      if (unread) {
-        const dialog = el('clientWeeklyReadDialog'); dialog.dataset.reportId = unread.id;
-        el('clientWeeklyReadTitle').textContent = `${unread.employeeName} · pregled klijenata`;
-        el('clientWeeklyReadPeriod').textContent = `${formatDate(unread.periodStart)}–${formatDate(unread.periodEnd)}`;
-        el('clientWeeklyReadContent').innerHTML = answerHtml(unread);
-        dialog.showModal();
-      }
+    } else if (unread) {
+      const dialog = el('clientWeeklyReadDialog'); dialog.dataset.reportId = unread.id;
+      el('clientWeeklyReadTitle').textContent = `${unread.employeeName} · pregled klijenata`;
+      el('clientWeeklyReadPeriod').textContent = `${formatDate(unread.periodStart)}–${formatDate(unread.periodEnd)}`;
+      el('clientWeeklyReadContent').innerHTML = answerHtml(unread);
+      dialog.showModal();
     }
   }
   async function refresh(force = false) {
@@ -118,6 +119,9 @@
     } catch (error) { sourceError = error.name === 'AbortError' ? 'Veza nije odgovorila na vreme.' : error.message; render(); }
     finally { busy = false; }
   }
+  el('clientWeeklyOpen').addEventListener('click', () => render(true));
+  el('clientWeeklyLater').addEventListener('click', () => { if (!saving) el('clientWeeklyDialog').close(); });
+  el('clientWeeklyReadLater').addEventListener('click', () => { if (!saving) el('clientWeeklyReadDialog').close(); });
   el('clientWeeklyForm').addEventListener('input', saveDraft);
   el('clientWeeklyForm').addEventListener('submit', async event => {
     event.preventDefault(); if (saving) return;
@@ -149,7 +153,7 @@
     finally { revision += 1; saving = false; button.disabled = false; button.textContent = 'Pročitao/la sam izveštaj'; render(); }
   });
   for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog']) {
-    el(id).addEventListener('cancel', event => event.preventDefault());
+    el(id).addEventListener('cancel', event => { if (saving) event.preventDefault(); });
     el(id).addEventListener('close', () => window.setTimeout(render, 0));
   }
   el('clientWeeklyPeriod').addEventListener('change', renderHistory);

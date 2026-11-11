@@ -1,5 +1,7 @@
 const db = require('../lib/database-request.js');
 const model = require('../lib/questionnaire-model.js');
+const { employeeHasMediaBuyer } = require('../lib/employee-roles.js');
+const { assignments, weeklyWindow, active } = require('../lib/client-weekly-reports.js');
 const defaults = require('../lib/questionnaire-templates.json');
 const TABLE = 'marketizo_questionnaires';
 const stateTable = process.env.SUPABASE_TABLE || 'agency_crm_state';
@@ -32,7 +34,20 @@ async function actor(req) {
   const rows = await request(`${stateTable}?id=eq.${encodeURIComponent(mainId)}&select=employees:payload->employees,clients:payload->clients`);
   const employee = rows[0]?.employees?.find(e => e.id === session.employeeId);
   if (!model.active(employee)) fail(403, 'Nalog nije aktivan.');
-  return { employee, clients: rows[0]?.clients || [] };
+  return { employee, employees: rows[0].employees, clients: rows[0]?.clients || [] };
+}
+async function assignedQuestionnaireClients(employee, employees, clients) {
+  const today = weeklyWindow().today;
+  if (!active(employee, today) || !employeeHasMediaBuyer(employee.position)) fail(403, 'Pregled upitnika nije dostupan za ovu ulogu.');
+  const { clickupRoster, roster } = require('./kpi.js').internal;
+  const source = await clickupRoster();
+  if (!source.live) fail(503, 'ClickUp raspodela trenutno nije dostupna.');
+  const assignedIds = new Set(assignments(employee, employees, source.rows)
+    .filter(item => item.roles.includes('Paid Ads')).map(item => item.clientId));
+  const activeEmployees = employees.filter(item => active(item, today));
+  return clients.filter(client => client.status !== 'Arhiviran' &&
+    roster(client, activeEmployees, [], source.rows).some(item => item.role === 'Paid Ads' && item.employeeId === employee.id) &&
+    !roster(client, activeEmployees, [], source.rows.filter(row => !assignedIds.has(row.taskId))).length);
 }
 async function template(key) { return await read('template:' + key) || { id:'template:' + key, updated_at:null, payload:structuredClone(defaults[key]) }; }
 async function handle(req, res) {
@@ -61,15 +76,29 @@ async function handle(req, res) {
       if (!p || p.recordType !== 'invite' || p.status !== 'Popunjen' || p.revoked || p.deletedAt) fail(404,'Link odgovora nije dostupan.');
       return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:body.token});
     }
-    const { employee, clients } = await actor(req);
+    const { employee, employees, clients } = await actor(req);
+    const canManage = model.canManage(employee);
     if (action === 'answers') {
       if (!model.uuid(body.id)) fail(400,'Neispravan link.');
       const row = await read(body.id);
       if (!row || row.payload.recordType !== 'invite' || row.payload.deletedAt) fail(404,'Upitnik nije pronađen.');
       const p = row.payload;
-      return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:p.status==='Popunjen'&&!p.revoked?model.answerToken(row.id,secret()):null});
+      if (!canManage) {
+        if (p.status !== 'Popunjen') fail(404, 'Popunjen upitnik nije dostupan.');
+        const assigned = await assignedQuestionnaireClients(employee, employees, clients);
+        if (!assigned.some(client => client.id === p.clientId)) fail(404, 'Popunjen upitnik nije dostupan.');
+      }
+      return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:canManage&&p.status==='Popunjen'&&!p.revoked?model.answerToken(row.id,secret()):null});
     }
-    if (!model.canManage(employee)) fail(403,'Slanje i uređivanje dostupni su SMM-u i administratorima.');
+    if (!canManage && action === 'list') {
+      const assigned = await assignedQuestionnaireClients(employee, employees, clients);
+      const ids = new Set(assigned.map(client => client.id));
+      const clientFilter = [...ids].map(id => encodeURIComponent(JSON.stringify(id))).join(',');
+      const rows = ids.size ? await request(`${TABLE}?${nsQuery()}&payload->>clientId=in.(${clientFilter})&payload->>status=eq.Popunjen&payload->>recordType=eq.invite&payload->>deletedAt=is.null&select=id,clientId:payload->>clientId,clientName:payload->>clientName,title:payload->>title,lang:payload->>lang,submittedAt:payload->>submittedAt&order=updated_at.desc`) : [];
+      const records = rows.filter(row => ids.has(row.clientId));
+      return json(res,200,{readOnly:true,employee:{id:employee.id,name:employee.name},records});
+    }
+    if (!canManage) fail(403,'Slanje i uređivanje dostupni su SMM-u i administratorima.');
     if (action === 'list') {
       const ts = await Promise.all(Object.keys(defaults).map(template));
       const rows = await request(`${TABLE}?${nsQuery()}&id=not.like.template:*&payload->>deletedAt=${body.deleted?'not.is.null':'is.null'}&select=id,payload,updated_at&order=updated_at.desc&limit=501`);
