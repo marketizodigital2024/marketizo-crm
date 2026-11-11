@@ -27,6 +27,23 @@ function canLead(leader, employee) {
   return Boolean(leader?.isLeader && employee && (isOwnerLeader(leader) || employee.leaderId === leader.id));
 }
 
+function automaticWeeklyReport(employee, reportId, now = new Date()) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const friday = new Date(`${today}T12:00:00Z`);
+  friday.setUTCDate(friday.getUTCDate() - (friday.getUTCDay() + 2) % 7);
+  const dueDate = friday.toISOString().slice(0, 10);
+  if (dueDate < "2026-11-13" || (employee.startDate && dueDate < employee.startDate) ||
+    (employee.endDate && dueDate > employee.endDate)) return null;
+  friday.setUTCDate(friday.getUTCDate() - 4);
+  const weekKey = friday.toISOString().slice(0, 10);
+  if (reportId !== `weekly-report-${employee.id}-${weekKey}`) return null;
+  return {
+    id: reportId, employeeId: employee.id, recipientId: employee.leaderId || "admin",
+    weekKey, date: dueDate, dueDate, title: "Nedeljni izveštaj zaposlenih",
+    isWeeklyQuestionnaire: true, createdAt: now.toISOString(),
+  };
+}
+
 function cleanAnswer(value) {
   return String(value || "").trim().slice(0, 1600);
 }
@@ -155,7 +172,16 @@ module.exports = async function handler(req, res) {
         if (!row) return json(res, 404, { ok: false, error: "Glavni zapis baze nije pronađen." });
         const payload = JSON.parse(JSON.stringify(row.payload || {}));
         const employee = (payload.employees || []).find((item) => item.id === employeeId && item.status !== "Neaktivan" && item.active !== false);
-        const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.employeeId === employeeId && item.isWeeklyQuestionnaire === true);
+        payload.employeeReports ||= [];
+        let report = payload.employeeReports.find((item) => item.id === reportId && item.employeeId === employeeId && item.isWeeklyQuestionnaire === true);
+        if (!report && employee) {
+          const automatic = automaticWeeklyReport(employee, reportId);
+          if (automatic && !payload.employeeReports.some(item => item.isWeeklyQuestionnaire === true &&
+            item.employeeId === employeeId && item.weekKey === automatic.weekKey)) {
+            report = automatic;
+            payload.employeeReports.unshift(report);
+          }
+        }
         if (!employee || !report) return json(res, 403, { ok: false, error: "Upitnik nije pronađen za ovog zaposlenog." });
         if (report.submittedAt && JSON.stringify(report.answers) === JSON.stringify(answers)) {
           return json(res, 200, { ok: true, report, updatedAt: row.updated_at, duplicate: true });
