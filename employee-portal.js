@@ -2841,6 +2841,8 @@ document.querySelectorAll("[data-report-view]").forEach(button => button.addEven
   for (const id of ["dailyReportDateFilter", "leaderLiveReportToday", "leaderLiveReportSummary"]) {
     document.getElementById(id).hidden = selected !== "daily";
   }
+  document.getElementById("clientReportWeekFilter").hidden = selected !== "clients";
+  document.getElementById("employeeReportWeekFilter").hidden = selected !== "weekly";
 }));
 document.getElementById("employeeWeeklyReportPeriod")?.addEventListener("change", renderWeeklyQuestionnaires);
 
