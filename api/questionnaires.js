@@ -78,17 +78,18 @@ async function handle(req, res) {
     }
     const { employee, employees, clients } = await actor(req);
     const canManage = model.canManage(employee);
+    const assignedBuyer = !canManage && employeeHasMediaBuyer(employee.position);
     if (action === 'answers') {
       if (!model.uuid(body.id)) fail(400,'Neispravan link.');
       const row = await read(body.id);
       if (!row || row.payload.recordType !== 'invite' || row.payload.deletedAt) fail(404,'Upitnik nije pronađen.');
       const p = row.payload;
-      if (!canManage) {
+      if (assignedBuyer) {
         if (p.status !== 'Popunjen') fail(404, 'Popunjen upitnik nije dostupan.');
         const assigned = await assignedQuestionnaireClients(employee, employees, clients);
         if (!assigned.some(client => client.id === p.clientId)) fail(404, 'Popunjen upitnik nije dostupan.');
       }
-      return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:canManage&&p.status==='Popunjen'&&!p.revoked?model.answerToken(row.id,secret()):null});
+      return json(res,200,{id:row.id,title:p.title,clientName:p.clientName,lang:p.lang,questions:p.questions,answers:p.answers,status:p.status,submittedAt:p.submittedAt,answerToken:!assignedBuyer&&p.status==='Popunjen'&&!p.revoked?model.answerToken(row.id,secret()):null});
     }
     if (!canManage && action === 'list') {
       const assigned = await assignedQuestionnaireClients(employee, employees, clients);
