@@ -347,6 +347,11 @@
         <button id="weeklyTaskButton" type="button" class="secondary-button" hidden>Popuni nedeljni upitnik</button>
         <section class="client-tab" id="employeeReportsTab">
           <section class="panel">
+            <div class="row-actions" role="group" aria-label="Vrsta izveštaja">
+              <button type="button" class="primary-button" data-report-view="daily" aria-pressed="true">Dnevni izveštaj</button>
+              <button type="button" class="secondary-button" data-report-view="clients" aria-pressed="false">Nedeljni pregled klijenata</button>
+              <button type="button" class="secondary-button" data-report-view="weekly" aria-pressed="false">Nedeljni izveštaj zaposlenih</button>
+            </div>
             <div class="panel-head">
               <div>
                 <p class="eyebrow">Pregled tima</p>
@@ -354,40 +359,50 @@
               </div>
               <span id="leaderLiveReportUpdated">podaci uživo</span>
             </div>
-            <p class="muted">Datum filtrira dnevne izveštaje i aktivnosti. Zaposleni filtrira i nedeljni pregled klijenata.</p>
+            
             <div class="leader-activity-filter">
               <label>Pretraži izveštaje <input id="reportSearch" type="search" placeholder="Zaposleni, klijent ili tekst izveštaja" /></label>
-              <label>Datum
+              <label id="dailyReportDateFilter">Datum
                 <input id="leaderLiveReportDate" type="date" />
               </label>
               <label>Zaposleni
                 <select id="leaderLiveReportEmployee"><option value="">Svi zaposleni iz mog tima</option></select>
               </label>
-              <button id="openLeaderDailyReports" class="secondary-button" type="button" hidden>Otvori dnevne izveštaje</button>
               <button id="leaderLiveReportToday" class="secondary-button" type="button">Danas</button>
               <strong id="leaderLiveReportSummary">0 aktivnosti</strong>
             </div>
           </section>
+          <div data-report-panel="daily">
           <section class="panel">
+            <div class="panel-head"><h2>Dnevni izveštaj</h2><button id="openLeaderDailyReports" class="secondary-button" type="button" hidden>Otvori dnevne izveštaje</button></div>
+            <div class="setup-list" id="leaderDailyReportList"></div>
+          </section>
+          <details class="panel">
+            <summary><strong>Evidencija aktivnosti</strong></summary>
             <div class="panel-head">
               <div><p class="eyebrow">Dnevni pregled</p><h2 id="leaderLiveReportTitle">Aktivnosti tima</h2></div>
               <span id="leaderLiveReportMinutes">0 min</span>
             </div>
             <div class="setup-list" id="leaderLiveReportList"></div>
-          </section>
-          <details class="panel" id="clientWeeklyLeaderPanel" hidden>
-            <summary><strong>Nedeljni pregled klijenata</strong></summary>
+          </details>
+          </div>
+          <div data-report-panel="clients" hidden>
+          <section class="panel" id="clientWeeklyLeaderPanel" hidden>
+            <h2>Nedeljni pregled klijenata</h2>
             <div class="leader-activity-filter"><label>Nedelja <select id="clientWeeklyPeriod" aria-label="Nedelja pregleda klijenata"></select></label></div>
             <p class="muted">Ponedeljkom od 12h zaposleni pišu kako je protekla prethodna nedelja za njihove klijente: šta je dobro, šta nije dobro i za šta im treba pomoć.</p>
             <p id="clientWeeklyTeamStatus" role="status"></p><div id="clientWeeklyTeamList"></div><details><summary>Aktuelna ClickUp raspodela</summary><p id="clientWeeklyAssignmentStatus" class="muted"></p><div id="clientWeeklyAssignmentList"></div></details>
-          </details>
-          <details class="panel weekly-report-panel">
-            <summary><strong>Nedeljni izveštaj zaposlenih</strong></summary>
+          </section>
+          </div>
+          <div data-report-panel="weekly" hidden>
+          <section class="panel weekly-report-panel">
+            <h2>Nedeljni izveštaj zaposlenih</h2>
             <div class="panel-head">
               <div>
                 <p class="eyebrow">Priprema za petak</p>
               </div>
               <span id="weeklyReportWeekLabel">ova nedelja</span>
+              <label>Nedelja <select id="employeeWeeklyReportPeriod"></select></label>
             </div>
             <p class="muted">Pošalji upitnik u četvrtak. Zaposleni ga popunjavaju do četvrtka uveče, kako bi odgovori bili spremni za sastanak u petak.</p>
             <div class="weekly-report-actions">
@@ -395,7 +410,8 @@
               <strong id="weeklyReportStatus">Nije poslato</strong>
             </div>
             <div class="setup-list" id="leaderWeeklyReportList"></div>
-          </details>
+          </section>
+          </div>
         </section>
 
         <section class="client-tab" id="employeeCalendarTab">
@@ -637,7 +653,7 @@
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-simple-quantity"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="employee-portal.js?v=20261111-5"></script>
+    <script src="employee-portal.js?v=20261111-6"></script>
     <script src="client-weekly-reports.js?v=20261111-5"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
   <script src="questionnaire-nav.js?v=20261111-1" defer></script>
