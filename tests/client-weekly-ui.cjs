@@ -29,6 +29,8 @@ function setup(actor,initial){
  prevented=false;lead.node('clientWeeklyReadDialog').listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,false);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,0,'Opening never marks read');
  lead.setMode('holdRead');lead.ctx.focus();await flush();
  await lead.node('clientWeeklyReadAck').listeners.click();lead.setMode('ok');lead.release();await flush();assert.equal(lead.node('clientWeeklyReadDialog').open,false);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,1);
+ lead.node('clientWeeklyPeriod').value=fixture.periodStart;
+ lead.ctx.tick();
  const cardList=lead.node('clientWeeklyTeamList');
  const card={open:true,dataset:{clientId:'c'}};
  cardList.querySelectorAll=selector=>selector==='details[open]'&&!card.open?[]:[card];
