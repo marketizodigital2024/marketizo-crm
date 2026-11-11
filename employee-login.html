@@ -236,7 +236,7 @@
                 </div>
                 <span>jednom dnevno</span>
               </div>
-              <div class="empty-state">Kada ispuniš dnevnu kvotu sati, popuni kratak izveštaj koji ide tvom lideru.</div>
+              <div class="empty-state">Na kraju radnog dana popuni kratak izveštaj.</div>
             </section>
           </div>
 
@@ -339,8 +339,9 @@
         <button id="clientWeeklyOpen" type="button" class="secondary-button" hidden>Popuni pregled klijenata</button>
         <button id="weeklyTaskButton" type="button" class="secondary-button" hidden>Popuni nedeljni upitnik</button>
         <section class="client-tab" id="employeeReportsTab">
+          <label>Pretraži izveštaje <input id="reportSearch" type="search" placeholder="Zaposleni, klijent ili tekst izveštaja" /></label>
           <section class="panel" id="clientWeeklyLeaderPanel" hidden>
-            <div class="panel-head"><div><p class="eyebrow">Priprema za utorak</p><h2>Nedeljni pregled klijenata</h2></div><label>Nedelja <select id="clientWeeklyPeriod" aria-label="Nedelja pregleda klijenata"></select></label></div>
+            <div class="panel-head"><div><p class="eyebrow">Priprema za sredu</p><h2>Nedeljni pregled klijenata</h2></div><label>Nedelja <select id="clientWeeklyPeriod" aria-label="Nedelja pregleda klijenata"></select></label></div>
             <p class="muted">Ponedeljkom od 12h zaposleni pišu kako je protekla prethodna nedelja za njihove klijente: šta je dobro, šta nije dobro i za šta im treba pomoć.</p>
             <p id="clientWeeklyTeamStatus" role="status"></p><div id="clientWeeklyTeamList"></div><details><summary>Aktuelna ClickUp raspodela</summary><p id="clientWeeklyAssignmentStatus" class="muted"></p><div id="clientWeeklyAssignmentList"></div></details>
           </section>
@@ -375,7 +376,7 @@
               <label>Zaposleni
                 <select id="leaderLiveReportEmployee"><option value="">Svi zaposleni iz mog tima</option></select>
               </label>
-              <button id="openLeaderDailyReports" class="secondary-button" type="button" hidden>Pročitaj dnevne izveštaje</button>
+              <button id="openLeaderDailyReports" class="secondary-button" type="button" hidden>Otvori dnevne izveštaje</button>
               <button id="leaderLiveReportToday" class="secondary-button" type="button">Danas</button>
               <strong id="leaderLiveReportSummary">0 aktivnosti</strong>
             </div>
@@ -534,7 +535,7 @@
         <div class="modal-head">
           <div>
             <p class="eyebrow">Dnevni pregled rada</p>
-            <h2>Kratak izveštaj za lidera</h2>
+            <h2>Kratak dnevni izveštaj</h2>
             <p id="dailyReportDateLabel" class="muted"></p>
           </div>
           <button id="closeDailyReportDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
@@ -542,11 +543,14 @@
         <label>Šta si danas završio/la?
           <textarea name="summary" rows="4" maxlength="1200" required placeholder="Ukratko navedi najvažnije završene stvari."></textarea>
         </label>
-        <label>Šta je išlo dobro? <span class="muted">(opciono)</span>
-          <textarea name="positive" rows="3" maxlength="800" placeholder="Rezultat, pohvala ili napredak."></textarea>
+        <label>Šta je danas bilo pozitivno?
+          <textarea name="positive" rows="2" maxlength="800" required placeholder="Ukratko opiši ili napiši „Nema“."></textarea>
         </label>
-        <label>Da li postoji prepreka ili ti treba pomoć? <span class="muted">(opciono)</span>
-          <textarea name="negative" rows="3" maxlength="800" placeholder="Ako nema prepreka, ostavi prazno."></textarea>
+        <label>Šta je danas bilo negativno?
+          <textarea name="negative" rows="2" maxlength="800" required placeholder="Ukratko opiši ili napiši „Nema“."></textarea>
+        </label>
+        <label>Da li ti treba pomoć sa nečim?
+          <textarea name="help" rows="2" maxlength="800" required placeholder="Napiši oko čega ili upiši „Ne“."></textarea>
         </label>
         <div class="modal-actions">
           <button class="secondary-button" id="dailyReportLater" type="button">Popuni kasnije</button>
@@ -595,7 +599,7 @@
       <form id="clientWeeklyForm" class="modal-card daily-report-modal">
         <div class="modal-head"><div><p class="eyebrow">Priprema za sastanak o klijentima</p><h2 id="clientWeeklyTitle">Nedeljni pregled klijenata</h2></div></div>
         <p id="clientWeeklyPeriodLabel" class="muted"></p>
-        <p>Za svakog klijenta napiši kratko šta je pozitivno, šta je negativno i da li ti treba pomoć. Ako nema problema ili ne treba pomoć, napiši to. Ako nije bilo rada, navedi to u odgovoru. Popuni do kraja radnog vremena u ponedeljak; ako je rok prošao, popuni sada.</p>
+        <p>Za svakog klijenta napiši kratko šta je pozitivno, šta je negativno i da li ti treba pomoć. Ako nema problema ili ne treba pomoć, napiši to. Ako nije bilo rada, navedi to u odgovoru. Popuni do roka navedenog za ovaj pregled.</p>
         <div id="clientWeeklyFields"></div><p id="clientWeeklyFormStatus" role="status"></p>
         <div class="modal-actions"><button id="clientWeeklyLater" class="secondary-button" type="button">Kasnije</button><button id="clientWeeklySubmit" class="primary-button" type="submit">Pošalji lideru</button></div>
       </form>
@@ -625,8 +629,8 @@
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-simple-quantity"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="employee-portal.js?v=20261111-2"></script>
-    <script src="client-weekly-reports.js?v=20261111-1"></script>
+    <script src="employee-portal.js?v=20261111-3"></script>
+    <script src="client-weekly-reports.js?v=20261111-3"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
   <script src="questionnaire-nav.js?v=20261111-1" defer></script>
   </body>

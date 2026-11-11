@@ -45,13 +45,23 @@
     el('clientWeeklyTeamStatus').textContent = team.length ? `${submitted}/${visible.length} izveštaja popunjeno · ${visible.filter(r => !r.submittedAt).length} čeka odgovor` : 'Prvi izveštaji stižu od ponedeljka u 12h. Izvor: ClickUp raspodela klijenata.';
     el('clientWeeklyAssignmentStatus').textContent = assignmentSyncedAt ? `ClickUp raspodela proverena: ${new Date(assignmentSyncedAt).toLocaleString('sr-RS')}. Merodavna su osnovna polja (Scenarista, Editor, SMM…).` : 'Proveravamo ClickUp raspodelu…';
     el('clientWeeklyAssignmentList').innerHTML = assignmentPreview.filter(e => e.clients.length).map(e => `<details class="client-weekly-card"><summary>${escape(e.employeeName)} · ${e.clients.length} klijenata</summary><p>${e.clients.map(c => escape(c.clientName)).join(' · ')}</p></details>`).join('');
+    const search = (el('reportSearch')?.value || '').trim().toLocaleLowerCase('sr-Latn');
     const grouped = new Map();
     for (const report of visible) for (const client of report.clients) {
-      if (!grouped.has(client.clientId)) grouped.set(client.clientId, { name: client.clientName, rows: [] });
       const answer = (report.clientAnswers || []).find(a => a.clientId === client.clientId);
+      if (search && ![client.clientName, report.employeeName, answer?.positive, answer?.negative, answer?.help].some(value => String(value || '').toLocaleLowerCase('sr-Latn').includes(search))) continue;
+      if (!grouped.has(client.clientId)) grouped.set(client.clientId, { name: client.clientName, rows: [] });
       grouped.get(client.clientId).rows.push(`<section class="client-weekly-person"><h4>${escape(report.employeeName)} · ${escape(client.roles.join(', '))}</h4>${answer ? `<p><strong>Pozitivno:</strong> ${escape(answer.positive)}</p><p><strong>Negativno:</strong> ${escape(answer.negative)}</p><p><strong>Pomoć:</strong> ${escape(answer.help)}</p><p class="muted">${report.acknowledgedAt ? 'Pročitano' : 'Popunjeno · čeka čitanje'}</p>` : '<p class="muted">Čeka odgovor zaposlenog.</p>'}</section>`);
     }
-    el('clientWeeklyTeamList').innerHTML = [...grouped.values()].sort((a,b) => a.name.localeCompare(b.name, 'sr')).map(group => `<details class="client-weekly-card"><summary><strong>${escape(group.name)}</strong></summary>${group.rows.join('')}</details>`).join('');
+    const list = el('clientWeeklyTeamList');
+    const openClients = new Set([...list.querySelectorAll('details[open]')].map(card => card.dataset.clientId));
+    const markup = [...grouped.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, 'sr'))
+      .map(([id, group]) => `<details class="client-weekly-card" data-client-id="${escape(id)}"><summary><strong>${escape(group.name)}</strong></summary>${group.rows.join('')}</details>`).join('');
+    if (list.dataset.markup !== markup) {
+      list.innerHTML = markup;
+      list.dataset.markup = markup;
+      for (const card of list.querySelectorAll('details')) card.open = openClients.has(card.dataset.clientId);
+    }
   }
   function render(openReport = false) {
     if (loadedActor !== activeEmployee?.id) {
@@ -69,7 +79,7 @@
       saveDraft();el('clientWeeklyDialog').close();
     }
     notice.hidden = !pending && !sourceError;
-    notice.textContent = sourceError ? `Pregled klijenata: ${sourceError} Pokušaćemo ponovo; spisak nije označen kao prazan.` : pending ? `Obavezno: pregled klijenata za ${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)}. Popuni do kraja radnog vremena u ponedeljak; ako je rok prošao, popuni sada.` : '';
+    notice.textContent = sourceError ? `Pregled klijenata: ${sourceError} Pokušaćemo ponovo; spisak nije označen kao prazan.` : pending ? `Obavezno: pregled klijenata za ${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)}. Rok je ${formatDate(pending.dueDate || pending.date)} do kraja radnog vremena.` : '';
     const unread = receivedUnread();
     const openButton = el('clientWeeklyOpen');
     openButton.hidden = !pending && !unread;
@@ -156,6 +166,7 @@
     el(id).addEventListener('cancel', event => { if (saving) event.preventDefault(); });
     el(id).addEventListener('close', () => window.setTimeout(render, 0));
   }
+  el('reportSearch')?.addEventListener('input', renderHistory);
   el('clientWeeklyPeriod').addEventListener('change', renderHistory);
   window.setInterval(() => { if (!activeEmployee) return; render(); refresh(); }, 10000);
   window.addEventListener('focus', () => refresh(true));

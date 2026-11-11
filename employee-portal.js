@@ -1024,7 +1024,7 @@ function setupDailyMinuteProgress() {
     const status = progress.querySelector("#dailyMinuteStatus");
     const bar = progress.querySelector("#dailyMinuteBar");
     const message = progress.querySelector("#dailyMinuteMessage");
-    reportButton.hidden = !expected || logged < 1 || hasFinalDailyReport(date);
+    reportButton.hidden = !expected || date > currentDateKey() || hasFinalDailyReport(date);
     title.textContent = date === currentDateKey()
       ? `Danas · ${formatDate(date)}`
       : `Izabrani dan · ${formatDate(date)}`;
@@ -2007,10 +2007,10 @@ function renderLeaderReportsPage() {
 function renderLeaderReportStatus() {
   const nav = document.getElementById("leaderReportsNav");
   const dailyButton = document.getElementById("openLeaderDailyReports");
-  const dailyReports = unreadManualDailyReports();
+  const dailyReports = filteredDailyReports();
   if (dailyButton) {
     dailyButton.hidden = !dailyReports.length;
-    dailyButton.textContent = `Pročitaj dnevne izveštaje (${dailyReports.length})`;
+    dailyButton.textContent = `Otvori dnevne izveštaje (${dailyReports.length})`;
   }
   const unreadWeeklyCount = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).length;
   if (nav) nav.textContent = `Izveštaji${unreadWeeklyCount ? ` (${unreadWeeklyCount})` : ""}`;
@@ -2084,12 +2084,21 @@ async function postEmployeeReport(body) {
   }
 }
 
-function unreadManualDailyReports() {
+function filteredDailyReports() {
   if (!activeEmployee?.isLeader) return [];
   const peopleIds = new Set(leaderReportPeople().map(employee => employee.id));
-  return (state.employeeReports || []).filter(report =>
-    report.isFinalDailyReport === true && !report.isAutomaticRollup && !report.acknowledgedAt && peopleIds.has(report.employeeId)
-  ).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const date = document.getElementById("leaderLiveReportDate")?.value;
+  const employeeId = document.getElementById("leaderLiveReportEmployee")?.value;
+  const search = (document.getElementById("reportSearch")?.value || "").trim().toLocaleLowerCase("sr-Latn");
+  return (state.employeeReports || []).filter(report => {
+    if (report.isFinalDailyReport !== true || report.isAutomaticRollup || !peopleIds.has(report.employeeId)) return false;
+    if ((date && report.date !== date) || (employeeId && report.employeeId !== employeeId)) return false;
+    if (!search) return true;
+    const employee = (state.employees || []).find(item => item.id === report.employeeId);
+    const workLogs = (state.employeeWorkLogs || []).filter(log => log.employeeId === report.employeeId && log.date === report.date);
+    return [employee?.name, report.note, report.positive, report.negative, report.help, ...workLogs.map(portalWorkClientLabel)]
+      .some(value => String(value || "").toLocaleLowerCase("sr-Latn").includes(search));
+  }).sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 function renderLeaderReportInbox(reports) {
@@ -2099,7 +2108,7 @@ function renderLeaderReportInbox(reports) {
   list.innerHTML = reports.map((report) => {
     const employee = (state.employees || []).find((item) => item.id === report.employeeId);
     const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
-    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}<br /><button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button></span></div>`;
+    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}${report.help ? `<br /><b>Pomoć:</b> ${escapePortalText(report.help)}` : ""}<br />${report.acknowledgedAt ? "Pročitano" : `<button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button>`}</span></div>`;
   }).join("");
 }
 
@@ -2123,7 +2132,7 @@ async function acknowledgeLeaderReport(reportId, button) {
   if (report) Object.assign(report, result.report || {});
   saveState({ remote: false });
   renderLeaderReportsPage();
-  const remaining = unreadManualDailyReports();
+  const remaining = filteredDailyReports();
   if (remaining.length) renderLeaderReportInbox(remaining);
   else document.getElementById("leaderReportsDialog")?.close();
   showToast("Potvrđeno", "Sačuvano je da si pročitao/la izveštaj.", "ok");
@@ -2372,9 +2381,10 @@ function openDailyReportDialog(date) {
   const dialog = document.getElementById("dailyReportDialog");
   const form = document.getElementById("dailyReportForm");
   if (!dialog || !form || !date || hasFinalDailyReport(date) || document.querySelector("dialog[open], form[data-work-saving='true']")) return;
+  if (form.dataset.reportDate !== date || form.dataset.actorId !== activeEmployee.id) form.reset();
   form.dataset.reportDate = date;
-  form.reset();
-  setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)} biće vidljiv tvom lideru.`);
+  form.dataset.actorId = activeEmployee.id;
+  setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)} · ${formatNumber(loggedMinutesForDate(date))} min evidentiranog rada.`);
   if (!dialog.open) dialog.showModal();
 }
 
@@ -2574,6 +2584,8 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
     result = await postEmployeeReport({
       employeeId: activeEmployee.id,
       date,
+      action: "submitDaily",
+      help: String(formData.get("help") || "").trim(),
       note: String(formData.get("summary") || "").trim(),
       positive: String(formData.get("positive") || "").trim(),
       negative: String(formData.get("negative") || "").trim(),
@@ -2595,6 +2607,7 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   }
   state.employeeReports = (state.employeeReports || []).filter((report) => !(report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true));
   state.employeeReports.unshift(result.report);
+  form.reset();
   saveState({ remote: false });
   document.getElementById("dailyReportDialog")?.close();
   renderEmployeePortal();
@@ -2672,7 +2685,7 @@ document.getElementById("logoutEmployee")?.addEventListener("click", () => {
 });
 
 document.getElementById("openLeaderDailyReports")?.addEventListener("click", () => {
-  const reports = unreadManualDailyReports();
+  const reports = filteredDailyReports();
   if (!reports.length || document.querySelector("dialog[open], form[data-work-saving='true']")) return;
   renderLeaderReportInbox(reports);
   document.getElementById("leaderReportsDialog")?.showModal();
@@ -2734,6 +2747,7 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
 });
 
 document.getElementById("leaderLiveReportEmployee")?.addEventListener("change", renderLeaderReportsPage);
+document.getElementById("reportSearch")?.addEventListener("input", renderLeaderReportStatus);
 document.getElementById("leaderLiveReportDate")?.addEventListener("change", renderLeaderReportsPage);
 document.getElementById("leaderReportsNav")?.addEventListener("click", refreshLeaderReportsFromRemote);
 document.getElementById("leaderMeetingEmployee")?.addEventListener("change", renderLeaderMeetingsPage);

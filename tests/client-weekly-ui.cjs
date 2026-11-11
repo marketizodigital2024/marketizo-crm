@@ -4,7 +4,7 @@ const fixture={id:'review',employeeId:'worker',employeeName:'Hazim',recipientId:
 const clone=x=>structuredClone(x),flush=async()=>{for(let i=0;i<10;i++)await new Promise(r=>setImmediate(r));};
 function setup(actor,initial){
  const nodes=new Map(),storage=new Map(),timers=[],posts=[];let server=clone(initial),mode='ok',release;
- function node(id){if(nodes.has(id))return nodes.get(id);const n={id,hidden:true,open:false,dataset:{},value:'',textContent:'',innerHTML:'',elements:{},listeners:{},addEventListener(type,fn){this.listeners[type]=fn;},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();},reportValidity(){return true;},reset(){Object.values(this.elements).forEach(f=>f.value='');}};nodes.set(id,n);return n;}
+ function node(id){if(nodes.has(id))return nodes.get(id);const n={id,hidden:true,open:false,dataset:{},value:'',textContent:'',innerHTML:'',elements:{},listeners:{},querySelectorAll(){return [];},addEventListener(type,fn){this.listeners[type]=fn;},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();},reportValidity(){return true;},reset(){Object.values(this.elements).forEach(f=>f.value='');}};nodes.set(id,n);return n;}
  const form=node('clientWeeklyForm');for(const key of ['positive','negative','help'])form.elements[key+'-0']={value:''};
  const ctx={activeEmployee:{id:actor,isLeader:actor==='leader'},formatDate:x=>x,escapePortalText:x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'),employeeApiHeaders:()=>({}),showToast(){},AbortController,Date,Intl,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},document:{hidden:false,activeElement:null,getElementById:node,querySelector:selector=>selector.includes('dialog[open]')?[...nodes.values()].find(n=>n.open):null},window:{setTimeout(fn,ms){if(ms===0)timers.push(fn);return 1;},clearTimeout(){},setInterval(fn){ctx.tick=fn;},addEventListener(type,fn){ctx.focus=fn;}},fetch:async(url,options)=>{
   const body=options.body&&JSON.parse(options.body),readSnapshot=!body?clone(server):null;if(body)posts.push(body);
@@ -29,6 +29,13 @@ function setup(actor,initial){
  prevented=false;lead.node('clientWeeklyReadDialog').listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,false);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,0,'Opening never marks read');
  lead.setMode('holdRead');lead.ctx.focus();await flush();
  await lead.node('clientWeeklyReadAck').listeners.click();lead.setMode('ok');lead.release();await flush();assert.equal(lead.node('clientWeeklyReadDialog').open,false);assert.equal(lead.posts.filter(p=>p.action==='acknowledge').length,1);
+ const cardList=lead.node('clientWeeklyTeamList');
+ const card={open:true,dataset:{clientId:'c'}};
+ cardList.querySelectorAll=selector=>selector==='details[open]'&&!card.open?[]:[card];
+ lead.ctx.tick();assert.equal(card.open,true,'Unchanged refresh keeps client expanded');
+ const savedMarkup=cardList.dataset.markup;
+ lead.setServer([{...completed,clientAnswers:[{clientId:'c',positive:'Updated',negative:'None',help:'None'}]}]);
+ await lead.ctx.focus();await flush();assert.notEqual(cardList.dataset.markup,savedMarkup);assert.equal(card.open,true,'New answers keep the same client expanded');
  const moved=setup('worker',[fixture]);await flush();moved.node('clientWeeklyOpen').listeners.click();for(const key of ['positive','negative','help'])moved.form.elements[key+'-0'].value='Old client answer';moved.form.listeners.input();moved.setServer([{...fixture,clients:[{clientId:'new-client',clientName:'New client',roles:['Editor']}]}]);moved.ctx.focus();await flush();assert.equal(moved.node('clientWeeklyDialog').open,false);moved.node('clientWeeklyOpen').listeners.click();assert.match(moved.node('clientWeeklyFields').innerHTML,/New client/);assert.equal(moved.form.elements['positive-0'].value,'','Old answers must never shift to a different client');assert([...moved.storage.values()].some(v=>v.includes('Old client answer')),'Removed client draft retained locally');
  const identity=setup('worker',[fixture]);await flush();identity.node('clientWeeklyOpen').listeners.click();identity.ctx.activeEmployee={id:'other'};identity.ctx.tick();assert.equal(identity.node('clientWeeklyDialog').open,false,'Account change hides previous employee form');
  console.log('PASS weekly client UI: three required fields/client, escaped content, scoped drafts, failed-send retention, duplicate-click guard, explicit receipt and identity isolation');

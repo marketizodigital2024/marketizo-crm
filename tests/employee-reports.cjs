@@ -53,12 +53,17 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   r = await call('POST', 'worker', { employeeId: 'worker', recipientId: 'other', date: '2026-10-23', note: 'manual summary', positive: 'good', negative: 'blocked' });
   assert.equal(r.body.report.recipientId, 'leader'); assert.equal(r.body.report.minutes, 60); assert.equal(r.body.report.isAutomaticRollup, false); assert.equal(r.body.report.acknowledgedAt, null);
   r = await call('POST', 'leader', { action: 'acknowledge', leaderId: 'leader', reportId: 'auto' }); const dailyAck = r.body.report.acknowledgedAt;
+  const newDaily = { action:'submitDaily', employeeId:'worker', date:'2026-10-24', note:'wrap-up', positive:'good', negative:'none' };
+  assert.equal((await call('POST', 'worker', newDaily)).status,400);
+  const dailyWithHelp = await call('POST','worker',{ ...newDaily, help:'review ad copy' });
+  assert.equal(dailyWithHelp.body.report.help,'review ad copy');
+  assert.equal((await call('POST','worker',{ ...newDaily, help:'review ad copy' })).body.duplicate,true);
   r = await call('POST', 'worker', { employeeId: 'worker', date: '2026-10-23', note: 'manual summary', positive: 'good', negative: 'blocked' }); assert.equal(r.body.duplicate, true); assert.equal(r.body.report.acknowledgedAt, dailyAck);
   // Run the real report renderer with today/old/other/already-read records.
   let inbox;
   const elements = { openLeaderDailyReports: {}, leaderReportsNav: {}, employeeReportsTab: {}, leaderLiveReportDate: { value: '2026-10-23' }, leaderLiveReportEmployee: { value: '' } };
   const ui = { state: { employees: row.payload.employees, employeeWorkLogs: [], employeeReports: [ { id: 'today', employeeId: 'worker', date: '2026-10-23', isFinalDailyReport: true }, { id: 'old', employeeId: 'worker', date: '2026-10-22', isFinalDailyReport: true }, { id: 'read', employeeId: 'worker', isFinalDailyReport: true, acknowledgedAt: 'yes' }, { id: 'foreign', employeeId: 'other', isFinalDailyReport: true } ] }, activeEmployee: row.payload.employees[0], document: { getElementById: id => elements[id], querySelectorAll: () => [] }, window: { MarketizoCosts: { minutes: l => l.minutes } }, Date, Intl, setText() {}, formatNumber: String, formatDate: String, escapePortalText: String, currentDateKey: () => '2026-10-23', renderLeaderReportInbox: reports => inbox = reports, renderWeeklyQuestionnaires() {} };
-  vm.createContext(ui); vm.runInContext(named('leaderReportPeople') + '\n' + named('weeklyReportsForLeader') + '\n' + named('unreadManualDailyReports') + '\n' + named('renderLeaderReportStatus') + '\n' + named('renderLeaderReportsPage'), ui); ui.renderLeaderReportsPage(); assert.equal(inbox, undefined, 'Daily reports never automatically open the leader inbox'); assert.equal(elements.leaderReportsNav.textContent, 'Izveštaji'); assert.equal(elements.openLeaderDailyReports.textContent, 'Pročitaj dnevne izveštaje (2)');
+  vm.createContext(ui); vm.runInContext(named('leaderReportPeople') + '\n' + named('weeklyReportsForLeader') + '\n' + named('filteredDailyReports') + '\n' + named('renderLeaderReportStatus') + '\n' + named('renderLeaderReportsPage'), ui); ui.renderLeaderReportsPage(); assert.equal(inbox, undefined, 'Daily reports never automatically open the leader inbox'); assert.equal(elements.leaderReportsNav.textContent, 'Izveštaji'); assert.equal(elements.openLeaderDailyReports.textContent, 'Otvori dnevne izveštaje (1)');
   ui.state.employeeReports.push({id:'weekly-new',employeeId:'worker',isWeeklyQuestionnaire:true,submittedAt:'now'});
   ui.renderLeaderReportsPage(); assert.equal(elements.leaderReportsNav.textContent,'Izveštaji (1)','Weekly answers retain their unread badge');
   let dailyOpens=0,scheduled=0;
