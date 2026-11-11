@@ -67,7 +67,7 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   ui.state.employeeReports.push({id:'weekly-new',employeeId:'worker',isWeeklyQuestionnaire:true,submittedAt:'now'});
   ui.renderLeaderReportsPage(); assert.equal(elements.leaderReportsNav.textContent,'Izveštaji (1)','Weekly answers retain their unread badge');
   let dailyOpens=0,scheduled=0;
-  const dailyUi={document:{getElementById:id=>id==='leaderReportsDialog'?{showModal(){dailyOpens++}}:{innerHTML:''}},window:{setTimeout(){scheduled++}},state:{employees:row.payload.employees},formatDate:String,escapePortalText:String,formatNumber:String};
+  const dailyUi={activeEmployee:{id:'leader'},document:{getElementById:id=>id==='leaderReportsDialog'?{showModal(){dailyOpens++}}:{innerHTML:''}},window:{setTimeout(){scheduled++}},state:{employees:row.payload.employees},formatDate:String,escapePortalText:String,formatNumber:String};
   vm.createContext(dailyUi);vm.runInContext(named('reportReadByViewer') + '\n' + named('renderLeaderReportInbox'),dailyUi);dailyUi.renderLeaderReportInbox([{id:'daily',employeeId:'worker',minutes:60,date:'2026-10-23'}]);
   assert.equal(dailyOpens,0);assert.equal(scheduled,0,'Daily inbox never schedules a popup');
   // Weekly reminders remain visible without opening a dialog or blocking time entry.
