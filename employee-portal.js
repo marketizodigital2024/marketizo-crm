@@ -95,11 +95,9 @@ function currentWeeklyWindow(date = new Date()) {
   const mondayOffset = (value.getDay() + 6) % 7;
   const monday = new Date(value);
   monday.setDate(value.getDate() - mondayOffset);
-  const thursday = new Date(monday);
-  thursday.setDate(monday.getDate() + 3);
   const friday = new Date(monday);
   friday.setDate(monday.getDate() + 4);
-  return { weekKey: localDateKey(monday), dueDate: localDateKey(thursday), fridayDate: localDateKey(friday) };
+  return { weekKey: localDateKey(monday), dueDate: localDateKey(friday), fridayDate: localDateKey(friday) };
 }
 
 function showCachedEmployeeSession(session) {
@@ -1145,6 +1143,7 @@ async function hydrateOnlineState() {
   if (!window.MarketizoRemote || window.location.protocol === "file:") return;
   const result = await window.MarketizoRemote.load();
   if (result.payload) {
+    dailyRequirementOnline = true;
     const activeEmployeeId = activeEmployee?.id;
     const activeEmployeeEmail = activeEmployee?.email;
     state = loadState(result.payload);
@@ -1240,6 +1239,7 @@ function renderEmployeePortal() {
   renderLeaderMeetingsPage();
   renderLeaderReportsPage();
   if (!activeEmployee?.isLeader) renderWeeklyQuestionnaires();
+  renderOverdueDailyReport();
   showEmployeeNotificationPopups();
   window.refreshDailyMinuteProgress?.();
 }
@@ -1832,11 +1832,15 @@ function requiredWeeklyTask() {
   if (weekday === 0 || weekday === 6) return null;
   const pending = (state.employeeReports || []).filter((report) => report.isWeeklyQuestionnaire === true && report.employeeId === activeEmployee.id && !report.submittedAt)
     .sort((a, b) => String(a.weekKey || "").localeCompare(String(b.weekKey || "")))[0];
-  if (pending) return { kind: "answer", report: pending };
-  const windowInfo = currentWeeklyWindow();
-  if (activeEmployee.isLeader && today >= windowInfo.dueDate && today <= windowInfo.fridayDate) {
-    const sent = new Set(weeklyReportsForLeader().filter((report) => report.weekKey === windowInfo.weekKey).map((report) => report.employeeId));
-    if (leaderReportPeople().some((employee) => employee.id !== activeEmployee.id && !sent.has(employee.id))) return { kind: "send" };
+  if (pending) return { report: pending };
+  const windowInfo = currentWeeklyWindow(new Date(`${today}T12:00:00`));
+  const dueDate = today < windowInfo.dueDate ? addDays(windowInfo.dueDate, -7) : windowInfo.dueDate;
+  const weekKey = addDays(dueDate, -4);
+  if (dueDate < "2026-11-13" || (activeEmployee.startDate && dueDate < activeEmployee.startDate) ||
+    (activeEmployee.endDate && dueDate > activeEmployee.endDate)) return null;
+  if (!(state.employeeReports || []).some(report => report.isWeeklyQuestionnaire === true &&
+    report.employeeId === activeEmployee.id && report.weekKey === weekKey)) {
+    return { report: { id: `weekly-report-${activeEmployee.id}-${weekKey}`, weekKey, dueDate } };
   }
   return null;
 }
@@ -1858,34 +1862,29 @@ function renderRequiredWeeklyTask() {
   const button = document.getElementById("weeklyTaskButton");
   if (!button) return;
   button.hidden = !task;
-  button.textContent = task?.kind === "send" ? "Pošalji nedeljni upitnik timu" : "Popuni nedeljni upitnik";
+  button.textContent = "Popuni nedeljni izveštaj";
 }
 
 function openRequiredWeeklyTask() {
   const task = requiredWeeklyTask();
   if (!task || document.querySelector("dialog[open], form[data-work-saving='true'], form[data-saving='true']")) return;
-  if (task.kind === "send") {
-    document.getElementById("weeklySendDialog")?.showModal();
-  } else {
-    const form = document.getElementById("weeklyQuestionnaireForm");
-    if (!form) return;
-    if (form.dataset.reportId !== task.report.id) {
-      saveWeeklyDraft(form);
-      form.reset();
-      form.dataset.reportId = task.report.id;
-      try {
-        const draft = JSON.parse(localStorage.getItem(weeklyDraftKey(task.report.id)) || "null");
-        if (Array.isArray(draft)) [1, 2, 3, 4, 5].forEach((index) => { form.elements[`answer${index}`].value = String(draft[index - 1] || ""); });
-      } catch { /* An unavailable draft must not prevent answering. */ }
-    }
-    setText("weeklyQuestionnaireDeadline", `Obavezno popuni svih pet odgovora do kraja svog radnog vremena ${formatDate(task.report.dueDate || task.report.date)}. Ako je rok prošao, popuni sada.`);
-    document.getElementById("weeklyQuestionnaireDialog")?.showModal();
+  const form = document.getElementById("weeklyQuestionnaireForm");
+  if (!form) return;
+  if (form.dataset.reportId !== task.report.id) {
+    saveWeeklyDraft(form);
+    form.reset();
+    form.dataset.reportId = task.report.id;
+    try {
+      const draft = JSON.parse(localStorage.getItem(weeklyDraftKey(task.report.id)) || "null");
+      if (Array.isArray(draft)) [1, 2, 3, 4, 5].forEach((index) => { form.elements[`answer${index}`].value = String(draft[index - 1] || ""); });
+    } catch { /* An unavailable draft must not prevent answering. */ }
   }
+  setText("weeklyQuestionnaireDeadline", `Obavezno popuni svih pet odgovora do kraja svog radnog vremena ${formatDate(task.report.dueDate || task.report.date)}. Ako je rok prošao, popuni sada.`);
+  document.getElementById("weeklyQuestionnaireDialog")?.showModal();
 }
 
 function renderWeeklyQuestionnaires() {
-  const windowInfo = currentWeeklyWindow();
-  const currentReports = weeklyReportsForLeader().filter((report) => report.weekKey === windowInfo.weekKey);
+  const windowInfo = currentWeeklyWindow(parseDate(currentDateKey()));
   const allReports = weeklyReportsForLeader();
   const period = document.getElementById("employeeWeeklyReportPeriod");
   const periods = [...new Set([windowInfo.weekKey, ...allReports.map(report => report.weekKey).filter(Boolean)])].sort().reverse();
@@ -1906,14 +1905,8 @@ function renderWeeklyQuestionnaires() {
     return !search || [employee?.name, ...(report.answers || [])].some(value =>
       String(value || "").toLocaleLowerCase("sr-Latn").includes(search));
   });
-  const sentCount = currentReports.length;
   setText("weeklyReportWeekLabel", selectedPeriod === windowInfo.weekKey ? `${formatDate(windowInfo.weekKey)}–${formatDate(windowInfo.fridayDate)}` : formatDate(selectedPeriod));
   setText("weeklyReportStatus", visibleReports.length ? `${visibleReports.filter(report => report.submittedAt).length}/${visibleReports.length} popunjeno` : "Nema izveštaja");
-  const button = document.getElementById("sendWeeklyQuestionnaire");
-  if (button) {
-    button.hidden = selectedPeriod !== windowInfo.weekKey;
-    button.textContent = sentCount ? "Pošalji ponovo nepopunjenima" : "Pošalji upitnik zaposlenima";
-  }
   const list = document.getElementById("leaderWeeklyReportList");
   if (list) {
     const markup = visibleReports.length ? visibleReports.map((report) => {
@@ -1929,30 +1922,6 @@ function renderWeeklyQuestionnaires() {
   }
 
   renderRequiredWeeklyTask();
-}
-
-async function sendWeeklyQuestionnaires() {
-  const button = document.getElementById("confirmSendWeeklyQuestionnaire");
-  if (!activeEmployee?.isLeader || !button) return;
-  button.disabled = true;
-  button.textContent = "Slanje...";
-  const windowInfo = currentWeeklyWindow();
-  try {
-    const result = await postEmployeeReport({ action: "sendWeeklyQuestionnaire", leaderId: activeEmployee.id, weekKey: windowInfo.weekKey, dueDate: windowInfo.dueDate });
-    if (!result.ok) throw new Error(result.error || "Upitnik nije poslat.");
-    const ids = new Set((result.invitations || []).map((report) => report.id));
-    state.employeeReports = (state.employeeReports || []).filter((report) => !ids.has(report.id));
-    state.employeeReports.unshift(...(result.invitations || []));
-    saveState({ remote: false });
-    document.getElementById("weeklySendDialog")?.close();
-    renderWeeklyQuestionnaires();
-    showToast("Upitnik je poslat", `Poslato zaposlenima: ${(result.invitations || []).length}.`, "ok");
-  } catch (error) {
-    showToast("Upitnik nije poslat", error?.message || "Pokušaj ponovo.", "danger");
-  } finally {
-    button.disabled = false;
-    button.textContent = "Pošalji";
-  }
 }
 
 async function acknowledgeWeeklyQuestionnaire(reportId, button) {
@@ -2140,8 +2109,8 @@ async function refreshLeaderReportsFromRemote() {
   }
 }
 
-window.setInterval(() => { renderRequiredWeeklyTask(); refreshReportInbox(); }, 10000);
-window.addEventListener("focus", () => { renderRequiredWeeklyTask(); refreshReportInbox(); });
+window.setInterval(() => { renderOverdueDailyReport(); renderRequiredWeeklyTask(); refreshReportInbox(); }, 10000);
+window.addEventListener("focus", () => { renderOverdueDailyReport(); renderRequiredWeeklyTask(); refreshReportInbox(); });
 
 async function postEmployeeReport(body) {
   const controller = new AbortController();
@@ -2454,14 +2423,41 @@ function hasFinalDailyReport(date) {
   return (state.employeeReports || []).some((report) => report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true && !report.isAutomaticRollup);
 }
 
+let dailyRequirementOnline = false;
+let dailyRequirementRetryDate = "";
+
+function overdueDailyReportDate() {
+  if (!dailyRequirementOnline || !activeEmployee || document.getElementById("employeeApp")?.hidden) return "";
+  const date = previousWorkingDay();
+  if (date < "2026-11-11" || (activeEmployee.startDate && date < activeEmployee.startDate) ||
+    (activeEmployee.endDate && date > activeEmployee.endDate) || hasFinalDailyReport(date)) return "";
+  const absent = employeeAbsences().some(item => item.status === "Odobreno" && item.startDate <= date && date <= item.endDate);
+  return absent && !loggedMinutesForDate(date) ? "" : date;
+}
+
+function renderOverdueDailyReport() {
+  const date = overdueDailyReportDate();
+  const button = document.getElementById("overdueDailyReportButton");
+  if (button) {
+    button.hidden = !date;
+    if (date) button.textContent = `Obavezno: dnevni izveštaj za ${formatDate(date)}`;
+  }
+  if (!date || dailyRequirementRetryDate === date || document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']")) return;
+  openDailyReportDialog(date);
+}
+
 function openDailyReportDialog(date) {
   const dialog = document.getElementById("dailyReportDialog");
   const form = document.getElementById("dailyReportForm");
-  if (!dialog || !form || !date || hasFinalDailyReport(date) || document.querySelector("dialog[open], form[data-work-saving='true']")) return;
+  if (!dialog || !form || !date || hasFinalDailyReport(date) || document.querySelector("dialog[open], form[data-work-saving='true'], form[data-saving='true']")) return;
   if (form.dataset.reportDate !== date || form.dataset.actorId !== activeEmployee.id) form.reset();
   form.dataset.reportDate = date;
   form.dataset.actorId = activeEmployee.id;
-  setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)} · ${formatNumber(loggedMinutesForDate(date))} min evidentiranog rada.`);
+  const required = date === overdueDailyReportDate() && dailyRequirementRetryDate !== date;
+  dialog.dataset.required = String(required);
+  document.getElementById("closeDailyReportDialog").hidden = required;
+  document.getElementById("dailyReportLater").hidden = required;
+  setText("dailyReportDateLabel", `${required ? "Obavezno za prethodni radni dan: " : "Izveštaj za "}${formatDate(date)} · ${formatNumber(loggedMinutesForDate(date))} min evidentiranog rada.`);
   if (!dialog.open) dialog.showModal();
 }
 
@@ -2633,6 +2629,11 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   // A successful time entry must not launch a daily-report dialog.
 });
 
+document.getElementById("overdueDailyReportButton")?.addEventListener("click", () => openDailyReportDialog(overdueDailyReportDate()));
+document.getElementById("dailyReportDialog")?.addEventListener("cancel", event => {
+  if (event.currentTarget.dataset.required === "true" || document.getElementById("dailyReportForm")?.dataset.saving === "true") event.preventDefault();
+});
+
 document.getElementById("closeDailyReportDialog")?.addEventListener("click", () => {
   document.getElementById("dailyReportDialog")?.close();
 });
@@ -2679,6 +2680,13 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   }
   if (activeEmployee?.id !== actorId) return;
   if (!result.ok) {
+    const dialog = document.getElementById("dailyReportDialog");
+    if (dialog?.dataset.required === "true") {
+      dailyRequirementRetryDate = date;
+      dialog.dataset.required = "false";
+      document.getElementById("closeDailyReportDialog").hidden = false;
+      document.getElementById("dailyReportLater").hidden = false;
+    }
     showToast("Izveštaj nije poslat", result.error || "Pokušaj ponovo.", "danger");
     return;
   }
@@ -2780,14 +2788,11 @@ document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", (
   document.getElementById("leaderReportsDialog")?.close();
 });
 
-document.getElementById("sendWeeklyQuestionnaire")?.addEventListener("click", () => document.getElementById("weeklySendDialog")?.showModal());
 document.getElementById("weeklyTaskButton")?.addEventListener("click", openRequiredWeeklyTask);
-document.getElementById("closeWeeklySendDialog")?.addEventListener("click", () => document.getElementById("weeklySendDialog")?.close());
 document.getElementById("weeklyQuestionnaireLater")?.addEventListener("click", () => document.getElementById("weeklyQuestionnaireDialog")?.close());
 document.getElementById("weeklyQuestionnaireDialog")?.addEventListener("cancel", (event) => {
   if (document.getElementById("weeklyQuestionnaireForm")?.dataset.saving === "true") event.preventDefault();
 });
-document.getElementById("confirmSendWeeklyQuestionnaire")?.addEventListener("click", sendWeeklyQuestionnaires);
 document.getElementById("weeklyQuestionnaireForm")?.addEventListener("input", (event) => saveWeeklyDraft(event.currentTarget));
 document.getElementById("leaderWeeklyReportList")?.addEventListener("click", (event) => {
   const button = event.target.closest?.(".weekly-report-ack");
@@ -2991,6 +2996,7 @@ onlineHydrationPromise = hydrateOnlineState();
   }
   await onlineHydrationPromise.catch(() => null);
   window.MarketizoRemote?.startPolling((payload) => {
+    dailyRequirementOnline = true;
     const activeId = activeEmployee?.id;
     state = loadState(payload);
     activeEmployee = (state.employees || []).find((employee) => employee.id === activeId) || activeEmployee;

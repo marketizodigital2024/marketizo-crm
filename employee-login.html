@@ -342,9 +342,10 @@
             <button id="openUnreadClientReports" class="secondary-button" type="button" hidden>Otvori preglede klijenata</button>
           </div>
         </div>
+        <button id="overdueDailyReportButton" type="button" class="primary-button" hidden></button>
         <div id="clientWeeklyNotice" role="status" hidden></div>
-        <button id="clientWeeklyOpen" type="button" class="secondary-button" hidden>Popuni pregled klijenata</button>
-        <button id="weeklyTaskButton" type="button" class="secondary-button" hidden>Popuni nedeljni upitnik</button>
+        <button id="clientWeeklyOpen" type="button" class="secondary-button" hidden>Popuni nedeljni pregled klijenata</button>
+        <button id="weeklyTaskButton" type="button" class="secondary-button" hidden>Popuni nedeljni izveštaj</button>
         <section class="client-tab" id="employeeReportsTab">
           <section class="panel">
 
@@ -407,9 +408,8 @@
               <span id="weeklyReportWeekLabel">ova nedelja</span>
 
             </div>
-            <p class="muted">Pošalji upitnik u četvrtak. Zaposleni ga popunjavaju do četvrtka uveče, kako bi odgovori bili spremni za sastanak u petak.</p>
+            <p class="muted">Nedeljni izveštaj se automatski otvara petkom. Pristigli odgovori se prikazuju ovde.</p>
             <div class="weekly-report-actions">
-              <button id="sendWeeklyQuestionnaire" class="primary-button" type="button">Pošalji upitnik zaposlenima</button>
               <strong id="weeklyReportStatus">Nije poslato</strong>
             </div>
             <div class="setup-list" id="leaderWeeklyReportList"></div>
@@ -567,10 +567,10 @@
           </div>
           <button id="closeDailyReportDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
         </div>
-        <label>Šta si danas završio/la?
+        <label>Šta si završio/la tog dana?
           <textarea name="summary" rows="4" maxlength="1200" required placeholder="Ukratko navedi najvažnije završene stvari."></textarea>
         </label>
-        <label>Šta je danas bilo pozitivno?
+        <label>Šta je tog dana bilo pozitivno?
           <textarea name="positive" rows="2" maxlength="800" required placeholder="Ukratko opiši ili napiši „Nema“."></textarea>
         </label>
         <label>Šta je danas bilo negativno?
@@ -597,23 +597,13 @@
         <div id="leaderUnreadReportList" class="setup-list"></div>
       </section>
     </dialog>
-    <dialog id="weeklySendDialog" class="daily-report-dialog">
-      <section class="modal-card daily-report-modal">
-        <div class="modal-head">
-          <div><p class="eyebrow">Četvrtak · priprema za petak</p><h2>Pošalji nedeljni upitnik timu</h2></div>
-          <button id="closeWeeklySendDialog" class="employee-install-dialog-close" type="button" aria-label="Zatvori">×</button>
-        </div>
-        <p>Upitnik će biti poslat svim aktivnim zaposlenima koji su dodeljeni tebi. Zaposleni moraju da ga popune do kraja radnog vremena u četvrtak.</p>
-        <div class="modal-actions"><button id="confirmSendWeeklyQuestionnaire" class="primary-button" type="button">Pošalji</button></div>
-      </section>
-    </dialog>
     <dialog id="weeklyQuestionnaireDialog" class="daily-report-dialog">
       <form id="weeklyQuestionnaireForm" class="modal-card daily-report-modal">
         <div class="modal-head">
-          <div><p class="eyebrow">Nedeljni izveštaj</p><h2>Obavezan nedeljni upitnik</h2><p class="muted">Odgovori pomažu lideru da se pripremi za sastanak u petak.</p></div>
+          <div><p class="eyebrow">Nedeljni izveštaj</p><h2>Obavezan nedeljni upitnik</h2><p class="muted">Ukratko sumiraj svoju radnu nedelju.</p></div>
 
         </div>
-        <p id="weeklyQuestionnaireDeadline" role="status">Popuni do kraja svog radnog vremena u četvrtak.</p>
+        <p id="weeklyQuestionnaireDeadline" role="status">Popuni do kraja svog radnog vremena u petak.</p>
         <label>1. Koji ti je omiljeni klijent ove nedelje i zašto?<textarea name="answer1" rows="3" maxlength="1600" required></textarea></label>
         <label>2. Koji ti je najneomiljeniji klijent i zašto?<textarea name="answer2" rows="3" maxlength="1600" required></textarea></label>
         <label>3. Šta te je kočilo ove nedelje?<textarea name="answer3" rows="3" maxlength="1600" required></textarea></label>
@@ -656,7 +646,7 @@
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-simple-quantity"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="employee-portal.js?v=20261111-8"></script>
+    <script src="employee-portal.js?v=20261111-9"></script>
     <script src="client-weekly-reports.js?v=20261111-6"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
   <script src="questionnaire-nav.js?v=20261111-1" defer></script>
