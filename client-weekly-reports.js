@@ -55,7 +55,7 @@
     const grouped = new Map();
     for (const report of visible) for (const client of report.clients) {
       const answer = (report.clientAnswers || []).find(a => a.clientId === client.clientId);
-      if (search && ![client.clientName, report.employeeName, answer?.positive, answer?.negative, answer?.help].some(value => String(value || '').toLocaleLowerCase('sr-Latn').includes(search))) continue;
+      if (search && !String(client.clientName || '').toLocaleLowerCase('sr-Latn').includes(search)) continue;
       if (!grouped.has(client.clientId)) grouped.set(client.clientId, { name: client.clientName, rows: [] });
       grouped.get(client.clientId).rows.push(`<section class="client-weekly-person"><h4>${escape(report.employeeName)} · ${escape(client.roles.join(', '))}</h4>${answer ? `<p><strong>Pozitivno:</strong> ${escape(answer.positive)}</p><p><strong>Negativno:</strong> ${escape(answer.negative)}</p><p><strong>Pomoć:</strong> ${escape(answer.help)}</p><p class="muted">${hasRead(report) ? 'Pročitano' : 'Popunjeno · čeka čitanje'}</p>` : '<p class="muted">Čeka odgovor zaposlenog.</p>'}</section>`);
     }

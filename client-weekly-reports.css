@@ -10,3 +10,36 @@
 #clientWeeklyDialog, #clientWeeklyReadDialog { width: min(760px, calc(100vw - 28px)); max-height: calc(100dvh - 32px); box-sizing: border-box; overflow-y: auto; }
 #clientWeeklyDialog .modal-actions, #clientWeeklyReadDialog .modal-actions { position: sticky; bottom: 0; background: var(--panel, #fff); padding: 14px 0; }
 @media (max-width: 600px) { .client-weekly-card { padding: 12px; } }
+
+/* Keep report names on one line, including in narrow portal layouts. */
+#employeeReportsTab .report-view-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 0 0 12px;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 3px 3px 6px;
+}
+#employeeReportsTab .report-view-tabs button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid var(--line, #d7dfd9);
+  border-radius: 8px;
+  background: var(--panel, #fff);
+  color: inherit;
+  box-shadow: none;
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+#employeeReportsTab .report-view-tabs button[aria-pressed="true"] {
+  background: #fff0e4;
+  border-color: #e9a578;
+  color: #79380e;
+}
+#employeeReportsTab .leader-activity-filter label[hidden] { display: none; }
