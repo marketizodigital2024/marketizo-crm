@@ -2353,13 +2353,13 @@ function clearPortalHoursForm(form) {
 }
 
 function hasFinalDailyReport(date) {
-  return (state.employeeReports || []).some((report) => report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true);
+  return (state.employeeReports || []).some((report) => report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true && !report.isAutomaticRollup);
 }
 
 function openDailyReportDialog(date) {
   const dialog = document.getElementById("dailyReportDialog");
   const form = document.getElementById("dailyReportForm");
-  if (!dialog || !form || !date || hasFinalDailyReport(date)) return;
+  if (!dialog || !form || !date || hasFinalDailyReport(date) || document.querySelector("dialog[open], form[data-work-saving='true']")) return;
   form.dataset.reportDate = date;
   form.reset();
   setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)} biće vidljiv tvom lideru.`);
