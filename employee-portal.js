@@ -2006,7 +2006,12 @@ function renderLeaderReportsPage() {
 
 function renderLeaderReportStatus() {
   const nav = document.getElementById("leaderReportsNav");
-  // Daily activity remains available on demand; only weekly answers need inbox attention.
+  const dailyButton = document.getElementById("openLeaderDailyReports");
+  const dailyReports = unreadManualDailyReports();
+  if (dailyButton) {
+    dailyButton.hidden = !dailyReports.length;
+    dailyButton.textContent = `Pročitaj dnevne izveštaje (${dailyReports.length})`;
+  }
   const unreadWeeklyCount = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).length;
   if (nav) nav.textContent = `Izveštaji${unreadWeeklyCount ? ` (${unreadWeeklyCount})` : ""}`;
   renderWeeklyQuestionnaires();
@@ -2079,6 +2084,14 @@ async function postEmployeeReport(body) {
   }
 }
 
+function unreadManualDailyReports() {
+  if (!activeEmployee?.isLeader) return [];
+  const peopleIds = new Set(leaderReportPeople().map(employee => employee.id));
+  return (state.employeeReports || []).filter(report =>
+    report.isFinalDailyReport === true && !report.isAutomaticRollup && !report.acknowledgedAt && peopleIds.has(report.employeeId)
+  ).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
 function renderLeaderReportInbox(reports) {
   const dialog = document.getElementById("leaderReportsDialog");
   const list = document.getElementById("leaderUnreadReportList");
@@ -2088,7 +2101,6 @@ function renderLeaderReportInbox(reports) {
     const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
     return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}<br /><button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button></span></div>`;
   }).join("");
-  // Keep historical rendering without automatically opening the daily inbox.
 }
 
 async function acknowledgeLeaderReport(reportId, button) {
@@ -2111,9 +2123,9 @@ async function acknowledgeLeaderReport(reportId, button) {
   if (report) Object.assign(report, result.report || {});
   saveState({ remote: false });
   renderLeaderReportsPage();
-  const peopleIds = new Set(leaderReportPeople().map((employee) => employee.id));
-  const remaining = (state.employeeReports || []).filter((item) => item.isFinalDailyReport === true && peopleIds.has(item.employeeId) && !item.acknowledgedAt).length;
-  if (!remaining) document.getElementById("leaderReportsDialog")?.close();
+  const remaining = unreadManualDailyReports();
+  if (remaining.length) renderLeaderReportInbox(remaining);
+  else document.getElementById("leaderReportsDialog")?.close();
   showToast("Potvrđeno", "Sačuvano je da si pročitao/la izveštaj.", "ok");
 }
 
@@ -2659,6 +2671,16 @@ document.getElementById("logoutEmployee")?.addEventListener("click", () => {
   document.getElementById("employeeLoginForm").reset();
 });
 
+document.getElementById("openLeaderDailyReports")?.addEventListener("click", () => {
+  const reports = unreadManualDailyReports();
+  if (!reports.length || document.querySelector("dialog[open], form[data-work-saving='true']")) return;
+  renderLeaderReportInbox(reports);
+  document.getElementById("leaderReportsDialog")?.showModal();
+});
+document.getElementById("leaderUnreadReportList")?.addEventListener("click", (event) => {
+  const button = event.target.closest?.(".leader-report-ack");
+  if (button) acknowledgeLeaderReport(button.dataset.reportId, button);
+});
 document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", () => {
   document.getElementById("leaderReportsDialog")?.close();
 });
