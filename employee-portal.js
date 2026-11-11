@@ -2831,6 +2831,9 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
 document.getElementById("leaderLiveReportEmployee")?.addEventListener("change", renderLeaderReportsPage);
 document.querySelectorAll("[data-report-view]").forEach(button => button.addEventListener("click", () => {
   const selected = button.dataset.reportView;
+  const clientSearch = selected === "clients";
+  setText("reportSearchLabel", clientSearch ? "Pretraži klijenta" : "Pretraži izveštaje");
+  document.getElementById("reportSearch").placeholder = clientSearch ? "Naziv klijenta" : "Zaposleni ili tekst izveštaja";
   document.querySelectorAll("[data-report-view]").forEach(item => {
     const active = item === button;
     item.setAttribute("aria-pressed", String(active));
