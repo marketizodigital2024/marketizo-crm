@@ -1016,6 +1016,7 @@ function setupDailyMinuteProgress() {
   const reportButton = progress.querySelector("#dailyReportPromptButton");
   reportButton.addEventListener("click", () => openDailyReportDialog(dateInput.value || currentDateKey()));
   const render = () => {
+    if (!activeEmployee) return;
     const date = dateInput.value || currentDateKey();
     const logged = loggedMinutesForDate(date);
     const expected = expectedMinutesForDate(activeEmployee, date);
