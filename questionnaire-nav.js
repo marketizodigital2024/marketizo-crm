@@ -25,13 +25,17 @@ function employeeRoles(value) {
 }
 function employeeHasSmm(value) { return employeeRoles(value).some(role => ['Social Media Manager','Social Media Manager Leader','Scenario','Scenario Leader'].includes(role)); }
 
+function employeeHasMediaBuyer(value) {
+  return employeeRoles(value).some(role => /^(media buy(?:er|ing)(?: lead(?:er)?)?|paid ads(?: specialist| lead(?:er)?)?)$/i.test(role));
+}
+
   function sync() {
     const app = document.getElementById('employeeApp');
     const nav = app?.querySelector('nav.nav');
     if (!nav) return;
     const position = String(document.getElementById('employeePortalPosition')?.textContent || '').trim();
     const employee = typeof activeEmployee !== 'undefined' ? activeEmployee : null;
-    const allowed = !!employee && (employeeHasSmm(employee.position || position) || ['emp-miljan','emp-ivana'].includes(employee.id));
+    const allowed = !!employee && (employeeHasSmm(employee.position || position) || employeeHasMediaBuyer(employee.position || position) || ['emp-miljan','emp-ivana'].includes(employee.id));
     let link = document.getElementById('questionnairesNav');
     if (!link && allowed) {
       link = document.createElement('a');

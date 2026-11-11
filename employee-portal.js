@@ -54,7 +54,6 @@ let activeEmployee = null;
 let portalMonth = currentMonthKey();
 let deferredInstallPrompt = null;
 let onlineHydrationPromise = null;
-let weeklyCompletionShown = false;
 let weeklyAcknowledgementInFlight = false;
 let reportRefreshInFlight = false;
 let reportInboxRevision = 0;
@@ -1017,6 +1016,7 @@ function setupDailyMinuteProgress() {
   const reportButton = progress.querySelector("#dailyReportPromptButton");
   reportButton.addEventListener("click", () => openDailyReportDialog(dateInput.value || currentDateKey()));
   const render = () => {
+    if (!activeEmployee) return;
     const date = dateInput.value || currentDateKey();
     const logged = loggedMinutesForDate(date);
     const expected = expectedMinutesForDate(activeEmployee, date);
@@ -1025,7 +1025,12 @@ function setupDailyMinuteProgress() {
     const status = progress.querySelector("#dailyMinuteStatus");
     const bar = progress.querySelector("#dailyMinuteBar");
     const message = progress.querySelector("#dailyMinuteMessage");
-    reportButton.hidden = !expected || logged < 1 || hasFinalDailyReport(date);
+    const employedOnDate = (!activeEmployee.startDate || activeEmployee.startDate <= date) &&
+      (!activeEmployee.endDate || date <= activeEmployee.endDate);
+    const approvedAbsence = employeeAbsences().some(absence =>
+      absence.status === "Odobreno" && absence.startDate <= date && date <= absence.endDate);
+    const reportDay = logged > 0 || (isAustrianWorkingDay(date) && !approvedAbsence);
+    reportButton.hidden = !employedOnDate || !reportDay || date > currentDateKey() || hasFinalDailyReport(date);
     title.textContent = date === currentDateKey()
       ? `Danas · ${formatDate(date)}`
       : `Izabrani dan · ${formatDate(date)}`;
@@ -1265,7 +1270,7 @@ function renderPortalCalendar() {
   const firstDay = parseDate(days[0]).getDay();
   const offset = firstDay === 0 ? 6 : firstDay - 1;
   const blanks = Array.from({ length: offset }, () => `<div class="calendar-day empty"></div>`).join("");
-  const absences = (state.employeeAbsences || []).filter((absence) => absence.status === "Odobreno" && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)));
+  const absences = [...(state.employeeAbsences || []), ...(state.teamVacationCalendar || [])].filter((absence) => absence.status === "Odobreno" && dateRangeKeys(absence.startDate, absence.endDate).some((day) => day.startsWith(portalMonth)));
   const logs = employeeWorkLogs(portalMonth);
   const plans = (state.companyPlans || []).filter((plan) => String(plan.date || "").startsWith(portalMonth));
   setText("portalCalendarSummary", `${monthLabel(portalMonth)} · ${absences.length} odsustava`);
@@ -1295,7 +1300,7 @@ function renderPortalCalendar() {
             ${dayPlans.map((plan) => `<span class="calendar-note plan-note">${escapePortalText(plan.type)}: ${escapePortalText(plan.title)}</span>`).join("")}
             ${dayAbsences
               .map((absence) => {
-                const employee = (state.employees || []).find((item) => item.id === absence.employeeId);
+                const employee = (state.employeeDirectory || state.employees || []).find((item) => item.id === absence.employeeId);
                 const label = absence.employeeId === activeEmployee.id ? absence.type : `${employee?.name || "Zaposleni"} · ${absence.type}`;
                 return `<span class="calendar-note ${absence.type === "Bolovanje" ? "sick-note" : "vacation-note"}">${escapePortalText(label)}</span>`;
               })
@@ -1312,7 +1317,7 @@ function renderPortalCalendar() {
   list.innerHTML = rows.length
     ? rows
         .map((absence) => {
-          const employee = (state.employees || []).find((item) => item.id === absence.employeeId);
+          const employee = (state.employeeDirectory || state.employees || []).find((item) => item.id === absence.employeeId);
           const days = workdayKeysBetween(absence.startDate, absence.endDate).length;
           return `
           <div class="setup-item alert-item ${absence.type === "Bolovanje" ? "danger" : "warn"}">
@@ -1850,24 +1855,15 @@ function saveWeeklyDraft(form) {
 
 function renderRequiredWeeklyTask() {
   const task = requiredWeeklyTask();
-  const sendClose = document.getElementById("closeWeeklySendDialog");
-  const wasRequired = sendClose?.hidden === true;
-  if (sendClose) sendClose.hidden = task?.kind === "send";
-  const weekday = new Date(`${currentDateKey()}T12:00:00`).getDay();
-  if (!task && (weekday === 0 || weekday === 6)) {
-    const sending = document.getElementById("confirmSendWeeklyQuestionnaire")?.disabled;
-    const sendDialog = document.getElementById("weeklySendDialog");
-    if (wasRequired && sendDialog?.open && !sending) sendDialog.close();
-    const answerDialog = document.getElementById("weeklyQuestionnaireDialog");
-    const form = document.getElementById("weeklyQuestionnaireForm");
-    if (answerDialog?.open && form && !form.inert && form.dataset.saving !== "true") {
-      saveWeeklyDraft(form);
-      answerDialog.close();
-    }
-  }
-  if (!task || document.hidden || document.querySelector("form[data-saving='true']") || document.querySelector("dialog[open]")) return;
-  // Do not interrupt an employee while typing a work entry; retry on the next tick.
-  if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']")) return;
+  const button = document.getElementById("weeklyTaskButton");
+  if (!button) return;
+  button.hidden = !task;
+  button.textContent = task?.kind === "send" ? "Pošalji nedeljni upitnik timu" : "Popuni nedeljni upitnik";
+}
+
+function openRequiredWeeklyTask() {
+  const task = requiredWeeklyTask();
+  if (!task || document.querySelector("dialog[open], form[data-work-saving='true'], form[data-saving='true']")) return;
   if (task.kind === "send") {
     document.getElementById("weeklySendDialog")?.showModal();
   } else {
@@ -1907,21 +1903,6 @@ function renderWeeklyQuestionnaires() {
   }
 
   renderRequiredWeeklyTask();
-
-  const unread = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
-  const completedDialog = document.getElementById("weeklyCompletedDialog");
-  if (completedDialog?.open) return;
-  const next = unread[0];
-  if (next && completedDialog && !weeklyCompletionShown) {
-    completedDialog.dataset.reportId = next.id;
-    const employee = (state.employees || []).find((item) => item.id === next.employeeId);
-    setText("weeklyCompletedTitle", `${employee?.name || "Zaposleni"} je popunio/la izveštaj`);
-    const content = document.getElementById("weeklyCompletedContent");
-    if (content) content.innerHTML = weeklyQuestions.map((question, index) => `<p><strong>${index + 1}. ${escapePortalText(question)}</strong><br />${escapePortalText(next.answers?.[index] || "")}</p>`).join("");
-    window.setTimeout(() => { if (!completedDialog.open && !document.querySelector("dialog[open]")) { weeklyCompletionShown = true; completedDialog.showModal(); } }, 350);
-  }
-
-
 }
 
 async function sendWeeklyQuestionnaires() {
@@ -1948,11 +1929,9 @@ async function sendWeeklyQuestionnaires() {
   }
 }
 
-async function acknowledgeWeeklyQuestionnaire(reportId = document.getElementById("weeklyCompletedDialog")?.dataset.reportId || "") {
-  const dialog = document.getElementById("weeklyCompletedDialog");
+async function acknowledgeWeeklyQuestionnaire(reportId, button) {
   const actorId = activeEmployee?.id;
   if (!reportId || !actorId || weeklyAcknowledgementInFlight) return;
-  const button = document.getElementById("ackWeeklyCompleted");
   weeklyAcknowledgementInFlight = true;
   if (button) { button.disabled = true; button.textContent = "Čuvanje potvrde…"; }
   try {
@@ -1962,10 +1941,6 @@ async function acknowledgeWeeklyQuestionnaire(reportId = document.getElementById
     const report = (state.employeeReports || []).find((item) => item.id === reportId);
     if (report) Object.assign(report, result.report);
     saveState({ remote: false });
-    if (dialog?.dataset.reportId === reportId) {
-      dialog.close();
-      weeklyCompletionShown = false;
-    }
     renderLeaderReportStatus();
   } catch (error) {
     showToast("Nije potvrđeno", error?.message || "Pokušaj ponovo.", "danger");
@@ -2035,12 +2010,46 @@ function renderLeaderReportsPage() {
   renderLeaderReportStatus();
 }
 
+let clientReviewNotice = { actorId: "", count: 0 };
+
+function reportReadByViewer(report, actorId) {
+  return Boolean(report.acknowledgedByViewer?.[actorId] || (report.acknowledgedBy === actorId && report.acknowledgedAt));
+}
+
+function unreadDailyReports() {
+  const actorId = activeEmployee?.id;
+  const peopleIds = new Set(leaderReportPeople().map(employee => employee.id));
+  return (state.employeeReports || []).filter(report => peopleIds.has(report.employeeId) &&
+    report.isFinalDailyReport === true && !report.isAutomaticRollup && !reportReadByViewer(report, actorId)
+  ).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+function updateReportArrival(notice = clientReviewNotice) {
+  clientReviewNotice = notice;
+  const panel = document.getElementById("reportArrival");
+  if (!panel) return;
+  const daily = activeEmployee?.isLeader ? unreadDailyReports().length : 0;
+  const clients = activeEmployee?.isLeader && notice.actorId === activeEmployee.id ? notice.count : 0;
+  const label = document.getElementById("reportArrivalText");
+  const message = [daily ? `Dnevni izveštaji: ${daily}` : "", clients ? `Pregledi klijenata: ${clients}` : ""].filter(Boolean).join(" · ");
+  if (label.textContent !== message) label.textContent = message;
+  panel.hidden = !message;
+  document.getElementById("openUnreadDailyReports").hidden = !daily;
+  document.getElementById("openUnreadClientReports").hidden = !clients;
+}
+
 function renderLeaderReportStatus() {
   const nav = document.getElementById("leaderReportsNav");
-  // Daily activity remains available on demand; only weekly answers need inbox attention.
+  const dailyButton = document.getElementById("openLeaderDailyReports");
+  const dailyReports = filteredDailyReports();
+  if (dailyButton) {
+    dailyButton.hidden = !dailyReports.length;
+    dailyButton.textContent = `Otvori dnevne izveštaje (${dailyReports.length})`;
+  }
   const unreadWeeklyCount = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).length;
   if (nav) nav.textContent = `Izveštaji${unreadWeeklyCount ? ` (${unreadWeeklyCount})` : ""}`;
   renderWeeklyQuestionnaires();
+  updateReportArrival();
 }
 
 // Report-only reads never replace work entries, balances or an employee's draft.
@@ -2049,7 +2058,7 @@ async function refreshReportInbox(force = false) {
   if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']")) return;
   if (document.querySelector("form[data-saving='true']")) return;
   const openDialog = document.querySelector("dialog[open]");
-  if (openDialog && !["leaderReportsDialog", "weeklyCompletedDialog"].includes(openDialog.id)) return;
+  if (openDialog && openDialog.id !== "leaderReportsDialog") return;
   const actorId = activeEmployee.id;
   const revision = reportInboxRevision;
   reportRefreshInFlight = true;
@@ -2064,7 +2073,7 @@ async function refreshReportInbox(force = false) {
     const changed = JSON.stringify(state.employeeReports) !== JSON.stringify(result.reports);
     if (document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']") || document.querySelector("form[data-saving='true']")) return;
     const currentDialog = document.querySelector("dialog[open]");
-    if (currentDialog && !["leaderReportsDialog", "weeklyCompletedDialog"].includes(currentDialog.id)) return;
+    if (currentDialog && currentDialog.id !== "leaderReportsDialog") return;
     if (changed) state.employeeReports = result.reports;
     renderLeaderReportStatus();
   } catch (error) {
@@ -2076,7 +2085,6 @@ async function refreshReportInbox(force = false) {
 }
 
 async function refreshLeaderReportsFromRemote() {
-  weeklyCompletionShown = false;
   if (!activeEmployee?.isLeader || document.querySelector("form[data-saving='true']")) return;
   const actorId = activeEmployee.id;
   const revision = reportInboxRevision;
@@ -2111,6 +2119,23 @@ async function postEmployeeReport(body) {
   }
 }
 
+function filteredDailyReports() {
+  if (!activeEmployee?.isLeader) return [];
+  const peopleIds = new Set(leaderReportPeople().map(employee => employee.id));
+  const date = document.getElementById("leaderLiveReportDate")?.value;
+  const employeeId = document.getElementById("leaderLiveReportEmployee")?.value;
+  const search = (document.getElementById("reportSearch")?.value || "").trim().toLocaleLowerCase("sr-Latn");
+  return (state.employeeReports || []).filter(report => {
+    if (report.isFinalDailyReport !== true || report.isAutomaticRollup || !peopleIds.has(report.employeeId)) return false;
+    if ((date && report.date !== date) || (employeeId && report.employeeId !== employeeId)) return false;
+    if (!search) return true;
+    const employee = (state.employees || []).find(item => item.id === report.employeeId);
+    const workLogs = (state.employeeWorkLogs || []).filter(log => log.employeeId === report.employeeId && log.date === report.date);
+    return [employee?.name, report.note, report.positive, report.negative, report.help, ...workLogs.map(portalWorkClientLabel)]
+      .some(value => String(value || "").toLocaleLowerCase("sr-Latn").includes(search));
+  }).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
 function renderLeaderReportInbox(reports) {
   const dialog = document.getElementById("leaderReportsDialog");
   const list = document.getElementById("leaderUnreadReportList");
@@ -2118,9 +2143,8 @@ function renderLeaderReportInbox(reports) {
   list.innerHTML = reports.map((report) => {
     const employee = (state.employees || []).find((item) => item.id === report.employeeId);
     const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
-    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}<br /><button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button></span></div>`;
+    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}${report.help ? `<br /><b>Pomoć:</b> ${escapePortalText(report.help)}` : ""}<br />${reportReadByViewer(report, activeEmployee?.id) ? "Pročitano" : `<button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button>`}</span></div>`;
   }).join("");
-  // Keep historical rendering without automatically opening the daily inbox.
 }
 
 async function acknowledgeLeaderReport(reportId, button) {
@@ -2143,9 +2167,10 @@ async function acknowledgeLeaderReport(reportId, button) {
   if (report) Object.assign(report, result.report || {});
   saveState({ remote: false });
   renderLeaderReportsPage();
-  const peopleIds = new Set(leaderReportPeople().map((employee) => employee.id));
-  const remaining = (state.employeeReports || []).filter((item) => item.isFinalDailyReport === true && peopleIds.has(item.employeeId) && !item.acknowledgedAt).length;
-  if (!remaining) document.getElementById("leaderReportsDialog")?.close();
+  const dialog = document.getElementById("leaderReportsDialog");
+  const remaining = dialog?.dataset.unread === "true" ? unreadDailyReports().slice(0, 25) : filteredDailyReports();
+  if (dialog?.open && remaining.length) renderLeaderReportInbox(remaining);
+  else dialog?.close();
   showToast("Potvrđeno", "Sačuvano je da si pročitao/la izveštaj.", "ok");
 }
 
@@ -2385,16 +2410,17 @@ function clearPortalHoursForm(form) {
 }
 
 function hasFinalDailyReport(date) {
-  return (state.employeeReports || []).some((report) => report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true);
+  return (state.employeeReports || []).some((report) => report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true && !report.isAutomaticRollup);
 }
 
 function openDailyReportDialog(date) {
   const dialog = document.getElementById("dailyReportDialog");
   const form = document.getElementById("dailyReportForm");
-  if (!dialog || !form || !date || hasFinalDailyReport(date)) return;
+  if (!dialog || !form || !date || hasFinalDailyReport(date) || document.querySelector("dialog[open], form[data-work-saving='true']")) return;
+  if (form.dataset.reportDate !== date || form.dataset.actorId !== activeEmployee.id) form.reset();
   form.dataset.reportDate = date;
-  form.reset();
-  setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)} biće vidljiv tvom lideru.`);
+  form.dataset.actorId = activeEmployee.id;
+  setText("dailyReportDateLabel", `Izveštaj za ${formatDate(date)} · ${formatNumber(loggedMinutesForDate(date))} min evidentiranog rada.`);
   if (!dialog.open) dialog.showModal();
 }
 
@@ -2594,6 +2620,8 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
     result = await postEmployeeReport({
       employeeId: activeEmployee.id,
       date,
+      action: "submitDaily",
+      help: String(formData.get("help") || "").trim(),
       note: String(formData.get("summary") || "").trim(),
       positive: String(formData.get("positive") || "").trim(),
       negative: String(formData.get("negative") || "").trim(),
@@ -2615,6 +2643,7 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   }
   state.employeeReports = (state.employeeReports || []).filter((report) => !(report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true));
   state.employeeReports.unshift(result.report);
+  form.reset();
   saveState({ remote: false });
   document.getElementById("dailyReportDialog")?.close();
   renderEmployeePortal();
@@ -2686,33 +2715,42 @@ document.getElementById("logoutEmployee")?.addEventListener("click", () => {
   }
   document.documentElement.classList.remove("employee-session-cached");
   activeEmployee = null;
-  weeklyCompletionShown = false;
   document.getElementById("employeeApp").hidden = true;
   document.getElementById("employeeLoginScreen").hidden = false;
   document.getElementById("employeeLoginForm").reset();
 });
 
+function openLeaderDailyReports(unread = false) {
+  const reports = unread ? unreadDailyReports().slice(0, 25) : filteredDailyReports();
+  if (!reports.length || document.querySelector("dialog[open], form[data-work-saving='true']")) return;
+  const dialog = document.getElementById("leaderReportsDialog");
+  if (!dialog) return;
+  dialog.dataset.unread = String(unread);
+  renderLeaderReportInbox(reports);
+  dialog.showModal();
+}
+document.getElementById("openLeaderDailyReports")?.addEventListener("click", () => openLeaderDailyReports());
+document.getElementById("openUnreadDailyReports")?.addEventListener("click", () => openLeaderDailyReports(true));
+document.getElementById("leaderUnreadReportList")?.addEventListener("click", (event) => {
+  const button = event.target.closest?.(".leader-report-ack");
+  if (button) acknowledgeLeaderReport(button.dataset.reportId, button);
+});
 document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", () => {
   document.getElementById("leaderReportsDialog")?.close();
 });
 
 document.getElementById("sendWeeklyQuestionnaire")?.addEventListener("click", () => document.getElementById("weeklySendDialog")?.showModal());
-document.getElementById("closeWeeklySendDialog")?.addEventListener("click", () => {
-  if (requiredWeeklyTask()?.kind !== "send") document.getElementById("weeklySendDialog")?.close();
+document.getElementById("weeklyTaskButton")?.addEventListener("click", openRequiredWeeklyTask);
+document.getElementById("closeWeeklySendDialog")?.addEventListener("click", () => document.getElementById("weeklySendDialog")?.close());
+document.getElementById("weeklyQuestionnaireLater")?.addEventListener("click", () => document.getElementById("weeklyQuestionnaireDialog")?.close());
+document.getElementById("weeklyQuestionnaireDialog")?.addEventListener("cancel", (event) => {
+  if (document.getElementById("weeklyQuestionnaireForm")?.dataset.saving === "true") event.preventDefault();
 });
-for (const [dialogId, kind] of [["weeklySendDialog", "send"], ["weeklyQuestionnaireDialog", "answer"]]) {
-  document.getElementById(dialogId)?.addEventListener("cancel", (event) => {
-    if (requiredWeeklyTask()?.kind === kind) event.preventDefault();
-  });
-  document.getElementById(dialogId)?.addEventListener("close", renderRequiredWeeklyTask);
-}
 document.getElementById("confirmSendWeeklyQuestionnaire")?.addEventListener("click", sendWeeklyQuestionnaires);
 document.getElementById("weeklyQuestionnaireForm")?.addEventListener("input", (event) => saveWeeklyDraft(event.currentTarget));
-document.getElementById("ackWeeklyCompleted")?.addEventListener("click", () => acknowledgeWeeklyQuestionnaire());
-document.getElementById("weeklyCompletedDialog")?.addEventListener("cancel", (event) => event.preventDefault());
 document.getElementById("leaderWeeklyReportList")?.addEventListener("click", (event) => {
   const button = event.target.closest?.(".weekly-report-ack");
-  if (button) acknowledgeWeeklyQuestionnaire(button.dataset.reportId);
+  if (button) acknowledgeWeeklyQuestionnaire(button.dataset.reportId, button);
 });
 document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -2750,6 +2788,7 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
 });
 
 document.getElementById("leaderLiveReportEmployee")?.addEventListener("change", renderLeaderReportsPage);
+document.getElementById("reportSearch")?.addEventListener("input", renderLeaderReportStatus);
 document.getElementById("leaderLiveReportDate")?.addEventListener("change", renderLeaderReportsPage);
 document.getElementById("leaderReportsNav")?.addEventListener("click", refreshLeaderReportsFromRemote);
 document.getElementById("leaderMeetingEmployee")?.addEventListener("change", renderLeaderMeetingsPage);

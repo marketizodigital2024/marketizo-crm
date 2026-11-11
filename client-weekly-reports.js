@@ -7,7 +7,12 @@
   const escape = value => escapePortalText(String(value || ''));
   const draftKey = report => `marketizoClientWeekly:${activeEmployee?.id}:${report.id}`;
   const ownPending = () => reports.filter(r => !activeEmployee?.isLeader && r.employeeId === activeEmployee?.id && !r.submittedAt && r.clients?.length).sort((a, b) => a.date.localeCompare(b.date))[0];
-  const receivedUnread = () => reports.filter(r => r.recipientId === activeEmployee?.id && r.submittedAt && !r.acknowledgedAt).sort((a, b) => a.date.localeCompare(b.date))[0];
+  const canReadTeamReport = report => activeEmployee?.isLeader && report.employeeId !== activeEmployee.id &&
+    (report.recipientId === activeEmployee.id || ['emp-miljan', 'emp-ivana'].includes(activeEmployee.id));
+  const hasRead = report => Boolean(report.acknowledgedByViewer?.[activeEmployee?.id] ||
+    (report.acknowledgedAt && report.acknowledgedBy === activeEmployee?.id));
+  const receivedUnread = () => reports.filter(report => canReadTeamReport(report) && report.submittedAt && !hasRead(report))
+    .sort((a, b) => a.date.localeCompare(b.date));
   async function request(body) {
     const controller = new AbortController(), timer = window.setTimeout(() => controller.abort(), 28000);
     try {
@@ -35,7 +40,7 @@
     const panel = el('clientWeeklyLeaderPanel'); if (!panel) return;
     panel.hidden = !activeEmployee?.isLeader;
     if (!activeEmployee?.isLeader) return;
-    const team = reports.filter(r => r.recipientId === activeEmployee.id || (['emp-miljan', 'emp-ivana'].includes(activeEmployee.id) && r.employeeId !== activeEmployee.id));
+    const team = reports.filter(canReadTeamReport);
     const select = el('clientWeeklyPeriod'), previous = select.value;
     const periods = [...new Set(team.map(r => r.periodStart))].sort().reverse();
     select.innerHTML = periods.map(period => `<option value="${escape(period)}">${escape(formatDate(period))}–${escape(formatDate(team.find(r => r.periodStart === period).periodEnd))}</option>`).join('');
@@ -45,18 +50,30 @@
     el('clientWeeklyTeamStatus').textContent = team.length ? `${submitted}/${visible.length} izveštaja popunjeno · ${visible.filter(r => !r.submittedAt).length} čeka odgovor` : 'Prvi izveštaji stižu od ponedeljka u 12h. Izvor: ClickUp raspodela klijenata.';
     el('clientWeeklyAssignmentStatus').textContent = assignmentSyncedAt ? `ClickUp raspodela proverena: ${new Date(assignmentSyncedAt).toLocaleString('sr-RS')}. Merodavna su osnovna polja (Scenarista, Editor, SMM…).` : 'Proveravamo ClickUp raspodelu…';
     el('clientWeeklyAssignmentList').innerHTML = assignmentPreview.filter(e => e.clients.length).map(e => `<details class="client-weekly-card"><summary>${escape(e.employeeName)} · ${e.clients.length} klijenata</summary><p>${e.clients.map(c => escape(c.clientName)).join(' · ')}</p></details>`).join('');
+    const search = (el('reportSearch')?.value || '').trim().toLocaleLowerCase('sr-Latn');
     const grouped = new Map();
     for (const report of visible) for (const client of report.clients) {
-      if (!grouped.has(client.clientId)) grouped.set(client.clientId, { name: client.clientName, rows: [] });
       const answer = (report.clientAnswers || []).find(a => a.clientId === client.clientId);
-      grouped.get(client.clientId).rows.push(`<section class="client-weekly-person"><h4>${escape(report.employeeName)} · ${escape(client.roles.join(', '))}</h4>${answer ? `<p><strong>Pozitivno:</strong> ${escape(answer.positive)}</p><p><strong>Negativno:</strong> ${escape(answer.negative)}</p><p><strong>Pomoć:</strong> ${escape(answer.help)}</p><p class="muted">${report.acknowledgedAt ? 'Pročitano' : 'Popunjeno · čeka čitanje'}</p>` : '<p class="muted">Čeka odgovor zaposlenog.</p>'}</section>`);
+      if (search && ![client.clientName, report.employeeName, answer?.positive, answer?.negative, answer?.help].some(value => String(value || '').toLocaleLowerCase('sr-Latn').includes(search))) continue;
+      if (!grouped.has(client.clientId)) grouped.set(client.clientId, { name: client.clientName, rows: [] });
+      grouped.get(client.clientId).rows.push(`<section class="client-weekly-person"><h4>${escape(report.employeeName)} · ${escape(client.roles.join(', '))}</h4>${answer ? `<p><strong>Pozitivno:</strong> ${escape(answer.positive)}</p><p><strong>Negativno:</strong> ${escape(answer.negative)}</p><p><strong>Pomoć:</strong> ${escape(answer.help)}</p><p class="muted">${hasRead(report) ? 'Pročitano' : 'Popunjeno · čeka čitanje'}</p>` : '<p class="muted">Čeka odgovor zaposlenog.</p>'}</section>`);
     }
-    el('clientWeeklyTeamList').innerHTML = [...grouped.values()].sort((a,b) => a.name.localeCompare(b.name, 'sr')).map(group => `<details class="client-weekly-card"><summary><strong>${escape(group.name)}</strong></summary>${group.rows.join('')}</details>`).join('');
+    const list = el('clientWeeklyTeamList');
+    const openClients = new Set([...list.querySelectorAll('details[open]')].map(card => card.dataset.clientId));
+    const markup = [...grouped.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, 'sr'))
+      .map(([id, group]) => `<details class="client-weekly-card" data-client-id="${escape(id)}"><summary><strong>${escape(group.name)}</strong></summary>${group.rows.join('')}</details>`).join('');
+    if (list.dataset.markup !== markup) {
+      list.innerHTML = markup;
+      list.dataset.markup = markup;
+      for (const card of list.querySelectorAll('details')) card.open = openClients.has(card.dataset.clientId);
+    }
   }
-  function render() {
+  function render(openReport = false) {
     if (loadedActor !== activeEmployee?.id) {
       for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog']) if (el(id)?.open) el(id).close();
       el('clientWeeklyNotice').hidden = true;
+      el('clientWeeklyOpen').hidden = true;
+      if (typeof updateReportArrival === 'function') updateReportArrival({ actorId: activeEmployee?.id, count: 0 });
       el('clientWeeklyLeaderPanel').hidden = true;
       return;
     }
@@ -68,9 +85,14 @@
       saveDraft();el('clientWeeklyDialog').close();
     }
     notice.hidden = !pending && !sourceError;
-    notice.textContent = sourceError ? `Pregled klijenata: ${sourceError} Pokušaćemo ponovo; spisak nije označen kao prazan.` : pending ? `Obavezno: pregled klijenata za ${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)}. Popuni do kraja radnog vremena u ponedeljak; ako je rok prošao, popuni sada.` : '';
-    if (saving || document.querySelector('dialog[open], form[data-saving="true"]')) return;
-    if (document.activeElement?.matches?.('input,textarea,select,[contenteditable="true"]')) return;
+    notice.textContent = sourceError ? `Pregled klijenata: ${sourceError} Pokušaćemo ponovo; spisak nije označen kao prazan.` : pending ? `Obavezno: pregled klijenata za ${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)}. Rok je ${formatDate(pending.dueDate || pending.date)} do kraja radnog vremena.` : '';
+    const unreadReports = receivedUnread();
+    const unread = unreadReports[0];
+    if (typeof updateReportArrival === 'function') updateReportArrival({ actorId: activeEmployee?.id, count: unreadReports.length });
+    const openButton = el('clientWeeklyOpen');
+    openButton.hidden = !pending || Boolean(unread);
+    openButton.textContent = pending ? 'Popuni pregled klijenata' : 'Pročitaj pregled klijenata';
+    if (!openReport || saving || document.querySelector('dialog[open], form[data-saving="true"], form[data-work-saving="true"]')) return;
     if (pending) {
       const form = el('clientWeeklyForm');
       if (form.dataset.reportId !== pending.id || form.dataset.actorId !== activeEmployee.id || form.dataset.clients !== JSON.stringify(pending.clients)) {
@@ -84,15 +106,12 @@
         el('clientWeeklyFormStatus').textContent = '';
       }
       el('clientWeeklyDialog').showModal();
-    } else {
-      const unread = receivedUnread();
-      if (unread) {
-        const dialog = el('clientWeeklyReadDialog'); dialog.dataset.reportId = unread.id;
-        el('clientWeeklyReadTitle').textContent = `${unread.employeeName} · pregled klijenata`;
-        el('clientWeeklyReadPeriod').textContent = `${formatDate(unread.periodStart)}–${formatDate(unread.periodEnd)}`;
-        el('clientWeeklyReadContent').innerHTML = answerHtml(unread);
-        dialog.showModal();
-      }
+    } else if (unread) {
+      const dialog = el('clientWeeklyReadDialog'); dialog.dataset.reportId = unread.id;
+      el('clientWeeklyReadTitle').textContent = `${unread.employeeName} · pregled klijenata`;
+      el('clientWeeklyReadPeriod').textContent = `${formatDate(unread.periodStart)}–${formatDate(unread.periodEnd)}`;
+      el('clientWeeklyReadContent').innerHTML = answerHtml(unread);
+      dialog.showModal();
     }
   }
   async function refresh(force = false) {
@@ -118,6 +137,10 @@
     } catch (error) { sourceError = error.name === 'AbortError' ? 'Veza nije odgovorila na vreme.' : error.message; render(); }
     finally { busy = false; }
   }
+  el('clientWeeklyOpen').addEventListener('click', () => render(true));
+  el('openUnreadClientReports')?.addEventListener('click', () => render(true));
+  el('clientWeeklyLater').addEventListener('click', () => { if (!saving) el('clientWeeklyDialog').close(); });
+  el('clientWeeklyReadLater').addEventListener('click', () => { if (!saving) el('clientWeeklyReadDialog').close(); });
   el('clientWeeklyForm').addEventListener('input', saveDraft);
   el('clientWeeklyForm').addEventListener('submit', async event => {
     event.preventDefault(); if (saving) return;
@@ -149,9 +172,10 @@
     finally { revision += 1; saving = false; button.disabled = false; button.textContent = 'Pročitao/la sam izveštaj'; render(); }
   });
   for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog']) {
-    el(id).addEventListener('cancel', event => event.preventDefault());
+    el(id).addEventListener('cancel', event => { if (saving) event.preventDefault(); });
     el(id).addEventListener('close', () => window.setTimeout(render, 0));
   }
+  el('reportSearch')?.addEventListener('input', renderHistory);
   el('clientWeeklyPeriod').addEventListener('change', renderHistory);
   window.setInterval(() => { if (!activeEmployee) return; render(); refresh(); }, 10000);
   window.addEventListener('focus', () => refresh(true));

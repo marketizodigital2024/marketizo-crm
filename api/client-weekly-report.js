@@ -64,7 +64,13 @@ async function handler(req, res) {
           if (!report.submittedAt) { Object.assign(report, { clientAnswers: answers, submittedAt: new Date().toISOString(), status: 'completed' }); changed = true; }
         } else {
           if (!actor.isLeader || !report.submittedAt || report.employeeId === actor.id) return send(res, 403, { ok: false, error: 'Samo lider potvrđuje primljeni izveštaj.' });
-          if (!report.acknowledgedAt) { Object.assign(report, { acknowledgedAt: new Date().toISOString(), acknowledgedBy: actor.id }); changed = true; }
+          if (!report.acknowledgedByViewer?.[actor.id] && !(report.acknowledgedBy === actor.id && report.acknowledgedAt)) {
+            const readAt = new Date().toISOString();
+            report.acknowledgedByViewer = { ...report.acknowledgedByViewer, [actor.id]: readAt };
+            report.acknowledgedAt ||= readAt;
+            report.acknowledgedBy ||= actor.id;
+            changed = true;
+          }
         }
       }
       if (changed) {

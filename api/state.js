@@ -89,6 +89,9 @@ function hideEmployeeState(payload, employee) {
   }
   copy.employeeDirectory = (copy.employees || []).map(({ id, name, leaderId }) => ({ id, name, leaderId }));
   copy.employees = (copy.employees || []).filter((item) => visibleEmployeeIds.has(item.id));
+  copy.teamVacationCalendar = (copy.employeeAbsences || [])
+    .filter(item => !visibleEmployeeIds.has(item.employeeId) && item.status === "Odobreno" && item.type === "Godišnji odmor")
+    .map(({ employeeId, startDate, endDate, status, type }) => ({ employeeId, startDate, endDate, status, type }));
   copy.employeeAbsences = (copy.employeeAbsences || []).filter((item) => visibleEmployeeIds.has(item.employeeId));
   copy.clients = (copy.clients || []).map(({ id, name, status, clickupName }) => ({ id, name, status, ...(clickupName ? {clickupName} : {}) }));
   copy.leads = [];
