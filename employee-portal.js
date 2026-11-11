@@ -1024,7 +1024,12 @@ function setupDailyMinuteProgress() {
     const status = progress.querySelector("#dailyMinuteStatus");
     const bar = progress.querySelector("#dailyMinuteBar");
     const message = progress.querySelector("#dailyMinuteMessage");
-    reportButton.hidden = !expected || date > currentDateKey() || hasFinalDailyReport(date);
+    const employedOnDate = (!activeEmployee.startDate || activeEmployee.startDate <= date) &&
+      (!activeEmployee.endDate || date <= activeEmployee.endDate);
+    const approvedAbsence = employeeAbsences().some(absence =>
+      absence.status === "Odobreno" && absence.startDate <= date && date <= absence.endDate);
+    const reportDay = logged > 0 || (isAustrianWorkingDay(date) && !approvedAbsence);
+    reportButton.hidden = !employedOnDate || !reportDay || date > currentDateKey() || hasFinalDailyReport(date);
     title.textContent = date === currentDateKey()
       ? `Danas · ${formatDate(date)}`
       : `Izabrani dan · ${formatDate(date)}`;
