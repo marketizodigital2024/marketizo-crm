@@ -2010,6 +2010,34 @@ function renderLeaderReportsPage() {
   renderLeaderReportStatus();
 }
 
+let clientReviewNotice = { actorId: "", count: 0 };
+
+function reportReadByViewer(report, actorId) {
+  return Boolean(report.acknowledgedByViewer?.[actorId] || (report.acknowledgedBy === actorId && report.acknowledgedAt));
+}
+
+function unreadDailyReports() {
+  const actorId = activeEmployee?.id;
+  const peopleIds = new Set(leaderReportPeople().map(employee => employee.id));
+  return (state.employeeReports || []).filter(report => peopleIds.has(report.employeeId) &&
+    report.isFinalDailyReport === true && !report.isAutomaticRollup && !reportReadByViewer(report, actorId)
+  ).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+function updateReportArrival(notice = clientReviewNotice) {
+  clientReviewNotice = notice;
+  const panel = document.getElementById("reportArrival");
+  if (!panel) return;
+  const daily = activeEmployee?.isLeader ? unreadDailyReports().length : 0;
+  const clients = activeEmployee?.isLeader && notice.actorId === activeEmployee.id ? notice.count : 0;
+  const label = document.getElementById("reportArrivalText");
+  const message = [daily ? `Dnevni izveštaji: ${daily}` : "", clients ? `Pregledi klijenata: ${clients}` : ""].filter(Boolean).join(" · ");
+  if (label.textContent !== message) label.textContent = message;
+  panel.hidden = !message;
+  document.getElementById("openUnreadDailyReports").hidden = !daily;
+  document.getElementById("openUnreadClientReports").hidden = !clients;
+}
+
 function renderLeaderReportStatus() {
   const nav = document.getElementById("leaderReportsNav");
   const dailyButton = document.getElementById("openLeaderDailyReports");
@@ -2021,6 +2049,7 @@ function renderLeaderReportStatus() {
   const unreadWeeklyCount = weeklyReportsForLeader().filter((report) => report.submittedAt && !report.acknowledgedAt).length;
   if (nav) nav.textContent = `Izveštaji${unreadWeeklyCount ? ` (${unreadWeeklyCount})` : ""}`;
   renderWeeklyQuestionnaires();
+  updateReportArrival();
 }
 
 // Report-only reads never replace work entries, balances or an employee's draft.
@@ -2114,7 +2143,7 @@ function renderLeaderReportInbox(reports) {
   list.innerHTML = reports.map((report) => {
     const employee = (state.employees || []).find((item) => item.id === report.employeeId);
     const minutes = Number(report.minutes || Number(report.hours || 0) * 60);
-    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}${report.help ? `<br /><b>Pomoć:</b> ${escapePortalText(report.help)}` : ""}<br />${report.acknowledgedAt ? "Pročitano" : `<button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button>`}</span></div>`;
+    return `<div class="setup-item leader-report-card"><strong>${formatDate(report.date).slice(0, 5)}</strong><span><b>${escapePortalText(employee?.name || "Zaposleni")} · ${formatNumber(minutes)} min</b><br />${escapePortalText(report.note || report.autoSummary || "Bez rezimea")}${report.positive ? `<br /><b>Dobro:</b> ${escapePortalText(report.positive)}` : ""}${report.negative ? `<br /><b>Problemi:</b> ${escapePortalText(report.negative)}` : ""}${report.help ? `<br /><b>Pomoć:</b> ${escapePortalText(report.help)}` : ""}<br />${reportReadByViewer(report, activeEmployee?.id) ? "Pročitano" : `<button class="primary-button leader-report-ack" data-report-id="${escapePortalText(report.id)}" type="button">Pročitao/la sam izveštaj</button>`}</span></div>`;
   }).join("");
 }
 
@@ -2138,9 +2167,10 @@ async function acknowledgeLeaderReport(reportId, button) {
   if (report) Object.assign(report, result.report || {});
   saveState({ remote: false });
   renderLeaderReportsPage();
-  const remaining = filteredDailyReports();
-  if (remaining.length) renderLeaderReportInbox(remaining);
-  else document.getElementById("leaderReportsDialog")?.close();
+  const dialog = document.getElementById("leaderReportsDialog");
+  const remaining = dialog?.dataset.unread === "true" ? unreadDailyReports().slice(0, 25) : filteredDailyReports();
+  if (dialog?.open && remaining.length) renderLeaderReportInbox(remaining);
+  else dialog?.close();
   showToast("Potvrđeno", "Sačuvano je da si pročitao/la izveštaj.", "ok");
 }
 
@@ -2690,12 +2720,17 @@ document.getElementById("logoutEmployee")?.addEventListener("click", () => {
   document.getElementById("employeeLoginForm").reset();
 });
 
-document.getElementById("openLeaderDailyReports")?.addEventListener("click", () => {
-  const reports = filteredDailyReports();
+function openLeaderDailyReports(unread = false) {
+  const reports = unread ? unreadDailyReports().slice(0, 25) : filteredDailyReports();
   if (!reports.length || document.querySelector("dialog[open], form[data-work-saving='true']")) return;
+  const dialog = document.getElementById("leaderReportsDialog");
+  if (!dialog) return;
+  dialog.dataset.unread = String(unread);
   renderLeaderReportInbox(reports);
-  document.getElementById("leaderReportsDialog")?.showModal();
-});
+  dialog.showModal();
+}
+document.getElementById("openLeaderDailyReports")?.addEventListener("click", () => openLeaderDailyReports());
+document.getElementById("openUnreadDailyReports")?.addEventListener("click", () => openLeaderDailyReports(true));
 document.getElementById("leaderUnreadReportList")?.addEventListener("click", (event) => {
   const button = event.target.closest?.(".leader-report-ack");
   if (button) acknowledgeLeaderReport(button.dataset.reportId, button);

@@ -182,9 +182,13 @@ module.exports = async function handler(req, res) {
         const report = (payload.employeeReports || []).find((item) => item.id === reportId && item.isWeeklyQuestionnaire === true && item.submittedAt);
         const employee = (payload.employees || []).find((item) => item.id === report?.employeeId);
         if (!leader || !report || !canLead(leader, employee)) return json(res, 403, { ok: false, error: "Ovaj izveštaj nije dodeljen tom lideru." });
-        if (report.acknowledgedAt) return json(res, 200, { ok: true, report, updatedAt: row.updated_at, duplicate: true });
-        report.acknowledgedAt = new Date().toISOString();
-        report.acknowledgedBy = leaderId;
+        if (report.acknowledgedByViewer?.[leaderId] || (report.acknowledgedBy === leaderId && report.acknowledgedAt)) {
+          return json(res, 200, { ok: true, report, updatedAt: row.updated_at, duplicate: true });
+        }
+        const readAt = new Date().toISOString();
+        report.acknowledgedByViewer = { ...report.acknowledgedByViewer, [leaderId]: readAt };
+        report.acknowledgedAt ||= readAt;
+        report.acknowledgedBy ||= leaderId;
         const updatedAt = new Date().toISOString();
         const response = await dbFetch(`${url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}&select=updated_at`, {
           method: "PATCH", headers: headers(key, "return=representation"), body: JSON.stringify({ payload, updated_at: updatedAt }),
@@ -255,7 +259,7 @@ module.exports = async function handler(req, res) {
         if (!report.isAutomaticRollup && report.note === note && report.positive === positive && report.negative === negative && (report.help || "") === (body.help === undefined ? (report.help || "") : help) && report.minutes === minutes && report.recipientId === recipientId) {
           return json(res, 200, { ok: true, report, updatedAt: row.updated_at, duplicate: true });
         }
-        Object.assign(report, { recipientId, minutes, hours: Math.round((minutes / 60) * 10000) / 10000, note, positive, negative, ...(body.help === undefined ? {} : { help }), updatedAt: now, isAutomaticRollup: false, acknowledgedAt: null, acknowledgedBy: null });
+        Object.assign(report, { recipientId, minutes, hours: Math.round((minutes / 60) * 10000) / 10000, note, positive, negative, ...(body.help === undefined ? {} : { help }), updatedAt: now, isAutomaticRollup: false, acknowledgedAt: null, acknowledgedBy: null, acknowledgedByViewer: {} });
       } else {
         report = {
           id: `daily-report-${employeeId}-${date}`,
