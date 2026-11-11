@@ -65,38 +65,37 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   const dailyUi={document:{getElementById:id=>id==='leaderReportsDialog'?{showModal(){dailyOpens++}}:{innerHTML:''}},window:{setTimeout(){scheduled++}},state:{employees:row.payload.employees},formatDate:String,escapePortalText:String,formatNumber:String};
   vm.createContext(dailyUi);vm.runInContext(named('renderLeaderReportInbox'),dailyUi);dailyUi.renderLeaderReportInbox([{id:'daily',employeeId:'worker',minutes:60,date:'2026-10-23'}]);
   assert.equal(dailyOpens,0);assert.equal(scheduled,0,'Daily inbox never schedules a popup');
-  // Exercise required weekly tasks with real renderers and dialog cancel handlers.
-  let day='2026-11-05', editingWeekly=false;
-  const dialog=()=>({open:false,listeners:{},showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();},addEventListener(type,fn){this.listeners[type]=fn;}});
+  // Weekly reminders remain visible without opening a dialog or blocking time entry.
+  let day='2026-11-05', workSaving=false;
+  const dialog=()=>({open:false,listeners:{},showModal(){this.open=true;},close(){this.open=false;},addEventListener(type,fn){this.listeners[type]=fn;}});
   const sendDialog=dialog(),answerDialog=dialog(),draftValues=Object.fromEntries([1,2,3,4,5].map(i=>[`answer${i}`,{value:''}]));
   const draftForm={dataset:{},elements:draftValues,reset(){Object.values(draftValues).forEach(f=>f.value='');}};
-  const weeklyElements={weeklySendDialog:sendDialog,weeklyQuestionnaireDialog:answerDialog,weeklyQuestionnaireForm:draftForm,closeWeeklySendDialog:{}};
+  const taskButton=dialog(), laterButton=dialog();
+  const weeklyElements={weeklySendDialog:sendDialog,weeklyQuestionnaireDialog:answerDialog,weeklyQuestionnaireForm:draftForm,weeklyTaskButton:taskButton,weeklyQuestionnaireLater:laterButton,closeWeeklySendDialog:dialog()};
   const storage=new Map();
-  const requiredUi={state:{employees:[{id:'leader',isLeader:true},{id:'worker',leaderId:'leader'},{id:'second',leaderId:'leader'}],employeeReports:[]},activeEmployee:{id:'leader',isLeader:true},currentDateKey:()=>day,currentWeeklyWindow:()=>({weekKey:'2026-11-02',dueDate:'2026-11-05',fridayDate:'2026-11-06'}),document:{hidden:false,activeElement:{matches:()=>editingWeekly},getElementById:id=>weeklyElements[id],querySelector:selector=>selector==='dialog[open]'?[sendDialog,answerDialog].find(d=>d.open):null},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},setText(){},formatDate:String};
-  vm.createContext(requiredUi);vm.runInContext(['leaderReportPeople','weeklyReportsForLeader','requiredWeeklyTask','weeklyDraftKey','saveWeeklyDraft','renderRequiredWeeklyTask'].map(named).join('\n'),requiredUi);
-  day='2026-11-04';assert.equal(requiredUi.requiredWeeklyTask(),null);
-  day='2026-11-05';editingWeekly=true;requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,false);
-  editingWeekly=false;requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,true);assert.equal(weeklyElements.closeWeeklySendDialog.hidden,true);
-  requiredUi.state.employeeReports.push({id:'w1',isWeeklyQuestionnaire:true,employeeId:'worker',weekKey:'2026-11-02'});assert.equal(requiredUi.requiredWeeklyTask().kind,'send','Partial team sends remain required');
-  requiredUi.state.employeeReports.push({id:'w2',isWeeklyQuestionnaire:true,employeeId:'second',weekKey:'2026-11-02'});assert.equal(requiredUi.requiredWeeklyTask(),null);
-  sendDialog.open=false;requiredUi.activeEmployee={id:'worker',isLeader:true};requiredUi.renderRequiredWeeklyTask();assert.equal(answerDialog.open,true,'Leader recipients must also answer');
-  draftValues.answer1.value='Draft retained';requiredUi.saveWeeklyDraft(draftForm);draftForm.dataset={};draftForm.reset();answerDialog.open=false;requiredUi.renderRequiredWeeklyTask();assert.equal(draftValues.answer1.value,'Draft retained');
-  const guardStart=source.indexOf('for (const [dialogId, kind]'),guardEnd=source.indexOf('document.getElementById("confirmSendWeeklyQuestionnaire")?.addEventListener',guardStart);
+  const requiredUi={state:{employees:[{id:'leader',isLeader:true},{id:'worker',leaderId:'leader'},{id:'second',leaderId:'leader'}],employeeReports:[]},activeEmployee:{id:'leader',isLeader:true},currentDateKey:()=>day,currentWeeklyWindow:()=>({weekKey:'2026-11-02',dueDate:'2026-11-05',fridayDate:'2026-11-06'}),document:{getElementById:id=>weeklyElements[id],querySelector:()=>workSaving||sendDialog.open||answerDialog.open},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},setText(){},formatDate:String};
+  vm.createContext(requiredUi);vm.runInContext(['leaderReportPeople','weeklyReportsForLeader','requiredWeeklyTask','weeklyDraftKey','saveWeeklyDraft','renderRequiredWeeklyTask','openRequiredWeeklyTask'].map(named).join('\n'),requiredUi);
+  const guardStart=source.indexOf('document.getElementById("weeklyTaskButton")?.addEventListener'),guardEnd=source.indexOf('document.getElementById("confirmSendWeeklyQuestionnaire")?.addEventListener',guardStart);
   vm.runInContext(source.slice(guardStart,guardEnd),requiredUi);
-  requiredUi.activeEmployee={id:'leader',isLeader:true};requiredUi.state.employeeReports.pop();let senderPrevented=false;sendDialog.listeners.cancel({preventDefault(){senderPrevented=true;}});assert.equal(senderPrevented,true,'Escape cannot dismiss required team sending');
-  requiredUi.activeEmployee={id:'worker',isLeader:true};let prevented=false;answerDialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
-  answerDialog.open=false;answerDialog.listeners.close();assert.equal(answerDialog.open,true);
-  requiredUi.state.employeeReports[0].submittedAt='confirmed';assert.equal(requiredUi.requiredWeeklyTask(),null);prevented=false;answerDialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,false);
-  requiredUi.activeEmployee={id:'leader',isLeader:true};requiredUi.state.employeeReports=[];sendDialog.open=false;answerDialog.open=false;
-  day='2026-11-06';assert.equal(requiredUi.requiredWeeklyTask().kind,'send','Friday keeps the missed Thursday reminder');requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,true);
-  day='2026-11-07';requiredUi.renderRequiredWeeklyTask();assert.equal(requiredUi.requiredWeeklyTask(),null);assert.equal(sendDialog.open,false,'A required send popup does not stay trapped over the weekend');assert.equal(weeklyElements.closeWeeklySendDialog.hidden,false);
-  day='2026-11-08';requiredUi.renderRequiredWeeklyTask();assert.equal(sendDialog.open,false);
-  requiredUi.activeEmployee={id:'worker'};requiredUi.state.employeeReports=[{id:'weekend-answer',isWeeklyQuestionnaire:true,employeeId:'worker',weekKey:'2026-11-02'}];draftForm.dataset.reportId='weekend-answer';draftValues.answer1.value='Keep weekend draft';answerDialog.open=true;requiredUi.renderRequiredWeeklyTask();assert.equal(answerDialog.open,false);assert.equal(requiredUi.state.employeeReports[0].submittedAt,undefined);assert.match(storage.get('marketizoWeeklyDraft:worker:weekend-answer'),/Keep weekend draft/);
-  day='2026-11-09';assert.equal(requiredUi.requiredWeeklyTask().kind,'answer','Unanswered reports remain due on the next workday');requiredUi.renderRequiredWeeklyTask();assert.equal(answerDialog.open,true);assert.equal(draftValues.answer1.value,'Keep weekend draft');
-  // The exact reported Saturday must never force the team-send popup.
-  day='2026-10-31';requiredUi.currentWeeklyWindow=()=>({weekKey:'2026-10-26',dueDate:'2026-10-29',fridayDate:'2026-10-30'});requiredUi.activeEmployee={id:'leader',isLeader:true};requiredUi.state.employeeReports=[];assert.equal(requiredUi.requiredWeeklyTask(),null);
-  requiredUi.activeEmployee={id:'other'};assert.equal(requiredUi.requiredWeeklyTask(),null);
-  assert.ok(!fs.readFileSync(path.join(__dirname,'../employee-login.html'),'utf8').includes('id="closeWeeklyQuestionnaireDialog"'));
+  day='2026-11-04';requiredUi.renderRequiredWeeklyTask();assert.equal(taskButton.hidden,true);
+  day='2026-11-05';requiredUi.renderRequiredWeeklyTask();assert.equal(taskButton.hidden,false);assert.equal(sendDialog.open,false);
+  workSaving=true;taskButton.listeners.click();assert.equal(sendDialog.open,false);
+  workSaving=false;taskButton.listeners.click();assert.equal(sendDialog.open,true);weeklyElements.closeWeeklySendDialog.listeners.click();assert.equal(sendDialog.open,false);
+  requiredUi.state.employeeReports.push({id:'w1',isWeeklyQuestionnaire:true,employeeId:'worker',weekKey:'2026-11-02'});
+  assert.equal(requiredUi.requiredWeeklyTask().kind,'send','Partial team sends remain due');
+  requiredUi.state.employeeReports.push({id:'w2',isWeeklyQuestionnaire:true,employeeId:'second',weekKey:'2026-11-02'});
+  assert.equal(requiredUi.requiredWeeklyTask(),null);
+  requiredUi.activeEmployee={id:'worker',isLeader:true};requiredUi.renderRequiredWeeklyTask();assert.equal(answerDialog.open,false);
+  taskButton.listeners.click();assert.equal(answerDialog.open,true,'Leader recipients can answer');
+  draftValues.answer1.value='Draft retained';requiredUi.saveWeeklyDraft(draftForm);
+  laterButton.listeners.click();requiredUi.renderRequiredWeeklyTask();assert.equal(answerDialog.open,false);assert.equal(taskButton.hidden,false);
+  draftForm.dataset={};draftForm.reset();taskButton.listeners.click();assert.equal(draftValues.answer1.value,'Draft retained');
+  let prevented=false;answerDialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,false);
+  draftForm.dataset.saving='true';answerDialog.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
+  delete draftForm.dataset.saving;answerDialog.close();
+  day='2026-11-07';requiredUi.renderRequiredWeeklyTask();assert.equal(taskButton.hidden,true);
+  day='2026-11-09';requiredUi.renderRequiredWeeklyTask();assert.equal(taskButton.hidden,false);assert.equal(answerDialog.open,false);
+  taskButton.listeners.click();assert.equal(draftValues.answer1.value,'Draft retained');
   // Actual form handler: failed submission retains answers; double clicks issue one request.
   let submit, release, calls = 0, resets = 0, toasts = [];
   const fields = Object.fromEntries(answers.map((a, i) => [`answer${i + 1}`, a]));
@@ -118,24 +117,16 @@ function named(name) { const start = source.indexOf(`function ${name}(`); assert
   let abortRequest;
   const postUi = { reportInboxRevision: 0, window: { setTimeout: fn => { abortRequest = fn; return 1; }, clearTimeout() {} }, AbortController, employeeApiHeaders: () => ({}), fetch: (url, options) => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(Object.assign(new Error(), { name: 'AbortError' })))) };
   vm.createContext(postUi); vm.runInContext(named('postEmployeeReport'), postUi); const timedPost = postUi.postEmployeeReport({}); abortRequest(); const timedResult = await timedPost; assert.equal(timedResult.ok, false); assert.match(timedResult.error, /zadržani/);
-  // Completed reports cannot be dismissed; failed/duplicate requests do not mark them read.
-  const html = fs.readFileSync(path.join(__dirname, '../employee-login.html'), 'utf8');
-  assert.ok(!html.includes('id="closeWeeklyCompletedDialog"'));
-  let receiptCancel;
-  const receipt = { open: true, dataset: { reportId: 'receipt' }, close() { this.open = false; }, addEventListener(type, fn) { receiptCancel = fn; } };
+  // Read receipts are explicit and only confirmed when the server acknowledges the requested report.
   const receiptButton = {};
   let ackRelease, ackCalls = 0, ackRenders = 0;
-  const ackUi = { activeEmployee: { id: 'leader' }, weeklyCompletionShown: true, weeklyAcknowledgementInFlight: false, state: { employeeReports: [{ id: 'receipt' }] }, document: { getElementById: id => id === 'weeklyCompletedDialog' ? receipt : receiptButton }, postEmployeeReport() { ackCalls++; return new Promise(resolve => ackRelease = resolve); }, saveState() {}, showToast() {}, renderLeaderReportStatus() { ackRenders++; } };
+  const ackUi = { activeEmployee: { id: 'leader' }, weeklyAcknowledgementInFlight: false, state: { employeeReports: [{ id: 'receipt' }] }, postEmployeeReport() { ackCalls++; return new Promise(resolve => ackRelease = resolve); }, saveState() {}, showToast() {}, renderLeaderReportStatus() { ackRenders++; } };
   vm.createContext(ackUi); vm.runInContext(named('acknowledgeWeeklyQuestionnaire'), ackUi);
-  const cancelStart = source.indexOf('document.getElementById("weeklyCompletedDialog")?.addEventListener("cancel"');
-  vm.runInContext(source.slice(cancelStart, source.indexOf('\n', cancelStart)), ackUi);
-  let receiptPrevented = false; receiptCancel({ preventDefault() { receiptPrevented = true; } }); assert.equal(receiptPrevented, true);
-  const failedAck = ackUi.acknowledgeWeeklyQuestionnaire(); await ackUi.acknowledgeWeeklyQuestionnaire(); assert.equal(ackCalls, 1); assert.equal(receiptButton.disabled, true);
-  ackRelease({ ok: false, error: 'offline' }); await failedAck; assert.equal(receipt.open, true); assert.equal(ackUi.state.employeeReports[0].acknowledgedAt, undefined); assert.equal(receiptButton.disabled, false);
-  const falseSuccess = ackUi.acknowledgeWeeklyQuestionnaire(); ackRelease({ ok: true, report: { id: 'receipt' } }); await falseSuccess; assert.equal(receipt.open, true);
-  const confirmedAck = ackUi.acknowledgeWeeklyQuestionnaire(); ackRelease({ ok: true, report: { id: 'receipt', acknowledgedAt: 'confirmed' } }); await confirmedAck;
-  assert.equal(receipt.open, false); assert.equal(ackUi.state.employeeReports[0].acknowledgedAt, 'confirmed'); assert.equal(ackUi.weeklyCompletionShown, false); assert.equal(ackRenders, 1);
-  // Refresh never replaces an open report with a different unread report.
-  assert.match(named('renderWeeklyQuestionnaires'), /if \(completedDialog\?\.open\) return;/);
+  const failedAck = ackUi.acknowledgeWeeklyQuestionnaire('receipt', receiptButton); await ackUi.acknowledgeWeeklyQuestionnaire('receipt', receiptButton); assert.equal(ackCalls, 1); assert.equal(receiptButton.disabled, true);
+  ackRelease({ ok: false, error: 'offline' }); await failedAck; assert.equal(ackUi.state.employeeReports[0].acknowledgedAt, undefined); assert.equal(receiptButton.disabled, false);
+  const falseSuccess = ackUi.acknowledgeWeeklyQuestionnaire('receipt', receiptButton); ackRelease({ ok: true, report: { id: 'receipt' } }); await falseSuccess; assert.equal(ackUi.state.employeeReports[0].acknowledgedAt, undefined);
+  const confirmedAck = ackUi.acknowledgeWeeklyQuestionnaire('receipt', receiptButton); ackRelease({ ok: true, report: { id: 'receipt', acknowledgedAt: 'confirmed' } }); await confirmedAck;
+  assert.equal(ackUi.state.employeeReports[0].acknowledgedAt, 'confirmed'); assert.equal(ackRenders, 1);
+  assert.doesNotMatch(named('renderWeeklyQuestionnaires'), /showModal/);
   console.log('PASS: same-day leader inbox, team isolation, live report read without writes, concurrent staff-entry preservation, safe/idempotent retries, changed report unread status, bounded forms retain failed answers, and explicit-only read confirmations.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
