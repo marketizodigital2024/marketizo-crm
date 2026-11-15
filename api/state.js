@@ -339,6 +339,32 @@ function hidePasswords(payload) {
   return copy;
 }
 
+function getLeaderMeeting(current, leader, input = {}) {
+  const { id, employeeId, date } = input || {};
+  const employee = (current.employees || []).find(item => item.id === employeeId && item.status !== "Neaktivan" && item.active !== false);
+  if (!leader?.isLeader || !employee || employee.id === leader.id ||
+      (!FULL_ADMIN_EMPLOYEE_IDS.has(leader.id) && employee.leaderId !== leader.id)) {
+    return { status: 403, error: "Belešku možeš da upišeš samo za zaposlenog iz svog tima." };
+  }
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  const note = typeof input.note === "string" ? input.note.trim() : "";
+  if (typeof id !== "string" || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id) ||
+      typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(Date.parse(date + "T12:00:00Z")) || new Date(date + "T12:00:00Z").toISOString().slice(0, 10) !== date ||
+      !note || note.length > 8000 || title.length > 160) {
+    return { status: 400, error: "Proveri datum, temu i sadržaj beleške." };
+  }
+  const meeting = {
+    id: `one-on-one-${id}`, employeeId, date, title: title || "1:1 sastanak", note,
+    visibleToEmployee: false, createdBy: leader.id, createdAt: new Date().toISOString(),
+  };
+  const existing = (current.employeeOneOnOnes || []).find(item => item.id === meeting.id);
+  if (existing && ["employeeId", "date", "title", "note", "createdBy"].some(key => existing[key] !== meeting[key])) {
+    return { status: 409, error: "Zapis sa ovim identifikatorom već postoji. Osveži stranicu pre novog unosa." };
+  }
+  return { meeting, existing };
+}
+
 async function readStoredState(config) {
   const response = await dbFetch(`${config.url}/rest/v1/${tableName}?id=eq.${encodeURIComponent(rowId)}&select=payload,updated_at`, {
     headers: supabaseHeaders(config.key),
@@ -471,15 +497,24 @@ module.exports = async function handler(req, res) {
 
     if (req.method === "PUT" || req.method === "POST") {
       const body = await readBody(req);
+      const meetingAction = body.action === "save-one-on-one";
       let payload = body.payload;
-      if (!Object.prototype.hasOwnProperty.call(body, "patch") && (!payload || typeof payload !== "object" || Array.isArray(payload))) {
+      if (!meetingAction && !Object.prototype.hasOwnProperty.call(body, "patch") && (!payload || typeof payload !== "object" || Array.isArray(payload))) {
         return json(res, 400, { configured: true, error: "Nedostaje payload objekat." });
       }
       const current = await readStoredState(config);
       const access = accessSession(req, current.payload, config.key);
       if (!access) return json(res, 401, { configured: true, error: "Prijava je obavezna." });
+      let meeting;
+      if (meetingAction) {
+        const result = getLeaderMeeting(current.payload, access.employee, body.meeting);
+        if (result.error) return json(res, result.status, { ok: false, error: result.error });
+        if (result.existing) return json(res, 200, { ok: true, meeting: result.existing });
+        meeting = result.meeting;
+        payload = { ...current.payload, employeeOneOnOnes: [...(current.payload.employeeOneOnOnes || []), meeting] };
+      }
       const baseUpdatedAt = String(body.baseUpdatedAt || "");
-      if (current.updatedAt && baseUpdatedAt !== current.updatedAt) {
+      if (!meetingAction && current.updatedAt && baseUpdatedAt !== current.updatedAt) {
         return json(res, 409, {
           configured: true,
           conflict: true,
@@ -487,7 +522,7 @@ module.exports = async function handler(req, res) {
           updatedAt: current.updatedAt,
         });
       }
-      if (Object.prototype.hasOwnProperty.call(body, "patch")) {
+      if (!meetingAction && Object.prototype.hasOwnProperty.call(body, "patch")) {
         const visible = access.role === "full-admin" ? hidePasswords(current.payload)
           : access.role === "operational-admin" ? hideOperationalFinancials(current.payload)
             : access.role === "employee" ? hideEmployeeState(current.payload, access.employee)
@@ -496,7 +531,7 @@ module.exports = async function handler(req, res) {
         catch { return json(res, 400, { configured: true, error: "Neispravna izmena podataka." }); }
         if (!payload || typeof payload !== "object" || Array.isArray(payload)) return json(res, 400, { configured: true, error: "Neispravno stanje nakon izmene." });
       }
-      if (["full-admin", "operational-admin"].includes(access.role)) {
+      if (!meetingAction && ["full-admin", "operational-admin"].includes(access.role)) {
         const adjustments = (payload.employeeHourAdjustments || current.payload.employeeHourAdjustments || []).filter(item => !require("../comp-time.js").isAutomatic(item));
         if (Array.isArray(adjustments) && new Set(adjustments.map((item) => item.id)).size !== adjustments.length) return json(res, 400, { configured: true, error: "Duplirana korekcija salda." });
         if (!Array.isArray(adjustments) || adjustments.some((item) => !item.id || !current.payload.employees.some((employee) => employee.id === item.employeeId) || !Number.isInteger(Number(item.minutes)) || Number(item.minutes) < 1 || Number(item.minutes) > 10000 || !/^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")) || !Number.isFinite(Date.parse(item.date + "T12:00:00Z")) || new Date(item.date + "T12:00:00Z").toISOString().slice(0, 10) !== item.date || !String(item.reason || "").trim())) {
@@ -509,7 +544,7 @@ module.exports = async function handler(req, res) {
           ...adjustments.filter((item) => !previous.has(item.id)).map((item) => ({ ...item, action: "deduct", actorId: access.employee.id, recordedAt: new Date().toISOString() })),
           ...[...previous.values()].filter((item) => !desired.has(item.id)).map((item) => ({ ...item, action: "void", actorId: access.employee.id, recordedAt: new Date().toISOString() }))];
       }
-      if (access.role === "employee") {
+      if (!meetingAction && access.role === "employee") {
         const existing = new Map((current.payload.employeeAbsences || []).map((item) => [item.id, item]));
         const desired = payload.employeeAbsences || current.payload.employeeAbsences || [];
         const protectedChange = desired.some((item) => item.employeeId === access.employee.id && (existing.has(item.id)
@@ -519,14 +554,14 @@ module.exports = async function handler(req, res) {
         const removedApproved = [...existing.values()].some((item) => item.employeeId === access.employee.id && item.status === "Odobreno" && !desired.some((next) => next.id === item.id));
         if (protectedChange || removedApproved) return json(res, 403, { configured: true, error: "Odobrenje odsustva može da menja samo administrator." });
       }
-      if (access.role === "operational-admin") payload = mergeOperationalPayload(payload, current.payload, access.employee);
-      if (access.role === "employee") payload = mergeEmployeePayload(payload, current.payload, access.employee);
-      if (access.role === "client") payload = mergeClientPayload(payload, current.payload, access.client);
-      if (access.role === "full-admin") {
+      if (!meetingAction && access.role === "operational-admin") payload = mergeOperationalPayload(payload, current.payload, access.employee);
+      if (!meetingAction && access.role === "employee") payload = mergeEmployeePayload(payload, current.payload, access.employee);
+      if (!meetingAction && access.role === "client") payload = mergeClientPayload(payload, current.payload, access.client);
+      if (!meetingAction && access.role === "full-admin") {
         if (!Object.hasOwn(payload, "companyCostsByMonth") && current.payload.companyCostsByMonth) payload.companyCostsByMonth = current.payload.companyCostsByMonth;
         if (!require("../company-overhead.js").validate(payload.companyCostsByMonth)) return json(res, 400, { configured: true, error: "Neispravni mesečni troškovi ili fond sati." });
       }
-      if (["full-admin", "operational-admin"].includes(access.role)) {
+      if (!meetingAction && ["full-admin", "operational-admin"].includes(access.role)) {
         try { const synced = require("../lib/comp-time.js").sync(current.payload, payload, access.employee); payload = synced === payload ? payload : refreshWorkSummaries(synced); }
         catch (error) { return json(res, 400, { configured: true, error: error.message }); }
       }
@@ -604,6 +639,7 @@ module.exports = async function handler(req, res) {
       // state write is already committed, so a temporary auth-sync issue must
       // not roll it back or make the user repeat the business-data save.
       // Employee authentication is synchronized by the database trigger in this transaction.
+      if (meetingAction) return json(res, 200, { ok: true, meeting });
       const canonical = access.role === "full-admin" ? hidePasswords(payload) : access.role === "operational-admin" ? hideOperationalFinancials(payload) : access.role === "employee" ? hideEmployeeState(payload, access.employee) : hideClientState(payload, access.client);
       return json(res, 200, { configured: true, ok: true, updatedAt, payload: body.compact === true ? compactContracts(canonical) : canonical });
     }
