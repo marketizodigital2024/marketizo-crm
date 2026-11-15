@@ -91,7 +91,10 @@
             <button class="secondary-button" id="logoutEmployee" type="button">Odjavi se</button>
           </div>
         </header>
-        <div class="lead-toast employee-alert" id="employeeMissingTimeAlert" hidden></div>
+        <div class="lead-toast employee-alert" id="employeeMissingTimeAlert" hidden>
+          <span id="employeeMissingTimeMessage" role="status"></span>
+          <button id="employeeMissingTimeOpen" class="secondary-button" type="button">Upiši vreme</button>
+        </div>
         <dialog class="employee-install-dialog" id="employeeInstallDialog">
           <div class="employee-install-dialog-card">
             <button class="employee-install-dialog-close" id="closeEmployeeInstallDialog" type="button" aria-label="Zatvori">×</button>
@@ -315,7 +318,14 @@
               </div>
               <span id="leaderMeetingsUpdated">podaci uživo</span>
             </div>
-            <p class="muted">Pregled beleški sa 1:1 sastanaka zaposlenih iz tvog tima.</p>
+            <form id="leaderMeetingForm" class="form-stack">
+              <label>Zaposleni <select name="employeeId" required></select></label>
+              <label>Datum sastanka <input name="date" type="date" required /></label>
+              <label>Tema <input name="title" maxlength="160" placeholder="1:1 sastanak" /></label>
+              <label>Beleška sa sastanka <textarea name="note" rows="5" maxlength="8000" required></textarea></label>
+              <div class="row-actions"><button class="primary-button" type="submit">Sačuvaj belešku</button><span role="status"></span></div>
+            </form>
+            <p class="muted">Filtriraj istoriju sastanaka</p>
             <div class="leader-activity-filter">
               <label>Zaposleni
                 <select id="leaderMeetingEmployee"><option value="">Svi zaposleni iz mog tima</option></select>
@@ -339,7 +349,7 @@
           <span id="reportArrivalText" role="status"></span>
           <div class="row-actions">
             <button id="openUnreadDailyReports" class="secondary-button" type="button" hidden>Otvori dnevne</button>
-            <button id="openUnreadClientReports" class="secondary-button" type="button" hidden>Otvori preglede klijenata</button>
+            <button id="openUnreadClientReports" class="secondary-button" type="button" hidden>Izveštaji o klijentima</button>
           </div>
         </div>
         <button id="overdueDailyReportButton" type="button" class="primary-button" hidden></button>
@@ -395,6 +405,7 @@
             <h2>Nedeljni pregled klijenata</h2>
 
             <p class="muted">Ponedeljkom od 12h zaposleni pišu kako je protekla prethodna nedelja za njihove klijente: šta je dobro, šta nije dobro i za šta im treba pomoć.</p>
+            <button id="openClientReportList" class="secondary-button" type="button">Izveštaji o klijentima po zaposlenom</button>
             <p id="clientWeeklyTeamStatus" role="status"></p><div id="clientWeeklyTeamList"></div><details><summary>Aktuelna ClickUp raspodela</summary><p id="clientWeeklyAssignmentStatus" class="muted"></p><div id="clientWeeklyAssignmentList"></div></details>
           </section>
           </div>
@@ -621,6 +632,14 @@
         <div class="modal-actions"><button id="clientWeeklyLater" class="secondary-button" type="button">Kasnije</button><button id="clientWeeklySubmit" class="primary-button" type="submit">Pošalji lideru</button></div>
       </form>
     </dialog>
+    <dialog id="clientWeeklyInboxDialog" class="daily-report-dialog" aria-labelledby="clientWeeklyInboxTitle">
+      <section class="modal-card daily-report-modal">
+        <div class="modal-head"><h2 id="clientWeeklyInboxTitle">Izveštaji o klijentima</h2></div>
+        <div id="clientWeeklyInboxList" class="setup-list"></div>
+        <div class="modal-actions"><button id="clientWeeklyInboxClose" class="secondary-button" type="button">Zatvori</button></div>
+      </section>
+    </dialog>
+
     <dialog id="clientWeeklyReadDialog" class="daily-report-dialog" aria-labelledby="clientWeeklyReadTitle">
       <section class="modal-card daily-report-modal"><div class="modal-head"><h2 id="clientWeeklyReadTitle">Pregled klijenata</h2></div>
         <p id="clientWeeklyReadPeriod" class="muted"></p><div id="clientWeeklyReadContent"></div>
@@ -646,8 +665,8 @@
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-simple-quantity"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="employee-portal.js?v=20261111-9"></script>
-    <script src="client-weekly-reports.js?v=20261111-6"></script>
+    <script src="employee-portal.js?v=20261115-1"></script>
+    <script src="client-weekly-reports.js?v=20261115-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
   <script src="questionnaire-nav.js?v=20261111-1" defer></script>
   </body>
