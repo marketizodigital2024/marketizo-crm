@@ -13,6 +13,21 @@
     (report.acknowledgedAt && report.acknowledgedBy === activeEmployee?.id));
   const receivedUnread = () => reports.filter(report => canReadTeamReport(report) && report.submittedAt && !hasRead(report))
     .sort((a, b) => a.date.localeCompare(b.date));
+  function openReportList() {
+    if (!activeEmployee?.isLeader || loadedActor !== activeEmployee.id || document.querySelector('dialog[open]')) return;
+    const people = new Map();
+    const submitted = reports.filter(report => canReadTeamReport(report) && report.submittedAt)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    for (const report of submitted) {
+      if (!people.has(report.employeeId)) people.set(report.employeeId, []);
+      people.get(report.employeeId).push(report);
+    }
+    const groups = [...people.values()].sort((a, b) => a[0].employeeName.localeCompare(b[0].employeeName, 'sr'));
+    el('clientWeeklyInboxList').innerHTML = groups.map(group => `<details class="client-weekly-card"><summary><strong>${escape(group[0].employeeName)}</strong> · ${group.length}</summary>${group.map(report =>
+      `<button type="button" class="secondary-button" data-report-id="${escape(report.id)}">${escape(formatDate(report.periodStart))}–${escape(formatDate(report.periodEnd))}${hasRead(report) ? '' : ' · Novo'}</button>`).join('')}</details>`).join('') ||
+      '<div class="empty-state">Još nema predatih izveštaja.</div>';
+    el('clientWeeklyInboxDialog').showModal();
+  }
   async function request(body) {
     const controller = new AbortController(), timer = window.setTimeout(() => controller.abort(), 28000);
     try {
@@ -71,7 +86,7 @@
   }
   function render(openReport = false) {
     if (loadedActor !== activeEmployee?.id) {
-      for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog']) if (el(id)?.open) el(id).close();
+      for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog', 'clientWeeklyInboxDialog']) if (el(id)?.open) el(id).close();
       el('clientWeeklyNotice').hidden = true;
       el('clientWeeklyOpen').hidden = true;
       if (typeof updateReportArrival === 'function') updateReportArrival({ actorId: activeEmployee?.id, count: 0 });
@@ -88,10 +103,9 @@
     notice.hidden = !pending && !sourceError;
     notice.textContent = sourceError ? `Pregled klijenata: ${sourceError} Pokušaćemo ponovo; spisak nije označen kao prazan.` : pending ? `Obavezno: pregled klijenata za ${formatDate(pending.periodStart)}–${formatDate(pending.periodEnd)}. Rok je ${formatDate(pending.dueDate || pending.date)} do kraja radnog vremena.` : '';
     const unreadReports = receivedUnread();
-    const unread = unreadReports[0];
     if (typeof updateReportArrival === 'function') updateReportArrival({ actorId: activeEmployee?.id, count: unreadReports.length });
     const openButton = el('clientWeeklyOpen');
-    openButton.hidden = !pending || Boolean(unread);
+    openButton.hidden = !pending;
     openButton.textContent = pending ? 'Popuni pregled klijenata' : 'Pročitaj pregled klijenata';
     if (!openReport || saving || document.querySelector('dialog[open], form[data-saving="true"], form[data-work-saving="true"]')) return;
     if (pending) {
@@ -107,14 +121,9 @@
         el('clientWeeklyFormStatus').textContent = '';
       }
       el('clientWeeklyDialog').showModal();
-    } else if (unread) {
-      const dialog = el('clientWeeklyReadDialog'); dialog.dataset.reportId = unread.id;
-      el('clientWeeklyReadTitle').textContent = `${unread.employeeName} · pregled klijenata`;
-      el('clientWeeklyReadPeriod').textContent = `${formatDate(unread.periodStart)}–${formatDate(unread.periodEnd)}`;
-      el('clientWeeklyReadContent').innerHTML = answerHtml(unread);
-      dialog.showModal();
     }
   }
+
   async function refresh(force = false) {
     if (!activeEmployee?.id || busy || saving || document.hidden) return;
     const actor = activeEmployee.id;
@@ -139,7 +148,23 @@
     finally { busy = false; }
   }
   el('clientWeeklyOpen').addEventListener('click', () => render(true));
-  el('openUnreadClientReports')?.addEventListener('click', () => render(true));
+  el('openUnreadClientReports')?.addEventListener('click', openReportList);
+  el('openClientReportList').addEventListener('click', openReportList);
+  el('clientWeeklyInboxClose').addEventListener('click', () => el('clientWeeklyInboxDialog').close());
+  el('clientWeeklyInboxList').addEventListener('click', event => {
+    const id = event.target.closest('[data-report-id]')?.dataset.reportId;
+    const report = reports.find(item => item.id === id && item.submittedAt && canReadTeamReport(item));
+    if (!report) return;
+    const dialog = el('clientWeeklyReadDialog');
+    dialog.dataset.reportId = report.id;
+    el('clientWeeklyReadTitle').textContent = `${report.employeeName} · Izveštaj o klijentima`;
+    el('clientWeeklyReadPeriod').textContent = `${formatDate(report.periodStart)}–${formatDate(report.periodEnd)}`;
+    el('clientWeeklyReadContent').innerHTML = answerHtml(report);
+    el('clientWeeklyReadAck').hidden = hasRead(report);
+    el('clientWeeklyInboxDialog').close();
+    dialog.showModal();
+  });
+  el('clientWeeklyReadDialog').addEventListener('close', openReportList);
   el('clientWeeklyLater').addEventListener('click', () => { if (!saving) el('clientWeeklyDialog').close(); });
   el('clientWeeklyReadLater').addEventListener('click', () => { if (!saving) el('clientWeeklyReadDialog').close(); });
   el('clientWeeklyForm').addEventListener('input', saveDraft);
