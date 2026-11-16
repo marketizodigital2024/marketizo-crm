@@ -322,7 +322,71 @@
               <label>Zaposleni <select name="employeeId" required></select></label>
               <label>Datum sastanka <input name="date" type="date" required /></label>
               <label>Tema <input name="title" maxlength="160" placeholder="1:1 sastanak" /></label>
-              <label>Beleška sa sastanka <textarea name="note" rows="5" maxlength="8000" required></textarea></label>
+              <div id="leaderMeetingQuestions" class="form-stack">
+                <h3>Pitanja za 1:1</h3>
+                <p>Pitanja nisu obavezna. Popuni odgovore koje imaš ili dodaj belešku.</p>
+                <details class="one-on-one-question" open>
+                  <summary><span>1.</span> <span class="leader-meeting-question-text">Kako si generalno od prošlog 1:1 – u glavi i energiji?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer0" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>2.</span> <span class="leader-meeting-question-text">Da li se nešto privatno dešavalo što utiče na tvoj fokus ili rad?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer1" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>3.</span> <span class="leader-meeting-question-text">Kako je sa klijentima?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer2" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>4.</span> <span class="leader-meeting-question-text">Da li ima nešto što treba da znam kako bismo lakše isplanirali narednih 30 dana?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer3" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>5.</span> <span class="leader-meeting-question-text">Šta ti trenutno najviše uzima energiju u poslu, a ne daje rezultat?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer4" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>6.</span> <span class="leader-meeting-question-text">Šta ti je u poslednjih 30 dana išlo najbolje i zašto?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer5" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>7.</span> <span class="leader-meeting-question-text">Gde najčešće kasnimo ili grešimo i zbog čega se to ponavlja?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer6" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>8.</span> <span class="leader-meeting-question-text">Da možeš jednu stvar da ukloniš iz svog posla – šta bi to bilo?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer7" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>9.</span> <span class="leader-meeting-question-text">Da li su ti očekivanja, rokovi i prioriteti uvek jasni?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer8" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>10.</span> <span class="leader-meeting-question-text">Šta bi pojednostavio ili automatizovao odmah da možeš?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer9" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>11.</span> <span class="leader-meeting-question-text">Gde misliš da trenutno ne daješ maksimum i šta ti tu konkretno fali i šta ćemo da uradimo po tom pitanju?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer10" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>12.</span> <span class="leader-meeting-question-text">Kako ocenjuješ komunikaciju u timu (1–10) i šta bi je podiglo za +2?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer11" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>13.</span> <span class="leader-meeting-question-text">Da li vidiš sebe ovde za 6–12 meseci i u kojoj ulozi?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer12" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>14.</span> <span class="leader-meeting-question-text">Šta ja mogu da radim drugačije da bi ti radio brže, lakše i kvalitetnije?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer13" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+                <details class="one-on-one-question">
+                  <summary><span>15.</span> <span class="leader-meeting-question-text">Koja je jedna konkretna stvar koju menjamo do sledećeg 1:1?</span></summary>
+                  <label>Odgovor <textarea name="oneOnOneAnswer14" rows="4" maxlength="1600" placeholder="Upiši odgovor…"></textarea></label>
+                </details>
+              </div>
+              <label>Dodatna beleška <textarea name="note" rows="5" maxlength="8000"></textarea></label>
               <div class="row-actions"><button class="primary-button" type="submit">Sačuvaj belešku</button><span role="status"></span></div>
             </form>
             <p class="muted">Filtriraj istoriju sastanaka</p>
@@ -383,6 +447,7 @@
               <label id="clientReportWeekFilter" hidden>Nedelja <select id="clientWeeklyPeriod" aria-label="Nedelja pregleda klijenata"></select></label>
               <label id="employeeReportWeekFilter" hidden>Nedelja <select id="employeeWeeklyReportPeriod" aria-label="Nedelja izveštaja zaposlenih"></select></label>
               <button id="leaderLiveReportToday" class="secondary-button" type="button">Danas</button>
+              <button id="leaderLiveReportPreviousWorkday" class="secondary-button" type="button">Prethodni radni dan</button>
               <strong id="leaderLiveReportSummary">0 aktivnosti</strong>
             </div>
           </section>
@@ -391,7 +456,7 @@
             <div class="panel-head"><h2>Dnevni izveštaj</h2><button id="openLeaderDailyReports" class="secondary-button" type="button" hidden>Otvori dnevne izveštaje</button></div>
             <div class="setup-list" id="leaderDailyReportList"></div>
           </section>
-          <details class="panel">
+          <details class="panel" id="leaderReportWorkHistory" open>
             <summary><strong>Evidencija aktivnosti</strong></summary>
             <div class="panel-head">
               <div><p class="eyebrow">Dnevni pregled</p><h2 id="leaderLiveReportTitle">Aktivnosti tima</h2></div>
@@ -665,7 +730,7 @@
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-simple-quantity"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="employee-portal.js?v=20261115-1"></script>
+    <script src="employee-portal.js?v=20261116-1"></script>
     <script src="client-weekly-reports.js?v=20261115-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
   <script src="questionnaire-nav.js?v=20261111-1" defer></script>
