@@ -1851,9 +1851,18 @@ document.getElementById("leaderMeetingForm")?.addEventListener("submit", async e
   const actorId = activeEmployee.id;
   const status = form.querySelector('[role="status"]');
   const button = form.querySelector('[type="submit"]');
-  const { employeeId, date, title, note } = Object.fromEntries(new FormData(form));
-  if (!note.trim()) {
-    status.textContent = "Upiši belešku sa sastanka.";
+  const { employeeId, date, title, note: extraNote } = Object.fromEntries(new FormData(form));
+  const answers = [...form.querySelectorAll("#leaderMeetingQuestions details")].flatMap(question => {
+    const answer = question.querySelector("textarea").value.trim();
+    return answer ? [question.querySelector(".leader-meeting-question-text").textContent + "\n" + answer] : [];
+  });
+  const note = [...answers, ...(extraNote.trim() ? ["Dodatna beleška\n" + extraNote.trim()] : [])].join("\n\n");
+  if (!note) {
+    status.textContent = "Upiši bar jedan odgovor ili dodatnu belešku.";
+    return;
+  }
+  if (note.length > 8000) {
+    status.textContent = "Skrati zapis na najviše 8.000 znakova.";
     return;
   }
   const request = { id: form.dataset.noteId ||= crypto.randomUUID(), employeeId, date, title, note };
@@ -1877,6 +1886,7 @@ document.getElementById("leaderMeetingForm")?.addEventListener("submit", async e
     state.employeeOneOnOnes = [...meetings.filter(item => item.id !== result.meeting.id), result.meeting];
     form.elements.title.value = "";
     form.elements.note.value = "";
+    form.querySelectorAll("#leaderMeetingQuestions textarea").forEach(input => { input.value = ""; });
     delete form.dataset.noteId;
     const filter = document.getElementById("leaderMeetingEmployee");
     if (filter) filter.value = employeeId;
@@ -2920,7 +2930,7 @@ document.querySelectorAll("[data-report-view]").forEach(button => button.addEven
     item.classList.toggle("secondary-button", !active);
   });
   document.querySelectorAll("[data-report-panel]").forEach(panel => { panel.hidden = panel.dataset.reportPanel !== selected; });
-  for (const id of ["dailyReportDateFilter", "leaderLiveReportToday", "leaderLiveReportSummary"]) {
+  for (const id of ["dailyReportDateFilter", "leaderLiveReportToday", "leaderLiveReportPreviousWorkday", "leaderLiveReportSummary"]) {
     document.getElementById(id).hidden = selected !== "daily";
   }
   document.getElementById("clientReportWeekFilter").hidden = selected !== "clients";
@@ -2944,6 +2954,15 @@ document.getElementById("leaderMeetingsNav")?.addEventListener("click", refreshL
 document.getElementById("leaderLiveReportToday")?.addEventListener("click", () => {
   const dateInput = document.getElementById("leaderLiveReportDate");
   if (dateInput) dateInput.value = currentDateKey();
+  renderLeaderReportsPage();
+});
+
+document.getElementById("leaderLiveReportPreviousWorkday")?.addEventListener("click", () => {
+  const dateInput = document.getElementById("leaderLiveReportDate");
+  if (!dateInput) return;
+  dateInput.value = previousWorkingDay();
+  const history = document.getElementById("leaderReportWorkHistory");
+  if (history) history.open = true;
   renderLeaderReportsPage();
 });
 
