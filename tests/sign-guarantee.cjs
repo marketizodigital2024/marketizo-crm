@@ -10,3 +10,12 @@ for(const g of [{goal:'both'},{goal:'reach',platform:'Facebook',baseline:'0',tar
 assert.equal(validateDraft(fixture({goal:'leads'}),'template').contractDetails.guarantee,undefined);assert.throws(()=>validateFields({guarantee:{goal:'leads'}}),/podatke/);const legacy=fixture();legacy.content.blocks=[{type:'paragraph',runs:[{text:'Existing signed contract'}]}];assert.deepEqual(personalizeDocument(validateDraft(legacy)),validateDraft(legacy));
 const split=fixture({goal:'leads'});split.content.blocks[0].runs=[{text:MARKER.slice(0,10)},{text:MARKER.slice(10)}];assertReady(validateDraft(split));assert(!personalizeDocument(validateDraft(split)).content.blocks[0].runs[0].text.includes(MARKER));
 console.log('PASS guarantee choices, reach calculation, validation, recipient and legacy/source isolation');
+
+// Reach details can be confirmed after the test month, before the guarantee starts.
+for (const lang of ['sr','de']) {
+ const doc=validateDraft(fixture({goal:'reach',deferred:true},lang));assertReady(doc);
+ const before=JSON.stringify(doc),out=personalizeDocument(doc),body=out.content.blocks.map(b=>b.runs.map(r=>r.text).join('')).join('\n');
+ assert.equal(JSON.stringify(doc),before);assert(body.includes('[X] REACH:'));assert(!body.includes('[PODACI'));assert(!body.includes('undefined'));assert(!body.includes('Invalid Date'));
+ assert(body.includes(lang==='de'?'zweiten Monat':'drugog meseca'));assert(body.includes(lang==='de'?'schriftlich':'pisano'));
+}
+console.log('PASS deferred reach guarantee in both languages; no baseline/date required');
