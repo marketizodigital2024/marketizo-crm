@@ -27,6 +27,18 @@ ctx.setEmployeePositions(input,'');boxes=input.label.adjacent.children[1].queryS
 const nav=fs.readFileSync(__dirname+'/../questionnaire-nav.js','utf8');assert(nav.includes('employeeHasSmm(employee.position || position)'));
 console.log('PASS: combined SMM roles, aliases, owner titles, unknown roles, no eager rewriting, multi-select additions/removals, required-role validation, server and navigation permission parity.');
 
+// Sales remains a normal employee role and does not inherit questionnaire access.
+assert.deepEqual(employeeRoles('sales'), ['Sales']);
+assert.deepEqual(employeeRoles('Sales / Editor'), ['Sales', 'Editor']);
+assert(!employeeHasSmm('Sales'));
+assert(!canManage({id:'sales-employee',position:'Sales'}));
+ctx.setEmployeePositions(input,'Sales');
+boxes=input.label.adjacent.children[1].querySelectorAll('input');
+assert.deepEqual(boxes.filter(c=>c.checked).map(c=>c.value),['Sales']);
+assert.equal(input.value,'Sales');
+assert.equal(boxes[0].validityMessage,'');
+assert(!employeeHasSmm(input.value));
+
 assert(employeeHasSmm('Social Media Manager Leader'));
 assert(canManage({id:'leader-test',position:'Social Media Manager Leader'}));
 assert(employeeHasSmm('Scenario Leader'));

@@ -7730,7 +7730,7 @@ function applyInvoiceStartMonthV1() {
 
 
 function employeeRoles(value) {
-  const canonical = ['Editor','Lider editora','Scenario','Scenario Leader','Snimatelj','Snimatelj Leader','Social Media Manager','Social Media Manager Leader','Founder','Co Founder','Direktor'];
+  const canonical = ['Editor','Lider editora','Scenario','Scenario Leader','Snimatelj','Snimatelj Leader','Social Media Manager','Social Media Manager Leader','Founder','Co Founder','Direktor','Sales'];
   const input = Array.isArray(value) ? value : [value];
   const result = [];
   for (const item of input) {
@@ -7796,7 +7796,7 @@ function setEmployeePositions(input, value) {
   picker.box.querySelector('input')?.setCustomValidity(selected.length ? '' : 'Izaberi bar jednu poziciju.');
 }
 function setupEmployeePositionSelection() {
-  const canonical = ['Editor','Lider editora','Scenario','Scenario Leader','Snimatelj','Snimatelj Leader','Social Media Manager','Social Media Manager Leader','Founder','Co Founder','Direktor'];
+  const canonical = ['Editor','Lider editora','Scenario','Scenario Leader','Snimatelj','Snimatelj Leader','Social Media Manager','Social Media Manager Leader','Founder','Co Founder','Direktor','Sales'];
   document.querySelectorAll('input[name="position"]').forEach(input => {
     if (employeePositionPickers.has(input)) return;
     const existing = typeof state !== 'undefined' ? (state.employees || []).flatMap(e=>employeeRoles(e.position)) : [];
