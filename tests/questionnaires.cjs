@@ -11,7 +11,7 @@ global.fetch=async(url,opts={})=>{const u=new URL(url);calls.push({u,opts});if(u
 const api=require('../api/questionnaires.js');
 async function call(body,id){let status,reply;await api({method:'POST',body,headers:{authorization:id?signed(id):''}},{setHeader(){},status(n){status=n;return this},json(v){reply=v}});return {status,reply}}
 (async()=>{
- assert.equal(Object.keys(defaults).length,4);for(const l of ['sr','de']){assert.equal(defaults['business-'+l].questions.length,15);assert.equal(defaults['accounts-'+l].questions.length,24)}
+ assert.equal(Object.keys(defaults).length,5);for(const l of ['sr','de']){assert.equal(defaults['business-'+l].questions.length,15);assert.equal(defaults['accounts-'+l].questions.length,24)}
  assert(m.canManage(employees[0]));assert(!m.canManage(employees[1]));assert(!m.canManage(employees[2]));assert(m.canManage(employees[3]));
  assert.equal((await call({action:'list'})).status,401);assert.equal((await call({action:'list'},'editor')).status,403);assert.equal((await call({action:'list'},'inactive')).status,403);
  const id=crypto.randomUUID();const create={action:'create',requestId:id,key:'business-sr',clientId:'client-1'};assert.equal((await call(create,'smm')).status,200);assert.equal((await call(create,'smm')).status,200);assert.equal(rows.size,1);
@@ -46,6 +46,25 @@ async function call(body,id){let status,reply;await api({method:'POST',body,head
  assert.equal((await call({action:'list',deleted:true},'smm')).reply.records.length,0);
  assert.equal((await call({action:'revoke',id},'editor')).status,403);assert.equal((await call({action:'revoke',id},'smm')).status,200);assert.equal((await call({action:'public',id,token})).status,404);assert.equal((await call({action:'answers',id},'editor')).status,200);
  assert.equal((await call({action:'viewAnswers',id,token:readonly})).status,404);
+
+ const websiteId=crypto.randomUUID();
+ assert.equal((await call({action:'create',requestId:websiteId,key:'website-sr',clientId:'client-1'},'smm')).status,200);
+ const websiteToken=m.publicToken(websiteId,process.env.EMPLOYEE_SESSION_SECRET);
+ let website=await call({action:'public',id:websiteId,token:websiteToken});
+ assert.equal(website.reply.type,'website');
+ assert.equal(website.reply.questions.length,57);
+ assert(website.reply.introduction.includes('web sajta'));
+ assert(!/landing|jednu stranu/i.test(website.reply.introduction+' '+website.reply.questions.at(-1)));
+ const websiteAnswers=Object.fromEntries(website.reply.questions.map((q,i)=>[i,'Nije primenljivo']));
+ websiteAnswers[5]='https://example.com\nhttps://example.org';
+ assert.equal((await call({action:'draft',id:websiteId,token:websiteToken,revision:website.reply.revision,answers:websiteAnswers})).status,200);
+ website=await call({action:'public',id:websiteId,token:websiteToken});
+ assert.equal(website.reply.answers[5],websiteAnswers[5]);
+ assert.equal((await call({action:'submit',id:websiteId,token:websiteToken,revision:website.reply.revision,answers:websiteAnswers})).status,200);
+ assert.equal((await call({action:'viewAnswers',id:websiteId,token:m.answerToken(websiteId,process.env.EMPLOYEE_SESSION_SECRET)})).reply.answers[5],websiteAnswers[5]);
+ const backup=require('../lib/questionnaire-backup.js');
+ assert(backup.validSnapshot({format:'marketizo-questionnaires-v1',namespace:'production',defaultTemplates:defaults,rows:[...rows.values()]}));
+
  process.env.VERCEL_ENV='preview';assert.equal((await call({action:'viewAnswers',id,token:readonly})).status,404);assert.equal((await call({action:'public',id,token})).status,404);process.env.VERCEL_ENV='production';
  assert(calls.filter(c=>c.opts.method).every(c=>c.u.pathname.endsWith('/marketizo_questionnaires')));
  const portal=fs.readFileSync(require('node:path').join(__dirname,'../employee-login.html'),'utf8');assert(portal.includes('questionnaire-nav.js'));assert(!fs.readFileSync(require('node:path').join(__dirname,'../questionnaire-nav.js'),'utf8').includes('saveState'));

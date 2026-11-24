@@ -124,7 +124,7 @@ async function handle(req, res) {
         return json(res,200,{ok:true,id:previous.id});
       }
       const t = (await template(body.key)).payload;
-      const payload = {recordType:'invite',key:body.key,type:t.type,lang:t.lang,title:t.title,version:t.version,questions:t.questions,answers:{},clientId:client.id,clientName:client.name,createdBy:employee.id,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+90*86400000).toISOString(),status:'Kreiran'};
+      const payload = {recordType:'invite',key:body.key,type:t.type,lang:t.lang,title:t.title,version:t.version,...(t.introduction?{introduction:t.introduction}:{}),questions:t.questions,answers:{},clientId:client.id,clientName:client.name,createdBy:employee.id,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+90*86400000).toISOString(),status:'Kreiran'};
       if (!(await insert(body.requestId,payload))) fail(409,'Zahtev se obrađuje. Pokušajte ponovo istim zahtevom.');
       return json(res,200,{ok:true,id:body.requestId});
     }
