@@ -2622,7 +2622,6 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
     positive: "",
     negative: "",
   };
-  const previousState = cloneState(state);
   const employeeId = activeEmployee.id;
   const submitButton = form.querySelector('button[type="submit"]');
   if (submitButton) {
@@ -2650,24 +2649,16 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   };
   const recipientId = reportRecipientId();
   form.dataset.workSaving = "true";
+  let locallyQueued = false;
   try {
     queuePendingWorkLog(workLog, recipientId);
-  } catch (error) {
-    state = previousState;
-    activeEmployee = (state.employees || []).find((employee) => employee.id === employeeId) || activeEmployee;
-    saveState({ remote: false });
-    renderEmployeePortal();
-    restorePortalHoursForm(form, submittedFormValues);
-    delete form.dataset.workSaving;
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.textContent = "Sačuvaj sate";
-    }
-    showToast("Nije sačuvano", error?.message || "Unos nije sačuvan na ovom uređaju. Ne zatvaraj formu i pokušaj ponovo.", "danger");
-    return;
+    locallyQueued = true;
+  } catch (_) {
+    // Local storage may be full or blocked. Keep the form and retry ID intact
+    // and still attempt the atomic server append; no full-state write is needed.
   }
 
-  // Send the queued intent immediately. Rendering/caching the complete portal
+  // Send the intent immediately. Rendering/caching the complete portal
   // must not delay the request or re-populate the form before acknowledgement.
   form.inert = true;
   let saveResult;
@@ -2684,6 +2675,11 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   }
   if (!saveResult.ok) {
     if (saveResult.retryable) {
+      if (!locallyQueued) {
+        restorePortalHoursForm(form, submittedFormValues);
+        showToast("Čuvanje nije potvrđeno", "Potvrda sa servera nije stigla, a rezervna kopija na uređaju nije sačuvana. Ne zatvaraj niti osvežavaj formu. Pokušaj ponovo sa istim unosom.", "danger");
+        return;
+      }
       state.employeeWorkLogs = (state.employeeWorkLogs || []).filter((log) => log.id !== workLog.id);
       state.employeeWorkLogs.unshift(workLog);
       saveState({ remote: false });
