@@ -40,6 +40,50 @@ const event = () => ({ currentTarget: form, preventDefault() {} });
   assert.equal(clears, 1, 'An old request must not clear the new actor form');
   assert.equal(queue.length, 1); assert.equal(queue[0].workLog.id, 'foreign');
   assert(!notices.some(item => item[0] === 'Slanje je u toku'));
+  // Execute the real local queue with full/blocked storage, retaining history.
+  ctx.PENDING_WORK_LOGS_KEY = 'fixture-pending';
+  let storageError = 'QuotaExceededError';
+  ctx.localStorage = {
+    getItem() { return JSON.stringify(queue); },
+    setItem() { throw Object.assign(new Error('Storage unavailable'), { name: storageError }); },
+  };
+  vm.runInContext(['readPendingWorkLogs', 'writePendingWorkLogs', 'queuePendingWorkLog'].map(named).join('\n'), ctx);
+  const history = [{ id: 'already-saved', employeeId: 'qa', minutes: 55, activityId: 'act', clientId: 'client', note: 'Existing activity' }, { id: 'concurrent-other', employeeId: 'other', minutes: 30 }];
+  ctx.state.employeeWorkLogs = structuredClone(history);
+  ctx.activeEmployee = { id: 'qa' };
+  Object.assign(fields, captured); form.dataset = {};
+  const beforeQueue = structuredClone(queue), beforeClears = clears, beforeRenders = renders, beforeCaches = caches;
+  const blocked = handler(event());
+  const blockedId = received.at(-1).id;
+  assert.equal(form.inert, true, 'A failed local backup must still start the server request');
+  assert.equal(button.disabled, true);
+  assert.equal(clears, beforeClears);
+  await handler(event()); assert.equal(received.at(-1).id, blockedId, 'In-flight duplicate submit is blocked');
+  release({ ok: false, retryable: true, error: 'Lost acknowledgement' }); await blocked;
+  assert.deepEqual(fields, captured);
+  assert.deepEqual(ctx.state.employeeWorkLogs, history, 'Unconfirmed fallback must not replace history or add unconfirmed hours');
+  assert.equal(renders, beforeRenders); assert.equal(caches, beforeCaches);
+  assert.equal(notices.at(-1)[0], 'Čuvanje nije potvrđeno');
+  assert.match(notices.at(-1)[1], /Ne zatvaraj niti osvežavaj/);
+  assert.equal(form.dataset.retryWorkId, blockedId);
+  storageError = 'SecurityError';
+  const blockedRetry = handler(event());
+  assert.equal(received.at(-1).id, blockedId, 'Uncertain server commits retain the same idempotency key even without storage');
+  // A concurrent refresh/append while waiting must survive server confirmation.
+  const concurrent = { id: 'another-new-activity', employeeId: 'other', minutes: 12 };
+  ctx.state.employeeWorkLogs.push(concurrent);
+  release({ ok: true, duplicate: true }); await blockedRetry;
+  assert.equal(clears, beforeClears + 1, 'Only confirmed saves clear the form');
+  assert.deepEqual(ctx.state.employeeWorkLogs.filter(log => log.id !== blockedId), [...history, concurrent]);
+  assert.equal(ctx.state.employeeWorkLogs.filter(log => log.id === blockedId).length, 1);
+  assert.deepEqual(queue, beforeQueue, 'Other employees pending activities remain untouched');
+  Object.assign(fields, captured);
+  const rejected = handler(event());
+  assert.notEqual(received.at(-1).id, blockedId, 'A new confirmed entry has a new ID');
+  const beforeReject = structuredClone(ctx.state.employeeWorkLogs);
+  release({ ok: false, retryable: false, error: 'Validation failed' }); await rejected;
+  assert.deepEqual(fields, captured); assert.deepEqual(structuredClone(ctx.state.employeeWorkLogs), beforeReject);
+  assert.equal(notices.at(-1)[0], 'Unos nije prihvaćen');
   // Exercise the actual reset, including stale hidden activity/quantity values.
   const resetFields = Object.fromEntries(['date', 'minutes', 'clientId', 'note', 'positive', 'negative', 'productionQuantity'].map(key => [key, { value: key === 'date' ? '2026-10-30' : 'old choice' }]));
   const search = { value: 'Edit' }, hiddenActivity = { value: 'act', dispatchEvent() {} };
@@ -54,5 +98,5 @@ const event = () => ({ currentTarget: form, preventDefault() {} });
   assert.equal(calendar.expectedMinutesForDate({ startDate: '2026-10-15', weeklyHours: 38.5 }, '2026-10-14'), 0);
   assert.equal(calendar.expectedMinutesForDate({ startDate: '2026-10-15', weeklyHours: 38.5 }, '2026-10-15'), 510);
   assert.equal(calendar.expectedMinutesForDate({ endDate: '2026-10-13', weeklyHours: 38.5 }, '2026-10-14'), 0);
-  console.log('PASS: actual employee work form locks an in-flight submit, retains failed input and ID, retries/reloads pending intent without duplicates, starts a new confirmed entry and preserves other actor drafts/views.');
+  console.log('PASS: actual employee work form locks submits, preserves retry IDs/forms and other actors, survives full/blocked local storage with confirmed server append, retains uncertain input without false saved status, and preserves existing/concurrent activities.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
