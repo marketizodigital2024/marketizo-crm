@@ -234,6 +234,7 @@ function logGroupMappings() {
   const digest = crypto.createHash("sha256").update(JSON.stringify(mapping)).digest("hex");
   if (mappingLogDigest === digest) return;
   mappingLogDigest = digest;
+  console.log("[GROUP_INVENTORY]", JSON.stringify(groupMonitor.chats().map(chat => ({ name: chat.name, monitored: shouldMonitorGroup(chat) }))));
   for (const item of mapping) console.log("[GROUP_MAPPING]", JSON.stringify(item));
 }
 
