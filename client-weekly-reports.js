@@ -5,6 +5,7 @@
   let reports = [], busy = false, saving = false, lastEnsure = 0, lastRead = 0, loadedActor = '', sourceError = '', assignmentPreview = [], assignmentSyncedAt = '';
   const el = id => document.getElementById(id);
   const escape = value => escapePortalText(String(value || ''));
+  const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d').toLowerCase();
   const draftKey = report => `marketizoClientWeekly:${activeEmployee?.id}:${report.id}`;
   const ownPending = () => reports.filter(r => !activeEmployee?.isLeader && r.employeeId === activeEmployee?.id && !r.submittedAt && r.clients?.length).sort((a, b) => a.date.localeCompare(b.date))[0];
   const canReadTeamReport = report => activeEmployee?.isLeader && report.employeeId !== activeEmployee.id &&
@@ -65,14 +66,28 @@
     const submitted = visible.filter(r => r.submittedAt).length;
     el('clientWeeklyTeamStatus').textContent = team.length ? `${submitted}/${visible.length} izveštaja popunjeno · ${visible.filter(r => !r.submittedAt).length} čeka odgovor` : 'Prvi izveštaji stižu od ponedeljka u 12h. Izvor: ClickUp raspodela klijenata.';
     el('clientWeeklyAssignmentStatus').textContent = assignmentSyncedAt ? `ClickUp raspodela proverena: ${new Date(assignmentSyncedAt).toLocaleString('sr-RS')}. Merodavna su osnovna polja (Scenarista, Editor, SMM…).` : 'Proveravamo ClickUp raspodelu…';
-    el('clientWeeklyAssignmentList').innerHTML = assignmentPreview.filter(e => e.clients.length).map(e => `<details class="client-weekly-card"><summary>${escape(e.employeeName)} · ${e.clients.length} klijenata</summary><p>${e.clients.map(c => escape(c.clientName)).join(' · ')}</p></details>`).join('');
-    const search = (el('reportSearch')?.value || '').trim().toLocaleLowerCase('sr-Latn');
+    el('clientWeeklyAssignmentList').innerHTML = assignmentPreview.filter(e => e.clients.length).map(e => `<details class="client-weekly-card"><summary>${escape(e.employeeName)} · ${e.clients.length} klijenata</summary><p>${e.clients.map(c => escape(c.clientName)+' ('+escape(c.roles.join(', '))+')').join(' · ')}</p></details>`).join('');
+    const search = normalize(el('clientWeeklySearch') ? el('clientWeeklySearch').value : el('reportSearch')?.value || '').trim();
+    const selectedClient = el('clientWeeklyClientFilter')?.value || '';
+    const selectedRole = el('clientWeeklyRoleFilter')?.value || '';
+    const clientSelect = el('clientWeeklyClientFilter');
+    if (clientSelect) {
+      const clients = new Map([...visible.flatMap(r=>r.clients||[]), ...assignmentPreview.flatMap(e=>e.clients||[])].map(c=>[c.clientId,c.clientName]));
+      const options='<option value="">Svi klijenti</option>'+[...clients].sort((a,b)=>a[1].localeCompare(b[1],'sr')).map(([id,name])=>'<option value="'+escape(id)+'">'+escape(name)+'</option>').join('');
+      if(clientSelect.dataset.options!==options){clientSelect.innerHTML=options;clientSelect.dataset.options=options;if(clients.has(selectedClient))clientSelect.value=selectedClient;}
+    }
     const grouped = new Map();
     for (const report of visible) for (const client of report.clients) {
       const answer = (report.clientAnswers || []).find(a => a.clientId === client.clientId);
-      if (search && !String(client.clientName || '').toLocaleLowerCase('sr-Latn').includes(search)) continue;
+      if ((search && !normalize(client.clientName).includes(search)) || (selectedClient && client.clientId!==selectedClient) || (selectedRole && !client.roles.includes(selectedRole))) continue;
       if (!grouped.has(client.clientId)) grouped.set(client.clientId, { name: client.clientName, rows: [] });
       grouped.get(client.clientId).rows.push(`<section class="client-weekly-person"><h4>${escape(report.employeeName)} · ${escape(client.roles.join(', '))}</h4>${answer ? `<p><strong>Pozitivno:</strong> ${escape(answer.positive)}</p><p><strong>Negativno:</strong> ${escape(answer.negative)}</p><p><strong>Pomoć:</strong> ${escape(answer.help)}</p><p class="muted">${hasRead(report) ? 'Pročitano' : 'Popunjeno · čeka čitanje'}</p>` : '<p class="muted">Čeka odgovor zaposlenog.</p>'}</section>`);
+    }
+    // Leaders are assigned people too; they do not owe a client questionnaire.
+    for (const member of assignmentPreview.filter(e=>e.isLeader && (!employeeId||e.employeeId===employeeId))) for (const client of member.clients) {
+      if ((search&&!normalize(client.clientName).includes(search))||(selectedClient&&client.clientId!==selectedClient)||(selectedRole&&!client.roles.includes(selectedRole)))continue;
+      if(!grouped.has(client.clientId))grouped.set(client.clientId,{name:client.clientName,rows:[]});
+      grouped.get(client.clientId).rows.push('<section class="client-weekly-person"><h4>'+escape(member.employeeName)+' · '+escape(client.roles.join(', '))+'</h4><p class="muted">Aktuelna ClickUp dodela · lider ne popunjava pregled klijenata.</p></section>');
     }
     const list = el('clientWeeklyTeamList');
     const openClients = new Set([...list.querySelectorAll('details[open]')].map(card => card.dataset.clientId));
@@ -84,7 +99,7 @@
       for (const card of list.querySelectorAll('details')) card.open = openClients.has(card.dataset.clientId);
     }
   }
-  function render(openReport = false) {
+  function render(openReport = false, selectedId = '') {
     if (loadedActor !== activeEmployee?.id) {
       for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog', 'clientWeeklyInboxDialog']) if (el(id)?.open) el(id).close();
       el('clientWeeklyNotice').hidden = true;
@@ -95,7 +110,7 @@
     }
     renderHistory();
     const notice = el('clientWeeklyNotice');
-    const pending = ownPending();
+    const pending = selectedId ? reports.find(r => r.id === selectedId && r.employeeId === activeEmployee?.id && !r.submittedAt) : ownPending();
     if (!saving && el('clientWeeklyDialog').open && (!pending || JSON.stringify(pending.clients)!==JSON.stringify(editingReport?.clients))) {
       if(document.activeElement?.matches?.('input,textarea,select,[contenteditable="true"]'))return;
       saveDraft();el('clientWeeklyDialog').close();
@@ -120,6 +135,7 @@
         } catch { /* Keep the blank form usable if local draft storage is unavailable. */ }
         el('clientWeeklyFormStatus').textContent = '';
       }
+      el('clientWeeklyLater').hidden = Boolean(window.MarketizoReportGate?.required(pending.id));
       el('clientWeeklyDialog').showModal();
     }
   }
@@ -147,6 +163,7 @@
     } catch (error) { sourceError = error.name === 'AbortError' ? 'Veza nije odgovorila na vreme.' : error.message; render(); }
     finally { busy = false; }
   }
+  window.MarketizoClientReports = { syncActor: () => { if(loadedActor!==activeEmployee?.id)render(); }, open: async id => { await refresh(true); render(true, id); } };
   el('clientWeeklyOpen').addEventListener('click', () => render(true));
   el('openUnreadClientReports')?.addEventListener('click', openReportList);
   el('openClientReportList').addEventListener('click', openReportList);
@@ -165,7 +182,7 @@
     dialog.showModal();
   });
   el('clientWeeklyReadDialog').addEventListener('close', openReportList);
-  el('clientWeeklyLater').addEventListener('click', () => { if (!saving) el('clientWeeklyDialog').close(); });
+  el('clientWeeklyLater').addEventListener('click', () => { if (!saving && !window.MarketizoReportGate?.required(editingReport?.id)) el('clientWeeklyDialog').close(); });
   el('clientWeeklyReadLater').addEventListener('click', () => { if (!saving) el('clientWeeklyReadDialog').close(); });
   el('clientWeeklyForm').addEventListener('input', saveDraft);
   el('clientWeeklyForm').addEventListener('submit', async event => {
@@ -183,7 +200,7 @@
       try { localStorage.removeItem(draftKey(report)); } catch {}
       el('clientWeeklyDialog').close(); form.dataset.reportId = ''; form.reset();
     } catch (error) { el('clientWeeklyFormStatus').textContent = `Nije poslato. Odgovori su zadržani. ${error.message}`;if(error.assignmentChanged){try{const refreshed=await request({action:'ensure'});if(activeEmployee?.id===actor){reports=refreshed.reports;lastEnsure=Date.now();}}catch{ /* Keep the existing draft and form if refresh fails. */ }} }
-    finally { revision += 1; saving = false; delete form.dataset.saving; form.inert = false; button.disabled = false; button.textContent = 'Pošalji lideru'; render(); }
+    finally { revision += 1; saving = false; delete form.dataset.saving; form.inert = false; button.disabled = false; button.textContent = 'Pošalji lideru'; render(); window.MarketizoReportGate?.refresh(true); }
   });
   el('clientWeeklyReadAck').addEventListener('click', async () => {
     if (saving) return;
@@ -198,10 +215,13 @@
     finally { revision += 1; saving = false; button.disabled = false; button.textContent = 'Pročitao/la sam izveštaj'; render(); }
   });
   for (const id of ['clientWeeklyDialog', 'clientWeeklyReadDialog']) {
-    el(id).addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+    el(id).addEventListener('cancel', event => { if (saving || (id === 'clientWeeklyDialog' && window.MarketizoReportGate?.required(editingReport?.id))) event.preventDefault(); });
     el(id).addEventListener('close', () => window.setTimeout(render, 0));
   }
   el('reportSearch')?.addEventListener('input', renderHistory);
+  el('clientWeeklySearch')?.addEventListener('input', renderHistory);
+  el('clientWeeklyClientFilter')?.addEventListener('change', renderHistory);
+  el('clientWeeklyRoleFilter')?.addEventListener('change', renderHistory);
   el('leaderLiveReportEmployee')?.addEventListener('change', renderHistory);
   el('clientWeeklyPeriod').addEventListener('change', renderHistory);
   window.setInterval(() => { if (!activeEmployee) return; render(); refresh(); }, 10000);

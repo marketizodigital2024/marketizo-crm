@@ -324,3 +324,5 @@ module.exports = async function handler(req, res) {
 
 const originalHandler = module.exports;
 module.exports = Object.assign((req, res) => require("../lib/database-request.js").withRequestBudget(() => originalHandler(req, res)), originalHandler);
+
+module.exports.helpers = { verifySession };

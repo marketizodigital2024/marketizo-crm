@@ -16,6 +16,7 @@
     }
   ],
   "crons": [
+    { "path": "/api/report-obligations", "schedule": "15 * * * *" },
     {
       "path": "/api/backup",
       "schedule": "40 15 * * *"

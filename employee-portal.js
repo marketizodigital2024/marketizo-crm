@@ -1178,6 +1178,8 @@ async function waitForOnlineHydration() {
 
 function renderEmployeePortal() {
   if (!activeEmployee) return;
+  window.MarketizoReportGate?.syncActor();
+  window.MarketizoClientReports?.syncActor();
   state = loadState(state);
   activeEmployee = state.employees.find((employee) => employee.id === activeEmployee.id) || activeEmployee;
   syncOperationalAdminAccess();
@@ -1910,6 +1912,7 @@ function weeklyReportsForLeader() {
 
 // Required weekly tasks are derived from confirmed state on every refresh.
 function requiredWeeklyTask() {
+  if (typeof window !== "undefined" && window.MarketizoReportGate) return null;
   if (!activeEmployee) return null;
   const today = currentDateKey();
   const weekday = new Date(`${today}T12:00:00`).getDay();
@@ -2511,6 +2514,7 @@ let dailyRequirementOnline = false;
 let dailyRequirementRetryDate = "";
 
 function overdueDailyReportDate() {
+  if (typeof window !== "undefined" && window.MarketizoReportGate) return "";
   if (!dailyRequirementOnline || !activeEmployee || document.getElementById("employeeApp")?.hidden) return "";
   const date = previousWorkingDay();
   if (date < "2026-11-11" || (activeEmployee.startDate && date < activeEmployee.startDate) ||
@@ -2537,6 +2541,7 @@ function openDailyReportDialog(date) {
   if (form.dataset.reportDate !== date || form.dataset.actorId !== activeEmployee.id) form.reset();
   form.dataset.reportDate = date;
   form.dataset.actorId = activeEmployee.id;
+  try { const draft = JSON.parse(localStorage.getItem("marketizoDailyDraft:"+activeEmployee.id+":"+date)||"null"); if(draft) for(const key of ["summary","positive","negative","help"]) if(!form.elements[key].value) form.elements[key].value=draft[key]||""; } catch {}
   const required = !missingWorkDate() && date === overdueDailyReportDate() && dailyRequirementRetryDate !== date;
   dialog.dataset.required = String(required);
   document.getElementById("closeDailyReportDialog").hidden = required;
@@ -2710,7 +2715,8 @@ document.getElementById("portalHoursForm")?.addEventListener("submit", async (ev
   saveState({ remote: false });
   renderEmployeePortal();
   showToast("Uspešno sačuvano", "Sati su uspešno sačuvani u aplikaciji.", "ok");
-  // A successful time entry must not launch a daily-report dialog.
+  if (typeof window !== "undefined") window.MarketizoReportGate?.refresh(true);
+  // The obligation coordinator opens only overdue tasks, after confirmed saving.
 });
 
 document.getElementById("overdueDailyReportButton")?.addEventListener("click", () => openDailyReportDialog(overdueDailyReportDate()));
@@ -2765,7 +2771,7 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   if (activeEmployee?.id !== actorId) return;
   if (!result.ok) {
     const dialog = document.getElementById("dailyReportDialog");
-    if (dialog?.dataset.required === "true") {
+    if (dialog?.dataset.required === "true" && (typeof window === "undefined" || !window.MarketizoReportGate)) {
       dailyRequirementRetryDate = date;
       dialog.dataset.required = "false";
       document.getElementById("closeDailyReportDialog").hidden = false;
@@ -2776,10 +2782,12 @@ document.getElementById("dailyReportForm")?.addEventListener("submit", async (ev
   }
   state.employeeReports = (state.employeeReports || []).filter((report) => !(report.employeeId === activeEmployee.id && report.date === date && report.isFinalDailyReport === true));
   state.employeeReports.unshift(result.report);
+  try { localStorage.removeItem("marketizoDailyDraft:"+activeEmployee.id+":"+date); } catch {}
   form.reset();
   saveState({ remote: false });
   document.getElementById("dailyReportDialog")?.close();
   renderEmployeePortal();
+  if (typeof window !== "undefined") window.MarketizoReportGate?.refresh(true);
   showToast("Izveštaj poslat", "Dnevni izveštaj je sada vidljiv lideru.", "ok");
 });
 
@@ -2873,9 +2881,9 @@ document.getElementById("closeLeaderReportsDialog")?.addEventListener("click", (
 });
 
 document.getElementById("weeklyTaskButton")?.addEventListener("click", openRequiredWeeklyTask);
-document.getElementById("weeklyQuestionnaireLater")?.addEventListener("click", () => document.getElementById("weeklyQuestionnaireDialog")?.close());
+document.getElementById("weeklyQuestionnaireLater")?.addEventListener("click", () => { if ((typeof window === "undefined" || !window.MarketizoReportGate?.required(document.getElementById("weeklyQuestionnaireForm")?.dataset.reportId))) document.getElementById("weeklyQuestionnaireDialog")?.close(); });
 document.getElementById("weeklyQuestionnaireDialog")?.addEventListener("cancel", (event) => {
-  if (document.getElementById("weeklyQuestionnaireForm")?.dataset.saving === "true") event.preventDefault();
+  if (document.getElementById("weeklyQuestionnaireForm")?.dataset.saving === "true" || (typeof window !== "undefined" && window.MarketizoReportGate?.required(document.getElementById("weeklyQuestionnaireForm")?.dataset.reportId))) event.preventDefault();
 });
 document.getElementById("weeklyQuestionnaireForm")?.addEventListener("input", (event) => saveWeeklyDraft(event.currentTarget));
 document.getElementById("leaderWeeklyReportList")?.addEventListener("click", (event) => {
@@ -2905,6 +2913,7 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
     try { localStorage.removeItem(weeklyDraftKey(form.dataset.reportId)); } catch {}
     form.reset();
     document.getElementById("weeklyQuestionnaireDialog")?.close();
+    if (typeof window !== "undefined") window.MarketizoReportGate?.refresh(true);
     showToast("Nedeljni izveštaj je poslat", "Lider je obavešten da je upitnik popunjen.", "ok");
   } catch (error) {
     showToast("Izveštaj nije poslat", error?.message || "Pokušaj ponovo.", "danger");
@@ -2914,6 +2923,7 @@ document.getElementById("weeklyQuestionnaireForm")?.addEventListener("submit", a
     submitButton.disabled = false;
     submitButton.textContent = "Pošalji lideru";
     renderRequiredWeeklyTask();
+    if (typeof window !== "undefined") window.MarketizoReportGate?.refresh(true);
   }
 });
 
@@ -3113,3 +3123,7 @@ document.addEventListener("click", (event) => {
 });
 
 window.MarketizoProduction?.attach(document.getElementById("portalHoursForm"), () => ({ employeeId: activeEmployee?.id || "", activityId: document.getElementById("portalActivityId")?.value || "", clientId: document.getElementById("portalClientSelect")?.value || "" }));
+
+document.getElementById('dailyReportForm')?.addEventListener('input', event => {
+  const form=event.currentTarget;try{localStorage.setItem('marketizoDailyDraft:'+activeEmployee?.id+':'+form.dataset.reportDate,JSON.stringify(Object.fromEntries(new FormData(form))));}catch{}
+});
