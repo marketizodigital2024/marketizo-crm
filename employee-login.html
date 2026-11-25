@@ -420,7 +420,8 @@
         <div id="clientWeeklyNotice" role="status" hidden></div>
         <button id="clientWeeklyOpen" type="button" class="secondary-button" hidden>Popuni nedeljni pregled klijenata</button>
         <button id="weeklyTaskButton" type="button" class="secondary-button" hidden>Popuni nedeljni izveštaj</button>
-        <section class="client-tab" id="employeeReportsTab">
+        <section class="panel" id="reportObligationsPanel" hidden><h2>Izveštaji koje treba da popuniš</h2><p class="muted">Dnevni: rezime dana. Nedeljni: osvrt na tvoju radnu nedelju. Pregled klijenata: stanje svakog dodeljenog klijenta.</p><div id="reportObligationList"></div></section><p id="reportObligationError" role="status" hidden></p><p id="reportTimeRequirement" role="status" hidden></p>
+<section class="client-tab" id="employeeReportsTab">
           <section class="panel">
 
             <div class="panel-head">
@@ -451,7 +452,8 @@
               <strong id="leaderLiveReportSummary">0 aktivnosti</strong>
             </div>
           </section>
-          <div data-report-panel="daily">
+          <section class="panel" id="leaderObligationsPanel" hidden><h2>Obaveze i statusi izveštaja</h2><div class="leader-activity-filter"><label>Od datuma<input type="date" id="reportFromDate" /></label><label>Do datuma<input type="date" id="reportToDate" /></label><label>Status<select id="reportStatusFilter"><option value="">Svi statusi</option><option value="late">Kasni</option><option value="pending">Čeka popunjavanje</option><option value="sent">Poslat · čeka čitanje</option><option value="read">Pročitan</option></select></label></div><p id="leaderObligationsSummary" role="status"></p><div id="leaderObligationList" class="report-obligation-history"></div></section>
+<div data-report-panel="daily">
           <section class="panel">
             <div class="panel-head"><h2>Dnevni izveštaj</h2><button id="openLeaderDailyReports" class="secondary-button" type="button" hidden>Otvori dnevne izveštaje</button></div>
             <div class="setup-list" id="leaderDailyReportList"></div>
@@ -467,7 +469,7 @@
           </div>
           <div data-report-panel="clients" hidden>
           <section class="panel" id="clientWeeklyLeaderPanel" hidden>
-            <h2>Nedeljni pregled klijenata</h2>
+            <h2>Nedeljni pregled klijenata</h2><div class="leader-activity-filter"><label>Pretraži klijenta<input id="clientWeeklySearch" type="search" placeholder="Naziv klijenta" /></label><label>Klijent<select id="clientWeeklyClientFilter"><option value="">Svi klijenti</option></select></label><label>Uloga<select id="clientWeeklyRoleFilter"><option value="">Sve uloge</option><option>Social Media Manager</option><option>Scenarista</option><option>Editor</option><option>Snimatelj</option><option>Paid Ads</option><option>Voice Over</option><option>Checking</option></select></label></div>
 
             <p class="muted">Ponedeljkom od 12h zaposleni pišu kako je protekla prethodna nedelja za njihove klijente: šta je dobro, šta nije dobro i za šta im treba pomoć.</p>
             <button id="openClientReportList" class="secondary-button" type="button">Izveštaji o klijentima po zaposlenom</button>
@@ -633,7 +635,8 @@
       </main>
     </div>
     <div class="toast-stack" id="employeeToastStack" aria-live="polite"></div>
-    <dialog id="dailyReportDialog" class="daily-report-dialog">
+    <dialog id="reportGateDialog" class="daily-report-dialog"><section class="modal-card daily-report-modal"><p class="eyebrow">Obavezan izveštaj</p><h2 id="reportGateTitle"></h2><p id="reportGateDescription"></p><button id="reportGateOpen" class="primary-button" type="button">Popuni izveštaj</button><button id="reportGateLogout" class="secondary-button" type="button">Odjavi se</button></section></dialog>
+<dialog id="dailyReportDialog" class="daily-report-dialog">
       <form id="dailyReportForm" class="modal-card daily-report-modal">
         <div class="modal-head">
           <div>
@@ -730,11 +733,13 @@
     <script src="cost-calculation.js?v=20261008-repair"></script>
     <script src="work-production.js?v=20261031-simple-quantity"></script>
     <script src="comp-time.js?v=20261031-comp-time-1"></script>
-    <script src="employee-portal.js?v=20261116-1"></script>
-    <script src="client-weekly-reports.js?v=20261115-1"></script>
+    <script src="employee-portal.js?v=20261125-reports-1"></script>
+    <script src="client-weekly-reports.js?v=20261125-reports-1"></script>
     <script src="hours-history.js?v=20261014-audit-fix-r7"></script>
   <script src="questionnaire-nav.js?v=20261111-1" defer></script>
-  </body>
+  <script src="report-obligations.js?v=20261125-reports-1"></script>
+<style>.report-obligation-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid #e5e7eb}.report-obligation-row p{margin:6px 0;color:#526079}.report-obligation-history{max-height:420px;overflow:auto}#reportObligationError,#reportTimeRequirement{padding:12px;border-radius:10px;background:#fff2cf;color:#503d0c}#reportObligationsPanel{margin:16px 0}@media(max-width:600px){.report-obligation-row{align-items:flex-start;flex-direction:column}}</style>
+</body>
 </html>
 
 
