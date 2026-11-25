@@ -34,7 +34,9 @@ export function matchClickUpClient(groupName, clients) {
   const verifiedAliases = {
     "violeta golden bridge": "12445eqxrv8",
     "aleksandar": "12445eqxrvy",
-    "svetlana": "12445eqxrv7"
+    "svetlana": "12445eqxrv7",
+    "vk gebaudereinigung": "12445er2pzq",
+    "bau tycoon": "12445er43zy"
   };
   if (verifiedAliases[group]) return clients.find(client => client.clickupTaskId === verifiedAliases[group]) || null;
 
