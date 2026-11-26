@@ -26,8 +26,8 @@ begin
  select coalesce(jsonb_agg(jsonb_build_object('id',e->>'id','name',e->>'name','position',e->>'position','positions',e->'positions','status',e->>'status','active',coalesce(e->'active','true'::jsonb),'isLeader',coalesce(e->'isLeader','false'::jsonb))),'[]') into staff
  from public.agency_crm_state s,jsonb_array_elements(s.payload->'employees') e where s.id='marketizo-main' and access->'ids' ? (e->>'id');
  select coalesce(jsonb_agg(jsonb_build_object('id',c->>'id','name',c->>'name') order by c->>'name'),'[]') into clients from public.agency_crm_state s,jsonb_array_elements(coalesce(s.payload->'clients','[]')) c where s.id='marketizo-main' and coalesce(c->>'status','') not in ('Arhiviran','Neaktivan');
- select coalesce(jsonb_agg(jsonb_build_object('id',a->>'id','name',a->>'name','revision',coalesce((a->>'revision')::integer,1),'deleted',a->>'deletedAt' is not null) order by a->>'name'),'[]') into activities from jsonb_array_elements(coalesce(doc->'activities','[]')) a;
- return jsonb_build_object('ok',true,'clients',clients,'activities',activities,'entries',records,'employeeIds',access->'ids','employees',staff,'scope',case when (access->>'owner')::boolean then 'all' else 'team' end,'viewer',jsonb_build_object('id',p_actor,'name',access->>'actorName'),'updatedAt',stamp);
+ select coalesce(jsonb_agg(jsonb_build_object('id',a->>'id','name',a->>'name','revision',coalesce((a->>'revision')::integer,1),'deleted',a->>'deletedAt' is not null) order by a->>'name'),'[]') into activities from jsonb_array_elements(coalesce(doc->'activities','[]')) a where (access->>'owner')::boolean or a->>'deletedAt' is null;
+ return jsonb_build_object('ok',true,'canManageActivities',(access->>'owner')::boolean,'clients',clients,'activities',activities,'entries',records,'employeeIds',access->'ids','employees',staff,'scope',case when (access->>'owner')::boolean then 'all' else 'team' end,'viewer',jsonb_build_object('id',p_actor,'name',access->>'actorName'),'updatedAt',stamp);
 end $$;
 create or replace function public.marketizo_employee_kpi_save(p_actor text,p_action text,p_request_id uuid,p_entry jsonb)
 returns jsonb language plpgsql security invoker set search_path='' set lock_timeout='2s' set statement_timeout='5s' as $$
@@ -103,7 +103,7 @@ returns jsonb language plpgsql security invoker set search_path='' set lock_time
 declare access jsonb; doc jsonb; prior jsonb; item jsonb; label text; stamp timestamptz:=clock_timestamp();
 begin
  access=public.marketizo_employee_kpi_scope(p_actor);
- if access is null then return jsonb_build_object('ok',false,'status',403);end if;
+ if access is null or access->>'owner' is distinct from 'true' then return jsonb_build_object('ok',false,'status',403);end if;
  if p_request_id is null or jsonb_typeof(p_entry) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_entry) k where k<>'name') or jsonb_typeof(p_entry->'name') is distinct from 'string' then return jsonb_build_object('ok',false,'status',400);end if;
  label=regexp_replace(btrim(p_entry->>'name'),'\s+',' ','g');
  if char_length(label) not between 2 and 120 then return jsonb_build_object('ok',false,'status',400);end if;
@@ -132,7 +132,7 @@ returns jsonb language plpgsql security invoker set search_path='' set lock_time
 declare access jsonb; doc jsonb; prior jsonb; item jsonb; op jsonb; idx integer; label text; rev integer; stamp timestamptz:=clock_timestamp();
 begin
  access=public.marketizo_employee_kpi_scope(p_actor);
- if access is null then return jsonb_build_object('ok',false,'status',403);end if;
+ if access is null or access->>'owner' is distinct from 'true' then return jsonb_build_object('ok',false,'status',403);end if;
  if p_request_id is null or coalesce(p_action,'') not in ('update','delete','restore') or jsonb_typeof(p_entry) is distinct from 'object' then return jsonb_build_object('ok',false,'status',400);end if;
  if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('id','revision','name')) or jsonb_typeof(p_entry->'id') is distinct from 'string' or coalesce(p_entry->>'revision','') !~ '^\d{1,9}$' then return jsonb_build_object('ok',false,'status',400);end if;
  if p_action='update' then
