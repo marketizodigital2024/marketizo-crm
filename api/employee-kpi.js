@@ -16,6 +16,7 @@ async function handler(req,res){
  try{
   if(req.method==='POST'){
    const body=await store.body(req);
+   if(body.action==='activity-create')return send(res,200,await store.rpc(config,'marketizo_employee_kpi_activity_save',{p_actor:session.employeeId,p_request_id:body.requestId,p_entry:body.entry}));
    return send(res,200,await store.rpc(config,'marketizo_employee_kpi_save',{p_actor:session.employeeId,p_action:body.action,p_request_id:body.requestId,p_entry:body.entry}));
   }
   const saved=await store.rpc(config,'marketizo_employee_kpi_read',{p_actor:session.employeeId});

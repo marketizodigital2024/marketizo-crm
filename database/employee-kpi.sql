@@ -26,7 +26,7 @@ begin
  select coalesce(jsonb_agg(jsonb_build_object('id',e->>'id','name',e->>'name','position',e->>'position','positions',e->'positions','status',e->>'status','active',coalesce(e->'active','true'::jsonb),'isLeader',coalesce(e->'isLeader','false'::jsonb))),'[]') into staff
  from public.agency_crm_state s,jsonb_array_elements(s.payload->'employees') e where s.id='marketizo-main' and access->'ids' ? (e->>'id');
  select coalesce(jsonb_agg(jsonb_build_object('id',c->>'id','name',c->>'name') order by c->>'name'),'[]') into clients from public.agency_crm_state s,jsonb_array_elements(coalesce(s.payload->'clients','[]')) c where s.id='marketizo-main' and coalesce(c->>'status','') not in ('Arhiviran','Neaktivan');
- select coalesce(jsonb_agg(jsonb_build_object('id',a->>'id','name',a->>'name') order by a->>'name'),'[]') into activities from public.agency_crm_state s,jsonb_array_elements(coalesce(s.payload->'employeeActivities','[]')) a where s.id='marketizo-main' and coalesce(a->>'active','true')<>'false';
+ select coalesce(jsonb_agg(jsonb_build_object('id',a->>'id','name',a->>'name') order by a->>'name'),'[]') into activities from jsonb_array_elements(coalesce(doc->'activities','[]')) a;
  return jsonb_build_object('ok',true,'clients',clients,'activities',activities,'entries',records,'employeeIds',access->'ids','employees',staff,'scope',case when (access->>'owner')::boolean then 'all' else 'team' end,'viewer',jsonb_build_object('id',p_actor,'name',access->>'actorName'),'updatedAt',stamp);
 end $$;
 create or replace function public.marketizo_employee_kpi_save(p_actor text,p_action text,p_request_id uuid,p_entry jsonb)
@@ -98,9 +98,34 @@ begin
  return jsonb_build_object('ok',true,'entry',entry-'intent');
 exception when invalid_text_representation or invalid_datetime_format or datetime_field_overflow or numeric_value_out_of_range then return jsonb_build_object('ok',false,'status',400);
 end $$;
+create or replace function public.marketizo_employee_kpi_activity_save(p_actor text,p_request_id uuid,p_entry jsonb)
+returns jsonb language plpgsql security invoker set search_path='' set lock_timeout='2s' set statement_timeout='5s' as $$
+declare access jsonb; doc jsonb; prior jsonb; item jsonb; label text; stamp timestamptz:=clock_timestamp();
+begin
+ access=public.marketizo_employee_kpi_scope(p_actor);
+ if access is null then return jsonb_build_object('ok',false,'status',403);end if;
+ if p_request_id is null or jsonb_typeof(p_entry) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_entry) k where k<>'name') or jsonb_typeof(p_entry->'name') is distinct from 'string' then return jsonb_build_object('ok',false,'status',400);end if;
+ label=regexp_replace(btrim(p_entry->>'name'),'\s+',' ','g');
+ if char_length(label) not between 2 and 120 then return jsonb_build_object('ok',false,'status',400);end if;
+ insert into public.agency_crm_state(id,payload,updated_at) values('marketizo-employee-kpi-v1','{"format":"marketizo-employee-kpi-v1","entries":[],"activities":[]}',stamp) on conflict(id) do nothing;
+ select payload into doc from public.agency_crm_state where id='marketizo-employee-kpi-v1' for update;
+ if doc->>'format' is distinct from 'marketizo-employee-kpi-v1' then raise exception 'Invalid KPI storage format';end if;
+ select a into prior from jsonb_array_elements(coalesce(doc->'activities','[]')) a where a->>'id'=p_request_id::text;
+ if prior is not null then
+  if prior->>'createdBy' is distinct from p_actor or prior->>'name' is distinct from label then return jsonb_build_object('ok',false,'status',409);end if;
+  return jsonb_build_object('ok',true,'duplicate',true,'entry',jsonb_build_object('id',prior->>'id','name',prior->>'name'));
+ end if;
+ select a into prior from jsonb_array_elements(coalesce(doc->'activities','[]')) a where lower(a->>'name')=lower(label);
+ if prior is not null then return jsonb_build_object('ok',true,'duplicate',true,'entry',jsonb_build_object('id',prior->>'id','name',prior->>'name'));end if;
+ item=jsonb_build_object('id',p_request_id,'name',label,'createdAt',stamp,'createdBy',p_actor);
+ update public.agency_crm_state set payload=jsonb_set(doc,'{activities}',coalesce(doc->'activities','[]')||jsonb_build_array(item)),updated_at=stamp where id='marketizo-employee-kpi-v1';
+ return jsonb_build_object('ok',true,'entry',jsonb_build_object('id',p_request_id,'name',label));
+end $$;
 revoke all on function public.marketizo_employee_kpi_scope(text) from public,anon,authenticated;
 revoke all on function public.marketizo_employee_kpi_read(text) from public,anon,authenticated;
 revoke all on function public.marketizo_employee_kpi_save(text,text,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.marketizo_employee_kpi_scope(text),public.marketizo_employee_kpi_read(text),public.marketizo_employee_kpi_save(text,text,uuid,jsonb) to service_role;
+revoke all on function public.marketizo_employee_kpi_activity_save(text,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.marketizo_employee_kpi_activity_save(text,uuid,jsonb) to service_role;
 notify pgrst,'reload schema';
 commit;
