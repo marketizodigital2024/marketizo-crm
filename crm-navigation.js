@@ -16,7 +16,7 @@
   ];
   const primary = [
     ['admin','Početna','/'],['clients','Klijenti','/#clients'],['employees','Tim','/employees-overview'],
-    ['kpi','KPI i ocene klijenata','/kpi'],['sign','Marketizo Sign','/marketizo-sign'],
+    ['employeeKpi','KPI zaposleni','/employee-kpi'],['kpi','KPI i ocene klijenata','/kpi'],['sign','Marketizo Sign','/marketizo-sign'],
     ['codeks','Kodeks','/kodeks'],['analytics','Analitika','/work-analytics'],
     ['calendar','Kalendar','/#calendar'],['clientCosts','Trošak klijenata','/#client-costs'],['reports','Finansije','/#reports']
   ];
@@ -25,6 +25,7 @@
     const files={'employees-overview':'overview','employee-profile':'profile','employees-absences':'leave','employees-recognitions':'meetings','employees-ratings':'performance','employees-goals':'activities','employees-settings':'settings'};
     if(file==='billing-invoices')return{primary:'reports',finance:new URLSearchParams(search).get('type')==='once'?'oneoff':'issuing'};
     if(file==='work-analytics')return{primary:'analytics'};
+    if(file==='employee-kpi')return{primary:'employeeKpi'};
     if(file==='kodeks')return{primary:'codeks'};
     if(file==='marketizo-sign')return{primary:'sign',sign:new URLSearchParams(search).get('onboarding')==='1'?'onboarding':'documents'};
     if(file==='kpi')return{primary:'kpi'};
@@ -107,6 +108,8 @@
         el.classList.toggle('active',active);if(active)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
       });
       nav.querySelector('.finance-nav-menu').hidden=operational;
+      const privateKpi=nav.querySelector('[data-nav-key="employeeKpi"]');
+      if(privateKpi){let allowed=false;try{const s=JSON.parse(localStorage.getItem('marketizoAdminSession')||'null');allowed=!!s?.token&&Number(s.expiresAt)>Date.now()&&['emp-miljan','emp-ivana'].includes(s.employeeId);}catch{}privateKpi.hidden=!allowed;}
       if(current.primary==='reports')nav.querySelector('.finance-nav-menu').open=true;
       nav.dataset.currentCategory=current.primary;
     };

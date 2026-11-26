@@ -1,0 +1,34 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const core=require('../lib/employee-kpi.js');
+const p={employees:[{id:'emp-miljan',name:'Owner',isLeader:true,salary:9000},{id:'emp-ivana',name:'Other owner',isLeader:true},{id:'lead',name:'Leader',isLeader:true},{id:'a',name:'Ana',leaderId:'lead',position:'Editor',password:'PRIVATE'},{id:'b',name:'Bojan',leaderId:'other',position:'Editor'},{id:'child-lead',name:'Other leader',leaderId:'lead',isLeader:true},{id:'revoked',name:'Revoked',isLeader:true,status:'Neaktivan'}],clients:[{id:'c',name:'Client',status:'Aktivan',revenue:999,contractFileData:'PRIVATE'},{id:'secret',name:'Hidden client'}],employeeActivities:[{id:'act',name:'Edit klipova',category:'Editori'}],employeeWorkLogs:[{id:'one',employeeId:'a',date:'2026-11-26',activityId:'act',clientId:'c',minutes:20,note:'PRIVATE'},...['lead','b','child-lead','emp-ivana'].map(id=>({id,employeeId:id,date:'2026-11-26',clientId:'secret',minutes:99,note:'PRIVATE'}))]};
+const snap={payload:p,updated_at:'2026-11-26T12:00:00Z',production:{rules:[],outputs:[{log_id:'one',employee_id:'a',activity_id:'act',client_id:'c',batch_id:'batch',unit:'clip',completed:true,quantity:2,label:'PRIVATE',recorded_by:'b'}, {log_id:'b',employee_id:'b',batch_id:'foreign',unit:'clip',completed:true,quantity:99}]}};
+const before=JSON.stringify(snap),lead={role:'employee',employee:p.employees[2]};
+assert.equal(core.scope({role:'employee',employee:p.employees[3]},p),null);
+assert.equal(core.scope({role:'operational-admin',employee:p.employees[4]},p),null);
+assert.equal(core.scope({role:'full-admin',employee:p.employees[6]},p),null);
+assert.equal(core.scope({role:'client',employee:p.employees[0]},p),null);
+const view=core.scope(lead,p);assert.deepEqual([...view.ids],['a']);const projected=core.project(snap,view);
+assert.deepEqual(projected.employees.map(e=>e.id),['a']);assert.deepEqual(projected.clients.map(c=>c.id),['c']);assert.deepEqual(projected.logs.map(l=>l.id),['one']);assert.equal(projected.outputs.length,1);
+for(const secret of ['PRIVATE','Hidden client','Bojan','Other owner','Other leader','salary','password','recorded_by'])assert.ok(!JSON.stringify(projected).includes(secret),secret);
+assert.equal(core.scope({role:'employee',employee:p.employees[0]},p).owner,true);
+const source={live:true,rows:[{taskId:'t',Klijent:'Client',clientStatus:'Aktivan',Editor:'Ana',Scenarista:'Bojan'},{taskId:'s',Klijent:'Hidden client',clientStatus:'Aktivan',Editor:'Bojan'},{taskId:'inactive',Klijent:'Paused',clientStatus:'Neaktivan',Editor:'Ana'}]};
+const assignments=core.assignments(source,p,view);assert.equal(assignments.rows.length,1);assert.deepEqual(assignments.rows[0].roles.Editor,['a']);assert.deepEqual(assignments.rows[0].roles.Scenarista,[]);assert.ok(!JSON.stringify(assignments).includes('Bojan'));
+assert.equal(JSON.stringify(snap),before,'Reads never mutate CRM state or production records');
+let access=lead,reads=0,clickupReads=0;
+const helpers={supabaseConfig:()=>({configured:true,key:'fixture',url:'https://fixture.invalid'}),verifyAccessToken:t=>t==='valid'?{role:'employee'}:null,accessSession:()=>access,readStoredState:async()=>{reads++;return {payload:p};}};
+const env={blockProductionFeatureInPreview(res){if(ctx.process.env.VERCEL_ENV==='preview'){res.statusCode=409;res.end('{}');return true;}return false;}};
+const ctx={module:{exports:{}},URL,console,process:{env:{VERCEL_ENV:'test'}},fetch:()=>{throw Error('Unexpected network access');},require:id=>id==='./state.js'?{helpers}:id==='../lib/environment.js'?env:id==='../lib/work-production-backup.js'?{readSnapshot:async()=>{reads++;return snap;}}:id==='../lib/database-request.js'?{withRequestBudget:f=>f(),request:()=>{throw Error('Unexpected write');}}:id==='./kpi.js'?{internal:{clickupRoster:async()=>{clickupReads++;return source;}}}:require(require.resolve(id,{paths:[path.join(__dirname,'../api')]}))};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(__dirname,'../api/employee-kpi.js'),'utf8'),ctx);
+async function call(method='GET',token='valid',url='/api/employee-kpi'){let out,headers={};await ctx.module.exports({method,url,headers:{authorization:token?'Bearer '+token:''}},{setHeader:(k,v)=>headers[k]=v,end(raw){out={status:this.statusCode,body:JSON.parse(raw),headers};}});return out;}
+(async()=>{
+ assert.equal((await call('POST')).status,405);assert.equal(reads,0);
+ assert.equal((await call('GET','')).status,401);assert.equal((await call('GET','invalid')).status,401);assert.equal(reads,0);
+ let r=await call('GET','valid','/api/employee-kpi?employeeId=b');assert.equal(r.status,200);assert.deepEqual(r.body.employees.map(e=>e.id),['a']);assert.match(r.headers['Cache-Control'],/no-store/);
+ r=await call('GET','valid','/api/employee-kpi?view=assignments');assert.equal(r.body.rows.length,1);assert.equal(clickupReads,1);
+ access={role:'operational-admin',employee:p.employees[4]};assert.equal((await call('GET','valid','/api/employee-kpi?view=assignments')).status,403);assert.equal(clickupReads,1);
+ access={role:'full-admin',employee:p.employees[0]};r=await call();assert.equal(r.body.scope,'all');assert.equal(r.body.employees.length,p.employees.length);
+ ctx.process.env.VERCEL_ENV='preview';const previous=reads;assert.equal((await call()).status,409);assert.equal(reads,previous);
+ assert.equal(JSON.stringify(snap),before);
+ console.log('PASS employee KPI: owner/team authorization, no self or cross-team exposure, no financial/note leaks, invalid session rejected, read-only API, preview isolation and unchanged live-work structures');
+})().catch(e=>{console.error(e);process.exitCode=1;});
