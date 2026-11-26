@@ -16,11 +16,15 @@ async function handler(req,res){
  try{
   if(req.method==='POST'){
    const body=await store.body(req);
+   if(['monthly-approve','monthly-return'].includes(body.action)&&!['emp-miljan','emp-ivana'].includes(session.employeeId))return send(res,403,{ok:false,error:'Mesečne ocene potvrđuju samo Miljan i Ivana.'});
+   if(body.action.startsWith('monthly-'))return send(res,200,await store.rpc(config,'marketizo_employee_kpi_monthly_save',{p_actor:session.employeeId,p_action:body.action.slice(8),p_request_id:body.requestId,p_entry:body.entry}));
    if(body.action.startsWith('activity-')&&!['emp-miljan','emp-ivana'].includes(session.employeeId))return send(res,403,{ok:false,error:'KPI aktivnosti uređuju samo Miljan i Ivana.'});
    if(['activity-update','activity-delete','activity-restore'].includes(body.action))return send(res,200,await store.rpc(config,'marketizo_employee_kpi_activity_change',{p_actor:session.employeeId,p_action:body.action.slice(9),p_request_id:body.requestId,p_entry:body.entry}));
    if(body.action==='activity-create')return send(res,200,await store.rpc(config,'marketizo_employee_kpi_activity_save',{p_actor:session.employeeId,p_request_id:body.requestId,p_entry:body.entry}));
    return send(res,200,await store.rpc(config,'marketizo_employee_kpi_save',{p_actor:session.employeeId,p_action:body.action,p_request_id:body.requestId,p_entry:body.entry}));
   }
+  const query=new URL(req.url,'https://app.marketizo.com').searchParams;
+  if(query.get('view')==='monthly')return send(res,200,await store.rpc(config,'marketizo_employee_kpi_monthly_read',{p_actor:session.employeeId,p_month:query.get('month')}));
   const saved=await store.rpc(config,'marketizo_employee_kpi_read',{p_actor:session.employeeId});
   const ids=new Set(saved.employeeIds||[]);
   const employees=(saved.employees||[]).filter(e=>ids.has(e.id)).map(e=>({id:e.id,name:e.name,positions:employeeRoles(e.positions?.length?e.positions:e.position),active:e.active!==false&&e.status!=='Neaktivan',isLeader:e.isLeader===true}));
