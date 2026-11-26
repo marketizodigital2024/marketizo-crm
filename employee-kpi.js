@@ -7,7 +7,7 @@
  const normalize=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d').toLowerCase();
  let data=null,session=null,sequence=0,saving=false,pendingCreate=null,pendingStatus=null,statusTarget=null,page=1,timer;
  function getSession(){const keys=new URLSearchParams(location.search).get('portal')==='employee'?['marketizoEmployeeSession']:['marketizoAdminSession','marketizoEmployeeSession'];for(const key of keys){try{const s=JSON.parse(localStorage.getItem(key)||'null');if(s?.token&&Number(s.expiresAt)>Date.now())return s;}catch{}}return null;}
- function period(kind){const t=today(),d=new Date(t+'T12:00:00Z');let from,to=t;if(kind==='week')from=K.week(t);else if(kind==='previous'){d.setUTCDate(0);to=d.toISOString().slice(0,10);from=to.slice(0,8)+'01';}else from=t.slice(0,8)+'01';$('ekFrom').value=from;$('ekTo').value=to;document.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===kind)));}
+ function period(kind){const t=today(),d=new Date(t+'T12:00:00Z');let from,to=t;if(kind==='day')from=t;else if(kind==='week')from=K.week(t);else if(kind==='previous'){d.setUTCDate(0);to=d.toISOString().slice(0,10);from=to.slice(0,8)+'01';}else from=t.slice(0,8)+'01';$('ekFrom').value=from;$('ekTo').value=to;document.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===kind)));}
  const name=id=>data.employees.find(e=>e.id===id)?.name||id;
  const currentEmployees=()=>data.employees.filter(e=>e.active||data.entries.some(r=>r.employeeId===e.id));
  const eligible=()=>currentEmployees().filter(e=>(!$('ekRole').value||e.positions.includes($('ekRole').value))&&(!$('ekEmployee').value||e.id===$('ekEmployee').value));
@@ -44,7 +44,7 @@
  $('ekStatusCancel').addEventListener('click',()=>{$('ekStatusPanel').hidden=true;statusTarget=null;});
  $('ekRows').addEventListener('click',event=>{const b=event.target.closest('[data-employee]');if(!b)return;$('ekEmployee').value=b.dataset.employee;page=1;render();tab('Records');});
  document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>tab(b.dataset.tab)));
- document.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{period(b.dataset.period);page=1;render();}));
+ document.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{period(b.dataset.period);$('ekGrouping').value=b.dataset.period;page=1;render();}));
  for(const id of ['ekFrom','ekTo','ekRole','ekEmployee','ekRecordKind','ekRecordStatus','ekGrouping'])$(id).addEventListener('change',()=>{page=1;render();});
  $('ekSearch').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>{page=1;render();},120);});
  $('ekRecordPrev').addEventListener('click',()=>{page=Math.max(1,page-1);render();});$('ekRecordNext').addEventListener('click',()=>{page++;render();});

@@ -7,7 +7,7 @@
  function aggregate(entries,ids,from,to,group='employee'){
   const allowed=new Set(ids),map=new Map();if(group==='employee')for(const id of ids)map.set(id,empty(id));
   for(const e of entries||[]){if(!allowed.has(e.employeeId)||e.date<from||e.date>to)continue;
-   const period=group==='week'?week(e.date):group==='month'?e.date.slice(0,7):'';const key=period?e.employeeId+'|'+period:e.employeeId;
+   const period=group==='day'?e.date:group==='week'?week(e.date):group==='month'?e.date.slice(0,7):'';const key=period?e.employeeId+'|'+period:e.employeeId;
    if(!map.has(key))map.set(key,{...empty(e.employeeId),period});add(map.get(key),e);
   }return [...map.values()].sort((a,b)=>(b.period||'').localeCompare(a.period||'')||a.employeeId.localeCompare(b.employeeId));
  }
