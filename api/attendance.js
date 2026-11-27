@@ -30,7 +30,7 @@ function createHandler(deps={}) {return async function(req,res){
     if(req.method==='POST'){
       const body=req.body;
       if(!body||typeof body!=='object'||!employeeId)return json(res,400,{error:'Nedostaju podaci.'});
-      const employee=selected[0],schedule=require('../lib/attendance-schedule.js').forEmployee(employee,body.date);
+      const employee=selected[0],schedule=require('../lib/attendance-schedule.js').forEmployee(employee,body.date,body.confirmed===true);
       const data=core.validate(body,schedule);
       if(employee.startDate&&data.date<employee.startDate||employee.endDate&&data.date>employee.endDate)return json(res,400,{error:'Datum je van perioda zaposlenja.'});
       const day=Date.parse(data.date),lo=new Date(day-86400000).toISOString().slice(0,10),hi=new Date(day+86400000).toISOString().slice(0,10);
@@ -53,7 +53,7 @@ function createHandler(deps={}) {return async function(req,res){
     }
     const from=query.get('from')||core.today().slice(0,7)+'-01',to=query.get('to')||core.today();core.dates(from,to);
     const records=(await read(from,to,owner?employeeId:actor)).flatMap(r=>Object.values(r.payload.records||{})).filter(r=>r.date>=from&&r.date<=to&&selected.some(e=>e.id===r.employeeId));
-    const report={from,to,generatedAt:new Date().toISOString(),timeZone:'Europe/Vienna',schedules:Object.fromEntries(selected.map(e=>[e.id,require('../lib/attendance-schedule.js').forEmployee(e,from)])),employees:employees.map(e=>({id:e.id,name:e.name,status:e.status})),
+    const report={from,to,generatedAt:new Date().toISOString(),timeZone:'Europe/Vienna',schedules:Object.fromEntries(selected.map(e=>[e.id,require('../lib/attendance-schedule.js').forEmployee(e,from,true)])),employees:employees.map(e=>({id:e.id,name:e.name,status:e.status})),
       records:records.map(({history,...r})=>r),hours:core.hourRows(state,records,selected,from,to),
       absences:core.absenceRows(state,selected,from,to),vacations:core.vacationSummary(state,selected,to>core.today()?core.today():to),canSelectEmployee:owner};
     const format=query.get('format'),type=query.get('type')||'hours';
