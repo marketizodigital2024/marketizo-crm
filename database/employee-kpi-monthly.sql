@@ -30,6 +30,12 @@ begin
  ) select coalesce(jsonb_agg(jsonb_build_object('employeeId',employee_id,'score',score,'clientCount',client_count,'responseCount',client_count,'answerCount',answer_count,'items',items,'fingerprint',md5(items::text)) order by employee_id),'[]') into result from per_person;
  return jsonb_build_object('ok',true,'month',p_month,'employeeIds',access->'ids','sourceAvailable',available,'clients',result);
 end $$;
+create or replace function public.marketizo_employee_kpi_monthly_calculation(p_score integer,p_client jsonb)
+returns jsonb language sql immutable security invoker set search_path='' as $$
+ select jsonb_build_object('formula','marketizo70-30-simple-v2','scale',3,'leaderScore',p_score,'internalScore',p_score,'internalContribution',p_score::numeric*.7,'clientNormalized',case when p_client is null then null else 1+((p_client->>'score')::numeric-1)/2 end,'client',p_client,'clientFingerprint',coalesce(p_client->>'fingerprint','none'),'total',case when p_client is null then null else round(p_score::numeric*.7+(1+((p_client->>'score')::numeric-1)/2)*.3,2) end);
+$$;
+revoke all on function public.marketizo_employee_kpi_monthly_calculation(integer,jsonb) from public,anon,authenticated;
+grant execute on function public.marketizo_employee_kpi_monthly_calculation(integer,jsonb) to service_role;
 create or replace function public.marketizo_employee_kpi_monthly_read(p_actor text,p_month text)
 returns jsonb language plpgsql stable security invoker set search_path='' set statement_timeout='5s' as $$
 declare access jsonb; doc jsonb; records jsonb; clients jsonb;
@@ -40,6 +46,7 @@ begin
  if clients->>'ok'<>'true' then return clients;end if;
  select payload into doc from public.agency_crm_state where id='marketizo-employee-kpi-monthly-v1';
  select coalesce(jsonb_agg(e order by e->>'employeeId'),'[]') into records from jsonb_array_elements(coalesce(doc->'reviews','[]')) e where e->>'month'=p_month and access->'ids' ? (e->>'employeeId');
+ select coalesce(jsonb_agg(case when e->>'model'='simple-v2' then e||jsonb_build_object('calculation',public.marketizo_employee_kpi_monthly_calculation((e->>'leaderScore')::integer,(select c from jsonb_array_elements(clients->'clients') c where c->>'employeeId'=e->>'employeeId'))) else e end),'[]') into records from jsonb_array_elements(records) e;
  return clients||jsonb_build_object('reviews',records,'canApprove',(access->>'owner')::boolean);
 end $$;
 create or replace function public.marketizo_employee_kpi_monthly_save(p_actor text,p_action text,p_request_id uuid,p_entry jsonb)
@@ -52,12 +59,17 @@ begin
  if p_action<>'submit' and access->>'owner' is distinct from 'true' then return jsonb_build_object('ok',false,'status',403);end if;
  if coalesce(p_entry->>'revision','') !~ '^\d{1,9}$' then return jsonb_build_object('ok',false,'status',400);end if;
  if p_action='submit' then
-  if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('employeeId','month','criteria','comment','revision')) then return jsonb_build_object('ok',false,'status',400);end if;
+  if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('employeeId','month','criteria','leaderScore','comment','revision')) then return jsonb_build_object('ok',false,'status',400);end if;
   target=p_entry->>'employeeId';month=p_entry->>'month';criteria=p_entry->'criteria';
   if not(access->'ids' ? target) then return jsonb_build_object('ok',false,'status',403);end if;
   if coalesce(month,'') !~ '^\d{4}-(0[1-9]|1[0-2])$' or month<'2000-01' or month>to_char(stamp at time zone 'Europe/Vienna','YYYY-MM') then return jsonb_build_object('ok',false,'status',400);end if;
+  if p_entry ? 'leaderScore' then
+   if (p_entry->'leaderScore')::text !~ '^[1-3]$' or p_entry ? 'criteria' then return jsonb_build_object('ok',false,'status',400);end if;
+  else
   if jsonb_typeof(criteria) is distinct from 'object' or not(criteria ?& array['quality','deadlines','communication','independence']) then return jsonb_build_object('ok',false,'status',400);end if;
   if exists(select 1 from jsonb_each(criteria) x where x.key not in ('quality','deadlines','communication','independence') or x.value::text !~ '^[1-5]$') or jsonb_typeof(p_entry->'comment') is distinct from 'string' or char_length(btrim(p_entry->>'comment')) not between 3 and 1200 then return jsonb_build_object('ok',false,'status',400);end if;
+  end if;
+  if jsonb_typeof(p_entry->'comment') is distinct from 'string' or char_length(btrim(p_entry->>'comment')) not between 3 and 1200 then return jsonb_build_object('ok',false,'status',400);end if;
  else
   if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('id','revision','note','clientFingerprint')) or jsonb_typeof(p_entry->'id') is distinct from 'string' or jsonb_typeof(p_entry->'note') is distinct from 'string' or char_length(p_entry->>'note')>1000 then return jsonb_build_object('ok',false,'status',400);end if;
   if p_action='return' and char_length(btrim(p_entry->>'note'))<3 then return jsonb_build_object('ok',false,'status',400);end if;
@@ -70,6 +82,7 @@ begin
  else
   select e,(ord-1)::integer into prior,idx from jsonb_array_elements(doc->'reviews') with ordinality x(e,ord) where e->>'id'=p_entry->>'id';
   if prior is null then return jsonb_build_object('ok',false,'status',404);end if;
+  if prior->>'model'='simple-v2' then return jsonb_build_object('ok',false,'status',409);end if;
   target=prior->>'employeeId';month=prior->>'month';
   if not(access->'ids' ? target) then return jsonb_build_object('ok',false,'status',403);end if;
  end if;
@@ -85,6 +98,10 @@ begin
   if prior->>'status'='approved' then return jsonb_build_object('ok',false,'status',409);end if;
   item=coalesce(prior,jsonb_build_object('id',p_request_id,'employeeId',target,'month',month,'createdAt',stamp,'createdBy',p_actor,'employeeName',(select e->>'name' from public.agency_crm_state s,jsonb_array_elements(s.payload->'employees') e where s.id='marketizo-main' and e->>'id'=target)))||jsonb_build_object('criteria',criteria,'comment',btrim(p_entry->>'comment'),'status','pending','submittedAt',stamp,'submittedBy',p_actor,'submittedByName',access->>'actorName');
   item=item-'approval';
+  if p_entry ? 'leaderScore' then item=(item-'criteria')||jsonb_build_object('leaderScore',(p_entry->>'leaderScore')::integer,'model','simple-v2','status','recorded');
+   clients=public.marketizo_employee_kpi_client_scores(p_actor,month);select c into client from jsonb_array_elements(clients->'clients') c where c->>'employeeId'=target;
+   item=item||jsonb_build_object('calculation',public.marketizo_employee_kpi_monthly_calculation((p_entry->>'leaderScore')::integer,client));
+  else item=(item-'leaderScore'-'model');end if;
  elsif p_action='approve' then
   if prior->>'status' not in ('pending','approved') then return jsonb_build_object('ok',false,'status',409);end if;
   clients=public.marketizo_employee_kpi_client_scores(p_actor,month);
