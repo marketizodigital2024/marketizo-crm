@@ -13,3 +13,5 @@ Absence exports include original dates, statuses and working days intersecting t
 Tests: `node tests/attendance.cjs && node tests/attendance-api.cjs`; also registered in the normal fixture suite.
 
 Inspection PDF: German, company and address, one employee per section, selected period, daily start/end, individual break intervals, net hours and totals. Incomplete legacy days are labeled, never reconstructed. Internal activities, notes, penalties and clients are excluded. Approved absences and existing leave balances have their own PDF; missing credited service and payroll information is explicitly identified. Excel retains the detailed internal reconciliation sheets.
+
+Hours PDFs also show existing CRM activity durations per day and in total, excluding pause activities, with a separate source label. They are never added to actual attendance totals or presented as reconstructed clock times. An absent attendance total is shown as unrecorded rather than zero. Future days do not count as missing past records.
