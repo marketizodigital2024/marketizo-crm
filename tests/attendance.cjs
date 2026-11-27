@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),core=require('../lib/attendance.js'),exportsApi=require('../lib/attendance-export.js'),{unzipSync,strFromU8}=require('fflate');
+const original={employees:[{id:'a',name:'Slađan Simić',startDate:'2025-10-01',vacationDays:25,openingVacationUsed:1}],employeeWorkLogs:[{id:'w',employeeId:'a',date:'2026-11-02',minutes:480,activityName:'Rad'},{id:'p',employeeId:'a',date:'2026-11-02',minutes:30,activityName:'Pauza'}],employeeLateRecords:[{employeeId:'a',minutes:15}],employeeHourAdjustments:[{employeeId:'a',minutes:300}],employeeAbsences:[{id:'v',employeeId:'a',startDate:'2026-11-03',endDate:'2026-11-04',type:'Godišnji odmor',status:'Odobreno'}]};
+const frozen=JSON.stringify(original),input={employeeId:'a',date:'2026-11-02',start:'2026-11-02T09:00',end:'2026-11-02T17:30',breaks:[{start:'2026-11-02T12:00',end:'2026-11-02T12:30'}]};
+const entry=core.nextRecord(null,input,'owner');assert.equal(entry.netMinutes,480);assert.equal(entry.grossMinutes,510);
+assert.throws(()=>core.validate({...input,breaks:[{start:'2026-11-02T08:00',end:'2026-11-02T09:00'}]}));
+assert.throws(()=>core.validate({...input,breaks:[{start:'2026-11-02T12:00',end:'2026-11-02T13:00'},{start:'2026-11-02T12:30',end:'2026-11-02T13:30'}]}));
+assert.throws(()=>core.validate({...input,end:input.start}));assert.throws(()=>core.localInstant('2026-03-29T02:30'));assert.throws(()=>core.localInstant('2026-10-25T02:30'));
+const night=core.validate({...input,start:'2026-11-02T22:00',end:'2026-11-03T06:00',breaks:[{start:'2026-11-03T02:00',end:'2026-11-03T02:30'}]});assert.equal(night.netMinutes,450);
+assert.throws(()=>core.nextRecord(entry,input,'owner'),e=>e.status===409);const edited=core.nextRecord(entry,{...input,revision:entry.revision,end:'2026-11-02T18:00'},'owner');assert.equal(edited.history.length,1);assert.equal(edited.history[0].end,input.end);assert.equal(entry.end,input.end);
+const rows=core.hourRows(original,[entry],original.employees,'2026-11-02','2026-11-05');assert.equal(rows[0][7],480);assert.equal(rows[0][8],480);assert.equal(rows[0][9],30);assert.equal(rows.find(r=>r[1]==='2026-11-05')[2],'');
+const legacy=core.hourRows(original,[],original.employees,'2026-11-02','2026-11-02')[0];assert.equal(legacy[7],'');assert.match(legacy[11],/Samo aktivnosti/);
+assert.equal(core.absenceRows(original,original.employees,'2026-11-04','2026-11-04')[0][5],1);assert.equal(core.vacationSummary(original,original.employees,'2026-11-05')[0][3],3);assert.equal(JSON.stringify(original),frozen);
+const sheets=[{name:'Radno vreme',headers:core.hourHeaders,rows:[...rows,['=HYPERLINK("bad")','Željko Đurić – Straße']]}];
+const bytes=exportsApi.xlsx(sheets,['Test']);const xml=strFromU8(unzipSync(bytes)['xl/worksheets/sheet1.xml']);assert(!xml.includes('<f>'));assert(xml.includes('Slađan Simić'));assert(xml.includes('Željko Đurić'));assert(xml.includes('inlineStr'));
+const pdf=exportsApi.pdf(sheets,['Beč · Österreich']);assert.equal(pdf.subarray(0,8).toString(),'%PDF-1.7');assert(pdf.includes(Buffer.from('/ToUnicode')));assert(pdf.includes(Buffer.from('/FontFile2')));
+fs.mkdirSync('work',{recursive:true});fs.writeFileSync('work/attendance-sample.pdf',pdf);fs.writeFileSync('work/attendance-sample.xlsx',bytes);
+console.log('PASS: actual net/gross/breaks, overnight/DST, invalid/overlapping breaks, revision history/conflicts, no legacy mutations, old missing values, absence clipping, Unicode PDF/XLSX and formula safety');
