@@ -52,12 +52,17 @@ begin
  if p_action<>'submit' and access->>'owner' is distinct from 'true' then return jsonb_build_object('ok',false,'status',403);end if;
  if coalesce(p_entry->>'revision','') !~ '^\d{1,9}$' then return jsonb_build_object('ok',false,'status',400);end if;
  if p_action='submit' then
-  if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('employeeId','month','criteria','comment','revision')) then return jsonb_build_object('ok',false,'status',400);end if;
+  if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('employeeId','month','criteria','leaderScore','comment','revision')) then return jsonb_build_object('ok',false,'status',400);end if;
   target=p_entry->>'employeeId';month=p_entry->>'month';criteria=p_entry->'criteria';
   if not(access->'ids' ? target) then return jsonb_build_object('ok',false,'status',403);end if;
   if coalesce(month,'') !~ '^\d{4}-(0[1-9]|1[0-2])$' or month<'2000-01' or month>to_char(stamp at time zone 'Europe/Vienna','YYYY-MM') then return jsonb_build_object('ok',false,'status',400);end if;
+  if p_entry ? 'leaderScore' then
+   if (p_entry->'leaderScore')::text !~ '^[1-3]$' or p_entry ? 'criteria' then return jsonb_build_object('ok',false,'status',400);end if;
+  else
   if jsonb_typeof(criteria) is distinct from 'object' or not(criteria ?& array['quality','deadlines','communication','independence']) then return jsonb_build_object('ok',false,'status',400);end if;
   if exists(select 1 from jsonb_each(criteria) x where x.key not in ('quality','deadlines','communication','independence') or x.value::text !~ '^[1-5]$') or jsonb_typeof(p_entry->'comment') is distinct from 'string' or char_length(btrim(p_entry->>'comment')) not between 3 and 1200 then return jsonb_build_object('ok',false,'status',400);end if;
+  end if;
+  if jsonb_typeof(p_entry->'comment') is distinct from 'string' or char_length(btrim(p_entry->>'comment')) not between 3 and 1200 then return jsonb_build_object('ok',false,'status',400);end if;
  else
   if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('id','revision','note','clientFingerprint')) or jsonb_typeof(p_entry->'id') is distinct from 'string' or jsonb_typeof(p_entry->'note') is distinct from 'string' or char_length(p_entry->>'note')>1000 then return jsonb_build_object('ok',false,'status',400);end if;
   if p_action='return' and char_length(btrim(p_entry->>'note'))<3 then return jsonb_build_object('ok',false,'status',400);end if;
@@ -85,6 +90,7 @@ begin
   if prior->>'status'='approved' then return jsonb_build_object('ok',false,'status',409);end if;
   item=coalesce(prior,jsonb_build_object('id',p_request_id,'employeeId',target,'month',month,'createdAt',stamp,'createdBy',p_actor,'employeeName',(select e->>'name' from public.agency_crm_state s,jsonb_array_elements(s.payload->'employees') e where s.id='marketizo-main' and e->>'id'=target)))||jsonb_build_object('criteria',criteria,'comment',btrim(p_entry->>'comment'),'status','pending','submittedAt',stamp,'submittedBy',p_actor,'submittedByName',access->>'actorName');
   item=item-'approval';
+  if p_entry ? 'leaderScore' then item=(item-'criteria')||jsonb_build_object('leaderScore',(p_entry->>'leaderScore')::integer,'model','simple-v2');else item=(item-'leaderScore'-'model');end if;
  elsif p_action='approve' then
   if prior->>'status' not in ('pending','approved') then return jsonb_build_object('ok',false,'status',409);end if;
   clients=public.marketizo_employee_kpi_client_scores(p_actor,month);
@@ -93,6 +99,11 @@ begin
   criteria=prior->'criteria';contribution=(criteria->>'quality')::numeric*.25+(criteria->>'deadlines')::numeric*.20+(criteria->>'communication')::numeric*.15+(criteria->>'independence')::numeric*.10;internal=contribution/.70;
   total=case when client is null then null else round(contribution+(client->>'score')::numeric*.30,2) end;
   approval=jsonb_build_object('by',p_actor,'byName',access->>'actorName','at',stamp,'note',p_entry->>'note','formula','marketizo70-30-v1','weights',jsonb_build_object('quality',25,'deadlines',20,'communication',15,'independence',10,'clients',30),'criteria',criteria,'internalContribution',contribution,'internalScore',internal,'client',client,'clientFingerprint',coalesce(client->>'fingerprint','none'),'total',total);
+  if prior->>'model'='simple-v2' then
+   internal=(prior->>'leaderScore')::numeric;contribution=internal*.70;
+   total=case when client is null then null else round(contribution+(1+((client->>'score')::numeric-1)/2)*.30,2) end;
+   approval=jsonb_build_object('by',p_actor,'byName',access->>'actorName','at',stamp,'note',p_entry->>'note','formula','marketizo70-30-simple-v2','weights',jsonb_build_object('leader',70,'clients',30),'leaderScore',internal,'scale',3,'internalContribution',contribution,'internalScore',internal,'client',client,'clientFingerprint',coalesce(client->>'fingerprint','none'),'clientNormalized',case when client is null then null else 1+((client->>'score')::numeric-1)/2 end,'total',total);
+  end if;
   item=prior||jsonb_build_object('status','approved','approval',approval);
  else
   if prior->>'status' not in ('pending','approved') then return jsonb_build_object('ok',false,'status',409);end if;

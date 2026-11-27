@@ -26,7 +26,7 @@ begin
  select coalesce(jsonb_agg(jsonb_build_object('id',e->>'id','name',e->>'name','position',e->>'position','positions',e->'positions','status',e->>'status','active',coalesce(e->'active','true'::jsonb),'isLeader',coalesce(e->'isLeader','false'::jsonb))),'[]') into staff
  from public.agency_crm_state s,jsonb_array_elements(s.payload->'employees') e where s.id='marketizo-main' and access->'ids' ? (e->>'id');
  select coalesce(jsonb_agg(jsonb_build_object('id',c->>'id','name',c->>'name') order by c->>'name'),'[]') into clients from public.agency_crm_state s,jsonb_array_elements(coalesce(s.payload->'clients','[]')) c where s.id='marketizo-main' and coalesce(c->>'status','') not in ('Arhiviran','Neaktivan');
- select coalesce(jsonb_agg(jsonb_build_object('id',a->>'id','name',a->>'name','revision',coalesce((a->>'revision')::integer,1),'deleted',a->>'deletedAt' is not null) order by a->>'name'),'[]') into activities from jsonb_array_elements(coalesce(doc->'activities','[]')) a where (access->>'owner')::boolean or a->>'deletedAt' is null;
+ select coalesce(jsonb_agg(jsonb_build_object('id',a->>'id','name',a->>'name','polarity',coalesce(a->>'polarity','negative'),'revision',coalesce((a->>'revision')::integer,1),'deleted',a->>'deletedAt' is not null) order by a->>'name'),'[]') into activities from jsonb_array_elements(coalesce(doc->'activities','[]')) a where (access->>'owner')::boolean or a->>'deletedAt' is null;
  return jsonb_build_object('ok',true,'canManageActivities',(access->>'owner')::boolean,'clients',clients,'activities',activities,'entries',records,'employeeIds',access->'ids','employees',staff,'scope',case when (access->>'owner')::boolean then 'all' else 'team' end,'viewer',jsonb_build_object('id',p_actor,'name',access->>'actorName'),'updatedAt',stamp);
 end $$;
 create or replace function public.marketizo_employee_kpi_save(p_actor text,p_action text,p_request_id uuid,p_entry jsonb)
@@ -40,7 +40,7 @@ begin
   if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('employeeId','kind','date','clientId','clientName','activity','severity','score','expected','actual','cause','evidence','correction','deadline','status')) then return jsonb_build_object('ok',false,'status',400);end if;
   target=p_entry->>'employeeId';
   if not (access->'ids' ? target) then return jsonb_build_object('ok',false,'status',403);end if;
-  if coalesce(p_entry->>'kind','') not in ('incident','rating') or coalesce(p_entry->>'date','') !~ '^\d{4}-\d{2}-\d{2}$' then return jsonb_build_object('ok',false,'status',400);end if;
+  if coalesce(p_entry->>'kind','') not in ('incident','rating','positive') or coalesce(p_entry->>'date','') !~ '^\d{4}-\d{2}-\d{2}$' then return jsonb_build_object('ok',false,'status',400);end if;
   if exists(select 1 from jsonb_each(p_entry) x where x.key not in ('severity','score') and jsonb_typeof(x.value)<>'string') then return jsonb_build_object('ok',false,'status',400);end if;
   event_date=(p_entry->>'date')::date;
   if event_date<'2000-01-01'::date or event_date>(stamp at time zone 'Europe/Vienna')::date then return jsonb_build_object('ok',false,'status',400);end if;
@@ -55,6 +55,8 @@ begin
   if p_entry->>'kind'='incident' then
    if coalesce(p_entry->>'severity','') !~ '^[1-5]$' or coalesce(p_entry->>'status','') not in ('pending','confirmed') then return jsonb_build_object('ok',false,'status',400);end if;
    if p_entry->>'status'='confirmed' and p_entry->>'cause' is distinct from 'Propust zaposlenog' then return jsonb_build_object('ok',false,'status',400);end if;
+  elsif p_entry->>'kind'='positive' then
+   if p_entry->>'status' is distinct from 'active' or p_entry ? 'score' or p_entry ? 'severity' then return jsonb_build_object('ok',false,'status',400);end if;
   else
    if coalesce(p_entry->>'score','') !~ '^[1-5]$' or p_entry->>'status' is distinct from 'active' then return jsonb_build_object('ok',false,'status',400);end if;
   end if;
@@ -72,6 +74,8 @@ begin
    if prior->>'createdBy' is distinct from p_actor or prior->'intent' is distinct from p_entry then return jsonb_build_object('ok',false,'status',409);end if;
    return jsonb_build_object('ok',true,'duplicate',true,'entry',prior-'intent');
   end if;
+  if p_entry->>'kind'='positive' and not exists(select 1 from jsonb_array_elements(coalesce(doc->'activities','[]')) a where a->>'name'=p_entry->>'activity' and a->>'deletedAt' is null and a->>'polarity'='positive') then return jsonb_build_object('ok',false,'status',400);end if;
+  if p_entry->>'kind'='incident' and exists(select 1 from jsonb_array_elements(coalesce(doc->'activities','[]')) a where a->>'name'=p_entry->>'activity' and a->>'deletedAt' is null and a->>'polarity'='positive') then return jsonb_build_object('ok',false,'status',400);end if;
   entry=p_entry||jsonb_build_object('id',request,'createdAt',stamp,'createdBy',p_actor,'createdByName',access->>'actorName','employeeName',(select e->>'name' from public.agency_crm_state s,jsonb_array_elements(s.payload->'employees') e where s.id='marketizo-main' and e->>'id'=target),'clientName',coalesce(nullif(p_entry->>'clientName',''),(select c->>'name' from public.agency_crm_state s,jsonb_array_elements(s.payload->'clients') c where s.id='marketizo-main' and c->>'id'=p_entry->>'clientId'),''),'revision',1,'intent',p_entry,
    'history',jsonb_build_array(jsonb_build_object('requestId',request,'actorId',p_actor,'actorName',access->>'actorName','at',stamp,'revision',1,'status',p_entry->>'status','note','Kreiran unos')));
   doc=jsonb_set(doc,'{entries}',(doc->'entries')||jsonb_build_array(entry));
@@ -104,7 +108,8 @@ declare access jsonb; doc jsonb; prior jsonb; item jsonb; label text; stamp time
 begin
  access=public.marketizo_employee_kpi_scope(p_actor);
  if access is null or access->>'owner' is distinct from 'true' then return jsonb_build_object('ok',false,'status',403);end if;
- if p_request_id is null or jsonb_typeof(p_entry) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_entry) k where k<>'name') or jsonb_typeof(p_entry->'name') is distinct from 'string' then return jsonb_build_object('ok',false,'status',400);end if;
+ if p_request_id is null or jsonb_typeof(p_entry) is distinct from 'object' or exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('name','polarity')) or jsonb_typeof(p_entry->'name') is distinct from 'string' then return jsonb_build_object('ok',false,'status',400);end if;
+ if p_entry ? 'polarity' and coalesce(p_entry->>'polarity','') not in ('positive','negative') then return jsonb_build_object('ok',false,'status',400);end if;
  label=regexp_replace(btrim(p_entry->>'name'),'\s+',' ','g');
  if char_length(label) not between 2 and 120 then return jsonb_build_object('ok',false,'status',400);end if;
  insert into public.agency_crm_state(id,payload,updated_at) values('marketizo-employee-kpi-v1','{"format":"marketizo-employee-kpi-v1","entries":[],"activities":[]}',stamp) on conflict(id) do nothing;
@@ -112,14 +117,15 @@ begin
  if doc->>'format' is distinct from 'marketizo-employee-kpi-v1' then raise exception 'Invalid KPI storage format';end if;
  select a into prior from jsonb_array_elements(coalesce(doc->'activities','[]')) a where a->>'id'=p_request_id::text;
  if prior is not null then
-  if prior->>'createdBy' is distinct from p_actor or prior->>'name' is distinct from label then return jsonb_build_object('ok',false,'status',409);end if;
-  return jsonb_build_object('ok',true,'duplicate',true,'entry',jsonb_build_object('id',prior->>'id','name',prior->>'name','revision',coalesce((prior->>'revision')::integer,1),'deleted',prior->>'deletedAt' is not null));
+  if prior->>'createdBy' is distinct from p_actor or prior->>'name' is distinct from label or coalesce(prior->>'polarity','negative') is distinct from coalesce(p_entry->>'polarity','negative') then return jsonb_build_object('ok',false,'status',409);end if;
+  return jsonb_build_object('ok',true,'duplicate',true,'entry',jsonb_build_object('id',prior->>'id','name',prior->>'name','polarity',coalesce(prior->>'polarity','negative'),'revision',coalesce((prior->>'revision')::integer,1),'deleted',prior->>'deletedAt' is not null));
  end if;
  select a into prior from jsonb_array_elements(coalesce(doc->'activities','[]')) a where lower(a->>'name')=lower(label) and a->>'deletedAt' is null;
- if prior is not null then return jsonb_build_object('ok',true,'duplicate',true,'entry',jsonb_build_object('id',prior->>'id','name',prior->>'name','revision',coalesce((prior->>'revision')::integer,1),'deleted',prior->>'deletedAt' is not null));end if;
- item=jsonb_build_object('id',p_request_id,'name',label,'revision',1,'createdAt',stamp,'createdBy',p_actor);
+ if prior is not null and coalesce(prior->>'polarity','negative') is distinct from coalesce(p_entry->>'polarity','negative') then return jsonb_build_object('ok',false,'status',409);end if;
+ if prior is not null then return jsonb_build_object('ok',true,'duplicate',true,'entry',jsonb_build_object('id',prior->>'id','name',prior->>'name','polarity',coalesce(prior->>'polarity','negative'),'revision',coalesce((prior->>'revision')::integer,1),'deleted',prior->>'deletedAt' is not null));end if;
+ item=jsonb_build_object('id',p_request_id,'name',label,'polarity',coalesce(p_entry->>'polarity','negative'),'revision',1,'createdAt',stamp,'createdBy',p_actor);
  update public.agency_crm_state set payload=jsonb_set(doc,'{activities}',coalesce(doc->'activities','[]')||jsonb_build_array(item)),updated_at=stamp where id='marketizo-employee-kpi-v1';
- return jsonb_build_object('ok',true,'entry',jsonb_build_object('id',p_request_id,'name',label,'revision',1,'deleted',false));
+ return jsonb_build_object('ok',true,'entry',jsonb_build_object('id',p_request_id,'name',label,'polarity',coalesce(p_entry->>'polarity','negative'),'revision',1,'deleted',false));
 end $$;
 revoke all on function public.marketizo_employee_kpi_scope(text) from public,anon,authenticated;
 revoke all on function public.marketizo_employee_kpi_read(text) from public,anon,authenticated;
@@ -134,12 +140,13 @@ begin
  access=public.marketizo_employee_kpi_scope(p_actor);
  if access is null or access->>'owner' is distinct from 'true' then return jsonb_build_object('ok',false,'status',403);end if;
  if p_request_id is null or coalesce(p_action,'') not in ('update','delete','restore') or jsonb_typeof(p_entry) is distinct from 'object' then return jsonb_build_object('ok',false,'status',400);end if;
- if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('id','revision','name')) or jsonb_typeof(p_entry->'id') is distinct from 'string' or coalesce(p_entry->>'revision','') !~ '^\d{1,9}$' then return jsonb_build_object('ok',false,'status',400);end if;
+ if exists(select 1 from jsonb_object_keys(p_entry) k where k not in ('id','revision','name','polarity')) or jsonb_typeof(p_entry->'id') is distinct from 'string' or coalesce(p_entry->>'revision','') !~ '^\d{1,9}$' then return jsonb_build_object('ok',false,'status',400);end if;
  if p_action='update' then
+  if p_entry ? 'polarity' and coalesce(p_entry->>'polarity','') not in ('positive','negative') then return jsonb_build_object('ok',false,'status',400);end if;
   if jsonb_typeof(p_entry->'name') is distinct from 'string' then return jsonb_build_object('ok',false,'status',400);end if;
   label=regexp_replace(btrim(p_entry->>'name'),'\s+',' ','g');
   if char_length(label) not between 2 and 120 then return jsonb_build_object('ok',false,'status',400);end if;
- elsif p_entry ? 'name' then return jsonb_build_object('ok',false,'status',400);end if;
+ elsif p_entry ? 'name' or p_entry ? 'polarity' then return jsonb_build_object('ok',false,'status',400);end if;
  select payload into doc from public.agency_crm_state where id='marketizo-employee-kpi-v1' for update;
  if doc is null then return jsonb_build_object('ok',false,'status',404);end if;
  if doc->>'format' is distinct from 'marketizo-employee-kpi-v1' then raise exception 'Invalid KPI storage format';end if;
@@ -149,7 +156,7 @@ begin
  select h into op from jsonb_array_elements(coalesce(prior->'history','[]')) h where h->>'requestId'=p_request_id::text;
  if op is not null then
   if op->>'actorId' is distinct from p_actor or op->>'action' is distinct from p_action or op->'intent' is distinct from p_entry then return jsonb_build_object('ok',false,'status',409);end if;
-  return jsonb_build_object('ok',true,'duplicate',true,'entry',jsonb_build_object('id',prior->>'id','name',prior->>'name','revision',(prior->>'revision')::integer,'deleted',prior->>'deletedAt' is not null));
+  return jsonb_build_object('ok',true,'duplicate',true,'entry',jsonb_build_object('id',prior->>'id','name',prior->>'name','polarity',coalesce(prior->>'polarity','negative'),'revision',(prior->>'revision')::integer,'deleted',prior->>'deletedAt' is not null));
  end if;
  rev=coalesce((prior->>'revision')::integer,1);
  if (p_entry->>'revision')::integer<>rev then return jsonb_build_object('ok',false,'status',409);end if;
@@ -157,9 +164,9 @@ begin
  if p_action='restore' then label=prior->>'name';end if;
  if p_action in ('update','restore') and exists(select 1 from jsonb_array_elements(doc->'activities') a where a->>'id'<>p_entry->>'id' and a->>'deletedAt' is null and lower(a->>'name')=lower(label)) then return jsonb_build_object('ok',false,'status',409);end if;
  item=prior||jsonb_build_object('revision',rev+1,'updatedAt',stamp,'history',coalesce(prior->'history','[]')||jsonb_build_array(jsonb_build_object('requestId',p_request_id,'actorId',p_actor,'action',p_action,'intent',p_entry,'at',stamp)));
- if p_action='update' then item=item||jsonb_build_object('name',label);elsif p_action='delete' then item=item||jsonb_build_object('deletedAt',stamp);else item=item-'deletedAt';end if;
+ if p_action='update' then item=item||jsonb_build_object('name',label,'polarity',coalesce(p_entry->>'polarity',prior->>'polarity','negative'));elsif p_action='delete' then item=item||jsonb_build_object('deletedAt',stamp);else item=item-'deletedAt';end if;
  update public.agency_crm_state set payload=jsonb_set(doc,array['activities',idx::text],item),updated_at=stamp where id='marketizo-employee-kpi-v1';
- return jsonb_build_object('ok',true,'entry',jsonb_build_object('id',item->>'id','name',item->>'name','revision',rev+1,'deleted',item->>'deletedAt' is not null));
+ return jsonb_build_object('ok',true,'entry',jsonb_build_object('id',item->>'id','name',item->>'name','polarity',coalesce(item->>'polarity','negative'),'revision',rev+1,'deleted',item->>'deletedAt' is not null));
 end $$;
 revoke all on function public.marketizo_employee_kpi_activity_change(text,text,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.marketizo_employee_kpi_activity_change(text,text,uuid,jsonb) to service_role;

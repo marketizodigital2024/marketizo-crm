@@ -34,4 +34,29 @@ await db.exec('reset role');for(const [id,original]of [['marketizo-main',main],[
 const row=(await db.query("select * from agency_crm_state where id='marketizo-employee-kpi-monthly-v1'")).rows[0];assert.ok(backup.valid({format:'marketizo-system-domains-v1',schema:{},tables:{},stateRows:[{...row,updated_at:new Date(row.updated_at).toISOString()}]}));await db.exec('set role anon');await assert.rejects(read('emp-miljan'),/permission denied/);await assert.rejects(save('emp-miljan','submit',uuid(12),entry),/permission denied/);await db.exec('reset role;set role authenticated');await assert.rejects(read('emp-miljan'),/permission denied/);await db.exec('reset role');
 assert.equal(core.criteria.reduce((n,c)=>n+c.weight,0),70);assert.equal(core.calculate({quality:4,deadlines:3,communication:4,independence:3},{score:13/3}).total,3.8);assert.equal(core.calculate(entry.criteria,{score:4.5}).total,4.15);assert.equal(core.calculate(entry.criteria,null).total,null);assert.equal(core.calculate({...entry.criteria,quality:0},null),null);
 for(const score of [4.25,4.75,3.25]){const exact=(await db.query('select round(2.8+$1::numeric*.3,2) n',[score])).rows[0].n;assert.equal(core.calculate(entry.criteria,{score}).total,Number(exact),'Preview uses the same half-up rounding as PostgreSQL');}
+
+// Simplified assessment preserves legacy snapshots and normalizes both scales.
+const simple={employeeId:'a',month:'2020-04',leaderScore:1,comment:'Two repeated missed agreed deadlines.',revision:0};
+for(const score of [0,4,1.5,null,'2'])assert.equal((await save('lead','submit',uuid(30),{...simple,leaderScore:score})).status,400);
+assert.equal((await save('lead','submit',uuid(30),{...simple,criteria:entry.criteria})).status,400);
+feedback.responses.push(response('simple-client','c1','2020-04-28',{edit:5},'2020-04'));
+await db.query("update agency_crm_state set payload=$1 where id='marketizo-kpi-v1'",[JSON.stringify(feedback)]);
+r=await save('lead','submit',uuid(31),simple);assert.equal(r.ok,true);assert.equal(r.entry.model,'simple-v2');assert.equal(r.entry.criteria,undefined);
+const simpleClient=(await read('lead','2020-04')).clients[0];
+r=await save('emp-ivana','approve',uuid(32),{id:r.entry.id,revision:1,note:'Checked incidents',clientFingerprint:simpleClient.fingerprint});
+assert.equal(r.entry.approval.total,1.6);assert.equal(r.entry.approval.scale,3);assert.equal(r.entry.approval.leaderScore,1);assert.equal(r.entry.approval.clientNormalized,3);assert.equal(r.entry.approval.formula,'marketizo70-30-simple-v2');
+assert.equal(core.calculate({leaderScore:1},{score:5}).total,1.6);assert.equal(core.calculate({leaderScore:2},{score:3}).total,2);assert.equal(core.calculate({leaderScore:3},null).total,null);assert.equal(core.calculate({leaderScore:4},null),null);
+const activity=async(actor,request,entry)=>(await db.query('select marketizo_employee_kpi_activity_save($1,$2,$3) r',[actor,request,JSON.stringify(entry)])).rows[0].r;
+const event=async(actor,request,entry)=>(await db.query("select marketizo_employee_kpi_save($1,'create',$2,$3) r",[actor,request,JSON.stringify(entry)])).rows[0].r;
+assert.equal((await activity('lead',uuid(33),{name:'Improved workflow',polarity:'positive'})).status,403);
+r=await activity('emp-miljan',uuid(33),{name:'Improved workflow',polarity:'positive'});assert.equal(r.entry.polarity,'positive');
+const positive={employeeId:'a',kind:'positive',date:'2020-04-12',activity:'Improved workflow',actual:'Introduced a useful shared template.',status:'active'};
+r=await event('lead',uuid(34),positive);assert.equal(r.ok,true);assert.equal(r.entry.score,undefined);assert.equal((await event('lead',uuid(34),positive)).duplicate,true);
+assert.equal((await event('lead',uuid(35),{...positive,employeeId:'b'})).status,403);
+assert.equal((await event('lead',uuid(35),{...positive,score:5})).status,400);
+assert.equal((await event('lead',uuid(35),{...positive,activity:'Unknown positive'})).status,400);
+const events=require('../employee-kpi-core.js');const summary=events.aggregate([r.entry,{...positive,kind:'incident',severity:3,status:'confirmed'}],['a'],'2020-04-01','2020-04-30')[0];assert.equal(summary.positives,1);assert.equal(summary.incidents,1);
+await db.exec('set role anon');await assert.rejects(activity('emp-miljan',uuid(36),{name:'Private activity',polarity:'positive'}),/permission denied/);await db.exec('reset role');
+assert.deepEqual((await db.query("select payload from agency_crm_state where id='marketizo-main'")).rows[0].payload,main);
+
 await db.close();console.log('PASS monthly KPI: scoped leader submissions, owner-only revision-safe approvals/returns, exact weighted totals, equal-client latest-response aggregation, privacy, missing feedback, frozen approval snapshots, new-client detection, backups and unchanged work');
