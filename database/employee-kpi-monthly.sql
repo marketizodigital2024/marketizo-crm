@@ -31,9 +31,9 @@ begin
  return jsonb_build_object('ok',true,'month',p_month,'employeeIds',access->'ids','sourceAvailable',available,'clients',result);
 end $$;
 create or replace function public.marketizo_employee_kpi_monthly_calculation(p_score integer,p_client jsonb)
-returns jsonb language sql immutable security invoker set search_path='' as $
+returns jsonb language sql immutable security invoker set search_path='' as $$
  select jsonb_build_object('formula','marketizo70-30-simple-v2','scale',3,'leaderScore',p_score,'internalScore',p_score,'internalContribution',p_score::numeric*.7,'clientNormalized',case when p_client is null then null else 1+((p_client->>'score')::numeric-1)/2 end,'client',p_client,'clientFingerprint',coalesce(p_client->>'fingerprint','none'),'total',case when p_client is null then null else round(p_score::numeric*.7+(1+((p_client->>'score')::numeric-1)/2)*.3,2) end);
-$;
+$$;
 revoke all on function public.marketizo_employee_kpi_monthly_calculation(integer,jsonb) from public,anon,authenticated;
 grant execute on function public.marketizo_employee_kpi_monthly_calculation(integer,jsonb) to service_role;
 create or replace function public.marketizo_employee_kpi_monthly_read(p_actor text,p_month text)
