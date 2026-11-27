@@ -1,8 +1,8 @@
 (function(){'use strict';
   let loading;
   function open(mode){
-    if(!document.getElementById('attendanceStyle')){const css=document.createElement('link');css.id='attendanceStyle';css.rel='stylesheet';css.href='/attendance.css?v=20261127-3';document.head.append(css);}
-    if(!loading)loading=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/attendance-ui.js?v=20261127-3';script.onload=resolve;script.onerror=()=>{loading=null;reject(Error('Učitavanje nije uspelo.'));};document.body.append(script);});
+    if(!document.getElementById('attendanceStyle')){const css=document.createElement('link');css.id='attendanceStyle';css.rel='stylesheet';css.href='/attendance.css?v=20261127-4';document.head.append(css);}
+    if(!loading)loading=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/attendance-ui.js?v=20261127-4';script.onload=resolve;script.onerror=()=>{loading=null;reject(Error('Učitavanje nije uspelo.'));};document.body.append(script);});
     loading.then(()=>window.MarketizoAttendance.open(mode)).catch(e=>alert(e.message));
   }
   function button(target,text,mode,id){if(!target||document.getElementById(id))return;const b=document.createElement('button');b.id=id;b.type='button';b.className='secondary-button';b.textContent=text;b.addEventListener('click',()=>open(mode));target.append(b);}
