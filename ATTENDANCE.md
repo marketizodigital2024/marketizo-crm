@@ -26,3 +26,5 @@ Filming-position PDFs are a separate daily duration overview (Datum, Arbeitsstun
 
 
 Final hour PDF format: office employees use Datum, Beginn, Ende, Arbeitsstunden, Zusatzstunden and GESAMT; filming roles use Datum, Arbeitsstunden and GESAMT. Durations are H:MM, never decimal hours (0:33 means 33 minutes). Dejan Klement is explicitly classified as office/scenario for attendance, without modifying his other CRM roles. Break records and calculations remain intact internally and in Excel, but there is no break column in the PDF. Calculated clock times remain labeled and existing actual times take priority.
+
+Clean PDF presentation: no * or dagger cell markers and no explanation block below hour tables; GESAMT stays in the table. Calculated clock-time reports are identified in their existing title as Arbeitszeitübersicht (berechnet); activity-only reports use (CRM). Underlying source fields and confirmation state remain unchanged.
