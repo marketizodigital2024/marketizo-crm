@@ -30,13 +30,14 @@ function createHandler(deps={}) {return async function(req,res){
     if(req.method==='POST'){
       const body=req.body;
       if(!body||typeof body!=='object'||!employeeId)return json(res,400,{error:'Nedostaju podaci.'});
-      const data=core.validate(body),employee=selected[0];
+      const employee=selected[0],schedule=require('../lib/attendance-schedule.js').forEmployee(employee,body.date);
+      const data=core.validate(body,schedule);
       if(employee.startDate&&data.date<employee.startDate||employee.endDate&&data.date>employee.endDate)return json(res,400,{error:'Datum je van perioda zaposlenja.'});
       const day=Date.parse(data.date),lo=new Date(day-86400000).toISOString().slice(0,10),hi=new Date(day+86400000).toISOString().slice(0,10);
       const documents=await read(lo,hi,employeeId),id=`${prefix}${employeeId}`,document=documents[0]?.payload;
       const nearby=Object.values(document?.records||{}).filter(r=>r.date>=lo&&r.date<=hi);
       const previous=document?.records?.[data.date];
-      const entry=core.nextRecord(previous,body,actor);
+      const entry=core.nextRecord(previous,body,actor,schedule);
       if(nearby.some(r=>r.date!==data.date&&core.localInstant(r.start)<core.localInstant(entry.end)&&core.localInstant(r.end)>core.localInstant(entry.start)))return json(res,400,{error:'Smena se preklapa sa susednim danom.'});
       // A separate row, never a PATCH to marketizo-main or existing activity/absence rows.
       const payload={employeeId,records:{...(document?.records||{}),[data.date]:entry},revision:require('node:crypto').randomUUID()};
@@ -52,14 +53,14 @@ function createHandler(deps={}) {return async function(req,res){
     }
     const from=query.get('from')||core.today().slice(0,7)+'-01',to=query.get('to')||core.today();core.dates(from,to);
     const records=(await read(from,to,owner?employeeId:actor)).flatMap(r=>Object.values(r.payload.records||{})).filter(r=>r.date>=from&&r.date<=to&&selected.some(e=>e.id===r.employeeId));
-    const report={from,to,generatedAt:new Date().toISOString(),timeZone:'Europe/Vienna',employees:employees.map(e=>({id:e.id,name:e.name,status:e.status})),
+    const report={from,to,generatedAt:new Date().toISOString(),timeZone:'Europe/Vienna',schedules:Object.fromEntries(selected.map(e=>[e.id,require('../lib/attendance-schedule.js').forEmployee(e,from)])),employees:employees.map(e=>({id:e.id,name:e.name,status:e.status})),
       records:records.map(({history,...r})=>r),hours:core.hourRows(state,records,selected,from,to),
       absences:core.absenceRows(state,selected,from,to),vacations:core.vacationSummary(state,selected,to>core.today()?core.today():to),canSelectEmployee:owner};
     const format=query.get('format'),type=query.get('type')||'hours';
     if(format){
       if(!['xlsx','pdf'].includes(format)||!['hours','absences'].includes(type))return json(res,400,{error:'Nepoznat izvoz.'});
-      const totals=selected.map(e=>{const rows=report.hours.filter(r=>r[0]===e.name);return[e.name,rows.filter(r=>r[2]).length,rows.filter(r=>!r[2]&&!r[10]).length,rows.reduce((n,r)=>n+(Number(r[7])||0),0),rows.reduce((n,r)=>n+(Number(r[8])||0),0),rows.reduce((n,r)=>n+(Number(r[9])||0),0)];});
-      const sheets=type==='hours'?[{name:'Radno vreme',headers:core.hourHeaders,rows:report.hours},{name:'Ukupno',headers:['Zaposleni','Dana sa početkom i krajem','Dana bez vremena (bez odsustva)','Neto min iz potpunih unosa','Aktivnosti bez pauze min','Pauze iz aktivnosti min'],rows:totals}]:[
+      const totals=selected.map(e=>{const rows=report.hours.filter(r=>r[0]===e.name);return[e.name,rows.filter(r=>r[2]).length,rows.filter(r=>!r[2]&&!r[10]).length,rows.reduce((n,r)=>n+(Number(r[7])||0),0),rows.reduce((n,r)=>n+(Number(r[8])||0),0),rows.reduce((n,r)=>n+(Number(r[9])||0),0),rows.reduce((n,r)=>n+(Number(r[15])||0),0)];});
+      const sheets=type==='hours'?[{name:'Radno vreme',headers:core.hourHeaders,rows:report.hours},{name:'Ukupno',headers:['Zaposleni','Dana sa početkom i krajem','Dana bez vremena (bez odsustva)','Neto min iz potpunih unosa','Aktivnosti bez pauze min','Pauze iz aktivnosti min','Dodatni rad min'],rows:totals}]:[
         {name:'Odsustva',headers:['Zaposleni','Tip','Od','Do','Status','Radni dani u periodu'],rows:report.absences},
         {name:'Stanje odmora',headers:['Zaposleni','Stanje na dan','Stečeno dana','Iskorišćeno dana','Rezervisano dana','Preostalo dana','Napomena'],rows:report.vacations}];
       if(sheets.reduce((n,s)=>n+s.rows.length,0)>1000)return json(res,400,{error:'Za izvoz izaberite jednog zaposlenog ili kraći period (najviše 1000 redova).'});
