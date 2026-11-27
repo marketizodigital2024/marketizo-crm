@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict'),core=require('../lib/attendance.js'),{createHandler}=require('../api/attendance.js');
+const state={employees:[{id:'a',name:'A',startDate:'2025-01-01'},{id:'b',name:'B',startDate:'2025-01-01'}],employeeWorkLogs:[{id:'old',employeeId:'a',date:'2026-11-02',minutes:20}],employeeAbsences:[]},before=JSON.stringify(state);let rows=[],calls=[],role='employee',sessionId='a';
+const helpers={supabaseConfig:()=>({configured:true,url:'https://db.test',key:'secret'}),supabaseHeaders:()=>({}),readStoredState:async()=>({payload:state}),accessSession:()=>role?({role,employee:{id:sessionId}}):null};
+const response=(status,data)=>({ok:status>=200&&status<300,status,json:async()=>data});
+const request=async(url,opts)=>{calls.push([url,opts]);if(!opts.method)return response(200,rows);if(opts.method==='POST'){const row=JSON.parse(opts.body);if(rows.some(r=>r.id===row.id))return response(409,{});rows.push(row);return response(201,[row]);}if(opts.method==='PATCH'){const p=new URL(url).searchParams,expected=p.get('payload->>revision').slice(3);const row=rows.find(r=>r.id===p.get('id').slice(3)&&r.payload.revision===expected);if(!row)return response(200,[]);Object.assign(row,JSON.parse(opts.body));return response(200,[row]);}throw Error('unexpected mutation');};
+const handler=createHandler({helpers,request});
+async function call(method,url,body){const res={headers:{},setHeader(k,v){this.headers[k]=v;},end(value){this.body=value;}};await handler({method,url,body},res);return{...res,data:JSON.parse(res.body)};}
+(async()=>{let r=await call('GET','/api/attendance?from=2026-11-02&to=2026-11-02&employeeId=b');assert.equal(r.statusCode,403);assert.equal(calls.length,0);
+role='client';assert.equal((await call('GET','/api/attendance')).statusCode,401);role=null;assert.equal((await call('GET','/api/attendance')).statusCode,401);role='employee';
+const input={employeeId:'a',date:'2026-11-02',start:'2026-11-02T09:00',end:'2026-11-02T17:00',breaks:[]};r=await call('POST','/api/attendance',input);assert.equal(r.statusCode,200);const revision=r.data.record.revision;
+assert.equal((await call('POST','/api/attendance',input)).statusCode,409);
+r=await call('POST','/api/attendance',{...input,revision,note:'Ispravka'});assert.equal(r.statusCode,200);assert.equal(r.data.record.history.length,1);
+r=await call('GET','/api/attendance?from=2026-11-02&to=2026-11-02');assert.equal(r.data.employees.length,1);assert.equal(r.data.records[0].history,undefined);assert.equal(r.data.hours[0][7],480);
+assert(calls.filter(([,o])=>o.method).every(([u,o])=>o.method==='POST'?JSON.parse(o.body).id.startsWith('attendance-v1:'):new URL(u).searchParams.get('id').startsWith('eq.attendance-v1:')));assert.equal(JSON.stringify(state),before);
+role='full-admin';r=await call('GET','/api/attendance?from=2026-11-02&to=2026-11-02');assert.equal(r.data.employees.length,2);
+assert.equal((await call('DELETE','/api/attendance')).statusCode,405);console.log('PASS: employee isolation, client/anonymous rejection, separate-row writes only, CAS conflict, history and unmodified core state');
+})().catch(e=>{console.error(e);process.exitCode=1;});
