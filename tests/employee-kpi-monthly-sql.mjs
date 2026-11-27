@@ -43,8 +43,10 @@ feedback.responses.push(response('simple-client','c1','2020-04-28',{edit:5},'202
 await db.query("update agency_crm_state set payload=$1 where id='marketizo-kpi-v1'",[JSON.stringify(feedback)]);
 r=await save('lead','submit',uuid(31),simple);assert.equal(r.ok,true);assert.equal(r.entry.model,'simple-v2');assert.equal(r.entry.criteria,undefined);
 const simpleClient=(await read('lead','2020-04')).clients[0];
-r=await save('emp-ivana','approve',uuid(32),{id:r.entry.id,revision:1,note:'Checked incidents',clientFingerprint:simpleClient.fingerprint});
-assert.equal(r.entry.approval.total,1.6);assert.equal(r.entry.approval.scale,3);assert.equal(r.entry.approval.leaderScore,1);assert.equal(r.entry.approval.clientNormalized,3);assert.equal(r.entry.approval.formula,'marketizo70-30-simple-v2');
+assert.equal(r.entry.status,'recorded');assert.equal(r.entry.approval,undefined);assert.equal(r.entry.calculation.total,1.6);assert.equal(r.entry.calculation.scale,3);assert.equal(r.entry.calculation.leaderScore,1);assert.equal(r.entry.calculation.clientNormalized,3);assert.equal(r.entry.calculation.formula,'marketizo70-30-simple-v2');
+assert.equal((await save('emp-ivana','approve',uuid(32),{id:r.entry.id,revision:1,note:'No monthly approval needed',clientFingerprint:simpleClient.fingerprint})).status,409);
+feedback.responses.push(response('simple-client-later','c1','2020-04-29',{edit:1},'2020-04'));await db.query("update agency_crm_state set payload=$1 where id='marketizo-kpi-v1'",[JSON.stringify(feedback)]);assert.equal((await read('lead','2020-04')).reviews[0].calculation.total,1,'Client responses update the current monthly calculation without an owner step');
+r=await save('lead','submit',uuid(37),{...simple,leaderScore:2,revision:1});assert.equal(r.entry.status,'recorded');assert.equal(r.entry.calculation.total,1.7);assert.equal(r.entry.history.length,2);
 assert.equal(core.calculate({leaderScore:1},{score:5}).total,1.6);assert.equal(core.calculate({leaderScore:2},{score:3}).total,2);assert.equal(core.calculate({leaderScore:3},null).total,null);assert.equal(core.calculate({leaderScore:4},null),null);
 const activity=async(actor,request,entry)=>(await db.query('select marketizo_employee_kpi_activity_save($1,$2,$3) r',[actor,request,JSON.stringify(entry)])).rows[0].r;
 const event=async(actor,request,entry)=>(await db.query("select marketizo_employee_kpi_save($1,'create',$2,$3) r",[actor,request,JSON.stringify(entry)])).rows[0].r;

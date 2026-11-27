@@ -78,6 +78,7 @@ begin
   if p_entry->>'kind'='incident' and exists(select 1 from jsonb_array_elements(coalesce(doc->'activities','[]')) a where a->>'name'=p_entry->>'activity' and a->>'deletedAt' is null and a->>'polarity'='positive') then return jsonb_build_object('ok',false,'status',400);end if;
   entry=p_entry||jsonb_build_object('id',request,'createdAt',stamp,'createdBy',p_actor,'createdByName',access->>'actorName','employeeName',(select e->>'name' from public.agency_crm_state s,jsonb_array_elements(s.payload->'employees') e where s.id='marketizo-main' and e->>'id'=target),'clientName',coalesce(nullif(p_entry->>'clientName',''),(select c->>'name' from public.agency_crm_state s,jsonb_array_elements(s.payload->'clients') c where s.id='marketizo-main' and c->>'id'=p_entry->>'clientId'),''),'revision',1,'intent',p_entry,
    'history',jsonb_build_array(jsonb_build_object('requestId',request,'actorId',p_actor,'actorName',access->>'actorName','at',stamp,'revision',1,'status',p_entry->>'status','note','Kreiran unos')));
+  if entry->>'kind'='incident' and access->>'owner' is distinct from 'true' then entry=entry||jsonb_build_object('status','pending','cause','Još nije potvrđen','history',jsonb_build_array(jsonb_build_object('requestId',request,'actorId',p_actor,'actorName',access->>'actorName','at',stamp,'revision',1,'status','pending','note','Prijavljeno; čeka proveru vlasnika')));end if;
   doc=jsonb_set(doc,'{entries}',(doc->'entries')||jsonb_build_array(entry));
  else
   select e,(ord-1)::integer into prior,idx from jsonb_array_elements(doc->'entries') with ordinality x(e,ord) where e->>'id'=p_entry->>'id';
@@ -89,6 +90,7 @@ begin
    return jsonb_build_object('ok',true,'duplicate',true,'entry',prior-'intent');
   end if;
   if coalesce(p_entry->>'revision','') !~ '^\d+$' or (p_entry->>'revision')::integer<>(prior->>'revision')::integer then return jsonb_build_object('ok',false,'status',409);end if;
+  if prior->>'kind'='incident' and access->>'owner' is distinct from 'true' then return jsonb_build_object('ok',false,'status',403);end if;
   desired=coalesce(p_entry->>'status','');
   if prior->>'kind'='incident' then
    if not ((prior->>'status'='pending' and desired in ('confirmed','dismissed')) or (prior->>'status'='confirmed' and desired in ('resolved','dismissed')) or (prior->>'status'='resolved' and desired in ('confirmed','dismissed')) or (prior->>'status'='dismissed' and desired='pending')) then return jsonb_build_object('ok',false,'status',400);end if;
