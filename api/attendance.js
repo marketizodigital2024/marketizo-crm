@@ -67,7 +67,10 @@ function createHandler(deps={}) {return async function(req,res){
       const meta=[`Marketizo Digital e.U. | ${from} – ${to} | Europe/Vienna`,`Generisano: ${report.generatedAt}`,
         type==='hours'?'Neto rad = stvarno prisustvo minus pauze. Aktivnosti su odvojen izvor; kazne i korekcije salda nisu odbijene.':'Dani odsustva su radni dani u izabranom periodu. Status razlikuje zahteve od odobrenih odsustava.',
         'Prazna vremena nisu rekonstruisana. Stanje odmora je obračun postojećih CRM podataka, uključujući početna stanja/korekcije.'];
-      const bytes=await output[format](sheets,meta);
+      const bytes=format==='pdf'?await output.pdf(selected.flatMap(e=>core.inspectionSheets({...report,hours:core.hourRows(state,records,[e],from,to),absences:core.absenceRows(state,[e],from,to),vacations:core.vacationSummary(state,[e],to>core.today()?core.today():to)},[e],type)),[
+        'Marketizo Digital e.U. | Inhaber: Miljan Marinjes','Simmeringer Hauptstraße 24, 1110 Wien',
+        `Erstellt am ${new Intl.DateTimeFormat('de-AT',{timeZone:'Europe/Vienna',dateStyle:'medium',timeStyle:'short'}).format(new Date(report.generatedAt))}`
+      ]):await output.xlsx(sheets,meta);
       res.setHeader('Content-Type',format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition',`attachment; filename="marketizo-${type}-${from}-${to}.${format}"`);res.statusCode=200;return res.end(bytes);
     }
